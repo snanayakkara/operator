@@ -1,0 +1,3331 @@
+// Content script for Reflow Medical Assistant Chrome Extension
+// Handles EMR interaction and field manipulation
+
+const CONTENT_SCRIPT_VERSION = '2.6.0-ai-review-fix-5';
+console.log('🏥 Reflow Medical Assistant Content Script Loading...', window.location.href);
+console.log('📝 Content Script Version:', CONTENT_SCRIPT_VERSION);
+console.log('⏰ Load Time:', new Date().toISOString());
+console.log('🔧 EXTRACT_EMR_DATA handler: ENABLED');
+console.log('🔧 AI Review support: ENABLED');
+
+// Prevent duplicate injection
+if ((window as any).reflowContentScriptLoaded) {
+  console.log('🏥 Content script already loaded, skipping...');
+  console.log('📝 Previously loaded version:', (window as any).reflowContentScriptVersion || 'unknown');
+} else {
+  (window as any).reflowContentScriptLoaded = true;
+  (window as any).reflowContentScriptVersion = CONTENT_SCRIPT_VERSION;
+
+interface EMRField {
+  selector: string;
+  type: 'textarea' | 'input' | 'contenteditable';
+  label: string;
+  waitFor?: string;
+}
+
+interface EMRSystem {
+  name: string;
+  baseUrl: string;
+  fields: Record<string, EMRField>;
+  selectors: Record<string, string>;
+}
+
+class ContentScriptHandler {
+  private isInitialized = false;
+  private emrSystem: EMRSystem | null = null;
+  private currentTabId: number | null = null;
+
+  constructor() {
+    this.initialize();
+  }
+
+  private async initialize() {
+    if (this.isInitialized) return;
+
+    try {
+      // Detect EMR system
+      this.emrSystem = this.detectEMRSystem();
+      
+      if (this.emrSystem) {
+        console.log(`🏥 Reflow Medical Assistant: Detected ${this.emrSystem.name}`);
+        this.setupEventListeners();
+        this.isInitialized = true;
+        console.log('🏥 Content script initialized successfully');
+      } else {
+        console.log('🏥 EMR system not detected on this page:', window.location.href);
+      }
+    } catch (error) {
+      console.error('Content script initialization failed:', error);
+    }
+  }
+
+  private detectEMRSystem(): EMRSystem | null {
+    const hostname = window.location.hostname;
+    const url = window.location.href;
+
+    // Xestro EMR
+    if (hostname.includes('my.xestro.com')) {
+      return {
+        name: 'Xestro',
+        baseUrl: 'https://my.xestro.com',
+        fields: {
+          investigationSummary: {
+            selector: 'textarea[data-field="investigation-summary"], #investigation-summary, .investigation-summary textarea',
+            type: 'textarea',
+            label: 'Investigation Summary',
+            waitFor: '.XestroBoxTitle:contains("Investigation Summary")'
+          },
+          background: {
+            selector: 'textarea[data-field="background"], #background, .background textarea',
+            type: 'textarea',
+            label: 'Background',
+            waitFor: '.XestroBoxTitle:contains("Background")'
+          },
+          medications: {
+            selector: 'textarea[data-field="medications"], #medications, .medications textarea',
+            type: 'textarea',
+            label: 'Medications'
+          },
+          notes: {
+            selector: 'textarea[data-field="notes"], #notes, .notes textarea, #AddNoteArea',
+            type: 'textarea',
+            label: 'Notes'
+          }
+        },
+        selectors: {
+          patientRecord: '.patient-record, .record-view, #patient-view',
+          noteArea: '#AddNoteArea, .note-area, textarea[placeholder*="note"]',
+          quickLetter: '.quick-letter, [data-action="quick-letter"]',
+          taskButton: '.task-button, [data-action="create-task"]'
+        }
+      };
+    }
+
+
+    return null;
+  }
+
+  private setupEventListeners() {
+    // Listen for messages from background script
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      this.handleMessage(message, sender, sendResponse);
+      return true; // Keep message channel open
+    });
+
+    // Listen for keyboard shortcuts
+    document.addEventListener('keydown', (event) => {
+      this.handleKeyboardShortcut(event);
+    });
+
+    // Watch for DOM changes to handle dynamic content
+    const observer = new MutationObserver((mutations) => {
+      this.handleDOMChanges(mutations);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'id']
+    });
+  }
+
+  private async handleMessage(
+    message: any,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response?: any) => void
+  ) {
+    console.log('🏥 Content script received message:', message);
+    console.log('📝 Content script version:', CONTENT_SCRIPT_VERSION, 'at', new Date().toISOString());
+    console.log('🔧 Available message types: EXTRACT_EMR_DATA, EXECUTE_ACTION, SHOW_SCREENSHOT_INSTRUCTIONS, START_CLIPBOARD_MONITORING');
+    try {
+      const { type, action, data } = message;
+      console.log('📨 Processing message type:', type, 'action:', action);
+
+      // Handle ping for content script readiness check
+      if (type === 'PING') {
+        sendResponse({ success: true, ready: true, version: CONTENT_SCRIPT_VERSION });
+        return;
+      }
+
+      // Handle page status check for batch AI review
+      if (type === 'PAGE_STATUS_CHECK') {
+        try {
+          const pageStatus = this.getPageStatus();
+          sendResponse({ success: true, status: pageStatus });
+        } catch (error) {
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'Page status check failed' });
+        }
+        return;
+      }
+
+      // Handle XestroBox detection for patient page verification
+      if (type === 'CHECK_XESTRO_BOXES') {
+        try {
+          const xestroBoxCount = document.querySelectorAll('.XestroBox').length;
+          const hasPatientData = xestroBoxCount > 0;
+          console.log(`📋 XestroBox check: found ${xestroBoxCount} boxes, hasPatientData: ${hasPatientData}`);
+          sendResponse({ 
+            success: true, 
+            found: hasPatientData, 
+            count: xestroBoxCount,
+            url: window.location.href 
+          });
+        } catch (error) {
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'XestroBox check failed' });
+        }
+        return;
+      }
+
+      if (type === 'SHOW_SCREENSHOT_INSTRUCTIONS') {
+        await this.showScreenshotInstructions(data);
+        sendResponse({ success: true });
+        return;
+      }
+
+      if (type === 'CLOSE_SCREENSHOT_INSTRUCTIONS') {
+        this.closeScreenshotModal();
+        sendResponse({ success: true });
+        return;
+      }
+
+      if (type === 'START_CLIPBOARD_MONITORING') {
+        console.log('📸 Content script received START_CLIPBOARD_MONITORING request');
+        this.startClipboardMonitoring(data.timeoutMs || 30000);
+        sendResponse({ success: true });
+        return;
+      }
+
+      if (type === 'EXTRACT_EMR_DATA') {
+        console.log('📋 Received EXTRACT_EMR_DATA request - HANDLER FOUND!');
+        console.log('📋 Request data:', data);
+        console.log('📋 Extracting fields:', data?.fields || ['background', 'investigations', 'medications']);
+        try {
+          const extractedData = await this.extractEMRData(data?.fields || ['background', 'investigations', 'medications']);
+          console.log('📋 EMR extraction completed successfully:', extractedData);
+          sendResponse({ success: true, data: extractedData });
+        } catch (error) {
+          console.error('📋 EMR extraction failed:', error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'EMR extraction failed' });
+        }
+        return;
+      }
+
+      // Handle patient data extraction from XestroBoxContent
+      if (type === 'EXTRACT_PATIENT_DATA') {
+        console.log('👤 Received EXTRACT_PATIENT_DATA request');
+        try {
+          const patientData = this.extractPatientData();
+          console.log('👤 Patient data extraction completed:', patientData);
+          sendResponse({ success: true, data: patientData });
+        } catch (error) {
+          console.error('👤 Patient data extraction failed:', error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'Patient data extraction failed' });
+        }
+        return;
+      }
+
+      if (type !== 'EXECUTE_ACTION') {
+        console.log('❌ Unknown message type:', type);
+        sendResponse({ error: 'Unknown message type' });
+        return;
+      }
+
+      console.log(`🏥 Executing action: ${action}`);
+
+      switch (action) {
+        case 'insertText':
+          await this.insertText(data.text, data.fieldType);
+          sendResponse({ success: true });
+          break;
+
+        case 'openField':
+          await this.openFieldByType(data.fieldType);
+          sendResponse({ success: true });
+          break;
+
+        case 'investigation-summary':
+          if (data?.extractOnly) {
+            // Extract content instead of opening
+            const content = await this.extractFieldContent('Investigation Summary');
+            sendResponse({ success: true, data: content });
+          } else {
+            // Open Investigation Summary field for e-Intray workflow
+            await this.openInvestigationSummary();
+            
+            // If there's formatted content to insert, add it to the field
+            if (data?.content) {
+              await this.wait(500); // Wait for field to be ready
+              await this.insertFormattedSummary(data.content);
+            }
+            
+            sendResponse({ success: true });
+          }
+          break;
+
+        case 'background':
+          if (data?.extractOnly) {
+            // Extract content instead of opening
+            const content = await this.extractFieldContent('Background');
+            sendResponse({ success: true, data: content });
+          } else {
+            await this.openBackground();
+            sendResponse({ success: true });
+          }
+          break;
+
+        case 'medications':
+          if (data?.extractOnly) {
+            // Extract content instead of opening
+            const content = await this.extractFieldContent('Medications (Problem List for Phil)') || 
+                            await this.extractFieldContent('Medications');
+            sendResponse({ success: true, data: content });
+          } else {
+            await this.openMedications();
+            sendResponse({ success: true });
+          }
+          break;
+        case 'social-history':
+          await this.openSocialHistory();
+          sendResponse({ success: true });
+          break;
+
+        case 'extract-patient-data':
+          const patientData = this.extractPatientData();
+          if (patientData) {
+            sendResponse({ success: true, data: patientData });
+          } else {
+            sendResponse({ success: false, error: 'No patient data found' });
+          }
+          break;
+
+        case 'quick-letter':
+          await this.openQuickLetter();
+          sendResponse({ success: true });
+          break;
+
+        case 'create-task':
+          await this.createTask();
+          sendResponse({ success: true });
+          break;
+
+        case 'appointment-wrap-up':
+          await this.appointmentWrapUp(data);
+          sendResponse({ success: true });
+          break;
+
+        case 'profile-photo':
+          await this.handleProfilePhoto(data);
+          sendResponse({ success: true });
+          break;
+
+        case 'save':
+          await this.saveNote();
+          sendResponse({ success: true });
+          break;
+
+        case 'ai-medical-review':
+          // AI medical review should not reach content script
+          console.warn('⚠️ AI medical review should be processed entirely in side panel');
+          sendResponse({ success: true, message: 'AI medical review should use side panel processing only' });
+          break;
+
+        case 'extract-calendar-patients':
+          console.log('📅 Received extract-calendar-patients request');
+          try {
+            const patientData = await this.extractCalendarPatients();
+            console.log('📅 Calendar patient extraction completed:', patientData);
+            sendResponse({ success: true, data: patientData });
+          } catch (error) {
+            console.error('📅 Calendar patient extraction failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Calendar extraction failed' });
+          }
+          break;
+
+        case 'navigate-to-patient':
+          console.log('🧭 Received navigate-to-patient request');
+          try {
+            await this.navigateToPatient(data.fileNumber, data.patientName);
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('🧭 Patient navigation failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Navigation failed' });
+          }
+          break;
+
+        case 'activate-patient-by-element':
+          console.log('🖱️ Received activate-patient-by-element request');
+          try {
+            await this.activatePatientByElement(data.patientSelector || data.patientIndex);
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('🖱️ Patient activation failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Patient activation failed' });
+          }
+          break;
+        case 'double-click-patient':
+          console.log('👆 SWITCH CASE HIT: double-click-patient');
+          console.log('👆 Received double-click-patient request with data:', data);
+          console.log('👆 About to call this.doubleClickPatient method...');
+          try {
+            await this.doubleClickPatient(data.patientName, data.patientId);
+            console.log('👆 doubleClickPatient method completed successfully');
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('👆 Double-click patient failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Double-click patient failed' });
+          }
+          break;
+        case 'navigate-to-patient-record':
+          console.log('🏥 SWITCH CASE HIT: navigate-to-patient-record');
+          console.log('🏥 Received navigate-to-patient-record request');
+          console.log('🏥 About to call this.navigateToPatientRecord method...');
+          try {
+            await this.navigateToPatientRecord();
+            console.log('🏥 navigateToPatientRecord method completed successfully');
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('🏥 Navigate to patient record failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Navigate to patient record failed' });
+          }
+          break;
+        case 'navigate-to-appointment-book':
+          console.log('📅 Received navigate-to-appointment-book request');
+          try {
+            await this.navigateToAppointmentBook();
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('📅 Navigate to appointment book failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Navigate to appointment book failed' });
+          }
+          break;
+        case 'extract-patient-fields':
+          console.log('📋 SWITCH CASE HIT: extract-patient-fields');
+          console.log('📋 Received extract-patient-fields request');
+          console.log('📋 About to call extractPatientFields method...');
+          try {
+            const fieldsData = await this.extractPatientFields();
+            console.log('📋 extractPatientFields completed, sending response:', fieldsData);
+            sendResponse({ success: true, data: fieldsData });
+          } catch (error) {
+            console.error('📋 Extract patient fields failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Extract patient fields failed' });
+          }
+          break;
+
+        default:
+          console.log(`❌ DEFAULT CASE HIT: Unknown action "${action}"`);
+          console.log(`❌ Available SPA actions: double-click-patient, navigate-to-patient-record, extract-patient-fields`);
+          sendResponse({ error: 'Unknown action' });
+      }
+    } catch (error) {
+      console.error('Content script message handling error:', error);
+      sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  }
+
+  private handleKeyboardShortcut(event: KeyboardEvent) {
+    const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+    
+    if (!isCtrlOrCmd || !event.shiftKey) return;
+
+    switch (event.key.toLowerCase()) {
+      case 'i':
+        event.preventDefault();
+        this.openInvestigationSummary();
+        break;
+      case 'b':
+        event.preventDefault();
+        this.openBackground();
+        break;
+      case 'm':
+        event.preventDefault();
+        this.openMedications();
+        break;
+      case 's':
+        event.preventDefault();
+        this.openSocialHistory();
+        break;
+      case 'l':
+        event.preventDefault();
+        this.openQuickLetter();
+        break;
+      case 't':
+        event.preventDefault();
+        this.createTask();
+        break;
+    }
+  }
+
+  private handleDOMChanges(mutations: MutationRecord[]) {
+    // Handle dynamic content loading
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList') {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as Element;
+            
+            // Check if new EMR elements were added
+            if (element.matches?.('.note-area, textarea, .field-container')) {
+              // Update field mappings if needed
+              this.updateFieldMappings();
+            }
+          }
+        });
+      }
+    }
+  }
+
+  private async insertText(text: string, fieldType?: string) {
+    let targetElement: HTMLElement | null = null;
+
+    if (fieldType && this.emrSystem?.fields[fieldType]) {
+      targetElement = await this.findElement(this.emrSystem.fields[fieldType].selector);
+    } else {
+      // Find the currently focused element or active note area
+      targetElement = document.activeElement as HTMLElement;
+      
+      if (!this.isTextInputElement(targetElement)) {
+        targetElement = await this.findActiveNoteArea();
+      }
+    }
+
+    if (!targetElement) {
+      throw new Error('No suitable text input found');
+    }
+
+    await this.insertTextIntoElement(targetElement, text);
+  }
+
+  private async openFieldByType(fieldType: string) {
+    if (!this.emrSystem?.fields[fieldType]) {
+      throw new Error(`Unknown field type: ${fieldType}`);
+    }
+    
+    const field = this.emrSystem.fields[fieldType];
+    const element = await this.findElement(field.selector, 5000);
+    
+    if (element) {
+      this.focusElement(element);
+    } else {
+      throw new Error(`Field ${fieldType} not found`);
+    }
+  }
+
+  private async insertTextIntoElement(element: HTMLElement, text: string) {
+    if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+      const input = element as HTMLInputElement | HTMLTextAreaElement;
+      
+      // Get current cursor position
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      const currentValue = input.value;
+      
+      // Insert text at cursor position
+      const newValue = currentValue.slice(0, start) + text + currentValue.slice(end);
+      input.value = newValue;
+      
+      // Set cursor position after inserted text
+      const newCursorPos = start + text.length;
+      input.setSelectionRange(newCursorPos, newCursorPos);
+      
+      // Trigger events
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      
+    } else if (element.contentEditable === 'true') {
+      // Handle contenteditable elements
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        element.textContent += text;
+      }
+      
+      // Trigger events
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    
+    // Focus the element
+    element.focus();
+  }
+
+  private async insertFormattedSummary(formattedContent: string) {
+    console.log('📝 Inserting formatted investigation summary:', formattedContent);
+    
+    try {
+      // Find the specific Investigation Summary textarea (AddNoteArea)
+      const noteArea = await this.findInvestigationSummaryTextarea();
+      if (!noteArea) {
+        console.error('❌ No Investigation Summary textarea (AddNoteArea) found');
+        return;
+      }
+
+      // Insert the formatted content at the end of the field with proper formatting
+      await this.insertTextAtEndOfField(noteArea, formattedContent);
+      
+      console.log('✅ Successfully inserted formatted investigation summary');
+    } catch (error) {
+      console.error('❌ Error inserting formatted summary:', error);
+    }
+  }
+
+  private async findInvestigationSummaryTextarea(): Promise<HTMLElement | null> {
+    console.log('🔍 Looking for Investigation Summary textarea...');
+    
+    // Try multiple selectors to find the correct textarea
+    const selectors = [
+      'textarea#AddNoteArea',
+      'textarea.AddNoteArea',
+      'textarea[placeholder*="Add a note"]',
+      'textarea.form-control.AddNoteArea'
+    ];
+    
+    for (const selector of selectors) {
+      console.log(`🔍 Trying selector: ${selector}`);
+      const element = await this.findElement(selector, 2000);
+      if (element && element.tagName === 'TEXTAREA') {
+        console.log(`✅ Found Investigation Summary textarea with selector: ${selector}`);
+        return element;
+      }
+    }
+    
+    console.warn('⚠️ Could not find Investigation Summary textarea with any selector');
+    return null;
+  }
+
+  private async insertTextAtEndOfField(element: HTMLElement, text: string) {
+    if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+      const input = element as HTMLInputElement | HTMLTextAreaElement;
+      
+      // Get current content and prepare insertion
+      const currentValue = input.value;
+      let textToInsert = text;
+      
+      // If field has existing content, add a newline before the new content
+      if (currentValue.trim().length > 0) {
+        textToInsert = '\n' + text;
+      }
+      
+      // Position cursor at the very end
+      const endPosition = currentValue.length;
+      input.setSelectionRange(endPosition, endPosition);
+      
+      // Insert text at the end
+      const newValue = currentValue + textToInsert;
+      input.value = newValue;
+      
+      // Position cursor after the newly inserted text
+      const newCursorPos = newValue.length;
+      input.setSelectionRange(newCursorPos, newCursorPos);
+      
+      // Trigger events to ensure the change is registered
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Keep the field focused for user review
+      input.focus();
+      
+      // Scroll to bottom of textarea if needed
+      if (element.tagName === 'TEXTAREA') {
+        input.scrollTop = input.scrollHeight;
+      }
+      
+      console.log(`📝 Inserted text at end of field. Field now has ${newValue.length} characters.`);
+      
+    } else if (element.contentEditable === 'true') {
+      // Handle contenteditable elements - move to end
+      const selection = window.getSelection();
+      const range = document.createRange();
+      
+      // Move to the end of the element
+      range.selectNodeContents(element);
+      range.collapse(false); // Collapse to end
+      
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      
+      // Add newline if content exists
+      const currentContent = element.textContent || '';
+      let textToInsert = text;
+      if (currentContent.trim().length > 0) {
+        textToInsert = '\n' + text;
+      }
+      
+      // Insert the text
+      range.insertNode(document.createTextNode(textToInsert));
+      
+      // Move cursor to end
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      
+      // Trigger events and focus
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.focus();
+    }
+    
+    console.log('✅ Text inserted at end of field and field kept focused for review');
+  }
+
+  private async openInvestigationSummary() {
+    console.log('📝 Opening Investigation Summary section in Xestro');
+    await this.openCustomField('Investigation Summary');
+  }
+
+  private async openCustomFieldWithTemplate(fieldName: string, templateFn: () => string) {
+    console.log(`📝 Opening ${fieldName} with template in note area`);
+    
+    const noteArea = await this.findNoteArea();
+    if (!noteArea) {
+      console.error('❌ No suitable note area found on page');
+      throw new Error('Note area not found');
+    }
+    
+    // Focus the element
+    noteArea.focus();
+    
+    // Get template content and current value
+    const templateContent = templateFn();
+    const isContentEditable = noteArea.contentEditable === 'true';
+    const currentValue = isContentEditable ? noteArea.innerText || '' : (noteArea as HTMLTextAreaElement).value || '';
+    
+    // Check if this field already exists
+    const firstLine = templateContent.split('\n')[0];
+    if (!currentValue.includes(firstLine)) {
+      // Add the template content
+      const newValue = `${templateContent}\n${currentValue}`;
+      
+      if (isContentEditable) {
+        // Handle contenteditable div (original Xestro approach)
+        noteArea.innerText = newValue;
+        noteArea.dispatchEvent(new Event('input', { bubbles: true }));
+        noteArea.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // Handle textarea
+        const textarea = noteArea as HTMLTextAreaElement;
+        textarea.value = newValue;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+    
+    // Visual feedback
+    noteArea.style.boxShadow = '0 0 5px 2px rgba(33, 150, 243, 0.5)';
+    setTimeout(() => {
+      noteArea.style.boxShadow = '';
+    }, 1000);
+    
+    // Ensure the element is visible
+    noteArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Original Xestro auto-save functionality
+    setTimeout(() => {
+      const saveButton = document.querySelector('#patientNotesSave') as HTMLButtonElement;
+      if (saveButton && confirm('Save the updated notes?')) {
+        saveButton.click();
+        console.log('💾 Auto-saved via Xestro save button');
+      }
+    }, 1000);
+    
+    console.log('✅ Note area ready for input with template (Xestro method)');
+  }
+
+  private async findNoteArea(): Promise<HTMLElement | null> {
+    console.log('🔍 Looking for Xestro note input areas...');
+    
+    // Original working Xestro selectors (contenteditable divs, not textareas)
+    const xestroSelectors = [
+      '#patientNotesInput',      // Primary Xestro notes area
+      '#patientNoteInput',       // Alternative spelling
+      '.patient-notes-input',    // Class-based
+      '[contenteditable="true"]' // Any contenteditable element
+    ];
+
+    // Try Xestro-specific selectors first
+    for (const selector of xestroSelectors) {
+      const element = document.querySelector(selector) as HTMLElement;
+      if (element && (element as HTMLElement).offsetParent !== null) {
+        console.log(`✅ Found Xestro note area with selector: ${selector}`);
+        return element;
+      }
+    }
+
+    // Log all contenteditable elements for debugging
+    const allContentEditable = document.querySelectorAll('[contenteditable="true"], [contenteditable]');
+    console.log(`🔍 Found ${allContentEditable.length} contenteditable elements:`);
+    allContentEditable.forEach((elem, index) => {
+      console.log(`  ${index + 1}. ID: "${elem.id}" Class: "${elem.className}" Size: ${(elem as HTMLElement).offsetWidth}x${(elem as HTMLElement).offsetHeight}`);
+    });
+
+    // Also check textareas as fallback
+    const allTextareas = document.querySelectorAll('textarea');
+    console.log(`🔍 Found ${allTextareas.length} textareas:`);
+    allTextareas.forEach((textarea, index) => {
+      console.log(`  ${index + 1}. ID: "${textarea.id}" Class: "${textarea.className}" Placeholder: "${textarea.placeholder}"`);
+    });
+
+    // Try any visible contenteditable element
+    for (let i = 0; i < allContentEditable.length; i++) {
+      const element = allContentEditable[i] as HTMLElement;
+      if ((element as HTMLElement).offsetParent !== null && 
+          (element as HTMLElement).offsetWidth > 50 && 
+          (element as HTMLElement).offsetHeight > 30) {
+        console.log(`✅ Found usable contenteditable at index ${i + 1}`);
+        return element;
+      }
+    }
+
+    // Fallback to textareas
+    for (let i = 0; i < allTextareas.length; i++) {
+      const textarea = allTextareas[i] as HTMLTextAreaElement;
+      if (textarea.offsetParent !== null && 
+          !textarea.readOnly && 
+          !textarea.disabled &&
+          textarea.offsetWidth > 50 && 
+          textarea.offsetHeight > 30) {
+        console.log(`✅ Found usable textarea at index ${i + 1}`);
+        return textarea;
+      }
+    }
+
+    // If no textarea found, wait for dynamic content with MutationObserver
+    console.log('⏳ No textarea found immediately, waiting for dynamic content...');
+    
+    return new Promise<HTMLTextAreaElement | null>((resolve) => {
+      let timeoutId: number;
+      let observer: MutationObserver;
+      
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (observer) observer.disconnect();
+      };
+      
+      const checkForTextarea = () => {
+        // Try specific selectors first
+        for (const selector of xestroSelectors) {
+          const element = document.querySelector(selector) as HTMLTextAreaElement;
+          if (element && element.offsetParent !== null) {
+            console.log(`✅ Found note area dynamically with selector: ${selector}`);
+            cleanup();
+            resolve(element);
+            return;
+          }
+        }
+        
+        // Try any visible textarea
+        const allTextareas = document.querySelectorAll('textarea');
+        for (let i = 0; i < allTextareas.length; i++) {
+          const textarea = allTextareas[i] as HTMLTextAreaElement;
+          if (textarea.offsetParent !== null && 
+              !textarea.readOnly && 
+              !textarea.disabled &&
+              textarea.offsetWidth > 50 && 
+              textarea.offsetHeight > 30) {
+            console.log(`✅ Found usable textarea dynamically at index ${i + 1}`);
+            cleanup();
+            resolve(textarea);
+            return;
+          }
+        }
+      };
+      
+      // Set up MutationObserver to watch for new elements
+      observer = new MutationObserver((mutations) => {
+        let hasNewTextarea = false;
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'childList') {
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                const element = node as Element;
+                if (element.tagName === 'TEXTAREA' || element.querySelector('textarea')) {
+                  hasNewTextarea = true;
+                }
+              }
+            });
+          }
+        });
+        
+        if (hasNewTextarea) {
+          checkForTextarea();
+        }
+      });
+      
+      // Start observing
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      // Also check periodically in case we miss something
+      const intervalId = setInterval(checkForTextarea, 500);
+      
+      // Set timeout to avoid waiting forever
+      timeoutId = setTimeout(() => {
+        cleanup();
+        clearInterval(intervalId);
+        console.log('❌ Timeout waiting for textarea');
+        resolve(null);
+      }, 10000); // 10 second timeout
+      
+      // Check one more time immediately
+      checkForTextarea();
+    });
+  }
+
+  private async openCustomField(fieldName: string) {
+    console.log(`📝 Opening ${fieldName} section in Xestro`);
+    
+    // Step 1: Find and click the XestroBox title to expand the section
+    const xestroBox = await this.findAndClickXestroBox(fieldName);
+    if (!xestroBox) {
+      console.error(`❌ Could not find XestroBox for ${fieldName}`);
+      throw new Error(`XestroBox for ${fieldName} not found`);
+    }
+    
+    // Step 2: Wait for AddNoteArea textarea to appear after clicking
+    console.log('⏳ Waiting for AddNoteArea textarea to appear...');
+    const noteArea = await this.waitForAddNoteArea();
+    if (!noteArea) {
+      console.error('❌ AddNoteArea textarea did not appear after clicking XestroBox');
+      throw new Error('AddNoteArea textarea not found');
+    }
+    
+    // Step 3: Focus the textarea and position cursor at the end
+    noteArea.focus();
+    console.log(`✅ Found AddNoteArea textarea for ${fieldName}`);
+    
+    // Position cursor at the end of existing content
+    const currentValue = noteArea.value || '';
+    const cursorPos = currentValue.length;
+    noteArea.setSelectionRange(cursorPos, cursorPos);
+    
+    // Trigger focus event to ensure cursor is visible
+    noteArea.dispatchEvent(new Event('focus', { bubbles: true }));
+    
+    // Visual feedback
+    noteArea.style.boxShadow = '0 0 5px 2px rgba(33, 150, 243, 0.5)';
+    setTimeout(() => {
+      noteArea.style.boxShadow = '';
+    }, 1000);
+    
+    // Ensure the textarea is visible
+    noteArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    console.log(`✅ ${fieldName} section opened and ready for input`);
+  }
+
+  private async openBackground() {
+    console.log('📝 Opening Background in note area');
+    await this.openCustomField('Background');
+  }
+
+  private async openMedications() {
+    console.log('📝 Opening Medications section in Xestro');
+    // Use the specific medication title
+    await this.openCustomField('Medications (Problem List for Phil)');
+  }
+
+  private async openSocialHistory() {
+    console.log('📝 Opening Social & Family History section in Xestro');
+    await this.openCustomField('Social & Family History');
+  }
+
+  private async openQuickLetter() {
+    const quickLetterButton = await this.findElement(
+      'button:contains("Quick Letter"), [data-action="quick-letter"], .quick-letter-btn'
+    );
+    
+    if (quickLetterButton) {
+      quickLetterButton.click();
+    } else {
+      // Fallback: open notes area
+      const notesArea = await this.findActiveNoteArea();
+      if (notesArea) {
+        this.focusElement(notesArea);
+      }
+    }
+  }
+
+  private async createTask() {
+    const taskButton = await this.findElement(
+      'button:contains("Task"), [data-action="create-task"], .task-btn, .create-task'
+    );
+    
+    if (taskButton) {
+      taskButton.click();
+    } else {
+      console.warn('Task creation button not found');
+    }
+  }
+
+  private async appointmentWrapUp(data: any) {
+    // Implementation depends on EMR system
+    if (this.emrSystem?.name === 'Xestro') {
+      await this.xestroAppointmentWrapUp(data);
+    } else {
+      console.warn('Appointment wrap-up not implemented for this EMR system');
+    }
+  }
+
+  private async xestroAppointmentWrapUp(data: any) {
+    // Find and click appointment wrap-up button
+    const wrapUpButton = await this.findElement(
+      'button.btn.btn-primary.appt-wrap-up-btn, [data-action="appt-wrap-up"]'
+    );
+    
+    if (wrapUpButton) {
+      wrapUpButton.click();
+      await this.wait(1500); // Wait longer for modal to open
+      
+      // Handle preset data if provided
+      if (data.preset) {
+        await this.populateAppointmentPreset(data.preset);
+      }
+    }
+  }
+
+  // Extract patient data from Xestro EMR XestroBoxContent element
+  private extractPatientData(): any {
+    console.log('👤 Extracting patient data from XestroBoxContent');
+    
+    try {
+      const xestroBox = document.querySelector('.XestroBoxContent');
+      if (!xestroBox) {
+        console.log('❌ XestroBoxContent not found');
+        return null;
+      }
+
+      console.log('✅ Found XestroBoxContent:', xestroBox);
+
+      // Extract patient data from the HTML structure
+      const patientData: any = {
+        extractedAt: Date.now()
+      };
+
+      // Get the main content div
+      const contentDiv = xestroBox.querySelector('div');
+      if (!contentDiv) {
+        console.log('❌ No content div found in XestroBoxContent');
+        return null;
+      }
+
+      // Extract name from first text node - "Mrs Maria (Mary) Martino"
+      const nameNode = contentDiv.firstChild;
+      if (nameNode && nameNode.nodeType === Node.TEXT_NODE) {
+        patientData.name = nameNode.textContent?.trim() || '';
+        console.log('📝 Extracted name:', patientData.name);
+      }
+
+      // Extract ID and DOB from pull-right div - "ID: 33710" and "06/11/1957 (67)"
+      const pullRightDiv = contentDiv.querySelector('.pull-right');
+      if (pullRightDiv) {
+        const boldElement = pullRightDiv.querySelector('b');
+        if (boldElement && boldElement.textContent) {
+          const idMatch = boldElement.textContent.match(/ID:\s*(\d+)/);
+          if (idMatch) {
+            patientData.id = idMatch[1];
+            console.log('📝 Extracted ID:', patientData.id);
+          }
+        }
+
+        // Extract DOB and age from text after <br>
+        const textContent = pullRightDiv.textContent || '';
+        const dobMatch = textContent.match(/(\d{2}\/\d{2}\/\d{4})\s*\((\d+)\)/);
+        if (dobMatch) {
+          patientData.dob = dobMatch[1];
+          patientData.age = dobMatch[2];
+          console.log('📝 Extracted DOB:', patientData.dob, 'Age:', patientData.age);
+        }
+      }
+
+      // Extract other details from data-allow="1" divs
+      const dataAllowDivs = contentDiv.querySelectorAll('div[data-allow="1"]');
+      dataAllowDivs.forEach((div, index) => {
+        const text = div.textContent?.trim() || '';
+        if (text) {
+          // First data-allow div is usually phone
+          if (index === 0 && /^\d{4}\s\d{3}\s\d{3}$/.test(text)) {
+            patientData.phone = text;
+            console.log('📝 Extracted phone:', patientData.phone);
+          }
+          // Second is usually email
+          else if (index === 1 && text.includes('@')) {
+            patientData.email = text;
+            console.log('📝 Extracted email:', patientData.email);
+          }
+          // Last one is usually address
+          else if (text.includes('VIC') || text.includes('NSW') || text.includes('QLD') || 
+                   text.includes('SA') || text.includes('WA') || text.includes('TAS') || 
+                   text.includes('ACT') || text.includes('NT')) {
+            patientData.address = text;
+            console.log('📝 Extracted address:', patientData.address);
+          }
+        }
+      });
+
+      // Extract Medicare and insurance from span elements
+      const spans = contentDiv.querySelectorAll('span');
+      spans.forEach(span => {
+        const text = span.textContent?.trim() || '';
+        if (text.includes('Medicare:')) {
+          patientData.medicare = text.replace('Medicare:', '').trim();
+          console.log('📝 Extracted Medicare:', patientData.medicare);
+        } else if (text.includes('Private') && text.includes('Limited:')) {
+          patientData.insurance = text;
+          console.log('📝 Extracted insurance:', patientData.insurance);
+        }
+      });
+
+      console.log('✅ Successfully extracted patient data:', patientData);
+      return patientData;
+
+    } catch (error) {
+      console.error('❌ Error extracting patient data:', error);
+      return null;
+    }
+  }
+
+  private async populateAppointmentPreset(preset: any) {
+    try {
+      // Wait for the appointment wrap-up modal to be fully loaded
+      await this.wait(500);
+
+      // Find and populate Item Codes field
+      if (preset.itemCode) {
+        const itemCodesInput = await this.findElement(
+          'input.item-codes-autocomplete, input.ui-autocomplete-input'
+        );
+        if (itemCodesInput) {
+          // Clear existing value and set new value
+          (itemCodesInput as HTMLInputElement).value = '';
+          (itemCodesInput as HTMLInputElement).value = preset.itemCode;
+          
+          // Trigger input events to activate autocomplete
+          itemCodesInput.dispatchEvent(new Event('input', { bubbles: true }));
+          itemCodesInput.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          console.log(`✅ Populated Item Code: ${preset.itemCode}`);
+        } else {
+          console.warn('⚠️ Item codes input field not found');
+        }
+      }
+
+      // Find and populate Appointment Notes field
+      if (preset.notes) {
+        const notesTextarea = await this.findElement('textarea.Notes, textarea.form-control');
+        if (notesTextarea) {
+          // Clear existing content and set new content
+          (notesTextarea as HTMLTextAreaElement).value = '';
+          (notesTextarea as HTMLTextAreaElement).value = preset.notes;
+          
+          // Trigger events to ensure the change is registered
+          notesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+          notesTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          console.log(`✅ Populated Appointment Notes: ${preset.notes}`);
+        } else {
+          console.warn('⚠️ Appointment notes textarea not found');
+        }
+      }
+
+      console.log(`✅ Successfully applied preset: ${preset.displayName}`);
+    } catch (error) {
+      console.error('❌ Error populating appointment preset:', error);
+    }
+  }
+
+  private async ensurePatientRecordView() {
+    if (!this.emrSystem) return;
+    
+    const patientRecord = await this.findElement(this.emrSystem.selectors.patientRecord, 1000);
+    if (!patientRecord) {
+      // Try to navigate to patient record view
+      const recordButton = await this.findElement(
+        'button:contains("Record"), [data-view="record"], .record-view-btn'
+      );
+      if (recordButton) {
+        recordButton.click();
+        await this.wait(2000);
+      }
+    }
+  }
+
+  /**
+   * Ensure patient record is opened for Batch AI Review data extraction
+   * Specifically looks for and clicks the "Patient Record" button
+   */
+  private async ensurePatientRecordOpened(): Promise<void> {
+    console.log('🔍 Ensuring patient record is opened...');
+    
+    // Check if XestroBox elements are already present (record may already be open)
+    const initialXestroBoxes = document.querySelectorAll('.XestroBox');
+    console.log(`🔍 Initial XestroBox count: ${initialXestroBoxes.length}`);
+    
+    // Look for the specific "Patient Record" button using individual selectors
+    let recordButton = await this.findElement('button.PatientDetailsButton');
+    
+    if (!recordButton) {
+      // Try to find button by text content
+      recordButton = await this.findButtonByText('Patient Record');
+    }
+    
+    if (!recordButton) {
+      // Try to find button with "Patient" text
+      recordButton = await this.findButtonByText('Patient');
+    }
+    
+    if (!recordButton) {
+      // Try btn-default buttons and check their text
+      const defaultButtons = document.querySelectorAll('button.btn-default');
+      for (const button of defaultButtons) {
+        if (button.textContent?.includes('Patient')) {
+          recordButton = button as HTMLElement;
+          break;
+        }
+      }
+    }
+    
+    if (recordButton) {
+      console.log('🔍 Found Patient Record button, clicking...');
+      recordButton.click();
+      
+      // Wait for record to load
+      await this.wait(3000);
+      
+      // Verify record opened by checking for clinical content
+      const finalXestroBoxes = document.querySelectorAll('.XestroBox');
+      console.log(`🔍 Final XestroBox count: ${finalXestroBoxes.length}`);
+      
+      if (finalXestroBoxes.length === 0) {
+        console.warn('⚠️ Patient record button clicked but no clinical content found');
+        // Don't throw error - proceed with extraction anyway
+      } else if (finalXestroBoxes.length > initialXestroBoxes.length) {
+        console.log('✅ Patient record opened successfully - clinical content detected');
+      } else {
+        console.log('ℹ️ Patient record may have already been open');
+      }
+    } else {
+      console.warn('⚠️ Patient Record button not found - proceeding with extraction');
+      console.log('💡 Available buttons:', Array.from(document.querySelectorAll('button')).map(b => b.textContent?.trim()).filter(Boolean));
+    }
+  }
+
+  private async findActiveNoteArea(): Promise<HTMLElement | null> {
+    if (!this.emrSystem) return null;
+    
+    return await this.findElement(this.emrSystem.selectors.noteArea);
+  }
+
+  private async findElement(selector: string, timeout = 5000): Promise<HTMLElement | null> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeout) {
+      // Handle jQuery-style :contains selector
+      if (selector.includes(':contains(')) {
+        const match = selector.match(/(.+):contains\("(.+)"\)/);
+        if (match) {
+          const [, baseSelector, text] = match;
+          const elements = document.querySelectorAll(baseSelector);
+          for (const element of elements) {
+            if (element.textContent?.includes(text)) {
+              return element as HTMLElement;
+            }
+          }
+        }
+      } else {
+        const element = document.querySelector(selector) as HTMLElement;
+        if (element) {
+          return element;
+        }
+      }
+      
+      await this.wait(100);
+    }
+    
+    return null;
+  }
+
+
+  private focusElement(element: HTMLElement) {
+    element.focus();
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Highlight the element briefly
+    const originalStyle = element.style.cssText;
+    element.style.cssText += 'border: 2px solid #3b82f6 !important; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5) !important;';
+    
+    setTimeout(() => {
+      element.style.cssText = originalStyle;
+    }, 2000);
+  }
+
+  private isTextInputElement(element: HTMLElement | null): boolean {
+    if (!element) return false;
+    
+    const tagName = element.tagName.toLowerCase();
+    return (
+      tagName === 'textarea' ||
+      (tagName === 'input' && ['text', 'email', 'search', 'url'].includes((element as HTMLInputElement).type)) ||
+      element.contentEditable === 'true'
+    );
+  }
+
+  private updateFieldMappings() {
+    // Update field mappings if EMR UI has changed
+    // This is a placeholder for dynamic field mapping updates
+  }
+
+  private async findAndClickXestroBox(fieldName: string): Promise<HTMLElement | null> {
+    console.log(`🔍 Looking for XestroBox with title "${fieldName}"`);
+    
+    // Find all XestroBox elements
+    const xestroBoxes = document.querySelectorAll('.XestroBox');
+    console.log(`Found ${xestroBoxes.length} XestroBox elements`);
+    
+    for (let i = 0; i < xestroBoxes.length; i++) {
+      const box = xestroBoxes[i] as HTMLElement;
+      const titleElement = box.querySelector('.XestroBoxTitle');
+      
+      if (titleElement && titleElement.textContent?.includes(fieldName)) {
+        console.log(`✅ Found XestroBox for "${fieldName}" at index ${i}`);
+        console.log(`🖱️ Clicking XestroBox title: "${titleElement.textContent}"`);
+        
+        // Click the XestroBox (or its title) to expand it
+        (titleElement as HTMLElement).click();
+        
+        // Wait a moment for the expansion animation
+        await this.wait(500);
+        
+        return box;
+      }
+    }
+    
+    console.log(`❌ No XestroBox found with title containing "${fieldName}"`);
+    // Log all available titles for debugging
+    xestroBoxes.forEach((box, index) => {
+      const titleElement = box.querySelector('.XestroBoxTitle');
+      console.log(`  ${index + 1}. XestroBoxTitle: "${titleElement?.textContent || 'No title'}"`);
+    });
+    
+    return null;
+  }
+
+  private async waitForAddNoteArea(): Promise<HTMLTextAreaElement | null> {
+    const maxWaitTime = 5000; // 5 seconds
+    const checkInterval = 100; // Check every 100ms
+    const maxAttempts = maxWaitTime / checkInterval;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const addNoteArea = document.getElementById('AddNoteArea') as HTMLTextAreaElement;
+      
+      if (addNoteArea && addNoteArea.offsetParent !== null) { // Check if visible
+        console.log(`✅ AddNoteArea found after ${attempt * checkInterval}ms`);
+        return addNoteArea;
+      }
+      
+      if (attempt % 10 === 0) { // Log every second
+        console.log(`⏳ Still waiting for AddNoteArea... (${attempt * checkInterval}ms)`);
+      }
+      
+      await this.wait(checkInterval);
+    }
+    
+    console.log(`❌ AddNoteArea not found after ${maxWaitTime}ms`);
+    return null;
+  }
+
+  private async wait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Get current page status for batch AI review readiness
+   */
+  private getPageStatus(): any {
+    const url = window.location.href;
+    const title = document.title;
+    const readyState = document.readyState;
+    
+    // Check for various page elements to determine page type and readiness
+    const hasXestroBoxes = document.querySelectorAll('.XestroBox').length > 0;
+    const hasPatientNotes = document.querySelector('#patientNotesInput, #AddNoteArea') !== null;
+    const hasCalendarElements = document.querySelectorAll('.appointmentBook, .one-appt-book').length > 0;
+    const hasDateInput = document.querySelector('input.date.form-control') !== null;
+    
+    // Determine page type
+    let pageType = 'unknown';
+    if (hasCalendarElements && hasDateInput) {
+      pageType = 'calendar';
+    } else if (hasXestroBoxes && hasPatientNotes) {
+      pageType = 'patient';
+    } else if (url.includes('Dashboard')) {
+      pageType = 'dashboard';
+    }
+
+    // Determine if page is ready for operations
+    const isReady = readyState === 'complete' && 
+                   (pageType === 'calendar' || (pageType === 'patient' && hasXestroBoxes));
+
+    return {
+      url,
+      title,
+      readyState,
+      pageType,
+      isReady,
+      elements: {
+        xestroBoxCount: document.querySelectorAll('.XestroBox').length,
+        hasPatientNotes,
+        hasCalendarElements,
+        hasDateInput
+      },
+      timestamp: Date.now()
+    };
+  }
+
+  private async handleProfilePhoto(data: any) {
+    console.log('📸 Handling profile photo capture:', data);
+    
+    if (data?.imageData) {
+      // First, navigate to the photo upload interface
+      console.log('📸 Opening photo upload interface...');
+      await this.openPhotoUploadInterface();
+      
+      // Then insert the image data into DropZone
+      await this.insertImageIntoDropZone(data.imageData, data.method || 'tab-capture');
+    } else {
+      // No image data, this means we need to show instructions for manual capture
+      console.log('📸 No image data provided, showing capture instructions');
+      throw new Error('Profile photo capture requires image data');
+    }
+  }
+
+  private async insertImageIntoDropZone(imageData: string, method: string) {
+    console.log(`📸 Inserting image into DropZone using method: ${method}`);
+    
+    try {
+      // Find the DropZone element
+      const dropZone = await this.findDropZone();
+      if (!dropZone) {
+        console.error('❌ DropZone not found on page');
+        throw new Error('DropZone field not found');
+      }
+
+      // Convert base64 image data to File object
+      const file = await this.base64ToFile(imageData, 'profile-photo.png');
+      
+      // Simulate file drop into DropZone
+      await this.simulateFileDrop(dropZone, file);
+      
+      console.log('✅ Profile photo inserted successfully');
+      
+      // Visual feedback
+      this.showSuccessMessage('Profile photo added successfully!');
+      
+    } catch (error) {
+      console.error('❌ Error inserting image into DropZone:', error);
+      throw error;
+    }
+  }
+
+  private async openPhotoUploadInterface(): Promise<void> {
+    console.log('🔄 Starting photo upload interface navigation...');
+    
+    try {
+      // Step 1: Click the sidebar patient photo
+      console.log('🔄 Step 1: Clicking sidebar patient photo...');
+      const patientPhoto = await this.findElement('#SidebarPatientPhoto', 3000);
+      if (!patientPhoto) {
+        throw new Error('Could not find sidebar patient photo (#SidebarPatientPhoto)');
+      }
+      patientPhoto.click();
+      await this.wait(500); // Wait for any animations/loading
+      
+      // Step 2: Click the "Profile Picture" description
+      console.log('🔄 Step 2: Clicking Profile Picture description...');
+      const profileDescriptions = document.querySelectorAll('.description');
+      let profilePictureDescription: HTMLElement | null = null;
+      
+      for (const desc of profileDescriptions) {
+        if (desc.textContent?.includes('Profile Picture')) {
+          profilePictureDescription = desc as HTMLElement;
+          break;
+        }
+      }
+      
+      if (!profilePictureDescription) {
+        throw new Error('Could not find Profile Picture description element');
+      }
+      profilePictureDescription.click();
+      await this.wait(500); // Wait for any animations/loading
+      
+      // Step 3: Click the "Upload New" button
+      console.log('🔄 Step 3: Clicking Upload New button...');
+      const uploadButton = await this.findElement('#UploadPhotoButton', 3000);
+      if (!uploadButton) {
+        throw new Error('Could not find Upload New button (#UploadPhotoButton)');
+      }
+      uploadButton.click();
+      await this.wait(1000); // Wait for DropZone to appear
+      
+      console.log('✅ Photo upload interface navigation completed');
+      
+    } catch (error) {
+      console.error('❌ Failed to open photo upload interface:', error);
+      throw new Error(`Navigation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async findDropZone(): Promise<HTMLElement | null> {
+    console.log('🔍 Looking for DropZone element...');
+    
+    // Wait for DropZone to appear after navigation
+    const dropZone = await this.waitForDropZone();
+    if (dropZone) {
+      console.log('✅ Found DropZone after navigation');
+      return dropZone;
+    }
+    
+    console.warn('⚠️ Could not find DropZone even after navigation');
+    return null;
+  }
+
+  private async waitForDropZone(timeout = 5000): Promise<HTMLElement | null> {
+    console.log('⏳ Waiting for DropZone to appear...');
+    
+    const startTime = Date.now();
+    const checkInterval = 200; // Check every 200ms
+    
+    while (Date.now() - startTime < timeout) {
+      const dropZone = document.querySelector('#DropZone') as HTMLElement;
+      if (dropZone && dropZone.offsetParent !== null) {
+        console.log('✅ DropZone appeared and is visible');
+        return dropZone;
+      }
+      
+      await this.wait(checkInterval);
+    }
+    
+    console.log('❌ Timeout waiting for DropZone to appear');
+    return null;
+  }
+
+  private async base64ToFile(base64Data: string, filename: string): Promise<File> {
+    // Remove data URL prefix if present
+    const base64String = base64Data.replace(/^data:image\/\w+;base64,/, '');
+    
+    // Convert base64 to blob
+    const byteCharacters = atob(base64String);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'image/png' });
+    
+    // Create File object
+    return new File([blob], filename, { type: 'image/png' });
+  }
+
+  private async simulateFileDrop(dropZone: HTMLElement, file: File) {
+    console.log('📁 Simulating file drop into DropZone');
+    
+    // Create a FileList-like object
+    const fileList = {
+      0: file,
+      length: 1,
+      item: (index: number) => index === 0 ? file : null
+    } as unknown as FileList;
+
+    // Create and dispatch drag events
+    const dragEnterEvent = new DragEvent('dragenter', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: new DataTransfer()
+    });
+    
+    const dragOverEvent = new DragEvent('dragover', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: new DataTransfer()
+    });
+    
+    const dropEvent = new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: new DataTransfer()
+    });
+
+    // Add file to dataTransfer
+    dropEvent.dataTransfer?.items.add(file);
+
+    // Dispatch events in sequence
+    dropZone.dispatchEvent(dragEnterEvent);
+    await this.wait(50);
+    
+    dropZone.dispatchEvent(dragOverEvent);
+    await this.wait(50);
+    
+    dropZone.dispatchEvent(dropEvent);
+    
+    // Also try direct file input approach as fallback
+    const fileInput = dropZone.querySelector('input[type="file"]') as HTMLInputElement;
+    if (fileInput) {
+      console.log('📁 Found file input, setting files directly');
+      Object.defineProperty(fileInput, 'files', {
+        value: fileList,
+        writable: false,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    console.log('📁 File drop simulation completed');
+  }
+
+  private showSuccessMessage(message: string) {
+    // Create and show success message
+    const messageDiv = document.createElement('div');
+    messageDiv.textContent = message;
+    messageDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      animation: slideInRight 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+      messageDiv.style.animation = 'slideOutRight 0.3s ease-out';
+      setTimeout(() => {
+        if (messageDiv.parentNode) {
+          messageDiv.parentNode.removeChild(messageDiv);
+        }
+      }, 300);
+    }, 3000);
+  }
+
+  private async showScreenshotInstructions(data: any) {
+    console.log('📸 Showing screenshot instructions:', data);
+    
+    // First, navigate to the photo upload interface so DropZone will be ready
+    try {
+      console.log('📸 Opening photo upload interface for clipboard workflow...');
+      await this.openPhotoUploadInterface();
+    } catch (error) {
+      console.error('❌ Failed to open photo upload interface for clipboard workflow:', error);
+      // Continue anyway and show instructions - user can navigate manually
+    }
+    
+    // Create instruction modal
+    const modal = document.createElement('div');
+    modal.id = 'screenshot-instructions-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.3s ease-out;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      font-family: system-ui, sans-serif;
+      animation: scaleIn 0.3s ease-out;
+    `;
+
+    const title = document.createElement('h2');
+    title.textContent = '📸 Take Screenshot';
+    title.style.cssText = `
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      text-align: center;
+    `;
+
+    const subtitle = document.createElement('p');
+    subtitle.textContent = data.tabCaptureError 
+      ? `No doxy.me tabs found. ${data.tabCaptureError}`
+      : 'No doxy.me tabs found. Please take a manual screenshot.';
+    subtitle.style.cssText = `
+      margin: 0 0 20px 0;
+      font-size: 14px;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.5;
+    `;
+
+    const instructionsList = document.createElement('div');
+    instructionsList.style.cssText = `
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 16px;
+      margin: 20px 0;
+    `;
+
+    const instructions = data.instructions || [
+      'Press cmd+shift+4 to take a screenshot',
+      'Select the area you want to capture', 
+      'The image will automatically be inserted when ready'
+    ];
+
+    instructions.forEach((instruction: string, index: number) => {
+      const step = document.createElement('div');
+      step.style.cssText = `
+        display: flex;
+        align-items: flex-start;
+        margin: ${index > 0 ? '12px' : '0'} 0 0 0;
+        font-size: 14px;
+        color: #374151;
+        line-height: 1.5;
+      `;
+      
+      const stepNumber = document.createElement('span');
+      stepNumber.textContent = `${index + 1}.`;
+      stepNumber.style.cssText = `
+        display: inline-block;
+        width: 20px;
+        font-weight: 600;
+        color: #3b82f6;
+        flex-shrink: 0;
+      `;
+      
+      const stepText = document.createElement('span');
+      stepText.textContent = instruction;
+      
+      step.appendChild(stepNumber);
+      step.appendChild(stepText);
+      instructionsList.appendChild(step);
+    });
+
+    // Status indicator
+    const statusDiv = document.createElement('div');
+    statusDiv.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: #fef3c7;
+      border-radius: 8px;
+      margin: 20px 0;
+    `;
+
+    const statusText = document.createElement('span');
+    statusText.textContent = '⏳ Waiting for screenshot...';
+    statusText.style.cssText = `
+      font-size: 14px;
+      font-weight: 500;
+      color: #92400e;
+    `;
+
+    statusDiv.appendChild(statusText);
+
+    // Manual paste button as backup option
+    const pasteButton = document.createElement('button');
+    pasteButton.textContent = '📋 Manual Paste';
+    pasteButton.style.cssText = `
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-bottom: 12px;
+    `;
+
+    pasteButton.addEventListener('mouseenter', () => {
+      pasteButton.style.backgroundColor = '#2563eb';
+    });
+
+    pasteButton.addEventListener('mouseleave', () => {
+      pasteButton.style.backgroundColor = '#3b82f6';
+    });
+
+    pasteButton.addEventListener('click', async () => {
+      try {
+        console.log('📋 Manual paste button clicked, attempting clipboard read...');
+        const clipboardItems = await navigator.clipboard.read();
+        
+        if (clipboardItems.length === 0) {
+          alert('No items found in clipboard. Please copy an image first.');
+          return;
+        }
+
+        let imageFound = false;
+        for (let i = 0; i < clipboardItems.length; i++) {
+          const item = clipboardItems[i];
+          
+          // Check for image types
+          const imageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp'];
+          const foundImageType = item.types.find(type => 
+            imageTypes.includes(type) || type.startsWith('image/')
+          );
+          
+          if (foundImageType) {
+            console.log(`📋 Found image in clipboard: ${foundImageType}`);
+            const blob = await item.getType(foundImageType);
+            const base64Data = await this.blobToBase64(blob);
+            
+            // Close the instruction modal
+            this.closeScreenshotModal();
+            
+            // Insert image into DropZone
+            await this.insertImageIntoDropZone(base64Data, 'manual-paste');
+            
+            // Notify service worker of success
+            try {
+              await chrome.runtime.sendMessage({
+                type: 'CLIPBOARD_MONITORING_RESULT',
+                data: {
+                  success: true,
+                  imageData: base64Data,
+                  method: 'manual-paste'
+                }
+              });
+            } catch (error) {
+              console.error('Failed to notify service worker:', error);
+            }
+            
+            imageFound = true;
+            break;
+          }
+        }
+        
+        if (!imageFound) {
+          alert('No image found in clipboard. Please copy an image and try again.');
+        }
+        
+      } catch (error) {
+        console.error('Manual paste failed:', error);
+        alert('Failed to access clipboard. Please ensure you have copied an image and try again.');
+      }
+    });
+
+    // Cancel button
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.style.cssText = `
+      width: 100%;
+      padding: 12px;
+      background: #f3f4f6;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    `;
+
+    cancelButton.addEventListener('mouseenter', () => {
+      cancelButton.style.backgroundColor = '#e5e7eb';
+    });
+
+    cancelButton.addEventListener('mouseleave', () => {
+      cancelButton.style.backgroundColor = '#f3f4f6';
+    });
+
+    cancelButton.addEventListener('click', () => {
+      this.closeScreenshotModal();
+    });
+
+    // Assemble modal
+    modalContent.appendChild(title);
+    modalContent.appendChild(subtitle);
+    modalContent.appendChild(instructionsList);
+    modalContent.appendChild(statusDiv);
+    modalContent.appendChild(pasteButton);
+    modalContent.appendChild(cancelButton);
+    modal.appendChild(modalContent);
+
+    // Add styles for animations
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes scaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+      @keyframes scaleOut {
+        from { transform: scale(1); opacity: 1; }
+        to { transform: scale(0.9); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Add to document
+    document.body.appendChild(modal);
+
+    console.log('📸 Screenshot instructions modal shown');
+  }
+
+  private closeScreenshotModal() {
+    const modal = document.getElementById('screenshot-instructions-modal');
+    if (modal) {
+      modal.style.animation = 'fadeOut 0.3s ease-out';
+      const content = modal.querySelector('div');
+      if (content) {
+        (content as HTMLElement).style.animation = 'scaleOut 0.3s ease-out';
+      }
+      
+      setTimeout(() => {
+        if (modal.parentNode) {
+          modal.parentNode.removeChild(modal);
+        }
+      }, 300);
+      
+      console.log('📸 Screenshot instructions modal closed');
+    }
+  }
+
+  private async startClipboardMonitoring(timeoutMs: number) {
+    console.log(`📸 Starting enhanced clipboard monitoring for ${timeoutMs/1000} seconds...`);
+    
+    const startTime = Date.now();
+    const checkInterval = 500; // Check every 500ms for more responsive detection
+    let lastClipboardChecksum: string | null = null;
+    let checkCount = 0;
+    
+    const monitorLoop = async () => {
+      const elapsedTime = Date.now() - startTime;
+      checkCount++;
+      
+      if (elapsedTime >= timeoutMs) {
+        console.log(`❌ Clipboard monitoring timeout after ${checkCount} checks over ${elapsedTime/1000} seconds`);
+        // Notify service worker of timeout
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'CLIPBOARD_MONITORING_RESULT',
+            data: {
+              success: false,
+              error: `Timeout waiting for screenshot in clipboard (${checkCount} checks)`
+            }
+          });
+        } catch (error) {
+          console.error('❌ Failed to notify service worker of timeout:', error);
+        }
+        return;
+      }
+      
+      // Log progress every 5 seconds
+      if (checkCount % 10 === 0) {
+        console.log(`📸 Clipboard monitoring: check ${checkCount}, ${Math.round((timeoutMs - elapsedTime)/1000)}s remaining`);
+      }
+      
+      try {
+        // Ensure the page is focused for clipboard access
+        if (document.hasFocus && !document.hasFocus()) {
+          console.log('📸 Page not focused, attempting to focus...');
+          window.focus();
+          // Give focus a moment to take effect
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Check clipboard permissions first
+        const permissionStatus = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
+        if (permissionStatus.state === 'denied') {
+          console.error('❌ Clipboard read permission denied');
+          throw new Error('Clipboard read permission denied');
+        }
+        
+        // Check if clipboard contains image data
+        const clipboardItems = await navigator.clipboard.read();
+        
+        // Create a simple checksum to detect clipboard changes
+        const clipboardChecksum = clipboardItems.map(item => item.types.join(',')).join('|');
+        const clipboardChanged = lastClipboardChecksum !== clipboardChecksum;
+        
+        if (clipboardChanged) {
+          console.log(`📸 Clipboard content changed! Found ${clipboardItems.length} items (check ${checkCount})`);
+          lastClipboardChecksum = clipboardChecksum;
+        } else if (checkCount % 20 === 0) {
+          console.log(`📸 No clipboard change detected (check ${checkCount})`);
+        }
+        
+        for (let i = 0; i < clipboardItems.length; i++) {
+          const item = clipboardItems[i];
+          
+          if (clipboardChanged) {
+            console.log(`📸 Clipboard item ${i + 1} types:`, item.types);
+          }
+          
+          // Check for various image formats with expanded list
+          const imageTypes = [
+            'image/png', 
+            'image/jpeg', 
+            'image/jpg', 
+            'image/gif', 
+            'image/webp', 
+            'image/bmp',
+            'image/svg+xml',
+            'image/tiff',
+            'image/ico',
+            'image/avif'
+          ];
+          
+          const foundImageType = item.types.find(type => 
+            imageTypes.includes(type) || type.startsWith('image/')
+          );
+          
+          if (foundImageType) {
+            console.log(`📸 ✅ IMAGE DETECTED in clipboard! Type: ${foundImageType}, Size check starting...`);
+            
+            try {
+              // Get the image blob with timeout
+              const blob = await Promise.race([
+                item.getType(foundImageType),
+                new Promise<never>((_, reject) => 
+                  setTimeout(() => reject(new Error('Blob retrieval timeout')), 5000)
+                )
+              ]);
+              
+              console.log(`📸 ✅ Successfully retrieved blob: ${blob.size} bytes, type: ${blob.type}`);
+              
+              // Validate blob size
+              if (blob.size === 0) {
+                console.warn('⚠️ Blob is empty, skipping...');
+                continue;
+              }
+              
+              if (blob.size > 10 * 1024 * 1024) { // 10MB limit
+                console.warn(`⚠️ Blob too large: ${blob.size} bytes, skipping...`);
+                continue;
+              }
+              
+              // Convert blob to base64 with progress
+              console.log(`📸 Converting ${blob.size} byte blob to base64...`);
+              const base64Data = await this.blobToBase64(blob);
+              console.log(`📸 ✅ Successfully converted to base64: ${base64Data.length} characters`);
+              
+              // Validate base64 data
+              if (!base64Data.startsWith('data:image/')) {
+                console.warn('⚠️ Invalid base64 image data format, skipping...');
+                continue;
+              }
+              
+              console.log('🎉 CLIPBOARD IMAGE PROCESSING SUCCESSFUL! Closing modal and inserting image...');
+              
+              // Close the instruction modal
+              this.closeScreenshotModal();
+              
+              // Insert image into DropZone
+              await this.insertImageIntoDropZone(base64Data, 'clipboard');
+              
+              // Notify service worker of success
+              try {
+                await chrome.runtime.sendMessage({
+                  type: 'CLIPBOARD_MONITORING_RESULT',
+                  data: {
+                    success: true,
+                    imageData: base64Data,
+                    method: 'clipboard',
+                    imageType: foundImageType,
+                    imageSize: blob.size,
+                    checksCount: checkCount
+                  }
+                });
+                console.log('✅ Successfully notified service worker of clipboard success');
+              } catch (notificationError) {
+                console.error('❌ Failed to notify service worker of success:', notificationError);
+              }
+              
+              return;
+              
+            } catch (blobError) {
+              console.error(`❌ Failed to process clipboard image blob (${foundImageType}):`, blobError);
+              
+              // Try to continue with other items or formats
+              if (i < clipboardItems.length - 1) {
+                console.log('🔄 Trying next clipboard item...');
+                continue;
+              }
+            }
+          }
+        }
+        
+        // Continue monitoring
+        setTimeout(monitorLoop, checkInterval);
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Clipboard access failed (check ${checkCount}):`, errorMessage);
+        
+        // Different handling based on error type
+        if (errorMessage.includes('permission') || errorMessage.includes('denied')) {
+          console.error('🚫 Clipboard permission issue - stopping monitoring');
+          try {
+            await chrome.runtime.sendMessage({
+              type: 'CLIPBOARD_MONITORING_RESULT',
+              data: {
+                success: false,
+                error: `Clipboard permission denied: ${errorMessage}`
+              }
+            });
+          } catch (notificationError) {
+            console.error('❌ Failed to notify service worker of permission error:', notificationError);
+          }
+          return;
+        }
+        
+        // For other errors, continue monitoring but with longer interval
+        console.log(`🔄 Continuing monitoring with longer interval due to error...`);
+        setTimeout(monitorLoop, checkInterval * 2);
+      }
+    };
+    
+    // Initial clipboard state check
+    try {
+      const initialItems = await navigator.clipboard.read();
+      lastClipboardChecksum = initialItems.map(item => item.types.join(',')).join('|');
+      console.log(`📸 Initial clipboard state: ${initialItems.length} items`);
+    } catch (error) {
+      console.log('📸 Could not read initial clipboard state:', error);
+    }
+    
+    // Start monitoring
+    console.log('📸 🚀 Starting clipboard monitoring loop...');
+    monitorLoop();
+  }
+
+  private async blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  private async extractEMRData(fields: string[]): Promise<Record<string, string>> {
+    console.log('📋 Extracting EMR data for fields:', fields);
+    console.log('📋 Current page URL:', window.location.href);
+    console.log('📋 Current page type:', window.location.href.includes('Dashboard') ? 'DASHBOARD' : 'PATIENT_PAGE');
+    
+    // Enhanced validation for patient record view
+    const xestroBoxes = document.querySelectorAll('.XestroBox');
+    
+    // Check for Patient Record button using valid selectors
+    let patientRecordButton = document.querySelector('button.PatientDetailsButton');
+    if (!patientRecordButton) {
+      patientRecordButton = await this.findButtonByText('Patient Record');
+    }
+    
+    console.log('📋 Found XestroBox elements:', xestroBoxes.length);
+    console.log('📋 Patient Record button present:', !!patientRecordButton);
+    
+    if (xestroBoxes.length === 0) {
+      console.warn('⚠️ No XestroBox elements found - patient record may not be opened');
+      
+      if (patientRecordButton) {
+        console.warn('💡 Patient Record button is available - attempting to open record');
+        try {
+          await this.ensurePatientRecordOpened();
+          
+          // Re-check for XestroBox elements after attempting to open record
+          const newXestroBoxes = document.querySelectorAll('.XestroBox');
+          if (newXestroBoxes.length === 0) {
+            console.warn('⚠️ Still no XestroBox elements after clicking Patient Record button');
+            console.warn('💡 Proceeding with extraction but results may be limited');
+          } else {
+            console.log(`✅ Found ${newXestroBoxes.length} XestroBox elements after opening record`);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to open patient record:', error);
+        }
+      } else {
+        console.warn('💡 EMR data extraction requires patient page with clinical fields');
+        console.warn('💡 Make sure you are on the correct patient page');
+      }
+    }
+    
+    const extractedData: Record<string, string> = {};
+    
+    for (const fieldName of fields) {
+      try {
+        let fieldValue = '';
+        
+        // Map common field name variations
+        const normalizedFieldName = this.normalizeFieldName(fieldName);
+        
+        switch (normalizedFieldName) {
+          case 'background':
+            fieldValue = await this.extractFieldContent('Background');
+            break;
+          case 'investigations':
+          case 'investigation-summary':
+            fieldValue = await this.extractFieldContent('Investigation Summary');
+            break;
+          case 'medications':
+            fieldValue = await this.extractFieldContent('Medications (Problem List for Phil)') || 
+                        await this.extractFieldContent('Medications');
+            break;
+          default:
+            // Try to extract custom field
+            fieldValue = await this.extractFieldContent(fieldName);
+        }
+        
+        extractedData[fieldName] = fieldValue;
+        console.log(`📋 Extracted ${fieldName}: ${fieldValue ? fieldValue.length + ' chars' : 'empty'}`);
+        
+      } catch (error) {
+        console.warn(`⚠️ Failed to extract field "${fieldName}":`, error);
+        extractedData[fieldName] = '';
+      }
+    }
+    
+    console.log('📋 EMR data extraction completed:', Object.keys(extractedData));
+    return extractedData;
+  }
+
+  private normalizeFieldName(fieldName: string): string {
+    return fieldName.toLowerCase().replace(/[_\s-]+/g, '-');
+  }
+
+  private async extractCustomNoteContent(fieldDisplayName: string): Promise<string> {
+    console.log(`📋 Looking for customNote content in field: "${fieldDisplayName}"`);
+    
+    try {
+      // Find the XestroBox for this field
+      const xestroBox = await this.findXestroBoxByTitle(fieldDisplayName);
+      if (!xestroBox) {
+        console.log(`⚠️ No XestroBox found for "${fieldDisplayName}"`);
+        return '';
+      }
+      
+      // Look for .customNote elements within this XestroBox
+      const customNotes = xestroBox.querySelectorAll('.customNote');
+      console.log(`📋 Found ${customNotes.length} customNote elements in "${fieldDisplayName}" XestroBox`);
+      
+      if (customNotes.length === 0) {
+        console.log(`⚠️ No .customNote elements found in "${fieldDisplayName}" XestroBox`);
+        return '';
+      }
+      
+      // Extract content from all customNote elements
+      let combinedContent = '';
+      for (let i = 0; i < customNotes.length; i++) {
+        const note = customNotes[i] as HTMLElement;
+        if (note.offsetParent !== null) { // Check if visible
+          const content = (note.textContent || note.innerText || '').trim();
+          if (content) {
+            if (combinedContent) {
+              combinedContent += '\n\n' + content; // Separate multiple notes
+            } else {
+              combinedContent = content;
+            }
+            console.log(`📋 Extracted customNote ${i + 1} content: ${content.length} chars`);
+          }
+        }
+      }
+      
+      if (combinedContent) {
+        console.log(`✅ Total customNote content for "${fieldDisplayName}": ${combinedContent.length} chars`);
+        return combinedContent;
+      } else {
+        console.log(`⚠️ No visible content found in customNote elements for "${fieldDisplayName}"`);
+        return '';
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error extracting customNote content for "${fieldDisplayName}":`, error);
+      return '';
+    }
+  }
+
+  private async extractFieldContent(fieldDisplayName: string): Promise<string> {
+    console.log(`📋 Extracting content for field: "${fieldDisplayName}"`);
+    
+    try {
+      // First, try the new direct customNote extraction method
+      const customNoteContent = await this.extractCustomNoteContent(fieldDisplayName);
+      if (customNoteContent) {
+        console.log(`📋 Found customNote content for "${fieldDisplayName}": ${customNoteContent.length} chars`);
+        return customNoteContent;
+      }
+      
+      // Fallback: try to find and expand the XestroBox for this field (original method)
+      const xestroBox = await this.findXestroBoxByTitle(fieldDisplayName);
+      if (xestroBox) {
+        console.log(`✅ Found XestroBox for "${fieldDisplayName}"`);
+        
+        // Click to expand if needed (some boxes may be collapsed)
+        const titleElement = xestroBox.querySelector('.XestroBoxTitle');
+        if (titleElement) {
+          (titleElement as HTMLElement).click();
+          await this.wait(300); // Wait for expansion
+        }
+        
+        // Look for textarea or contenteditable within this box
+        const textArea = xestroBox.querySelector('textarea') as HTMLTextAreaElement;
+        if (textArea && textArea.offsetParent !== null) {
+          const content = textArea.value.trim();
+          console.log(`📋 Found textarea content for "${fieldDisplayName}": ${content.length} chars`);
+          return content;
+        }
+        
+        // Try contenteditable elements
+        const contentEditables = xestroBox.querySelectorAll('[contenteditable="true"]');
+        for (const element of contentEditables) {
+          const htmlElement = element as HTMLElement;
+          if (htmlElement.offsetParent !== null) {
+            const content = (htmlElement.textContent || htmlElement.innerText || '').trim();
+            if (content) {
+              console.log(`📋 Found contenteditable content for "${fieldDisplayName}": ${content.length} chars`);
+              return content;
+            }
+          }
+        }
+      }
+      
+      // Fallback: try to find any textarea/input with matching attributes
+      const fallbackSelectors = [
+        `textarea[data-field="${fieldDisplayName.toLowerCase()}"]`,
+        `textarea[placeholder*="${fieldDisplayName}"]`,
+        `textarea[aria-label*="${fieldDisplayName}"]`,
+        `#${fieldDisplayName.replace(/\s+/g, '').toLowerCase()}`,
+        `.${fieldDisplayName.replace(/\s+/g, '-').toLowerCase()}`
+      ];
+      
+      for (const selector of fallbackSelectors) {
+        const element = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
+        if (element && element.offsetParent !== null) {
+          const content = element.value.trim();
+          console.log(`📋 Found fallback content for "${fieldDisplayName}" via ${selector}: ${content.length} chars`);
+          return content;
+        }
+      }
+      
+      console.log(`⚠️ No content found for field "${fieldDisplayName}"`);
+      return '';
+      
+    } catch (error) {
+      console.error(`❌ Error extracting field "${fieldDisplayName}":`, error);
+      return '';
+    }
+  }
+
+  private async findXestroBoxByTitle(title: string): Promise<HTMLElement | null> {
+    console.log(`🔍 Looking for XestroBox with title: "${title}"`);
+    
+    const xestroBoxes = document.querySelectorAll('.XestroBox');
+    console.log(`🔍 Found ${xestroBoxes.length} XestroBox elements`);
+    
+    // Log all XestroBox titles for debugging
+    xestroBoxes.forEach((box, index) => {
+      const titleElement = box.querySelector('.XestroBoxTitle');
+      const titleText = titleElement?.textContent || 'No title';
+      console.log(`🔍 XestroBox ${index}: "${titleText}"`);
+    });
+    
+    for (const box of xestroBoxes) {
+      const titleElement = box.querySelector('.XestroBoxTitle');
+      if (titleElement && titleElement.textContent?.includes(title)) {
+        console.log(`✅ Found XestroBox with matching title: "${titleElement.textContent}"`);
+        return box as HTMLElement;
+      }
+    }
+    
+    // Try partial matches for common variations
+    const partialMatches = [
+      title.split(' ')[0], // First word
+      title.replace(/\s+/g, ''), // No spaces
+      title.toLowerCase()
+    ];
+    
+    for (const partialTitle of partialMatches) {
+      for (const box of xestroBoxes) {
+        const titleElement = box.querySelector('.XestroBoxTitle');
+        const titleText = titleElement?.textContent?.toLowerCase() || '';
+        if (titleText.includes(partialTitle.toLowerCase())) {
+          console.log(`✅ Found XestroBox with partial match: "${titleElement?.textContent}" for "${title}"`);
+          return box as HTMLElement;
+        }
+      }
+    }
+    
+    console.log(`❌ No XestroBox found for title: "${title}"`);
+    return null;
+  }
+
+  private async saveNote() {
+    console.log('💾 Attempting to save note...');
+    
+    // Find and click the save button
+    const saveButton = document.getElementById('patientNotesSave') as HTMLButtonElement ||
+                       document.querySelector('button[title*="Save"]') as HTMLButtonElement ||
+                       document.querySelector('button:contains("Save")') as HTMLButtonElement;
+    
+    if (saveButton) {
+      saveButton.click();
+      console.log('💾 Note saved via button');
+      return;
+    }
+    
+    // Try Shift+Enter as fallback
+    const noteArea = document.getElementById('AddNoteArea') as HTMLTextAreaElement;
+    if (noteArea) {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        shiftKey: true,
+        bubbles: true
+      });
+      noteArea.dispatchEvent(event);
+      console.log('💾 Note saved via Shift+Enter');
+      return;
+    }
+    
+    console.log('❌ No save method available');
+  }
+
+  // Calendar/Appointment Book Patient Extraction
+  private async extractCalendarPatients(): Promise<any> {
+    console.log('📅 Starting calendar patient extraction...');
+    console.log('📅 Current page URL:', window.location.href);
+    
+    // Check if we're on a calendar/appointment book page
+    if (!this.isCalendarPage()) {
+      throw new Error('Not on a calendar/appointment book page');
+    }
+    
+    // Extract appointment date
+    const appointmentDate = this.extractAppointmentDate();
+    console.log('📅 Appointment date:', appointmentDate);
+    
+    // Find the appointment book table
+    const appointmentTable = document.querySelector('table.appointmentBook');
+    if (!appointmentTable) {
+      throw new Error('Appointment book table not found');
+    }
+    
+    // Extract patient appointments
+    const patients = this.extractPatientsFromTable(appointmentTable as HTMLTableElement);
+    console.log('📅 Extracted patients:', patients);
+    
+    return {
+      appointmentDate,
+      calendarUrl: window.location.href,
+      patients,
+      totalCount: patients.length
+    };
+  }
+
+  private isCalendarPage(): boolean {
+    // Check for appointment book elements
+    const appointmentBook = document.querySelector('.one-appt-book, table.appointmentBook');
+    const dateInput = document.querySelector('input.date.form-control');
+    
+    return !!(appointmentBook && dateInput);
+  }
+
+  private extractAppointmentDate(): string {
+    // Extract date from the date input field
+    const dateInput = document.querySelector('input.date.form-control') as HTMLInputElement;
+    if (dateInput) {
+      return dateInput.value || dateInput.getAttribute('data-value') || '';
+    }
+    
+    // Fallback to searching for date in the DOM
+    const dateElements = document.querySelectorAll('[data-date]');
+    for (const element of dateElements) {
+      const dataDate = element.getAttribute('data-date');
+      if (dataDate) {
+        return dataDate;
+      }
+    }
+    
+    return new Date().toDateString(); // Fallback to today
+  }
+
+  private extractPatientsFromTable(table: HTMLTableElement): any[] {
+    console.log('📅 Extracting patients from appointment table...');
+    const patients: any[] = [];
+    
+    // Find all appointment rows (those with patient data)
+    const appointmentRows = table.querySelectorAll('tr.appt');
+    console.log(`📅 Found ${appointmentRows.length} appointment rows`);
+    
+    appointmentRows.forEach((row, index) => {
+      try {
+        const nameCell = row.querySelector('td.Name');
+        if (!nameCell || !nameCell.textContent?.trim()) {
+          // Skip empty appointments
+          return;
+        }
+        
+        const patient = this.extractPatientFromRow(row as HTMLTableRowElement);
+        if (patient) {
+          // Validate patient pattern
+          const isValidPattern = this.validatePatientPattern(patient);
+          if (isValidPattern.isValid) {
+            patients.push(patient);
+            console.log(`📅 ✅ Extracted patient ${index + 1} (${isValidPattern.patternType}):`, patient);
+          } else {
+            console.warn(`📅 ⚠️ Patient ${index + 1} has invalid pattern:`, { patient, reason: isValidPattern.reason });
+            // Still include for backward compatibility, but mark as legacy
+            patients.push({ ...patient, _patternType: 'legacy' });
+          }
+        }
+      } catch (error) {
+        console.warn(`📅 Failed to extract patient from row ${index}:`, error);
+      }
+    });
+    
+    console.log(`📅 Successfully extracted ${patients.length} patients from appointment table`);
+    return patients;
+  }
+
+  private extractPatientFromRow(row: HTMLTableRowElement): any | null {
+    // Extract time
+    const timeCell = row.querySelector('td.Time');
+    const appointmentTime = timeCell?.textContent?.trim() || '';
+    
+    // Extract appointment type
+    const typeCell = row.querySelector('td.Type');
+    const appointmentType = typeCell?.textContent?.trim() || '';
+    
+    // Extract patient name and details from Name cell
+    const nameCell = row.querySelector('td.Name');
+    if (!nameCell) return null;
+    
+    const patientInfo = this.parsePatientNameCell(nameCell);
+    if (!patientInfo) return null;
+    
+    // Extract confirmation status
+    const confirmCell = row.querySelector('td.Confirm');
+    const confirmed = this.isAppointmentConfirmed(confirmCell);
+    
+    // Check if first appointment
+    const isFirstAppointment = nameCell.querySelector('.fa-star') !== null;
+    
+    // Extract notes
+    const notesCell = row.querySelector('td.Notes');
+    const notes = notesCell?.textContent?.trim() || '';
+    
+    return {
+      name: patientInfo.name,
+      dob: patientInfo.dob,
+      fileNumber: patientInfo.fileNumber,
+      appointmentTime,
+      appointmentType,
+      confirmed,
+      isFirstAppointment,
+      notes: notes || undefined
+    };
+  }
+
+  private parsePatientNameCell(nameCell: Element): { name: string; dob: string; fileNumber: string } | null {
+    // Look for the pattern: "Name (ID)" as specified by user workflow
+    const nameSpan = nameCell.querySelector('span[aria-label]');
+    if (!nameSpan) return null;
+    
+    const ariaLabel = nameSpan.getAttribute('aria-label') || '';
+    const displayName = nameSpan.textContent?.trim() || '';
+    
+    console.log('📅 Parsing patient name cell:', { ariaLabel, displayName });
+    
+    // Try new pattern first: "Name (ID)" e.g., "Test Test (14524)"
+    const nameIdMatch = displayName.match(/^(.+?)\s*\((\d+)\)$/);
+    if (nameIdMatch) {
+      const fullName = nameIdMatch[1].trim();
+      const patientId = nameIdMatch[2];
+      
+      console.log('📅 Found Name (ID) pattern:', { fullName, patientId });
+      
+      // Extract DOB from aria-label if available (for backward compatibility)
+      const dobMatch = ariaLabel.match(/\((\d{2}\/\d{2}\/\d{4})\)/);
+      const dob = dobMatch ? dobMatch[1] : '';
+      
+      return {
+        name: fullName,
+        dob,
+        fileNumber: patientId // Use patient ID as file number
+      };
+    }
+    
+    // Fallback to legacy DOB pattern: "Mrs Jessica (Jess) Demicoli (07/08/1985)"
+    const legacyNameMatch = ariaLabel.match(/^(.+?)\s*\((\d{2}\/\d{2}\/\d{4})\)$/);
+    if (legacyNameMatch) {
+      console.log('📅 Using legacy DOB pattern as fallback');
+      const fullName = legacyNameMatch[1].trim();
+      const dob = legacyNameMatch[2];
+      
+      // Extract file number from small element
+      const fileNumberElement = nameCell.querySelector('small');
+      const fileNumberText = fileNumberElement?.textContent?.trim() || '';
+      const fileNumber = fileNumberText.replace(/[^\d]/g, ''); // Extract just the number
+      
+      return {
+        name: fullName,
+        dob,
+        fileNumber
+      };
+    }
+    
+    console.warn('📅 Could not parse patient name from either pattern:', { ariaLabel, displayName });
+    return null;
+  }
+
+  /**
+   * Validate patient pattern to ensure it follows the expected "Name (ID)" format
+   */
+  private validatePatientPattern(patient: any): { isValid: boolean; patternType: string; reason?: string } {
+    if (!patient || !patient.name || !patient.fileNumber) {
+      return { isValid: false, patternType: 'invalid', reason: 'Missing name or fileNumber' };
+    }
+
+    // Check if fileNumber is numeric (indicating ID pattern)
+    const isNumericId = /^\d+$/.test(patient.fileNumber);
+    
+    if (isNumericId) {
+      // Validate that the name doesn't contain obvious DOB patterns
+      const containsDOB = /\d{2}\/\d{2}\/\d{4}/.test(patient.name);
+      if (!containsDOB) {
+        return { isValid: true, patternType: 'name-id' };
+      }
+    }
+
+    // Check for legacy DOB pattern
+    if (patient.dob && /\d{2}\/\d{2}\/\d{4}/.test(patient.dob)) {
+      return { isValid: true, patternType: 'legacy-dob' };
+    }
+
+    return { 
+      isValid: false, 
+      patternType: 'unknown', 
+      reason: `Unrecognized pattern: name="${patient.name}", fileNumber="${patient.fileNumber}", dob="${patient.dob}"` 
+    };
+  }
+
+  private isAppointmentConfirmed(confirmCell: Element | null): boolean {
+    if (!confirmCell) return false;
+    
+    // Look for confirmation icons
+    const confirmIcon = confirmCell.querySelector('.fa-calendar-check.text-success');
+    return !!confirmIcon;
+  }
+
+  private async navigateToPatient(fileNumber: string, patientName: string): Promise<void> {
+    console.log(`🧭 Navigating to patient: ${patientName} (${fileNumber})`);
+    
+    // Implementation will depend on Xestro navigation patterns
+    // This could involve:
+    // 1. Using a search function with file number
+    // 2. Direct URL navigation if there's a pattern
+    // 3. Clicking through UI elements
+    
+    // For now, we'll implement a basic approach
+    // Check if there's a patient search or navigation mechanism
+    const searchInput = document.querySelector('input[placeholder*="search"], input[placeholder*="patient"]') as HTMLInputElement;
+    
+    if (searchInput) {
+      // Use search functionality
+      searchInput.value = fileNumber;
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Wait for search results and click on the correct patient
+      await this.wait(1000);
+      
+      // Look for patient in search results
+      const searchResults = document.querySelectorAll('[data-patient-id], .patient-result');
+      for (const result of searchResults) {
+        if (result.textContent?.includes(fileNumber) || result.textContent?.includes(patientName)) {
+          (result as HTMLElement).click();
+          console.log(`🧭 Clicked patient in search results`);
+          
+          // Wait for patient page to load, then ensure record is opened
+          await this.wait(2000);
+          await this.ensurePatientRecordOpened();
+          return;
+        }
+      }
+    }
+    
+    // Alternative: Try direct URL navigation if there's a pattern
+    const currentUrl = window.location.href;
+    const baseUrl = currentUrl.split('?')[0].split('#')[0];
+    
+    // Try common Xestro patient URL patterns
+    const possibleUrls = [
+      `${baseUrl}?patient=${fileNumber}`,
+      `${baseUrl}#patient/${fileNumber}`,
+      `${baseUrl}/patient/${fileNumber}`
+    ];
+    
+    for (const url of possibleUrls) {
+      try {
+        console.log(`🧭 Trying navigation to: ${url}`);
+        window.location.href = url;
+        await this.wait(2000); // Wait for navigation
+        
+        // Check if we successfully navigated to patient page
+        if (document.querySelector('.patient-record, #patient-view, .XestroBox')) {
+          console.log(`✅ Successfully navigated to patient page`);
+          
+          // Ensure patient record is opened for data extraction
+          await this.ensurePatientRecordOpened();
+          return;
+        }
+      } catch (error) {
+        console.warn(`🧭 Navigation attempt failed for ${url}:`, error);
+      }
+    }
+    
+    throw new Error(`Unable to navigate to patient ${patientName} (${fileNumber})`);
+  }
+
+  /**
+   * Activate a patient using UI-driven approach (for SPA navigation)
+   * @param patientSelector - Either a CSS selector or patient index number
+   */
+  private async activatePatientByElement(patientSelector: string | number): Promise<void> {
+    console.log(`🖱️ Activating patient by element: ${patientSelector}`);
+    console.log(`🖱️ Current page URL: ${window.location.href}`);
+    console.log(`🖱️ Page title: ${document.title}`);
+    
+    let patientElement: HTMLElement | null = null;
+    
+    if (typeof patientSelector === 'number') {
+      // Patient index - get the nth patient from appointment table using correct selectors
+      const appointmentTable = document.querySelector('table.appointmentBook');
+      if (!appointmentTable) {
+        // Debug: Show what table elements are available
+        const allTables = document.querySelectorAll('table');
+        const tableClasses = Array.from(allTables).map(table => 
+          table.className || 'no-class'
+        );
+        console.error(`🖱️ table.appointmentBook not found. Available tables:`, tableClasses);
+        throw new Error(`Appointment table not found. Expected table.appointmentBook. Found ${allTables.length} tables: ${tableClasses.join(', ')}`);
+      }
+      
+      // Find appointment rows first, then patient name cells (matching working discovery logic)
+      const appointmentRows = appointmentTable.querySelectorAll('tr.appt');
+      console.log(`🖱️ Found ${appointmentRows.length} appointment rows`);
+      
+      const patientElements = Array.from(appointmentRows)
+        .map(row => row.querySelector('td.Name'))
+        .filter(cell => cell && cell.textContent?.trim()) as HTMLElement[];
+        
+      console.log(`🖱️ Found ${patientElements.length} valid patient elements`);
+      
+      if (patientSelector >= patientElements.length) {
+        throw new Error(`Patient index ${patientSelector} out of range. Found ${patientElements.length} patients from ${appointmentRows.length} rows.`);
+      }
+      
+      patientElement = patientElements[patientSelector];
+      console.log(`🖱️ Found patient element by index ${patientSelector}`);
+      
+    } else {
+      // CSS selector - find specific element
+      patientElement = document.querySelector(patientSelector) as HTMLElement;
+      if (!patientElement) {
+        throw new Error(`Patient element not found using selector: ${patientSelector}`);
+      }
+      console.log(`🖱️ Found patient element by selector: ${patientSelector}`);
+    }
+    
+    // Extract patient info for logging
+    const patientInfo = this.extractPatientInfoFromElement(patientElement);
+    console.log(`🖱️ Activating patient: ${patientInfo.name} (${patientInfo.fileNumber})`);
+    
+    // Click the patient name element to activate them
+    patientElement.click();
+    console.log('🖱️ Patient name clicked');
+    
+    // Wait for patient activation
+    await this.wait(1000);
+    
+    // Verify activation (look for visual indicators)
+    const isActivated = this.checkPatientActivation(patientElement);
+    if (isActivated) {
+      console.log('✅ Patient activation confirmed visually');
+    } else {
+      console.warn('⚠️ Patient activation not visually confirmed, proceeding anyway');
+    }
+    
+    // Ensure patient record is opened
+    await this.ensurePatientRecordOpened();
+    
+    console.log(`✅ Successfully activated patient: ${patientInfo.name}`);
+  }
+
+  /**
+   * Extract patient information from a patient name element
+   */
+  private extractPatientInfoFromElement(patientElement: HTMLElement): { name: string; dob: string; fileNumber: string } {
+    const nameSpan = patientElement.querySelector('span[aria-label]');
+    const fileNumberElement = patientElement.querySelector('small');
+    
+    if (!nameSpan) {
+      return { name: 'Unknown', dob: '', fileNumber: '' };
+    }
+    
+    // Parse aria-label: "Mr Test Test (14/09/1976)"
+    const ariaLabel = nameSpan.getAttribute('aria-label') || '';
+    const nameMatch = ariaLabel.match(/^(.+?)\s*\((.+?)\)$/);
+    
+    const name = nameMatch ? nameMatch[1].trim() : nameSpan.textContent?.trim() || 'Unknown';
+    const dob = nameMatch ? nameMatch[2] : '';
+    const fileNumber = fileNumberElement?.textContent?.replace(/[^\d]/g, '') || '';
+    
+    return { name, dob, fileNumber };
+  }
+
+  /**
+   * Check if patient is visually activated (has selected styling)
+   */
+  private checkPatientActivation(patientElement: HTMLElement): boolean {
+    const row = patientElement.closest('tr');
+    if (!row) return false;
+    
+    // Check for common activation indicators
+    return (
+      row.classList.contains('selected') ||
+      row.classList.contains('active') ||
+      row.style.backgroundColor !== '' ||
+      row.querySelector('.fa-check') !== null ||
+      window.getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)' // Any background color
+    );
+  }
+
+  /**
+   * SPA Workflow: Double-click patient name to activate
+   */
+  private async doubleClickPatient(patientName: string, patientId: string): Promise<void> {
+    console.log(`👆 Double-clicking patient: ${patientName} (ID: ${patientId})`);
+    console.log(`👆 Current URL: ${window.location.href}`);
+    console.log(`👆 Page title: ${document.title}`);
+    
+    // First, log all available patient elements for debugging
+    const allPatientElements = document.querySelectorAll('span[aria-label]');
+    console.log(`👆 All patient elements found (${allPatientElements.length}):`, Array.from(allPatientElements).map((el, index) => ({
+      index,
+      ariaLabel: el.getAttribute('aria-label'),
+      textContent: el.textContent?.trim(),
+      className: el.className,
+      id: el.id,
+      visible: (el as HTMLElement).offsetParent !== null
+    })));
+    
+    // Find patient in appointment book by name pattern "Name (ID)"
+    const searchPattern = `${patientName} (${patientId})`;
+    console.log(`👆 Searching for patient with pattern: "${searchPattern}"`);
+    
+    // Look for patient elements using the "Name (ID)" pattern
+    const patientElements = Array.from(document.querySelectorAll('span[aria-label]')).filter(el => {
+      const textContent = el.textContent?.trim() || '';
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      
+      // Check for exact "Name (ID)" pattern match
+      const exactPatternMatch = textContent === searchPattern;
+      
+      // Check for name match in either text content or aria-label
+      const nameMatch = textContent.includes(patientName) || ariaLabel.includes(patientName);
+      
+      // Check for ID match in text content (for "Name (ID)" format)
+      const idMatch = textContent.includes(`(${patientId})`);
+      
+      return exactPatternMatch || (nameMatch && idMatch);
+    });
+    
+    console.log(`👆 Filtered patient elements (${patientElements.length}):`, patientElements.map((el, index) => {
+      const textContent = el.textContent?.trim() || '';
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      return {
+        index,
+        ariaLabel,
+        textContent,
+        matches: {
+          exactPattern: textContent === searchPattern,
+          nameMatch: textContent.includes(patientName) || ariaLabel.includes(patientName),
+          idMatch: textContent.includes(`(${patientId})`),
+          searchPattern
+        }
+      };
+    }));
+    
+    if (patientElements.length === 0) {
+      console.error(`👆 ERROR: No patient elements found matching pattern "${searchPattern}"`);
+      console.error(`👆 Search criteria: Name="${patientName}", ID="${patientId}"`);
+      console.error(`👆 Available patients:`, Array.from(allPatientElements).map(el => ({
+        textContent: el.textContent?.trim(),
+        ariaLabel: el.getAttribute('aria-label')
+      })));
+      throw new Error(`Patient not found in appointment book: ${searchPattern}. Expected format: "Name (ID)"`);
+    }
+    
+    if (patientElements.length > 1) {
+      console.warn(`👆 WARNING: Multiple patient elements found (${patientElements.length}), using the first one`);
+    }
+    
+    const patientElement = patientElements[0] as HTMLElement;
+    console.log(`👆 Selected patient element:`, {
+      ariaLabel: patientElement.getAttribute('aria-label'),
+      textContent: patientElement.textContent?.trim(),
+      className: patientElement.className,
+      id: patientElement.id,
+      tagName: patientElement.tagName,
+      parentElement: patientElement.parentElement?.tagName,
+      boundingRect: patientElement.getBoundingClientRect()
+    });
+    
+    console.log(`👆 Performing double-click on patient element...`);
+    
+    // Simulate double-click event
+    const dblClickEvent = new MouseEvent('dblclick', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+    
+    patientElement.dispatchEvent(dblClickEvent);
+    console.log(`👆 Double-click event dispatched`);
+    
+    // Wait for navigation to patient record
+    console.log(`👆 Waiting 1 second for navigation...`);
+    await this.wait(1000);
+    
+    console.log(`👆 Double-click completed for patient: ${patientName}`);
+    console.log(`👆 Post-click URL: ${window.location.href}`);
+    console.log(`👆 Post-click title: ${document.title}`);
+  }
+
+  /**
+   * SPA Workflow: Navigate to Patient Record view
+   */
+  private async navigateToPatientRecord(): Promise<void> {
+    console.log(`🏥 Navigating to Patient Record view`);
+    
+    // Look for "Patient Record" button in top navigation
+    const patientRecordButton = this.findButtonByText('Patient Record') || 
+                               this.findButtonByText('Patient') ||
+                               document.querySelector('button[title*="Patient Record"]') ||
+                               document.querySelector('a[href*="patient"]');
+    
+    if (!patientRecordButton) {
+      throw new Error('Patient Record button not found in navigation');
+    }
+    
+    console.log(`🏥 Found Patient Record button, clicking...`);
+    if (patientRecordButton instanceof HTMLElement) {
+      patientRecordButton.click();
+    } else {
+      throw new Error('Patient Record button is not a clickable element');
+    }
+    
+    // Wait for view to load
+    await this.wait(2000);
+    
+    // Verify we're in patient record view by checking for XestroBoxes
+    const xestroBoxCount = document.querySelectorAll('.XestroBox').length;
+    if (xestroBoxCount === 0) {
+      console.warn(`🏥 Patient Record view may not have loaded (no XestroBoxes found)`);
+    }
+    
+    console.log(`🏥 Navigation to Patient Record completed (${xestroBoxCount} XestroBoxes found)`);
+  }
+
+  /**
+   * SPA Workflow: Navigate back to Appointment Book view
+   */
+  private async navigateToAppointmentBook(): Promise<void> {
+    console.log(`📅 Navigating back to Appointment Book view`);
+    console.log(`📅 Current URL: ${window.location.href}`);
+    console.log(`📅 Page title: ${document.title}`);
+    
+    // First, let's inspect what navigation elements are available
+    console.log(`📅 Inspecting available navigation elements...`);
+    
+    // Log all buttons on the page
+    const allButtons = document.querySelectorAll('button');
+    console.log(`📅 All buttons found (${allButtons.length}):`, Array.from(allButtons).map((btn, index) => ({
+      index,
+      textContent: btn.textContent?.trim(),
+      className: btn.className,
+      id: btn.id,
+      title: btn.title,
+      onclick: btn.onclick ? 'has onclick' : 'no onclick',
+      visible: btn.offsetParent !== null
+    })));
+    
+    // Log all links on the page
+    const allLinks = document.querySelectorAll('a');
+    console.log(`📅 All links found (${allLinks.length}):`, Array.from(allLinks).map((link, index) => ({
+      index,
+      textContent: link.textContent?.trim(),
+      href: link.href,
+      className: link.className,
+      id: link.id,
+      title: link.title,
+      visible: link.offsetParent !== null
+    })));
+    
+    // Look for navigation elements with various patterns
+    console.log(`📅 Searching for navigation buttons...`);
+    
+    const searchPatterns = [
+      'Appointment Book',
+      'Appointments', 
+      'Calendar',
+      'Dashboard',
+      'Home',
+      'Back',
+      'Close',
+      'Return'
+    ];
+    
+    let appointmentBookButton = null;
+    let foundPattern = '';
+    
+    for (const pattern of searchPatterns) {
+      console.log(`📅 Searching for pattern: "${pattern}"`);
+      const button = this.findButtonByText(pattern);
+      if (button) {
+        appointmentBookButton = button;
+        foundPattern = pattern;
+        console.log(`📅 Found button with pattern "${pattern}":`, {
+          textContent: button.textContent?.trim(),
+          className: button.className,
+          id: button.id,
+          tagName: button.tagName
+        });
+        break;
+      }
+    }
+    
+    // Also try specific selectors
+    if (!appointmentBookButton) {
+      console.log(`📅 Trying specific selectors...`);
+      const selectors = [
+        'button[title*="Appointment"]',
+        'a[href*="appointment"]',
+        'button[title*="Dashboard"]',
+        'a[href*="Dashboard"]',
+        'button.btn-default:contains("Back")',
+        'button.btn-default:contains("Close")',
+        '.navbar-nav a',
+        '.nav-tabs a',
+        '.breadcrumb a'
+      ];
+      
+      for (const selector of selectors) {
+        try {
+          const element = document.querySelector(selector);
+          if (element) {
+            console.log(`📅 Found element with selector "${selector}":`, {
+              textContent: element.textContent?.trim(),
+              className: element.className,
+              id: element.id,
+              tagName: element.tagName,
+              href: (element as any).href
+            });
+            if (!appointmentBookButton) {
+              appointmentBookButton = element;
+              foundPattern = `selector: ${selector}`;
+            }
+          }
+        } catch (e) {
+          // Invalid selector, skip
+        }
+      }
+    }
+    
+    if (!appointmentBookButton) {
+      console.error(`📅 ERROR: No navigation button found`);
+      console.error(`📅 DOM inspection complete - no suitable navigation element located`);
+      throw new Error('Appointment Book button not found in navigation');
+    }
+    
+    console.log(`📅 Found navigation button with pattern "${foundPattern}", clicking...`);
+    
+    if (appointmentBookButton instanceof HTMLElement) {
+      appointmentBookButton.click();
+      console.log(`📅 Clicked navigation button successfully`);
+    } else {
+      console.error(`📅 ERROR: Found element is not clickable HTMLElement`);
+      throw new Error('Appointment Book button is not a clickable element');
+    }
+    
+    // Wait for view to load
+    console.log(`📅 Waiting 2 seconds for page transition...`);
+    await this.wait(2000);
+    
+    console.log(`📅 Verifying navigation result...`);
+    console.log(`📅 New URL: ${window.location.href}`);
+    console.log(`📅 New title: ${document.title}`);
+    
+    // Verify we're back in appointment book by checking for calendar elements
+    const calendarElements = document.querySelectorAll('.appointmentBook, .one-appt-book, input.date.form-control');
+    console.log(`📅 Calendar elements found: ${calendarElements.length}`);
+    
+    if (calendarElements.length === 0) {
+      console.warn(`📅 WARNING: Appointment Book view may not have loaded (no calendar elements found)`);
+      console.warn(`📅 Current page elements:`, {
+        xestroBoxes: document.querySelectorAll('.XestroBox').length,
+        buttons: document.querySelectorAll('button').length,
+        links: document.querySelectorAll('a').length,
+        forms: document.querySelectorAll('form').length
+      });
+    }
+    
+    console.log(`📅 Navigation to Appointment Book completed (${calendarElements.length} calendar elements found)`);
+  }
+
+  /**
+   * SPA Workflow: Extract patient fields from Patient Record view
+   */
+  private async extractPatientFields(): Promise<any> {
+    console.log(`📋 Extracting patient fields from Patient Record view`);
+    console.log(`📋 Current URL: ${window.location.href}`);
+    console.log(`📋 Page title: ${document.title}`);
+    
+    // Verify we're in patient record view
+    const xestroBoxCount = document.querySelectorAll('.XestroBox').length;
+    console.log(`📋 XestroBox count: ${xestroBoxCount}`);
+    
+    if (xestroBoxCount === 0) {
+      console.error(`📋 ERROR: No XestroBoxes found - not in Patient Record view`);
+      throw new Error('Not in Patient Record view - no XestroBoxes found');
+    }
+    
+    // Log page structure for debugging
+    const xestroBoxes = document.querySelectorAll('.XestroBox');
+    console.log(`📋 XestroBox details:`, Array.from(xestroBoxes).map((box, index) => ({
+      index,
+      id: box.id,
+      className: box.className,
+      textContent: box.textContent?.substring(0, 100) + '...'
+    })));
+    
+    // Smart empty field detection - check for visual indicators before extraction
+    console.log(`📋 Performing smart empty field detection...`);
+    const fieldStatus = this.detectEmptyFieldsVisually();
+    console.log(`📋 Visual field detection results:`, fieldStatus);
+    
+    console.log(`📋 Starting optimized field extraction...`);
+    
+    // Extract fields intelligently - only click into fields that have content
+    const extractedData = await this.extractEMRDataOptimized(['background', 'investigations', 'medications', 'problemList'], fieldStatus);
+    
+    console.log(`📋 Raw extracted data:`, {
+      background: {
+        length: extractedData.background?.length || 0,
+        preview: extractedData.background?.substring(0, 100) || 'EMPTY',
+        hasContent: !!(extractedData.background?.trim())
+      },
+      investigations: {
+        length: extractedData.investigations?.length || 0,
+        preview: extractedData.investigations?.substring(0, 100) || 'EMPTY',
+        hasContent: !!(extractedData.investigations?.trim())
+      },
+      medications: {
+        length: extractedData.medications?.length || 0,
+        preview: extractedData.medications?.substring(0, 100) || 'EMPTY',
+        hasContent: !!(extractedData.medications?.trim())
+      },
+      problemList: {
+        length: extractedData.problemList?.length || 0,
+        preview: extractedData.problemList?.substring(0, 100) || 'EMPTY',
+        hasContent: !!(extractedData.problemList?.trim())
+      }
+    });
+    
+    // Validate that we extracted meaningful data
+    const hasAnyData = [
+      extractedData.background,
+      extractedData.investigations,
+      extractedData.medications,
+      extractedData.problemList
+    ].some(field => field && field.trim().length > 0);
+    
+    console.log(`📋 Data validation: hasAnyData = ${hasAnyData}`);
+    
+    if (!hasAnyData) {
+      console.warn(`📋 WARNING: No meaningful data extracted from any field`);
+    }
+    
+    const result = {
+      background: extractedData.background || '',
+      investigations: extractedData.investigations || '',
+      medications: extractedData.medications || '',
+      problemList: extractedData.problemList || '',
+      extractionTimestamp: Date.now(),
+      xestroBoxCount,
+      hasAnyData
+    };
+    
+    console.log(`📋 Final extraction result:`, result);
+    
+    return result;
+  }
+
+  /**
+   * Smart visual detection of empty fields to avoid unnecessary clicking
+   */
+  private detectEmptyFieldsVisually(): Record<string, boolean> {
+    console.log(`🔍 Scanning page for empty field visual indicators...`);
+    
+    const fieldStatus: Record<string, boolean> = {
+      background: false,
+      investigations: false,
+      medications: false,
+      problemList: false
+    };
+    
+    // Look for empty field indicators with grayed text
+    const emptyIndicators = document.querySelectorAll('div[style*="color:#ccc"], div[style*="color: #ccc"], .empty-field, .no-content');
+    
+    console.log(`🔍 Found ${emptyIndicators.length} potential empty field indicators`);
+    
+    emptyIndicators.forEach((indicator, index) => {
+      const text = indicator.textContent?.toLowerCase() || '';
+      console.log(`🔍 Indicator ${index}: "${text.substring(0, 50)}..."`);
+      
+      // Check for background section indicators
+      if (text.includes('no background') || text.includes('no history') || text.includes('background summary')) {
+        fieldStatus.background = true;
+        console.log(`🔍 ✅ Background field detected as empty`);
+      }
+      
+      // Check for investigations section indicators  
+      if (text.includes('no investigation') || text.includes('no results') || text.includes('investigation summary')) {
+        fieldStatus.investigations = true;
+        console.log(`🔍 ✅ Investigations field detected as empty`);
+      }
+      
+      // Check for medications section indicators
+      if (text.includes('no medication') || text.includes('no drugs') || text.includes('medications')) {
+        fieldStatus.medications = true;
+        console.log(`🔍 ✅ Medications field detected as empty`);
+      }
+      
+      // Check for problem list indicators
+      if (text.includes('no problems') || text.includes('no conditions') || text.includes('problem list')) {
+        fieldStatus.problemList = true;
+        console.log(`🔍 ✅ Problem list field detected as empty`);
+      }
+    });
+    
+    return fieldStatus;
+  }
+  
+  /**
+   * Optimized EMR data extraction that skips empty fields
+   */
+  private async extractEMRDataOptimized(
+    fields: string[], 
+    emptyFieldStatus: Record<string, boolean>
+  ): Promise<Record<string, string>> {
+    console.log(`📋 Starting optimized extraction for fields:`, fields);
+    console.log(`📋 Empty field status:`, emptyFieldStatus);
+    
+    const extractedData: Record<string, string> = {};
+    
+    for (const fieldName of fields) {
+      const normalizedFieldName = fieldName.toLowerCase();
+      
+      // Check if field is visually detected as empty
+      if (emptyFieldStatus[normalizedFieldName]) {
+        console.log(`⚡ OPTIMIZATION: Skipping empty field "${fieldName}" - detected visually as empty`);
+        extractedData[fieldName] = '';
+        continue;
+      }
+      
+      // Extract field content normally for non-empty fields
+      console.log(`📋 Extracting content for field: "${fieldName}" (not empty)`);
+      let fieldValue = '';
+      
+      try {
+        switch (normalizedFieldName) {
+          case 'background':
+            fieldValue = await this.extractFieldContent('Background');
+            break;
+          case 'investigations':
+          case 'investigation-summary':
+            fieldValue = await this.extractFieldContent('Investigation Summary');
+            break;
+          case 'medications':
+            fieldValue = await this.extractFieldContent('Medications (Problem List for Phil)') || 
+                        await this.extractFieldContent('Medications');
+            break;
+          case 'problemlist':
+            fieldValue = await this.extractFieldContent('Problem List');
+            break;
+          default:
+            // Try to extract custom field
+            fieldValue = await this.extractFieldContent(fieldName);
+        }
+        
+        extractedData[fieldName] = fieldValue;
+        console.log(`✅ Extracted ${fieldValue.length} characters from ${fieldName}`);
+        
+      } catch (error) {
+        console.warn(`⚠️ Failed to extract ${fieldName}:`, error);
+        extractedData[fieldName] = '';
+      }
+    }
+    
+    return extractedData;
+  }
+
+  /**
+   * Helper method to find button by text content
+   */
+  private findButtonByText(buttonText: string): HTMLElement | null {
+    const buttons = Array.from(document.querySelectorAll('button, a'));
+    const found = buttons.find(button => 
+      button.textContent?.trim().toLowerCase().includes(buttonText.toLowerCase()) ||
+      (button as HTMLElement).title?.toLowerCase().includes(buttonText.toLowerCase())
+    );
+    return found instanceof HTMLElement ? found : null;
+  }
+}
+
+  // Initialize content script
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      new ContentScriptHandler();
+    });
+  } else {
+    new ContentScriptHandler();
+  }
+}

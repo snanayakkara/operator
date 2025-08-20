@@ -1,0 +1,631 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Semantic Medical Theme Components */
+@layer components {
+  .glass {
+    @apply bg-white border border-gray-200 shadow-lg;
+  }
+  
+  .glass-button {
+    @apply glass hover:bg-gray-50 active:bg-gray-100 transition-all duration-200 cursor-pointer select-none;
+  }
+  
+  .glass-input {
+    @apply glass bg-gray-50 border-gray-200 placeholder-gray-400 text-gray-900;
+  }
+  
+  .glass-card {
+    @apply glass p-4 rounded-xl;
+  }
+  
+  /* Workflow Type Cards */
+  .procedure-card {
+    background: var(--procedure-light);
+    border-color: var(--procedure-border);
+    color: var(--procedure-text);
+  }
+  
+  .documentation-card {
+    background: var(--documentation-light);
+    border-color: var(--documentation-border);
+    color: var(--documentation-text);
+  }
+  
+  .investigation-card {
+    background: var(--investigation-light);
+    border-color: var(--investigation-border);
+    color: var(--investigation-text);
+  }
+  
+  /* Primary Action Buttons */
+  .btn-procedure {
+    background: var(--procedure-primary);
+    border-color: var(--procedure-primary);
+    @apply text-white hover:opacity-90 transition-all;
+  }
+  
+  .btn-documentation {
+    background: var(--documentation-primary);
+    border-color: var(--documentation-primary);
+    @apply text-white hover:opacity-90 transition-all;
+  }
+  
+  .btn-investigation {
+    background: var(--investigation-primary);
+    border-color: var(--investigation-primary);
+    @apply text-white hover:opacity-90 transition-all;
+  }
+  
+  /* Secondary Action Buttons - Enhanced with Peak-End Design */
+  .btn-procedure-outline {
+    border-color: var(--procedure-border);
+    color: theme('colors.gray.600'); /* Muted by default */
+    @apply bg-white transition-all duration-300 btn-micro-press;
+  }
+  
+  .btn-procedure-outline:hover {
+    color: var(--procedure-primary); /* Vibrant on hover */
+    border-color: var(--procedure-primary);
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+  }
+  
+  .btn-documentation-outline {
+    border-color: var(--documentation-border);
+    color: theme('colors.gray.600'); /* Muted by default */
+    @apply bg-white transition-all duration-300 btn-micro-press;
+  }
+  
+  .btn-documentation-outline:hover {
+    color: var(--documentation-primary); /* Vibrant on hover */
+    border-color: var(--documentation-primary);
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+  }
+  
+  .btn-investigation-outline {
+    border-color: var(--investigation-border);
+    color: theme('colors.gray.600'); /* Muted by default */
+    @apply bg-white transition-all duration-300 btn-micro-press;
+  }
+  
+  .btn-investigation-outline:hover {
+    color: var(--investigation-primary); /* Vibrant on hover */
+    border-color: var(--investigation-primary);
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.1);
+  }
+  
+  /* Legacy Components (Updated) */
+  .medical-gradient {
+    @apply bg-gradient-to-br from-blue-50 to-indigo-50;
+  }
+  
+  .summary-card {
+    background: var(--documentation-light);
+    border-color: var(--documentation-border);
+  }
+  
+  .letter-card {
+    background: var(--investigation-light);
+    border-color: var(--investigation-border);
+  }
+  
+  .recording-pulse {
+    @apply animate-pulse bg-red-50 border-red-200;
+  }
+  
+  .processing-spin {
+    @apply animate-spin border-2 border-gray-200 border-t-blue-600;
+  }
+
+  /* Peak-End Animation Utilities with GPU Acceleration */
+  .btn-success-animation {
+    animation: success-bounce 0.6s ease-out;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .btn-press-animation {
+    animation: gentle-press 0.15s ease-out;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .btn-hover-enhanced {
+    transition: all 0.2s ease-out;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .btn-hover-enhanced:hover {
+    transform: translate3d(0, -1px, 0) scale(1.02);
+  }
+
+  .completion-celebration {
+    animation: completion-glow 0.8s ease-out;
+    will-change: transform, box-shadow;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .checkmark-appear {
+    animation: checkmark-bounce 0.5s ease-out;
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .content-slide-in {
+    animation: slide-in 0.4s ease-out;
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+  }
+
+  /* Button interaction micro-animations with GPU acceleration */
+  .btn-micro-press:active {
+    transform: translate3d(0, 0, 0) scale(0.98);
+    transition: transform 0.1s ease-out;
+    will-change: transform;
+  }
+
+  .btn-micro-hover {
+    transition: all 0.2s ease-out;
+    will-change: transform, box-shadow;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .btn-micro-hover:hover {
+    transform: translate3d(0, -0.5px, 0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Recording glow effect with GPU acceleration */
+  .recording-glow {
+    @apply shadow-lg;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    animation: recording-pulse 2s infinite;
+    will-change: transform, box-shadow;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Semantic Medical Color System */
+:root {
+  /* Medical Procedure Workflows (TAVI, PCI, Angiogram) */
+  --procedure-primary: theme('colors.red.600');
+  --procedure-secondary: theme('colors.red.500');
+  --procedure-light: theme('colors.red.50');
+  --procedure-border: theme('colors.red.200');
+  --procedure-text: theme('colors.red.900');
+  
+  /* Documentation Workflows (Quick Letter, Consultation) */
+  --documentation-primary: theme('colors.blue.600');
+  --documentation-secondary: theme('colors.blue.500');
+  --documentation-light: theme('colors.blue.50');
+  --documentation-border: theme('colors.blue.200');
+  --documentation-text: theme('colors.blue.900');
+  
+  /* Investigation Workflows (Investigation Summary) */
+  --investigation-primary: theme('colors.emerald.600');
+  --investigation-secondary: theme('colors.emerald.500');
+  --investigation-light: theme('colors.emerald.50');
+  --investigation-border: theme('colors.emerald.200');
+  --investigation-text: theme('colors.emerald.900');
+  
+  /* System States */
+  --system-success: theme('colors.green.500');
+  --system-warning: theme('colors.amber.500');
+  --system-error: theme('colors.red.500');
+  --system-info: theme('colors.blue.500');
+  
+  /* Base Colors */
+  --medical-text: theme('colors.gray.900');
+  --medical-muted: theme('colors.gray.500');
+  --medical-bg: theme('colors.white');
+  --medical-surface: theme('colors.gray.50');
+}
+
+/* Global Styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  width: 420px; /* Chrome side panel width */
+  min-height: 600px;
+  overflow-x: hidden;
+  background: white;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Button Animations */
+@keyframes button-press {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+.btn-press {
+  animation: button-press 0.15s ease-out;
+}
+
+/* Recording Animation with GPU Acceleration */
+@keyframes recording-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.8);
+    transform: translate3d(0, 0, 0) scale(1.02);
+  }
+}
+
+.recording-glow {
+  animation: recording-glow 2s ease-in-out infinite;
+  will-change: transform, box-shadow;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Voice Activity Visualization */
+@keyframes voice-activity {
+  0%, 100% { height: 4px; opacity: 0.3; }
+  50% { height: 20px; opacity: 1; }
+}
+
+.voice-bar {
+  animation: voice-activity 0.5s ease-in-out infinite;
+}
+
+.voice-bar:nth-child(2) { animation-delay: 0.1s; }
+.voice-bar:nth-child(3) { animation-delay: 0.2s; }
+.voice-bar:nth-child(4) { animation-delay: 0.3s; }
+.voice-bar:nth-child(5) { animation-delay: 0.4s; }
+
+/* Loading States */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+/* Peak-End Success Animations with GPU Acceleration */
+@keyframes success-bounce {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, 0, 0) scale(1.05); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes gentle-press {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { 
+    transform: translate3d(0, 0, 0) scale(0.98); 
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1); 
+  }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes completion-glow {
+  0% { 
+    box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    transform: translate3d(0, 0, 0) scale(1.02);
+  }
+  100% { 
+    box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes checkmark-bounce {
+  0% { 
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0) rotate(-45deg);
+  }
+  50% { 
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.1) rotate(0deg);
+  }
+  100% { 
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes slide-in {
+  0% { 
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  100% { 
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes recording-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+    transform: translate3d(0, 0, 0) scale(1.01);
+  }
+}
+
+/* Text Animations */
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+.typewriter {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typewriter 2s steps(40, end);
+}
+
+/* Status Indicators */
+.status-online {
+  @apply bg-emerald-500 shadow-emerald-500/50;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.status-offline {
+  @apply bg-red-500 shadow-red-500/50;
+  animation: pulse 2s infinite;
+}
+
+.status-processing {
+  @apply bg-amber-500 shadow-amber-500/50;
+  animation: pulse 1s infinite;
+}
+
+/* Medical Report Formatting */
+.medical-report {
+  @apply space-y-4 text-sm leading-relaxed;
+}
+
+.medical-report h3 {
+  @apply font-semibold text-gray-900 border-b border-gray-200 pb-1 mb-2;
+}
+
+.medical-report p {
+  @apply text-gray-900 mb-2;
+}
+
+.medical-report ul {
+  @apply list-disc list-inside space-y-1 text-gray-900;
+}
+
+.medical-report .measurement {
+  @apply font-mono bg-white/10 px-1 rounded;
+}
+
+/* Responsive Design */
+@media (max-width: 400px) {
+  body {
+    width: 100vw;
+  }
+  
+  .glass-card {
+    @apply mx-2 p-3;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .glass {
+    @apply border-white/50 bg-white/20;
+  }
+  
+  .glass-button:hover {
+    @apply bg-white/40;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  /* Already optimized for dark theme */
+}
+
+/* Focus Styles */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  @apply outline-none ring-2 ring-blue-500/50 ring-offset-2 ring-offset-white;
+}
+
+/* Selection Styles */
+::selection {
+  background: rgba(59, 130, 246, 0.2);
+  color: #1f2937;
+}
+
+/* Utility Classes */
+.text-shadow {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.backdrop-blur-md {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.backdrop-blur-lg {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Dropdown Z-Index Fix - Enhanced */
+.dropdown-container {
+  position: relative;
+  z-index: 1000;
+  isolation: isolate;
+}
+
+.dropdown-menu {
+  position: fixed;
+  z-index: 999999;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.dropdown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999998;
+  background: transparent;
+}
+
+/* Prevent parent containers from creating stacking contexts */
+.glass {
+  isolation: auto;
+  transform: none;
+  position: relative;
+}
+
+.glass-card {
+  position: relative;
+  z-index: auto;
+  isolation: auto;
+  transform: none;
+}
+
+/* Force dropdown menus to appear above everything using fixed positioning */
+[data-dropdown-menu] {
+  position: fixed !important;
+  z-index: 999999 !important;
+  transform: translateZ(0) !important;
+  will-change: transform;
+  isolation: isolate;
+  pointer-events: auto;
+}
+
+/* Ensure dropdown triggers maintain their stacking context */
+[data-dropdown-trigger] {
+  position: relative;
+  z-index: 1000;
+}
+
+/* Special handling for dropdowns in the side panel */
+.side-panel-dropdown {
+  position: fixed !important;
+  z-index: 999999 !important;
+  max-width: 280px;
+  transform: translateZ(0);
+}
+
+/* Reset any transform contexts that might interfere */
+.dropdown-reset-context {
+  transform: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
+}
+
+/* Grid Layout for Side Panel */
+.app-container {
+  @apply bg-gray-50;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-content {
+  @apply overflow-y-auto;
+  grid-row: 1;
+}
+
+.footer-section {
+  @apply bg-white border-t border-gray-200 shadow-lg;
+  grid-row: 2;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.footer-content {
+  @apply p-4;
+  max-width: 420px; /* Match sidebar width */
+  margin: 0 auto;
+}
+
+/* Compact Quick Actions for footer */
+.quick-actions-horizontal {
+  @apply flex space-x-2 overflow-x-auto;
+}
+
+.quick-actions-horizontal {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.quick-actions-horizontal::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.quick-action-compact {
+  @apply flex-shrink-0 rounded-lg p-3;
+}
+
+.quick-action-compact {
+  min-width: max-content;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-action-compact:hover {
+  @apply bg-gray-50;
+}

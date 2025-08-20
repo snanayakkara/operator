@@ -1,0 +1,99 @@
+{
+  "manifest_version": 3,
+  "name": "Xestro EMR Assistant",
+  "version": "2.5.1",
+  "description": "Xestro EMR Assistant with side panel for quick field access and task management",
+  
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "notifications",
+    "offscreen",
+    "clipboardWrite",
+    "clipboardRead",
+    "tabs",
+    "tabCapture"
+  ],
+  
+  "host_permissions": [
+    "https://my.xestro.com/*",
+    "http://localhost:1234/*",
+    "http://localhost:8001/*",
+    "https://*.doxy.me/*",
+    "https://doxy.me/*",
+    "<all_urls>"
+  ],
+  
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+R",
+        "mac": "Command+Shift+R"
+      },
+      "description": "Toggle voice recording"
+    },
+    "open-side-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Open medical assistant side panel"
+    },
+    "quick-transcribe": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+T",
+        "mac": "Command+Shift+T"
+      },
+      "description": "Quick transcription to active field"
+    }
+  },
+  
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  
+  "action": {
+    "default_title": "Toggle Xestro Assistant"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["https://my.xestro.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "chunks/*",
+        "src/components/BatchReviewResults.html"
+      ],
+      "matches": [
+        "https://my.xestro.com/*",
+        "<all_urls>"
+      ]
+    }
+  ],
+  
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:1234 https://localhost:1234 http://localhost:8001; img-src 'self' data:; font-src 'self' data:;"
+  }
+}

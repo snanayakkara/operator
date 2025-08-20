@@ -1,0 +1,1316 @@
+import React, { useEffect, useCallback, useRef } from 'react';
+import './styles/globals.css';
+import { WorkflowButtons } from './components/WorkflowButtons';
+import { TranscriptionDisplay } from './components/TranscriptionDisplay';
+import { OptimizedResultsPanel } from './components/results/OptimizedResultsPanel';
+import { SummaryPanel } from './components/SummaryPanel';
+import { QuickActions } from './components/QuickActions';
+import { StatusIndicator } from './components/StatusIndicator';
+import { ModelStatus } from './components/ModelStatus';
+import { ErrorAlert } from './components/ErrorAlert';
+import { ProcessingTimeDisplay } from './components/ProcessingTimeDisplay';
+import { CancelButton } from './components/CancelButton';
+import { PatientSelectionModal } from './components/PatientSelectionModal';
+import { CheckCircle, Menu, ChevronDown } from 'lucide-react';
+import type { AgentType, ProcessingStatus, FailedAudioRecording, PatientAppointment, BatchAIReviewReport } from '@/types/medical.types';
+import { useAppState } from '@/hooks/useAppState';
+
+import { LMStudioService } from '@/services/LMStudioService';
+import { WhisperServerService } from '@/services/WhisperServerService';
+import { AgentFactory } from '@/services/AgentFactory';
+import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
+import { NotificationService } from '@/services/NotificationService';
+import { useRecorder } from '@/hooks/useRecorder';
+
+const App: React.FC = () => {
+  console.log('🏥 App component rendering...', new Date().toISOString());
+  console.log('🔧 App initialization check - QuickActions handler available');
+  
+  // Use optimized state management
+  const { state, actions } = useAppState();
+  const activeWorkflowRef = useRef<AgentType | null>(null);
+  
+  // Store current audio blob for failed transcription storage
+  const currentAudioBlobRef = useRef<Blob | null>(null);
+  const currentRecordingTimeRef = useRef<number>(0);
+  
+  // AbortController refs for cancellation
+  const transcriptionAbortRef = useRef<AbortController | null>(null);
+  const processingAbortRef = useRef<AbortController | null>(null);
+  
+  // Voice activity throttling
+  const lastVoiceUpdateRef = useRef<number>(0);
+  const voiceUpdateThrottleMs = 100; // Update every 100ms instead of 60fps
+
+  const lmStudioService = LMStudioService.getInstance();
+  const whisperServerService = WhisperServerService.getInstance();
+  const batchOrchestrator = useRef(new BatchAIReviewOrchestrator());
+  
+  // Store failed audio recording for troubleshooting
+  const storeFailedAudioRecording = useCallback((
+    audioBlob: Blob, 
+    agentType: AgentType, 
+    errorMessage: string, 
+    transcriptionAttempt?: string,
+    recordingTime?: number
+  ) => {
+    const failedRecording: FailedAudioRecording = {
+      id: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      audioBlob,
+      timestamp: Date.now(),
+      agentType,
+      errorMessage,
+      transcriptionAttempt,
+      metadata: {
+        duration: recordingTime || currentRecordingTimeRef.current || 0,
+        fileSize: audioBlob.size,
+        recordingTime: recordingTime || currentRecordingTimeRef.current || 0
+      }
+    };
+
+    setAppState(prev => ({
+      ...prev,
+      failedAudioRecordings: [failedRecording, ...prev.failedAudioRecordings.slice(0, 4)] // Keep max 5 recordings
+    }));
+
+    console.log('📱 Stored failed audio recording:', {
+      id: failedRecording.id,
+      agentType,
+      errorMessage,
+      fileSize: audioBlob.size,
+      duration: failedRecording.metadata.duration
+    });
+  }, []);
+
+  // Clear failed recordings
+  const clearFailedRecordings = useCallback(() => {
+    setAppState(prev => ({
+      ...prev,
+      failedAudioRecordings: []
+    }));
+    console.log('🗑️ Cleared all failed audio recordings');
+  }, []);
+  
+  // Handle recording completion and processing
+  const handleRecordingComplete = useCallback(async (audioBlob: Blob) => {
+    // Store current audio blob for potential failed transcription storage
+    currentAudioBlobRef.current = audioBlob;
+    
+    // Check if cancellation is in progress - exit early if so
+    if (isCancelling) {
+      console.log('🛑 Recording completed but cancellation in progress - ignoring');
+      setIsCancelling(false); // Reset cancellation flag
+      return;
+    }
+    
+    // Get workflow from ref (more reliable than state)
+    const workflowToProcess = activeWorkflowRef.current;
+    
+    if (!workflowToProcess) {
+      // Fallback: try to get from current state or appState
+      const fallbackWorkflow = activeWorkflow || appState.currentAgent;
+      if (fallbackWorkflow) {
+        console.warn('⚠️ Using fallback workflow:', fallbackWorkflow);
+        activeWorkflowRef.current = fallbackWorkflow;
+      } else {
+        console.error('❌ No active workflow for recording completion');
+        setAppState(prev => ({ 
+          ...prev, 
+          processingStatus: 'error' 
+        }));
+        return;
+      }
+    }
+
+    const workflowId = activeWorkflowRef.current!;
+    console.log('🎤 Recording completed for workflow:', workflowId);
+
+    const processingStartTime = Date.now();
+    
+    // Update state with processing start time and agent name
+    setAppState(prev => ({ 
+      ...prev, 
+      processingStartTime,
+      currentAgentName: workflowId,
+      // Reset timing data for new processing
+      transcriptionTime: null,
+      agentProcessingTime: null,
+      totalProcessingTime: null
+    }));
+
+    try {
+      // Set up transcription AbortController
+      transcriptionAbortRef.current = new AbortController();
+      
+      // Transcribe audio with cancellation support
+      console.log('🔄 Starting transcription...');
+      setAppState(prev => ({ ...prev, processingStatus: 'transcribing' }));
+      
+      const transcriptionResult = await lmStudioService.transcribeAudio(
+        audioBlob, 
+        transcriptionAbortRef.current.signal
+      );
+      
+      // Clear transcription abort controller after successful completion
+      transcriptionAbortRef.current = null;
+      
+      console.log('✅ Transcription complete:', transcriptionResult.substring(0, 100) + '...');
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        transcription: transcriptionResult,
+        processingStatus: 'processing' 
+      }));
+
+      // Set up processing AbortController
+      processingAbortRef.current = new AbortController();
+
+      // Process with selected agent directly (no classification needed)
+      console.log('🔄 Processing with agent:', workflowId);
+      const result = await AgentFactory.processWithAgent(
+        workflowId, 
+        transcriptionResult, 
+        undefined, // context
+        processingAbortRef.current.signal
+      );
+      console.log('✅ Agent processing complete');
+      
+      // Clear processing abort controller after successful completion
+      processingAbortRef.current = null;
+      
+      // Handle warnings and errors separately
+      setWarnings(result.warnings || []);
+      setErrors(result.errors || []);
+      setShowAlerts(true);
+      
+      // Check if this is a failed investigation parsing - store for troubleshooting
+      if (result.errors && result.errors.length > 0) {
+        const hasParsingError = result.errors.some(error => 
+          error.includes('could not be parsed coherently') ||
+          error.includes('Investigation dictation could not be parsed')
+        );
+        
+        if (hasParsingError && currentAudioBlobRef.current) {
+          console.log('📱 Detected failed investigation parsing - storing for troubleshooting');
+          storeFailedAudioRecording(
+            currentAudioBlobRef.current,
+            workflowId,
+            result.errors[0], // Use first error as the main error message
+            transcriptionResult, // Include successful transcription for comparison
+            currentRecordingTimeRef.current
+          );
+        }
+      }
+      
+      // Calculate total processing time
+      const totalTime = processingStartTime ? Date.now() - processingStartTime : result.processingTime;
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        results: result.content,
+        agentProcessingTime: result.processingTime,
+        totalProcessingTime: totalTime,
+        currentAgentName: result.agentName,
+        processingStatus: 'complete' 
+      }));
+
+      // Show completion notification
+      await NotificationService.showCompletionNotification(
+        workflowId,
+        totalTime,
+        result.summary ? 'Summary generated' : undefined
+      );
+      
+      // Set summary if available (for Quick Letter Agent)
+      if (result.summary) {
+        setResultSummary(result.summary);
+      } else {
+        setResultSummary(''); // Clear previous summary if not available
+      }
+
+      // Auto-trigger Investigation Summary field opening and insertion for investigation-summary workflow
+      if (workflowId === 'investigation-summary' && result.content) {
+        try {
+          console.log('🔄 Auto-triggering Investigation Summary field with formatted content...');
+          await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'investigation-summary',
+            data: { content: result.content }
+          });
+          console.log('✅ Investigation Summary field auto-trigger completed');
+        } catch (error) {
+          console.error('❌ Failed to auto-trigger Investigation Summary field:', error);
+        }
+      }
+
+      // Clear workflow only after successful processing
+      setActiveWorkflow(null);
+      activeWorkflowRef.current = null;
+
+    } catch (error) {
+      // Handle user cancellation differently from other errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('🛑 Operation cancelled by user');
+        // Don't log as error - this is intentional user action
+        return; // State is already set to 'cancelled' by handleCancelProcessing
+      }
+      
+      console.error('❌ Processing error:', error);
+      
+      // Clear any remaining abort controllers
+      if (transcriptionAbortRef.current) {
+        transcriptionAbortRef.current = null;
+      }
+      if (processingAbortRef.current) {
+        processingAbortRef.current = null;
+      }
+      
+      // Provide specific error feedback based on error type
+      let errorMessage = 'Processing failed. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('transcription')) {
+          errorMessage = 'Transcription failed. Check if Whisper server is running.';
+        } else if (error.message.includes('agent') || error.message.includes('LMStudio')) {
+          errorMessage = 'AI processing failed. Check if LMStudio is running.';
+        }
+      }
+      
+      console.error('💡 Error guidance:', errorMessage);
+      
+      // Store failed recording for troubleshooting if we have the audio blob
+      if (currentAudioBlobRef.current && workflowId) {
+        storeFailedAudioRecording(
+          currentAudioBlobRef.current,
+          workflowId,
+          errorMessage,
+          undefined, // No transcription available for transcription failures
+          currentRecordingTimeRef.current
+        );
+      }
+
+      // Show error notification
+      if (workflowId) {
+        const processingTime = processingStartTime ? Date.now() - processingStartTime : 0;
+        await NotificationService.showErrorNotification(
+          workflowId,
+          processingTime,
+          errorMessage
+        );
+      }
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        processingStatus: 'error' 
+      }));
+      
+      // Don't clear workflow on error - user might want to retry
+    } finally {
+      // Clear current audio blob reference after processing (success or failure)
+      currentAudioBlobRef.current = null;
+      currentRecordingTimeRef.current = 0;
+    }
+  }, [activeWorkflow, appState.currentAgent, isCancelling, storeFailedAudioRecording]);
+  
+  // Recorder hook for audio recording
+  const recorder = useRecorder({
+    onRecordingComplete: handleRecordingComplete,
+    onVoiceActivityUpdate: (level, frequencies) => {
+      // Throttle voice activity updates to reduce excessive re-rendering
+      const now = Date.now();
+      if (now - lastVoiceUpdateRef.current >= voiceUpdateThrottleMs) {
+        lastVoiceUpdateRef.current = now;
+        // Capture current recording time for potential failed recording storage
+        currentRecordingTimeRef.current = recorder.recordingTime;
+        setAppState(prev => ({ 
+          ...prev, 
+          voiceActivityLevel: level, 
+          frequencyData: frequencies 
+        }));
+      }
+    },
+    onError: (error) => {
+      console.error('❌ Recording error:', error);
+      setAppState(prev => ({ 
+        ...prev, 
+        processingStatus: 'error' 
+      }));
+    }
+  });
+
+  useEffect(() => {
+    // Initialize services and check model status
+    const initializeServices = async () => {
+      const modelStatus = lmStudioService.getModelStatus();
+      const whisperStatus = await whisperServerService.checkServerStatus();
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        modelStatus: {
+          ...modelStatus,
+          whisperServer: {
+            ...whisperStatus,
+            lastChecked: Date.now()
+          }
+        }
+      }));
+    };
+
+    initializeServices();
+
+    // Set up periodic model status updates - reduced frequency
+    const statusInterval = setInterval(async () => {
+      const modelStatus = lmStudioService.getModelStatus();
+      const whisperStatus = await whisperServerService.checkServerStatus();
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        modelStatus: {
+          ...modelStatus,
+          whisperServer: {
+            ...whisperStatus,
+            lastChecked: Date.now()
+          }
+        }
+      }));
+    }, 60000); // Check every 1 minute instead of 10 seconds
+
+    return () => clearInterval(statusInterval);
+  }, []);
+
+  const updateProcessingStatus = useCallback((status: ProcessingStatus) => {
+    console.log('🔄 Processing status update:', status);
+    setAppState(prev => ({ ...prev, processingStatus: status }));
+  }, []);
+
+  // Handle workflow selection and recording
+  const handleWorkflowSelect = useCallback((workflowId: AgentType) => {
+    console.log('🎯 Workflow selected:', workflowId);
+    
+    
+    // Check service dependencies for recording agents (need both Whisper and LMStudio)
+    if (!appState.modelStatus.isConnected) {
+      alert(`LMStudio Connection Required\n\nPlease start LMStudio with the MedGemma model before recording.\n\n1. Open LMStudio\n2. Load the MedGemma-27b model\n3. Start the server on localhost:1234\n4. Try again`);
+      return;
+    }
+    
+    if (!appState.modelStatus.whisperServer?.running) {
+      alert(`Whisper Server Required\n\nPlease start the Whisper transcription server before recording.\n\nRun this command in your terminal:\n./start-whisper-server.sh\n\nThen try again.`);
+      return;
+    }
+    
+    if (recorder.isRecording && activeWorkflow === workflowId) {
+      // Stop recording for active workflow
+      console.log('🛑 Stopping recording for workflow:', workflowId);
+      recorder.stopRecording();
+      // Don't clear activeWorkflow here - let handleRecordingComplete do it
+      setAppState(prev => ({ 
+        ...prev, 
+        isRecording: false,
+        processingStatus: 'transcribing' 
+      }));
+    } else if (!recorder.isRecording) {
+      // Start recording for selected workflow
+      console.log('🎤 Starting recording for workflow:', workflowId);
+      setActiveWorkflow(workflowId);
+      activeWorkflowRef.current = workflowId; // Keep ref in sync
+      setAppState(prev => ({ 
+        ...prev, 
+        isRecording: true,
+        isProcessing: false,
+        currentAgent: workflowId,
+        processingStatus: 'recording',
+        transcription: '',
+        results: '' 
+      }));
+      recorder.startRecording();
+    }
+  }, [recorder, activeWorkflow]);
+
+  // Manual agent reprocessing (for transcription editing)
+  const handleAgentReprocess = useCallback(async (agentType: AgentType) => {
+    if (!appState.transcription) return;
+
+    console.log('🔄 Reprocessing transcription with agent:', agentType);
+    
+    // Set up processing AbortController for reprocessing
+    processingAbortRef.current = new AbortController();
+    
+    setAppState(prev => ({ 
+      ...prev, 
+      currentAgent: agentType,
+      processingStatus: 'processing' 
+    }));
+
+    try {
+      const result = await AgentFactory.processWithAgent(
+        agentType, 
+        appState.transcription,
+        undefined, // context
+        processingAbortRef.current.signal
+      );
+      
+      // Clear processing abort controller after successful completion
+      processingAbortRef.current = null;
+      
+      // Handle structured response
+      setWarnings(result.warnings || []);
+      setErrors(result.errors || []);
+      setShowAlerts(true);
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        results: result.content,
+        processingStatus: 'complete' 
+      }));
+
+      // Show completion notification for reprocessing
+      await NotificationService.showCompletionNotification(
+        agentType,
+        result.processingTime || 0,
+        'Reprocessed successfully'
+      );
+    } catch (error) {
+      // Handle user cancellation differently from other errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('🛑 Reprocessing cancelled by user');
+        return; // State is already set to 'cancelled' by handleCancelProcessing
+      }
+      
+      console.error('❌ Agent processing error:', error);
+      
+      // Clear abort controller on error
+      if (processingAbortRef.current) {
+        processingAbortRef.current = null;
+      }
+      
+      setAppState(prev => ({ 
+        ...prev, 
+        processingStatus: 'error' 
+      }));
+    }
+  }, [appState.transcription]);
+
+  // Retry processing when there's an error
+  const handleRetryProcessing = useCallback(() => {
+    const workflowId = activeWorkflowRef.current || activeWorkflow;
+    if (!workflowId) {
+      console.error('❌ No workflow to retry');
+      return;
+    }
+    
+    if (!appState.transcription) {
+      console.error('❌ No transcription to retry processing');
+      return;
+    }
+    
+    console.log('🔄 Retrying processing for workflow:', workflowId);
+    handleAgentReprocess(workflowId);
+  }, [activeWorkflow, appState.transcription, handleAgentReprocess]);
+
+  // Handle quick actions, including direct AI medical review processing
+  const handleQuickAction = useCallback(async (actionId: string, data?: any) => {
+    console.log('⚡ App.handleQuickAction called with:', actionId, data);
+    
+    try {
+      // Handle AI medical review directly (no recording workflow)
+      if (actionId === 'ai-medical-review' && data?.type === 'australian-medical-review') {
+        console.log('🔍 Processing AI medical review directly...');
+        
+        // Check LMStudio connection in real-time (AI Review only needs LMStudio, not Whisper)
+        console.log('🔗 Checking LMStudio connection in real-time...');
+        const isLMStudioConnected = await lmStudioService.checkConnection();
+        console.log('🔗 LMStudio connection check result:', isLMStudioConnected);
+        
+        if (!isLMStudioConnected) {
+          alert(`LMStudio Connection Required\n\nPlease start LMStudio with the MedGemma model before running AI Medical Review.\n\n1. Open LMStudio\n2. Load the MedGemma-27b model\n3. Start the server on localhost:1234\n4. Try again`);
+          return;
+        }
+        
+        const processingStartTime = Date.now();
+        
+        // Set processing state
+        setAppState(prev => ({
+          ...prev,
+          isProcessing: true,
+          processingStatus: 'processing',
+          currentAgent: 'ai-medical-review' as any,
+          currentAgentName: 'Australian Medical Review Agent',
+          processingStartTime,
+          // Reset timing data for new processing
+          transcriptionTime: null,
+          agentProcessingTime: null,
+          totalProcessingTime: null
+        }));
+        
+        // Process with the AusMedicalReviewAgent
+        const result = await AgentFactory.processWithAgent(
+          'ai-medical-review',
+          data.formattedInput
+        );
+        
+        // Calculate total processing time
+        const totalTime = Date.now() - processingStartTime;
+        
+        // Set results
+        setAppState(prev => ({
+          ...prev,
+          isProcessing: false,
+          processingStatus: 'complete',
+          results: result.content,
+          transcription: data.formattedInput, // Show input data as "transcription"
+          reviewData: result.reviewData, // Store structured AI Review data
+          agentProcessingTime: result.processingTime,
+          totalProcessingTime: totalTime
+        }));
+        
+        // Handle warnings/errors
+        setWarnings(result.warnings || []);
+        setErrors(result.errors || []);
+        if (result.warnings?.length || result.errors?.length) {
+          setShowAlerts(true);
+        }
+
+        // Show completion notification with findings count
+        const findingsCount = result.reviewData?.findings?.length || 0;
+        const findingsText = findingsCount > 0 ? `${findingsCount} finding${findingsCount === 1 ? '' : 's'} identified` : 'Review complete';
+        await NotificationService.showCompletionNotification(
+          'ai-medical-review',
+          totalTime,
+          findingsText
+        );
+        
+        console.log('✅ AI medical review completed');
+        return;
+      }
+      
+      // Handle other quick actions via background script
+      console.log('⚡ Sending chrome runtime message for action:', actionId);
+      const response = await chrome.runtime.sendMessage({
+        type: 'EXECUTE_ACTION',
+        action: actionId,
+        data: data || {}
+      });
+      console.log('⚡ Chrome runtime message response:', response);
+      
+    } catch (error) {
+      console.error('❌ Quick action failed:', error);
+      
+      // If this was an AI review error, show error state and notification
+      if (actionId === 'ai-medical-review') {
+        const processingTime = Date.now() - (appState.processingStartTime || Date.now());
+        await NotificationService.showErrorNotification(
+          'ai-medical-review',
+          processingTime,
+          error instanceof Error ? error.message : 'AI Review failed'
+        );
+        
+        setAppState(prev => ({
+          ...prev,
+          isProcessing: false,
+          processingStatus: 'error'
+        }));
+      }
+    }
+  }, []);
+
+  // Utility function to ensure content script is loaded and responsive
+  const ensureContentScriptReady = useCallback(async (tabId: number): Promise<void> => {
+    console.log('📝 Ensuring content script is ready on tab', tabId);
+    
+    const maxAttempts = 3;
+    let attempt = 1;
+    
+    while (attempt <= maxAttempts) {
+      try {
+        // Try to ping the content script
+        console.log(`📝 Content script ping attempt ${attempt}/${maxAttempts}`);
+        
+        const response = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+        
+        if (response) {
+          console.log('✅ Content script is responsive on tab', tabId);
+          return;
+        }
+      } catch (error) {
+        console.log(`📝 Content script ping attempt ${attempt} failed:`, error);
+        
+        if (attempt === maxAttempts) {
+          // Last attempt - try to inject content script
+          console.log('📝 Attempting to inject content script on tab', tabId);
+          
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              files: ['content-script.js']
+            });
+            
+            console.log('📝 Content script injected, waiting for initialization...');
+            
+            // Wait for script to initialize
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Try one final ping
+            const finalResponse = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+            
+            if (finalResponse) {
+              console.log('✅ Content script ready after injection on tab', tabId);
+              return;
+            } else {
+              throw new Error('Content script not responding after injection');
+            }
+            
+          } catch (injectError) {
+            console.error('❌ Failed to inject content script:', injectError);
+            throw new Error(`Content script injection failed: ${injectError instanceof Error ? injectError.message : 'Unknown error'}. Please reload the extension and try again.`);
+          }
+        }
+        
+        // Wait before retry
+        const waitTime = 1000 * attempt;
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        attempt++;
+      }
+    }
+    
+    throw new Error('Content script not responsive after multiple attempts. Please reload the page and try again.');
+  }, []);
+
+  // Batch AI Review handlers
+  const handleBatchAIReviewStart = useCallback(async () => {
+    console.log('📅 Starting batch AI review workflow');
+    
+    // Note: Batch AI review processes existing EMR text data through AusMedicalReviewAgent
+    // No Whisper server required, and LMStudioService handles connection gracefully
+    
+    // Reset state and start patient extraction
+    setCalendarData(null);
+    setExtractError(null);
+    setIsExtractingPatients(true);
+    setShowPatientSelectionModal(true);
+    
+    try {
+      // Extract patient data from current calendar page
+      const response = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!response[0]?.id) {
+        throw new Error('No active tab found');
+      }
+
+      const tabId = response[0].id;
+      
+      // Ensure content script is loaded and responsive before extraction
+      await ensureContentScriptReady(tabId);
+      
+      const extractResponse = await chrome.tabs.sendMessage(tabId, {
+        type: 'EXECUTE_ACTION',
+        action: 'extract-calendar-patients'
+      });
+      
+      if (extractResponse?.success && extractResponse?.data) {
+        setCalendarData(extractResponse.data);
+        console.log('📅 Patient extraction successful:', extractResponse.data);
+      } else {
+        throw new Error(extractResponse?.error || 'Failed to extract patient data');
+      }
+    } catch (error) {
+      console.error('❌ Failed to extract patients:', error);
+      
+      // Provide more specific error messaging
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        if (error.message.includes('Content script')) {
+          errorMessage = `Content script issue: ${error.message}`;
+        } else if (error.message.includes('Could not establish connection')) {
+          errorMessage = 'Extension communication failed. Please reload the extension in chrome://extensions and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setExtractError(errorMessage);
+    } finally {
+      setIsExtractingPatients(false);
+    }
+  }, [appState.modelStatus.isConnected]);
+
+  const handleBatchAIReviewProcess = useCallback(async (selectedPatients: PatientAppointment[]) => {
+    console.log('🔄 Starting batch processing for', selectedPatients.length, 'patients');
+    
+    if (!calendarData) {
+      console.error('❌ No calendar data available');
+      return;
+    }
+    
+    setIsBatchProcessing(true);
+    setBatchProcessingProgress(null);
+    setShowPatientSelectionModal(false);
+    
+    // Set processing state
+    setAppState(prev => ({
+      ...prev,
+      isProcessing: true,
+      processingStatus: 'processing',
+      currentAgent: 'batch-ai-review',
+      currentAgentName: 'Batch AI Review Orchestrator',
+      processingStartTime: Date.now(),
+      transcription: `Batch processing ${selectedPatients.length} patients from ${calendarData.appointmentDate}`,
+      results: ''
+    }));
+    
+    try {
+      const batchReport = await batchOrchestrator.current.processBatch(
+        {
+          selectedPatients,
+          appointmentDate: calendarData.appointmentDate,
+          calendarUrl: calendarData.calendarUrl || window.location.href
+        },
+        (progress: any) => {
+          console.log('📊 Batch processing progress:', progress);
+          setBatchProcessingProgress(progress);
+          
+          // Update app state with current patient info
+          if (progress.currentPatient) {
+            setAppState(prev => ({
+              ...prev,
+              transcription: `Processing patient ${progress.currentPatientIndex + 1}/${progress.totalPatients}: ${progress.currentPatient?.name} (${progress.phase})`
+            }));
+          }
+        }
+      );
+      
+      console.log('✅ Batch processing completed:', batchReport);
+      
+      // Store batch results in chrome.storage for new tab to access
+      const batchDataKey = `batchReview_${Date.now()}`;
+      await chrome.storage.local.set({ [batchDataKey]: batchReport });
+      console.log('💾 Stored batch results in chrome.storage with key:', batchDataKey);
+      
+      // Open results in new tab with clean URL
+      const resultsUrl = chrome.runtime.getURL(`src/components/BatchReviewResults.html?key=${batchDataKey}`);
+      console.log('🔗 Opening batch results in new tab:', resultsUrl);
+      const resultsTab = await chrome.tabs.create({ url: resultsUrl });
+      console.log('📄 Batch results tab created:', resultsTab);
+      
+      // Update side panel with completion status and structured review data for individual cards
+      const batchProcessingTime = batchReport.batchData.processingEndTime - batchReport.batchData.processingStartTime;
+      
+      // Aggregate all findings from successful patient reviews for individual card display
+      const aggregatedFindings: any[] = [];
+      let totalFindings = 0;
+      let immediateFindings = 0;
+      
+      batchReport.batchData.patientResults.forEach((result) => {
+        if (result.success && result.reviewReport?.reviewData?.findings) {
+          result.reviewReport.reviewData.findings.forEach((finding: any) => {
+            // Add patient context to each finding for batch display
+            aggregatedFindings.push({
+              ...finding,
+              patientName: result.patient.name,
+              patientFileNumber: result.patient.fileNumber
+            });
+            totalFindings++;
+            if (finding.urgency === 'Immediate') {
+              immediateFindings++;
+            }
+          });
+        }
+      });
+      
+      // Create structured review data for individual card display
+      const batchReviewData = {
+        findings: aggregatedFindings,
+        timestamp: Date.now(),
+        isBatchReview: true,
+        batchSummary: {
+          totalPatients: batchReport.batchData.totalPatients,
+          successfulReviews: batchReport.batchData.successfulReviews,
+          totalFindings,
+          immediateFindings
+        }
+      };
+      
+      setAppState(prev => ({
+        ...prev,
+        isProcessing: false,
+        processingStatus: 'complete',
+        currentAgent: null, // Clear agent type since results are in new tab
+        results: `✅ Batch AI Review Completed\n\n📊 Results Summary:\n• ${batchReport.batchData.totalPatients} patients processed\n• ${batchReport.batchData.successfulReviews} successful reviews\n• ${totalFindings} total clinical findings\n• ${immediateFindings} immediate action items\n\n📄 Detailed results have been opened in a new tab with full patient-by-patient breakdown, collapsible findings, and printable format.\n\n⏱️ Processing time: ${Math.round(batchProcessingTime / 1000)}s`,
+        reviewData: null, // Clear review data since it's in new tab
+        totalProcessingTime: batchProcessingTime
+      }));
+
+      // Show completion notification for batch review
+      const patientCount = batchReport.batchData.totalPatients;
+      const successCount = batchReport.batchData.successfulReviews;
+      const batchText = `${successCount}/${patientCount} patients processed`;
+      await NotificationService.showCompletionNotification(
+        'batch-ai-review',
+        batchProcessingTime,
+        batchText
+      );
+      
+      // Show summary in side panel
+      setWarnings(batchReport.warnings || []);
+      setErrors(batchReport.errors || []);
+      if (batchReport.warnings?.length || batchReport.errors?.length) {
+        setShowAlerts(true);
+      }
+      
+    } catch (error) {
+      console.error('❌ Batch processing failed:', error);
+      
+      setAppState(prev => ({
+        ...prev,
+        isProcessing: false,
+        processingStatus: 'error',
+        results: `Batch processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }));
+      
+      setErrors([error instanceof Error ? error.message : 'Unknown error']);
+      setShowAlerts(true);
+    } finally {
+      setIsBatchProcessing(false);
+      setBatchProcessingProgress(null);
+    }
+  }, [calendarData]);
+
+  const handlePatientSelectionModalClose = useCallback(() => {
+    setShowPatientSelectionModal(false);
+    setCalendarData(null);
+    setExtractError(null);
+    setIsExtractingPatients(false);
+  }, []);
+
+  const handleTranscriptionEdit = useCallback((newTranscription: string) => {
+    console.log('✏️ Editing transcription...');
+    setAppState(prev => ({ 
+      ...prev, 
+      transcription: newTranscription,
+      results: '',
+      currentAgent: null,
+      processingStatus: 'idle' 
+    }));
+  }, []);
+
+  // Universal cancellation function with improved reliability
+  const handleCancelProcessing = useCallback(() => {
+    console.log('🛑 Cancelling processing...');
+    
+    // 1. Show cancelling state immediately for user feedback
+    setAppState(prev => ({
+      ...prev,
+      processingStatus: 'cancelling',
+      isRecording: false,
+      isProcessing: false,
+      voiceActivityLevel: 0,
+      frequencyData: []
+    }));
+    
+    // 2. Set cancellation flag BEFORE stopping recording to prevent race condition
+    setIsCancelling(true);
+    
+    // 3. Stop recording if active
+    if (recorder.isRecording) {
+      console.log('🛑 Stopping recording...');
+      recorder.stopRecording();
+    }
+    
+    // 4. Abort transcription if in progress
+    if (transcriptionAbortRef.current) {
+      console.log('🛑 Aborting transcription...');
+      transcriptionAbortRef.current.abort();
+      transcriptionAbortRef.current = null;
+    }
+    
+    // 5. Abort AI processing if in progress  
+    if (processingAbortRef.current) {
+      console.log('🛑 Aborting AI processing...');
+      processingAbortRef.current.abort();
+      processingAbortRef.current = null;
+    }
+    
+    // 6. Clear active workflow
+    setActiveWorkflow(null);
+    activeWorkflowRef.current = null;
+    
+    // 7. Final state reset with slight delay to ensure persistence
+    setTimeout(() => {
+      setAppState(prev => ({
+        ...prev,
+        processingStatus: 'idle',
+        transcription: '',
+        results: '',
+        currentAgent: null,
+        voiceActivityLevel: 0,
+        frequencyData: []
+      }));
+      setIsCancelling(false);
+      console.log('✅ Processing cancelled and reset to idle');
+    }, 200); // Small delay to ensure state persistence
+  }, [recorder]);
+
+  const handleClearSession = useCallback(() => {
+    console.log('🗑️ Clearing session...');
+    setActiveWorkflow(null);
+    activeWorkflowRef.current = null;
+    setWarnings([]);
+    setErrors([]);
+    setShowAlerts(true);
+    setAppState(prev => ({
+      ...prev,
+      transcription: '',
+      results: '',
+      currentAgent: null,
+      processingStatus: 'idle',
+      voiceActivityLevel: 0,
+      frequencyData: []
+    }));
+  }, []);
+
+  return (
+    <div className="app-container">
+      <div className="main-content p-4">
+        <div className="max-w-md mx-auto space-y-4">
+        {/* Header */}
+        <div className="glass rounded-2xl p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-gray-900 text-lg font-semibold">
+                Reflow Medical Assistant
+              </h1>
+              <p className="text-gray-600 text-sm">
+                AI-powered medical dictation
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {/* Main Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMainMenu(!showMainMenu)}
+                  className="p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                  title="Main Menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+                
+                {showMainMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowMainMenu(false);
+                          handleBatchAIReviewStart();
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                      >
+                        <CheckCircle className="w-4 h-4 text-purple-600" />
+                        <div>
+                          <div className="font-medium">Batch AI Review</div>
+                          <div className="text-xs text-gray-500">Multi-patient processing</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Click outside to close menu */}
+                {showMainMenu && (
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowMainMenu(false)}
+                  />
+                )}
+              </div>
+              
+              <ModelStatus 
+                status={appState.modelStatus}
+                onRefresh={async () => {
+                  const status = await lmStudioService.checkConnection();
+                  const modelStatus = lmStudioService.getModelStatus();
+                  const whisperStatus = await whisperServerService.checkServerStatus();
+                  
+                  setAppState(prev => ({ 
+                    ...prev, 
+                    modelStatus: {
+                      ...modelStatus,
+                      whisperServer: {
+                        ...whisperStatus,
+                        lastChecked: Date.now()
+                      }
+                    }
+                  }));
+                }}
+                onRestartWhisper={async () => {
+                  const result = await whisperServerService.startServer();
+                  const whisperStatus = await whisperServerService.checkServerStatus();
+                  
+                  setAppState(prev => ({ 
+                    ...prev, 
+                    modelStatus: {
+                      ...prev.modelStatus,
+                      whisperServer: {
+                        ...whisperStatus,
+                        lastChecked: Date.now()
+                      }
+                    }
+                  }));
+                  
+                  return result;
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Status Indicator with Unified Controls */}
+        <div>
+          <StatusIndicator 
+            status={appState.processingStatus}
+            currentAgent={appState.currentAgent}
+            isRecording={appState.isRecording}
+            onCompleteRecording={activeWorkflow ? () => handleWorkflowSelect(activeWorkflow) : undefined}
+            onCancelProcessing={handleCancelProcessing}
+          />
+          
+          {/* Processing Time Display */}
+          <ProcessingTimeDisplay appState={appState} />
+          
+          {/* Error Recovery */}
+          {appState.processingStatus === 'error' && (
+            <div className="glass rounded-2xl p-4 mt-2 border-red-200 bg-red-50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-800 text-sm font-medium">Processing Failed</p>
+                  <p className="text-red-600 text-xs mt-1">
+                    {appState.transcription ? 'AI processing error' : 'Transcription error'}
+                  </p>
+                </div>
+                <button
+                  onClick={handleRetryProcessing}
+                  disabled={!appState.transcription || !activeWorkflowRef.current}
+                  className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Progressive Disclosure: Workflow Selection */}
+        {(!appState.transcription && !appState.results && !appState.isProcessing) && (
+          <WorkflowButtons
+            onWorkflowSelect={handleWorkflowSelect}
+            activeWorkflow={activeWorkflow}
+            isRecording={appState.isRecording}
+            disabled={appState.isProcessing}
+            voiceActivityLevel={appState.voiceActivityLevel}
+            recordingTime={recorder.recordingTime}
+          />
+        )}
+
+
+        {/* Quick Restart Flow - Show when results are available */}
+        {(appState.results || (appState.transcription && appState.processingStatus === 'complete')) && (
+          <div className="glass rounded-lg p-4 border-2 border-blue-200 bg-blue-50">
+            <div className="flex items-center justify-between">
+              <div>
+                {appState.currentAgent === 'ai-medical-review' ? (
+                  <>
+                    <h3 className="text-blue-900 font-medium text-sm">New Medical Review</h3>
+                    <p className="text-blue-700 text-xs mt-1">Clear current review and start fresh</p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-blue-900 font-medium text-sm">Start New Recording</h3>
+                    <p className="text-blue-700 text-xs mt-1">Clear current session and begin fresh</p>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleClearSession}
+                className="btn-documentation px-4 py-2 rounded-lg text-sm font-medium transition-all hover:shadow-md"
+              >
+                {appState.currentAgent === 'ai-medical-review' ? 'Clear Review' : 'New Recording'}
+              </button>
+            </div>
+          </div>
+        )}
+
+
+        {/* Error Alerts - Only show errors, warnings are now shown in ResultsPanel */}
+        {showAlerts && errors.length > 0 && (
+          <ErrorAlert
+            warnings={[]} // Don't show warnings here anymore
+            errors={errors}
+            onDismiss={() => setShowAlerts(false)}
+            onRetry={() => {
+              const workflowId = activeWorkflowRef.current || activeWorkflow;
+              if (workflowId && appState.transcription) {
+                handleAgentReprocess(workflowId);
+              }
+            }}
+            onEditTranscription={() => {
+              // Focus on transcription for editing - no specific action needed
+              // The TranscriptionDisplay component handles editing
+            }}
+            onAcceptWarning={() => {
+              setWarnings([]);
+              setShowAlerts(false);
+            }}
+          />
+        )}
+
+        {/* Summary Panel - For Quick Letter Agent only */}
+        {resultSummary && appState.results && (
+          <div className="mb-4">
+            <SummaryPanel
+              summary={resultSummary}
+              agentType={appState.currentAgent}
+              onCopy={async (text) => {
+                try {
+                  await navigator.clipboard.writeText(text);
+                  // Copy successful
+                } catch (error) {
+                  // Clipboard copy failed
+                }
+              }}
+              onInsertToEMR={async (text) => {
+                try {
+                  // Send message to content script to insert into active field
+                  await chrome.runtime.sendMessage({
+                    type: 'EXECUTE_ACTION',
+                    action: 'insertText',
+                    data: { text }
+                  });
+                } catch (error) {
+                  // EMR insertion failed
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Results Panel - Full Letter Content with embedded transcription */}
+        {appState.results && (
+          <ResultsPanel
+            results={appState.results}
+            agentType={appState.currentAgent}
+            warnings={warnings}
+            onDismissWarnings={() => {
+              setWarnings([]);
+              setShowAlerts(false);
+            }}
+            originalTranscription={appState.transcription}
+            currentAgent={appState.currentAgent}
+            onAgentReprocess={handleAgentReprocess}
+            isProcessing={appState.isProcessing}
+            onTranscriptionCopy={async (text) => {
+              try {
+                await navigator.clipboard.writeText(text);
+                // Copy successful
+              } catch (error) {
+                // Clipboard copy failed
+              }
+            }}
+            onTranscriptionInsert={async (text) => {
+              try {
+                // Send message to content script to insert into active field
+                await chrome.runtime.sendMessage({
+                  type: 'EXECUTE_ACTION',
+                  action: 'insertText',
+                  data: { text }
+                });
+              } catch (error) {
+                // EMR insertion failed
+              }
+            }}
+            onTranscriptionEdit={handleTranscriptionEdit}
+            onCopy={async (text) => {
+              try {
+                await navigator.clipboard.writeText(text);
+                // Copy successful
+              } catch (error) {
+                // Clipboard copy failed
+              }
+            }}
+            onInsertToEMR={async (text) => {
+              try {
+                // Send message to content script to insert into active field
+                await chrome.runtime.sendMessage({
+                  type: 'EXECUTE_ACTION',
+                  action: 'insertText',
+                  data: { text }
+                });
+              } catch (error) {
+                // EMR insertion failed
+              }
+            }}
+            failedAudioRecordings={appState.failedAudioRecordings}
+            onClearFailedRecordings={clearFailedRecordings}
+            errors={errors}
+            reviewData={appState.reviewData}
+          />
+        )}
+
+        {/* Transcription Display - Only show when no results exist */}
+        {appState.transcription && !appState.results && (
+          <TranscriptionDisplay
+            transcription={appState.transcription}
+            onEdit={handleTranscriptionEdit}
+            isEditable={!appState.isProcessing}
+            currentAgent={appState.currentAgent}
+            onAgentReprocess={handleAgentReprocess}
+            isProcessing={appState.isProcessing}
+            onCopy={async (text) => {
+              try {
+                await navigator.clipboard.writeText(text);
+                // Copy successful
+              } catch (error) {
+                // Clipboard copy failed
+              }
+            }}
+            onInsertToEMR={async (text) => {
+              try {
+                // Send message to content script to insert into active field
+                await chrome.runtime.sendMessage({
+                  type: 'EXECUTE_ACTION',
+                  action: 'insertText',
+                  data: { text }
+                });
+              } catch (error) {
+                // EMR insertion failed
+              }
+            }}
+          />
+        )}
+
+
+        </div>
+      </div>
+
+      {/* Footer Section with Quick Actions */}
+      <div className="footer-section">
+        <div className="footer-content">
+          <QuickActions
+            isFooter={true}
+            onQuickAction={handleQuickAction}
+            onStartWorkflow={handleWorkflowSelect}
+          />
+        </div>
+      </div>
+
+      {/* Patient Selection Modal */}
+      <PatientSelectionModal
+        isOpen={showPatientSelectionModal}
+        onClose={handlePatientSelectionModalClose}
+        onStartReview={handleBatchAIReviewProcess}
+        calendarData={calendarData}
+        isExtracting={isExtractingPatients}
+        extractError={extractError}
+      />
+    </div>
+  );
+};
+
+export default App;
