@@ -2,7 +2,7 @@
 
 ## 🔔 **Notification Implementation Complete**
 
-The Xestro EMR Assistant now shows native macOS system notifications when any medical agent completes processing, especially useful for the long-running AI Review (3+ minutes).
+Operator now shows native macOS system notifications when any medical agent completes processing, especially useful for the long-running AI Review (3+ minutes).
 
 ## 🎯 **Notification Scenarios**
 

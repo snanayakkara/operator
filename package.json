@@ -1,7 +1,7 @@
 {
-  "name": "reflow-medical-assistant",
-  "version": "2.5.1",
-  "description": "Unified medical assistant Chrome extension combining Reflow2 AI agents with Xestro EMR automation",
+  "name": "operator",
+  "version": "3.1.0",
+  "description": "Operator - Advanced medical AI assistant Chrome extension with specialized agents and EMR integration",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,10 +18,15 @@
     "lint:src": "eslint src/**/*.{ts,tsx} --max-warnings 30"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.85.5",
+    "@vitejs/plugin-react-swc": "^4.0.1",
     "@xenova/transformers": "^2.10.0",
+    "framer-motion": "^12.23.12",
+    "lottie-react": "^2.4.1",
     "lucide-react": "^0.300.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
     "react-loading-indicators": "^1.0.1"
   },
   "devDependencies": {
@@ -29,8 +34,8 @@
     "@types/chrome": "^0.0.258",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
@@ -53,6 +58,6 @@
     "dictation",
     "emr"
   ],
-  "author": "Medical AI Assistant Team",
+  "author": "Operator Team",
   "license": "MIT"
 }

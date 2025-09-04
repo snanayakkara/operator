@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Xestro EMR Assistant Chrome Extension** - A sophisticated medical dictation and EMR integration tool that combines AI-powered transcription with specialized medical agents for healthcare professionals.
+**Operator Chrome Extension** - A sophisticated medical dictation and EMR integration tool that combines AI-powered transcription with 11 specialized medical agents for healthcare professionals, including advanced batch processing capabilities and Australian medical guideline compliance.
 
 ## Key Architecture Components
 
@@ -14,42 +14,70 @@
 
 ### 🤖 AI Processing Stack
 - **Transcription**: MLX Whisper server (localhost:8001) using `mlx-community/whisper-large-v3-turbo`
-- **Generation**: MedGemma-27b-it model (localhost:1234) for medical report creation
+- **Generation**: MedGemma-27b MLX model (localhost:1234) for medical report creation
 - **Workflow Selection**: Direct user selection via side panel buttons (no classification required)
 - **Structured Prompts**: Dedicated SystemPrompts files for each medical specialty
 
 ### 🏥 Medical Agents Architecture
 
-#### Implemented Agents (6 Total)
+#### Implemented Agents (11 Total)
+**Core Medical Procedure Agents:**
 1. **TAVI Agent** (`TAVIAgent.ts` + `TAVISystemPrompts.ts`)
    - Transcatheter Aortic Valve Implantation procedures
    - Comprehensive hemodynamic assessment and valve sizing
    - Pre/post-procedural measurements with quantitative analysis
 
-2. **PCI Agent** (`PCIAgent.ts` + `PCISystemPrompts.ts`)
-   - Percutaneous Coronary Intervention procedures
-   - Detailed vessel assessment and intervention planning
-   - TIMI flow grading and angiographic results
+2. **Angiogram/PCI Agent** (`AngiogramPCIAgent.ts` + `AngiogramPCISystemPrompts.ts`)
+   - Combined cardiac catheterization and PCI procedures
+   - Percutaneous Coronary Intervention with vessel assessment
+   - TIMI flow grading and comprehensive angiographic results
 
-3. **Angiogram Agent** (`AngiogramAgent.ts` + `AngiogramSystemPrompts.ts`)
-   - Cardiac catheterization and coronary angiography
-   - Comprehensive vessel territory analysis
-   - Left/right heart catheterization support
+3. **mTEER Agent** (`MTEERAgent.ts` + `MTEERSystemPrompts.ts`)
+   - Mitral Transcatheter Edge-to-Edge Repair procedures
+   - MitraClip and PASCAL device deployment
+   - Mitral regurgitation assessment and outcomes
 
-4. **Quick Letter Agent** (`QuickLetterAgent.ts` + `QuickLetterSystemPrompts.ts`)
+4. **PFO Closure Agent** (`PFOClosureAgent.ts` + `PFOClosureSystemPrompts.ts`)
+   - Patent Foramen Ovale closure procedures
+   - Cryptogenic stroke prevention and device selection
+   - Anatomical assessment and deployment guidance
+
+5. **Right Heart Cath Agent** (`RightHeartCathAgent.ts` + `RightHeartCathSystemPrompts.ts`)
+   - Right heart catheterization with hemodynamic assessment
+   - Pulmonary hypertension evaluation
+   - Exercise hemodynamics and cardiac output measurements
+
+**Documentation and Review Agents:**
+6. **Quick Letter Agent** (`QuickLetterAgent.ts` + `QuickLetterSystemPrompts.ts`)
    - Medical correspondence and consultation letters
    - Brief procedure notes and clinical summaries
    - Structured letter formatting with professional tone
 
-5. **Consultation Agent** (`ConsultationAgent.ts`)
+7. **Consultation Agent** (`ConsultationAgent.ts`)
    - Comprehensive patient assessments
    - Clinical evaluation and management planning
    - Multi-system clinical reasoning
 
-6. **Investigation Summary Agent** (`InvestigationSummaryAgent.ts` + `InvestigationSummarySystemPrompts.ts`)
+8. **Investigation Summary Agent** (`InvestigationSummaryAgent.ts` + `InvestigationSummarySystemPrompts.ts`)
    - Diagnostic test result summarization
    - Echo, CT, MRI, and stress test interpretation
    - Integrated clinical correlation and recommendations
+
+**Advanced Specialized Agents:**
+9. **Australian Medical Review Agent** (`AusMedicalReviewAgent.ts` + `AusMedicalReviewSystemPrompts.ts`)
+   - Australian guideline compliance checking
+   - Heart Foundation resource integration
+   - Medication safety analysis with local standards
+
+10. **Background Agent** (`BackgroundAgent.ts` + `BackgroundSystemPrompts.ts`)
+    - Patient history and background analysis
+    - Comorbidity assessment and risk stratification
+    - Clinical context extraction and summarization
+
+11. **Medication Agent** (`MedicationAgent.ts` + `MedicationSystemPrompts.ts`)
+    - Comprehensive medication review and analysis
+    - Drug interaction checking and safety alerts
+    - Dosing optimization and therapeutic recommendations
 
 #### SystemPrompts Architecture
 Each agent now uses dedicated SystemPrompts files containing:
@@ -58,6 +86,51 @@ Each agent now uses dedicated SystemPrompts files containing:
 - **Validation patterns** for medical accuracy
 - **Template structures** for consistent formatting
 - **Quality assurance rules** for clinical accuracy
+
+### 🔄 Batch Processing Architecture
+
+#### Australian Medical Review Capabilities
+The extension now includes sophisticated batch processing capabilities for multi-patient clinical review:
+
+```typescript
+// BatchAIReviewOrchestrator.ts - Multi-patient processing coordination
+export class BatchAIReviewOrchestrator {
+  // Patient pattern recognition with "Name (ID)" format
+  parsePatientAppointments(html: string): PatientAppointment[]
+  
+  // Parallel patient processing with Australian guideline compliance
+  async processBatchReview(input: BatchAIReviewInput): Promise<BatchAIReviewReport>
+  
+  // Enhanced data extraction from EMR systems
+  async extractPatientData(patient: PatientAppointment): Promise<AusMedicalReviewInput>
+}
+```
+
+**Key Features:**
+- **Multi-Patient Processing**: Simultaneous review of appointment lists
+- **Australian Guideline Integration**: Heart Foundation compliance checking
+- **Enhanced Pattern Recognition**: "Name (ID)" format support (e.g., "Test Test (14524)")
+- **Structured Data Extraction**: Background, medications, investigations, problem lists
+- **Performance Monitoring**: CheckpointManager and MetricsCollector integration
+
+#### Advanced Session Management
+```typescript
+// PatientSession interface - Enhanced multi-patient workflows
+export interface PatientSession {
+  id: string;
+  patient: PatientInfo;
+  transcription: string;
+  results: string;
+  summary?: string; // Enhanced summary for dual card display
+  agentType: AgentType;
+  agentName: string;
+  status: SessionStatus; // 'recording' | 'transcribing' | 'processing' | 'completed' | 'error' | 'cancelled'
+  processingTime?: number;
+  warnings?: string[];
+  errors?: string[];
+  audioBlob?: Blob; // Audio storage for reprocessing
+}
+```
 
 ### Base Agent Framework
 ```typescript
@@ -78,7 +151,70 @@ export abstract class MedicalAgent {
 }
 ```
 
+### 🎯 Unified Recording Interface Architecture
+
+#### Consistent Recording Experience (v3.1.0)
+The extension now provides a unified recording interface that ensures consistency regardless of how users initiate recording:
+
+**Vertical Stacked Layout:**
+```
+┌─────────────────────────────────────────┐
+│ LiveAudioVisualizer (Top Section)      │
+│ ┌─────────────────────────────────────┐ │
+│ │   VU Meter + Timer + Stop Button   │ │
+│ │   Audio Waveform Visualization     │ │
+│ │   Device Status + Audio Levels     │ │
+│ └─────────────────────────────────────┘ │
+├─────────────────────────────────────────┤
+│ RecordingPromptCard (Bottom Section)   │
+│ ┌─────────────────────────────────────┐ │
+│ │ 📋 Recording Guide (CompactMode)   │ │
+│ │ • Key elements to include          │ │
+│ │ • Recording tips & terminology     │ │
+│ │ (Collapsible sections)             │ │
+│ └─────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+**Recording Entry Points:**
+- **Workflow Recordings**: TAVI, PCI, Quick Letter, Consultation, etc.
+- **Quick Action Recordings**: Investigation Summary, Background, Medications
+
+**Universal Prompt Cards:**
+All agents now have dedicated recording guidance:
+```typescript
+// recordingPrompts.ts - Universal prompt configuration
+const RECORDING_PROMPTS = [
+  'tavi', 'angiogram-pci', 'quick-letter', 'consultation',
+  'mteer', 'pfo-closure', 'right-heart-cath',
+  'investigation-summary', 'background', 'medication' // New quick action prompts
+];
+```
+
+**CompactMode Implementation:**
+- Optimized for narrow side panel interface
+- Smaller fonts, reduced padding, condensed spacing
+- Sections collapsed by default to maximize space efficiency
+- Essential guidance always visible during recording
+
 ## Recent Major Updates
+
+### Unified Recording Interface (v3.1.0 - August 2025)
+- **Consistent Recording Experience**: Eliminated interface inconsistencies between workflow and quick action recordings
+- **Vertical Stacked Layout**: LiveAudioVisualizer + RecordingPromptCard displayed together during ALL recordings
+- **CompactMode Implementation**: Space-optimized RecordingPromptCard design for narrow side panel
+- **Universal Prompt Cards**: Added recording guidance for quick action agents (investigation-summary, background, medication)
+- **Enhanced UX Design**: Timer, stop button, and reference materials always visible regardless of entry point
+- **Architectural Improvement**: Unified recording display logic replacing separate overlay and visualizer components
+
+### Major Agent Expansion & Batch Processing (v3.0.3 - January 2025)
+- **Agent Ecosystem Expansion**: Comprehensive expansion from 6 to 11 specialized medical agents
+- **Australian Medical Compliance**: Full integration of Australian Heart Foundation guidelines and local medical standards
+- **Batch Processing Capabilities**: Multi-patient clinical review workflows with enhanced pattern recognition
+- **Advanced Session Management**: Patient session tracking with comprehensive state management
+- **Enhanced UI Components**: PatientSelectionModal, SessionsPanel, AIReviewSection, and FieldIngestionOverlay
+- **Comprehensive Testing**: 11 E2E test suites with advanced orchestration and medical report validation
+- **Performance Optimizations**: Enhanced memory management and processing efficiency for large patient cohorts
 
 ### SystemPrompts Architecture Implementation (January 2025)
 - **Enhancement**: Extracted comprehensive medical knowledge from Reflow2 implementation
@@ -91,7 +227,7 @@ export abstract class MedicalAgent {
   - Australian spelling compliance throughout
 
 ### Major Architectural Improvements (v2.5.0 - January 2025)
-- **Agent-Specific Model Configuration**: Investigation Summary agent now uses lighter google/gemma-3n-e4b model for simple formatting tasks, while other agents use powerful MedGemma-27b-it for complex medical reports
+- **Agent-Specific Model Configuration**: Investigation Summary agent now uses lighter google/gemma-3n-e4b model for simple formatting tasks, while other agents use powerful MedGemma-27b MLX for complex medical reports
 - **Comprehensive Cancellation System**: AbortController integration across all processing phases (recording, transcription, processing) with proper cleanup and user feedback
 - **UI Space Optimization**: 
   - Consolidated reprocessing functionality into transcription header with dropdown menu
@@ -99,6 +235,7 @@ export abstract class MedicalAgent {
   - Eliminated duplicate UI elements for cleaner, more efficient workflow
 - **Enhanced Letter Intelligence**: Smart summary generation with medical pattern recognition for diagnosis, procedures, and outcomes instead of simple first-sentence extraction
 - **Integrated Warning Display**: Content warnings now appear within letter cards rather than separate alerts
+- **App Architecture Optimization**: Migrated from App.tsx to OptimizedApp.tsx with useReducer state management, replacing 20+ useState hooks with centralized state, memoized components, and optimized re-rendering patterns
 
 ### MLX Whisper Integration (January 2025)
 - **Issue**: LMStudio doesn't support `/v1/audio/transcriptions` endpoint
@@ -125,7 +262,7 @@ export abstract class MedicalAgent {
 {
   baseUrl: 'http://localhost:1234',           // LMStudio for report generation
   transcriptionUrl: 'http://localhost:8001', // Separate MLX Whisper server
-  processorModel: 'unsloth/medgemma27b/medgemma-27b-it-q4_k_m.gguf',
+  processorModel: 'lmstudio-community/medgemma-27b-text-it-MLX-4bit',
   transcriptionModel: 'whisper-large-v3-turbo',
   timeout: 300000  // 5-minute timeout for complex medical reports
 }
@@ -139,7 +276,7 @@ export abstract class MedicalAgent {
 - **Minor (x.X.0)**: New features, major agent enhancements, new investigation types, UX improvements
 - **Major (X.0.0)**: Breaking changes, architectural overhauls, new core functionality
 
-**Current Version**: **2.5.0** (synchronized across package.json and manifest.json)
+**Current Version**: **3.1.0** (synchronized across package.json and manifest.json)
 
 ## Recent Code Quality Improvements (January 2025)
 
@@ -163,6 +300,8 @@ export abstract class MedicalAgent {
 - **Type Updates**: Updated `PatientAppointment` interface to reflect ID-based pattern usage
 
 **Recent Version History**:
+- **3.1.0**: Unified Recording Interface - consistent recording experience for all agent types, vertical stacked layout with LiveAudioVisualizer + RecordingPromptCard, universal prompt cards for quick actions, CompactMode implementation for space optimization
+- **3.0.3**: Major expansion - 11 total agents, comprehensive batch processing with Australian Medical Review, advanced patient session management, enhanced UI components
 - **2.5.0**: Major architectural improvements - agent-specific model configuration, comprehensive cancellation system, UI space optimization with embedded transcription, enhanced letter intelligence with medical pattern recognition
 - **2.4.2**: SystemPrompts architecture implementation - comprehensive medical knowledge extraction from Reflow2, enhanced stenosis grading preservation, TIMI flow terminology, Australian spelling compliance
 - **2.4.1**: Enhanced stenosis grading and TIMI flow terminology handling
@@ -215,32 +354,56 @@ xestro-investigation-extension/
 │   │   ├── base/
 │   │   │   ├── MedicalAgent.ts          # Abstract base agent class
 │   │   │   └── NarrativeLetterAgent.ts  # Narrative letter functionality
-│   │   ├── specialized/                 # Medical specialty agents
+│   │   ├── specialized/                 # Medical specialty agents (11 total)
 │   │   │   ├── TAVIAgent.ts + TAVISystemPrompts.ts
-│   │   │   ├── PCIAgent.ts + PCISystemPrompts.ts  
-│   │   │   ├── AngiogramAgent.ts + AngiogramSystemPrompts.ts
+│   │   │   ├── AngiogramPCIAgent.ts + AngiogramPCISystemPrompts.ts  
+│   │   │   ├── MTEERAgent.ts + MTEERSystemPrompts.ts
+│   │   │   ├── PFOClosureAgent.ts + PFOClosureSystemPrompts.ts
+│   │   │   ├── RightHeartCathAgent.ts + RightHeartCathSystemPrompts.ts
 │   │   │   ├── QuickLetterAgent.ts + QuickLetterSystemPrompts.ts
 │   │   │   ├── ConsultationAgent.ts
 │   │   │   ├── InvestigationSummaryAgent.ts + InvestigationSummarySystemPrompts.ts
+│   │   │   ├── AusMedicalReviewAgent.ts + AusMedicalReviewSystemPrompts.ts
+│   │   │   ├── BackgroundAgent.ts + BackgroundSystemPrompts.ts
+│   │   │   ├── MedicationAgent.ts + MedicationSystemPrompts.ts
 │   │   │   └── index.ts                 # Agent exports
 │   │   └── router/
 │   │       └── AgentRouter.ts           # Direct agent routing
+│   ├── orchestrators/                   # Advanced workflow orchestration
+│   │   ├── BatchAIReviewOrchestrator.ts # Multi-patient processing
+│   │   ├── CheckpointManager.ts         # Process state management
+│   │   └── MetricsCollector.ts          # Performance analytics
 │   ├── services/                        # Core service layer
 │   │   ├── LMStudioService.ts          # AI model integration
 │   │   ├── TranscriptionService.ts      # Audio processing orchestration
 │   │   ├── WhisperServerService.ts      # MLX Whisper server management
-│   │   └── AgentFactory.ts             # Agent instantiation and processing
+│   │   ├── AgentFactory.ts             # Agent instantiation and processing
+│   │   ├── LazyAgentFactory.ts         # Lazy-loaded agent management
+│   │   ├── NotificationService.ts       # System notifications
+│   │   └── ToastService.ts             # UI toast notifications
 │   ├── config/                         # Configuration management
 │   │   ├── workflowConfig.ts           # Workflow button configuration
-│   │   └── appointmentPresets.ts       # Appointment type configurations
+│   │   ├── appointmentPresets.ts       # Appointment type configurations
+│   │   └── recordingPrompts.ts         # Agent-specific recording prompts
 │   ├── hooks/                          # React hooks
-│   │   └── useRecorder.ts              # Audio recording hook with voice activity
+│   │   ├── useRecorder.ts              # Audio recording hook with voice activity
+│   │   ├── useAppState.ts              # Optimized state management with useReducer
+│   │   ├── useModelStatus.ts           # Service status monitoring
+│   │   └── useAIProcessing.ts          # AI processing coordination
 │   ├── sidepanel/                      # Main React UI
-│   │   ├── App.tsx                     # Main application component
+│   │   ├── OptimizedApp.tsx            # Main application component (useReducer-based)
 │   │   ├── components/                 # UI components
 │   │   │   ├── WorkflowButtons.tsx     # Workflow selection interface
+│   │   │   ├── PatientSelectionModal.tsx # Multi-patient selection
+│   │   │   ├── SessionsPanel.tsx       # Patient session management
+│   │   │   ├── AIReviewSection.tsx     # Australian medical review display
+│   │   │   ├── FieldIngestionOverlay.tsx # Enhanced EMR integration
+│   │   │   ├── ProcessingPhaseIndicator.tsx # Detailed progress tracking
 │   │   │   ├── TranscriptionDisplay.tsx # Audio transcription display
-│   │   │   ├── ResultsPanel.tsx        # Medical report results
+│   │   │   ├── results/
+│   │   │   │   ├── OptimizedResultsPanel.tsx  # Optimized medical report results
+│   │   │   │   ├── AIReviewCards.tsx   # Structured review display
+│   │   │   │   └── [other results components]
 │   │   │   ├── QuickActions.tsx        # EMR quick actions
 │   │   │   ├── ModelStatus.tsx         # Service status monitoring
 │   │   │   └── [other components]
@@ -250,22 +413,39 @@ xestro-investigation-extension/
 │   │   └── content-script.ts          # Xestro EMR field detection
 │   ├── background/                     # Chrome extension service worker
 │   │   └── service-worker.ts          # Extension background processing
+│   ├── utils/                         # Utility functions
+│   │   ├── Logger.ts                  # Structured logging
+│   │   ├── CacheManager.ts            # Performance caching
+│   │   ├── ErrorRecoveryManager.ts    # Advanced error handling
+│   │   └── [other utilities]
 │   └── types/                         # TypeScript definitions
-│       └── medical.types.ts           # Medical domain types
+│       ├── medical.types.ts           # Medical domain types
+│       └── BatchProcessingTypes.ts    # Batch processing types
 ├── whisper-server.py                  # MLX Whisper transcription server
 ├── start-whisper-server.sh           # Server startup script
 ├── auto-start-whisper.sh             # Development auto-start
 ├── requirements-whisper.txt          # Python dependencies
 ├── WHISPER_SETUP.md                  # Transcription setup guide
 ├── tests/                            # Comprehensive testing
-│   ├── e2e/                         # Playwright end-to-end tests
+│   ├── e2e/                         # Playwright end-to-end tests (11 test suites)
+│   │   ├── 00-basic-extension-test.spec.ts
 │   │   ├── 01-extension-loading.spec.ts
 │   │   ├── 02-voice-recording.spec.ts
+│   │   ├── 03-medical-agents.spec.ts
+│   │   ├── 04-lmstudio-integration.spec.ts
 │   │   ├── 05-full-workflow.spec.ts  # Complete workflow testing
-│   │   └── [other test files]
+│   │   ├── 06-performance.spec.ts
+│   │   ├── 07-all-workflows.spec.ts
+│   │   ├── 08-output-validation.spec.ts
+│   │   ├── 09-ui-components.spec.ts
+│   │   ├── 10-batch-processing.spec.ts
+│   │   └── 11-error-scenarios.spec.ts
 │   └── helpers/                     # Test utilities
 │       ├── ExtensionTestHelper.ts   # Extension testing utilities
 │       ├── LMStudioMock.ts         # Mock AI services
+│       ├── TestOrchestrator.ts     # Advanced test coordination
+│       ├── AutoFixOrchestrator.ts  # Automated error recovery testing
+│       ├── MedicalReportValidator.ts # Clinical accuracy validation
 │       └── [other helpers]
 ├── vite.config.ts                   # Vite build configuration
 ├── playwright.config.ts             # Playwright test configuration
@@ -490,12 +670,16 @@ try {
 
 ### Expected Performance (Apple Silicon M1/M2/M3)
 - **Transcription**: ~50x real-time speed (MLX optimization)
-- **Report Generation**: 3-8 seconds (MedGemma-27b-it Q4_K_M)
+- **Report Generation**: 
+  - Investigation Summary: 1-3 seconds (google/gemma-3n-e4b lightweight model)
+  - Complex Procedures: 3-8 seconds (MedGemma-27b MLX 4-bit)
 - **Workflow Selection**: Instant (direct selection, no classification)
-- **Memory Usage**: ~150MB extension + ~8GB model memory
-- **Bundle Size**: ~1.2MB (optimized with code splitting)
+- **Batch Processing**: 5-15 patients per minute (depending on data complexity)
+- **Memory Usage**: ~200MB extension + ~8GB model memory (11 agents)
+- **Bundle Size**: ~1.5MB (optimized with code splitting)
 - **Cold Start**: 30-60 seconds first transcription (model loading)
 - **Warm Performance**: <2 seconds transcription + <5 seconds generation
+- **Australian Review**: 2-4 seconds per patient (guideline compliance checking)
 
 ### Optimization Features
 - **Code Splitting**: Vendor, agents, and services bundles
@@ -544,27 +728,33 @@ try {
 ## Current Architecture Status
 
 ### Implemented Features ✅
-- **6 Medical Agents**: TAVI, PCI, Angiogram, QuickLetter, Consultation, InvestigationSummary
-- **SystemPrompts Architecture**: Dedicated medical knowledge files per agent
+- **11 Medical Agents**: Complete expansion including TAVI, AngiogramPCI, mTEER, PFO Closure, Right Heart Cath, Quick Letter, Consultation, Investigation Summary, Australian Medical Review, Background, and Medication agents
+- **SystemPrompts Architecture**: Dedicated medical knowledge files per agent with Australian compliance
+- **Batch Processing Capabilities**: Multi-patient clinical review workflows with Australian guideline integration
+- **Advanced Session Management**: Patient session tracking with comprehensive state management
+- **Enhanced UI Components**: PatientSelectionModal, SessionsPanel, AIReviewSection, and ProcessingPhaseIndicator
 - **MLX Whisper Integration**: High-performance local transcription
 - **Direct Workflow Selection**: No classification step required
-- **Comprehensive Testing**: Full E2E workflow coverage
-- **EMR Integration**: Xestro field detection and auto-insertion
+- **Comprehensive Testing**: 11 E2E test suites with advanced orchestration
+- **EMR Integration**: Enhanced Xestro field detection and auto-insertion
 - **Error Recovery**: Intelligent error handling and user guidance
 - **Real-time Monitoring**: Service status and health checking
+- **Australian Compliance**: Heart Foundation guideline integration and local medical standards
 
 ### Development Roadmap
-- **Additional Agents**: MTEER, TTEER, PFO Closure, ASD Closure (commented in index.ts)
-- **Enhanced EMR Support**: Epic and Cerner deep integration
-- **Custom Agent Training**: User-specific medical templates
-- **Performance Optimization**: Model quantization and caching improvements
-- **Multi-language Support**: Non-English medical transcription
+- **Additional Procedure Agents**: TTEER, ASD Closure, PVL Plug, Bypass Graft (defined in AgentType but not yet implemented)
+- **Enhanced EMR Support**: Epic and Cerner deep integration beyond Xestro
+- **Advanced Batch Features**: Multi-appointment type processing and workflow optimization
+- **Custom Agent Training**: User-specific medical templates and personalization
+- **Performance Optimization**: Model quantization and caching improvements for 11-agent architecture
+- **Multi-language Support**: Non-English medical transcription and international guideline compliance
+- **Cloud Integration**: Optional secure cloud backup for enterprise deployments
 
 ## Key Dependencies
 
 ### Runtime Stack
 - **MLX Whisper**: Apple Silicon-optimized transcription (`mlx-whisper`)
-- **LMStudio**: Local AI model serving (MedGemma-27b-it Q4_K_M only)
+- **LMStudio**: Local AI model serving (MedGemma-27b MLX 4-bit only)
 - **Chrome Extension APIs**: Manifest V3, Side Panel, MediaRecorder, Clipboard
 - **React 18**: UI framework with hooks and modern patterns
 - **TypeScript 5**: Type system with strict mode enabled
@@ -589,7 +779,7 @@ pip install -r requirements-whisper.txt
 ./start-whisper-server.sh
 
 # 3. Configure LMStudio
-# - Download MedGemma-27b-it model
+# - Download MedGemma-27b MLX model
 # - Start server on localhost:1234
 # - Load model in LMStudio interface
 
@@ -611,8 +801,8 @@ curl http://localhost:1234/v1/models  # LMStudio
 
 ---
 
-**Current Version**: 2.5.0
-**Last Updated**: January 2025  
-**Architecture**: Agent-specific model configuration with MLX Whisper transcription and comprehensive cancellation system
-**Primary Focus**: Local-first medical AI with optimized UI workflow and EMR integration
-**Medical Accuracy**: Clinically validated system prompts with enhanced letter intelligence
+**Current Version**: 3.1.0
+**Last Updated**: August 2025  
+**Architecture**: 11-agent medical AI system with unified recording interface, batch processing capabilities, Australian compliance, and advanced session management
+**Primary Focus**: Comprehensive medical documentation automation with consistent UX, multi-patient processing, and local-first AI
+**Medical Accuracy**: Clinically validated system prompts with Australian guideline compliance and universal recording guidance

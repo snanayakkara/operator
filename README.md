@@ -1,6 +1,6 @@
-# Xestro EMR Assistant
+# Operator
 
-[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.0.3-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -10,10 +10,10 @@ A sophisticated **medical AI dictation and EMR integration** Chrome extension th
 
 ## 🏥 Overview
 
-The Xestro EMR Assistant transforms medical documentation by providing:
+Operator transforms medical documentation by providing:
 
 - **Local AI Processing** - Complete privacy with MLX Whisper + agent-specific models
-- **Specialized Medical Agents** - 6 medical specialty agents with clinical accuracy
+- **Specialized Medical Agents** - 11 medical specialty agents with clinical accuracy
 - **Real-time Transcription** - ~50x real-time speed on Apple Silicon
 - **EMR Integration** - Seamless Xestro field detection and auto-insertion
 - **Direct Workflow Selection** - No classification delays, instant workflow activation
@@ -102,7 +102,7 @@ curl http://localhost:8001/v1/health
 curl http://localhost:1234/v1/models
 
 # Verify extension loading
-# Look for "Xestro EMR Assistant" in Chrome extensions
+# Look for "Operator" in Chrome extensions
 ```
 
 ## 📖 Usage Guide

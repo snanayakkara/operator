@@ -1,5 +1,5 @@
 /**
- * Structured logging utility for Xestro EMR Assistant
+ * Structured logging utility for Operator
  * Provides development and production-appropriate logging levels
  */
 
