@@ -1,0 +1,33 @@
+{
+  "id": "ex002_complex",
+  "task": "quick-letter", 
+  "complexity": "complex",
+  "transcript": "Thank you for referring this 68-year-old gentleman with a background of ischaemic heart disease, previous CABG in 2019, and recent non-ST elevation myocardial infarction managed with PCI to the LAD. He presents today for routine cardiology follow-up. His symptoms have significantly improved since the intervention, with no further episodes of chest pain. Current medications include aspirin 100mg daily, clopidogrel 75mg daily, atorvastatin 80mg daily, and metoprolol 50mg twice daily. Recent echocardiogram shows preserved left ventricular function with ejection fraction of 55%. Plan to continue dual antiplatelet therapy for 12 months and optimise secondary prevention measures.",
+  "expected_elements": [
+    "professional referral acknowledgment",
+    "comprehensive medical background",
+    "detailed medication review with dosages",
+    "investigation results",
+    "evidence-based management plan", 
+    "clinical reasoning for medication duration",
+    "continuous narrative prose"
+  ],
+  "rubric_criteria": {
+    "has_clinical_content": true,
+    "has_medications": true,
+    "has_medication_dosages": true,
+    "has_follow_up_plan": true,
+    "narrative_flow": true,
+    "clinical_reasoning": true,
+    "min_score": 80
+  },
+  "metadata": {
+    "letter_type": "consultation_follow_up",
+    "patient_age": 68,
+    "background": ["ischaemic heart disease", "previous CABG", "recent NSTEMI", "PCI to LAD"],
+    "ejection_fraction": "55%",
+    "medication_count": 4,
+    "word_count_range": [180, 250],
+    "source": "MedicalDictations.ts - quick-letter complex"
+  }
+}

@@ -7,6 +7,7 @@
 
 import type { AgentType } from '@/types/medical.types';
 import { LazyAgentFactory } from './LazyAgentFactory';
+import { NotificationService } from './NotificationService';
 
 export class AgentFactory {
   private static lazyFactory = LazyAgentFactory.getInstance();
@@ -18,8 +19,12 @@ export class AgentFactory {
     workflowId: AgentType, 
     input: string, 
     context?: any,
-    _signal?: AbortSignal
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any }> {
+    _signal?: AbortSignal,
+    options?: {
+      patientName?: string;
+      skipNotification?: boolean;
+    }
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any }> {
     const startTime = Date.now();
     
     try {
@@ -33,10 +38,29 @@ export class AgentFactory {
       console.log(`⏱️ Total processing time (including load): ${totalTime}ms`);
       console.log(`⏱️ Agent processing time: ${report.metadata.processingTime}ms`);
       
-      // Check if this is an AusMedicalReviewAgent with structured data
-      const ausMedicalReviewData = (report as any).reviewData;
-      if (workflowId === 'ai-medical-review' && ausMedicalReviewData) {
-        console.log(`🔍 AI Review found ${ausMedicalReviewData.findings?.length || 0} findings`);
+      // Check if this is a BatchPatientReviewAgent with structured data
+      const batchPatientReviewData = (report as any).reviewData;
+      if (workflowId === 'ai-medical-review' && batchPatientReviewData) {
+        console.log(`🔍 Batch Patient Review found ${batchPatientReviewData.findings?.length || 0} findings`);
+      }
+      
+      // Send completion notification (will check if user is focused automatically)
+      if (!options?.skipNotification) {
+        try {
+          const extraInfo = workflowId === 'ai-medical-review' && batchPatientReviewData 
+            ? `${batchPatientReviewData.findings?.length || 0} findings identified`
+            : undefined;
+            
+          await NotificationService.showCompletionNotification(
+            workflowId, 
+            report.metadata.processingTime,
+            extraInfo,
+            options?.patientName
+          );
+          console.log(`🔔 Notification sent for ${workflowId} (${report.metadata.processingTime}ms)`);
+        } catch (notificationError) {
+          console.warn('Failed to send completion notification:', notificationError);
+        }
       }
       
       // Return structured response with separate warnings/errors, timing data, and optional summary
@@ -47,7 +71,8 @@ export class AgentFactory {
         errors: report.errors,
         processingTime: report.metadata.processingTime,
         agentName: report.agentName,
-        reviewData: ausMedicalReviewData // Include structured data for AI Review
+        reviewData: batchPatientReviewData, // Include structured data for Batch Patient Review
+        missingInfo: report.metadata?.missingInformation
       };
       
     } catch (error) {
@@ -82,6 +107,27 @@ export class AgentFactory {
    */
   public static async preloadCommonAgents(): Promise<void> {
     await this.lazyFactory.preloadCommonAgents();
+  }
+
+  /**
+   * Preload critical agents for immediate use
+   */
+  public static async preloadCriticalAgents(): Promise<void> {
+    await this.lazyFactory.preloadCriticalAgents();
+  }
+
+  /**
+   * Optimize cache memory usage
+   */
+  public static optimizeCache(): void {
+    this.lazyFactory.optimizeCache();
+  }
+
+  /**
+   * Get memory usage estimation
+   */
+  public static getMemoryEstimate(): { totalAgents: number; estimatedMemoryMB: number } {
+    return this.lazyFactory.getMemoryEstimate();
   }
 
   /**

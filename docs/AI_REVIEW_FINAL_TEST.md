@@ -68,7 +68,7 @@
 
 ### Step 1: Reload Extension
 1. Go to `chrome://extensions/`
-2. Click "Reload" for Reflow Medical Assistant
+2. Click "Reload" for Operator Chrome Extension
 3. Wait 3-5 seconds
 
 ### Step 2: Navigate to Patient Page

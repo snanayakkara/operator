@@ -11,7 +11,7 @@ import type {
   ClipType,
   MRSeverityGrade
 } from '@/types/medical.types';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { MTEERSystemPrompts, MTEERMedicalPatterns, MTEERValidationRules } from './MTEERSystemPrompts';
 
 /**
@@ -361,26 +361,26 @@ export class MTEERAgent extends MedicalAgent {
     complications: MTEERComplication[],
     originalInput: string
   ): Promise<string> {
-    console.log('🔧 Generating mTEER report with LMStudio medgemma-27b...');
+    console.log(`🔧 Generating mTEER report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
     
     try {
-      // Prepare comprehensive context for LMStudio
-      const extractedData = {
-        mteerData,
-        mitralRegurgitation,
-        clipAssessment,
-        complications
+      // Use simplified context to prevent system overload
+      const summaryContext = {
+        clips: clipAssessment.clipsDeployed,
+        preMR: mitralRegurgitation.preProcedure.mrGrade,
+        postMR: mitralRegurgitation.postProcedure.mrGrade,
+        device: `${mteerData.deviceDetails.manufacturer} ${mteerData.deviceDetails.model}`,
+        complications: complications.length
       };
       
-      // Use LMStudio for content generation with extracted data context
+      // Use LMStudio with proper agent type and simplified context to prevent performance issues
       const contextualPrompt = `${this.systemPrompt}
 
-EXTRACTED DATA CONTEXT:
-${JSON.stringify(extractedData, null, 2)}
+SIMPLIFIED CONTEXT: ${JSON.stringify(summaryContext)}
 
-Generate a comprehensive mTEER procedural report using the above extracted data and the following dictation. Include all relevant clip specifications, mitral regurgitation assessments, deployment details, and outcomes. Use proper Australian medical terminology (TOE, anaesthesia, colour Doppler) and structured formatting.`;
+Generate a comprehensive mTEER procedural report using the following dictation. Focus on clip deployment, mitral regurgitation assessment, and outcomes. Use proper Australian medical terminology (TOE, anaesthesia, colour Doppler) and structured formatting.`;
 
-      const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
+      const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput, 'mteer');
       
       console.log('✅ mTEER report generated successfully');
       return report;

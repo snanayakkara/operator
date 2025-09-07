@@ -1,0 +1,339 @@
+/* Monochrome-First Theme - Xestro Investigation Extension */
+
+:root {
+  /* Monochrome system */
+  --ink-primary: #1a1a1a;
+  --ink-secondary: #525252;
+  --ink-tertiary: #a3a3a3;
+  
+  --surface-primary: #ffffff;
+  --surface-secondary: #f8fafc;
+  --surface-tertiary: #f1f5f9;
+  
+  --line-primary: #e5e7eb;
+  --line-secondary: #f3f4f6;
+  
+  /* Meaningful accent colors (used sparingly) */
+  --accent-emerald: #10b981;
+  --accent-violet: #8b5cf6;
+  --accent-amber: #f59e0b;
+  --accent-red: #ef4444;
+
+  /* Legacy colors for gradual migration */
+  --emerald-50: rgb(236 253 245);
+  --emerald-100: rgb(209 250 229);
+  --emerald-200: rgb(167 243 208);
+  --emerald-400: rgb(52 211 153);
+  --emerald-500: rgb(16 185 129);
+  --emerald-600: rgb(5 150 105);
+  --emerald-700: rgb(4 120 87);
+
+  --blue-50: rgb(239 246 255);
+  --blue-100: rgb(219 234 254);
+  --blue-200: rgb(191 219 254);
+  --blue-400: rgb(96 165 250);
+  --blue-600: rgb(37 99 235);
+  --blue-700: rgb(29 78 216);
+
+  --purple-50: rgb(250 245 255);
+  --purple-100: rgb(243 232 255);
+  --purple-200: rgb(233 213 255);
+  --purple-400: rgb(196 181 253);
+  --purple-600: rgb(147 51 234);
+  --purple-700: rgb(126 34 206);
+
+  --red-400: rgb(248 113 113);
+  --gray-50: rgb(249 250 251);
+  --gray-100: rgb(243 244 246);
+  --gray-200: rgb(229 231 235);
+}
+
+/* Common Utility Classes */
+
+/* Status Indicators - Small color tokens */
+.status-dot {
+  @apply w-2 h-2 rounded-full flex-shrink-0;
+}
+
+.status-dot.healthy {
+  background-color: var(--accent-emerald);
+}
+
+.status-dot.error {
+  background-color: var(--accent-red);
+}
+
+.status-dot.processing {
+  background-color: var(--accent-violet);
+}
+
+.status-dot.warning {
+  background-color: var(--accent-amber);
+}
+
+.status-dot-large {
+  @apply w-3 h-3 rounded-full flex-shrink-0;
+}
+
+.status-dot-large.healthy {
+  background-color: var(--accent-emerald);
+}
+
+/* Legacy status indicators */
+.status-dot-healthy {
+  @apply status-dot healthy;
+}
+
+.status-dot-error {
+  @apply status-dot error;
+}
+
+.status-dot-large-healthy {
+  @apply status-dot-large healthy;
+}
+
+/* Background Patterns - Minimal use */
+.bg-accent-tint {
+  background-color: var(--surface-tertiary);
+}
+
+.bg-accent-emerald-tint {
+  background-color: rgba(16, 185, 129, 0.03);
+}
+
+.bg-accent-violet-tint {
+  background-color: rgba(139, 92, 246, 0.03);
+}
+
+.bg-accent-amber-tint {
+  background-color: rgba(245, 158, 11, 0.03);
+}
+
+/* Legacy backgrounds for gradual migration */
+.bg-emerald-light {
+  @apply bg-accent-tint;
+}
+
+.bg-emerald-success {
+  @apply bg-accent-emerald-tint;
+}
+
+.bg-blue-light {
+  @apply bg-accent-tint;
+}
+
+.bg-purple-light {
+  @apply bg-accent-tint;
+}
+
+/* Border Patterns */
+.border-emerald-light {
+  border-color: var(--emerald-200);
+}
+
+.border-blue-light {
+  border-color: var(--blue-200);
+}
+
+.border-purple-light {
+  border-color: var(--purple-200);
+}
+
+/* Text Colors */
+.text-emerald-primary {
+  color: var(--emerald-600);
+}
+
+.text-emerald-secondary {
+  color: var(--emerald-700);
+}
+
+.text-blue-primary {
+  color: var(--blue-600);
+}
+
+.text-purple-primary {
+  color: var(--purple-600);
+}
+
+/* Button Styles - Monochrome with accent icons */
+.btn-pill {
+  @apply px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-150;
+  @apply flex items-center space-x-1.5;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--line-primary);
+  color: var(--ink-primary);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+}
+
+.btn-pill:hover {
+  background-color: var(--surface-tertiary);
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  transform: translateY(-0.5px);
+}
+
+.btn-pill.primary {
+  background-color: var(--ink-primary);
+  color: var(--surface-primary);
+  border-color: var(--ink-primary);
+}
+
+.btn-pill.primary:hover {
+  background-color: var(--ink-secondary);
+}
+
+/* Legacy button for gradual migration */
+.btn-emerald-primary {
+  @apply btn-pill;
+}
+
+.btn-emerald-primary:hover {
+  @apply btn-pill;
+}
+
+/* Card Components - Soft depth */
+.modern-card {
+  @apply rounded-3xl overflow-hidden;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--line-primary);
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+}
+
+.modern-card:hover {
+  box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.06);
+  transform: translateY(-0.5px);
+}
+
+.modern-panel {
+  @apply border-r overflow-y-auto;
+  background-color: var(--surface-primary);
+  border-color: var(--line-primary);
+}
+
+/* Legacy glass components */
+.glass-card {
+  @apply modern-card;
+}
+
+.glass-panel {
+  @apply modern-panel;
+}
+
+/* Success Animation Classes */
+.completion-celebration {
+  animation: celebration 0.6s ease-out;
+}
+
+.checkmark-appear {
+  animation: checkmark-appear 0.3s ease-out;
+}
+
+.btn-success-animation {
+  animation: btn-success 0.4s ease-out;
+}
+
+@keyframes celebration {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes checkmark-appear {
+  0% { 
+    opacity: 0; 
+    transform: scale(0.8); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+}
+
+@keyframes btn-success {
+  0% { 
+    transform: scale(1); 
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); 
+  }
+  50% { 
+    transform: scale(1.02); 
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); 
+  }
+  100% { 
+    transform: scale(1); 
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); 
+  }
+}
+
+/* Micro Interactions */
+.micro-press {
+  transition: transform 0.1s ease-out;
+}
+
+.micro-press:active {
+  transform: scale(0.98);
+}
+
+.micro-lift {
+  transition: all 0.16s ease-out;
+}
+
+.micro-lift:hover {
+  transform: translateY(-0.5px);
+}
+
+/* Legacy micro effects */
+.btn-micro-press {
+  @apply micro-press;
+}
+
+.btn-micro-hover {
+  @apply micro-lift;
+}
+
+/* Layout Utilities */
+.medical-layout-sidebar {
+  @apply flex-shrink-0 w-80 overflow-y-auto;
+  background-color: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.medical-layout-main {
+  @apply flex-1 min-h-0 overflow-hidden;
+}
+
+/* Medical Content Cards - Monochrome with accent halos */
+.content-card {
+  @apply rounded-2xl;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--line-primary);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+}
+
+.content-card.selected {
+  border-color: var(--accent-violet);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+}
+
+.content-card.accent-emerald.selected {
+  border-color: var(--accent-emerald);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+}
+
+.content-card.accent-amber.selected {
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+}
+
+/* Legacy letter cards */
+.letter-card {
+  @apply content-card;
+}
+
+.letter-card-emerald {
+  @apply content-card accent-emerald;
+}
+
+.letter-card-blue {
+  @apply content-card;
+}

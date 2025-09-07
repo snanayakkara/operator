@@ -36,9 +36,11 @@ export class TranscriptionService {
       ['taxi', 'TAVI'],
       ['tavern', 'TAVI'],
       ['taffy', 'TAVI'],
+      ['tabby', 'TAVI'],  // Common Whisper transcription error
       ['p c i', 'PCI'],
       ['p.c.i.', 'PCI'],
       ['pci', 'PCI'],
+      ['pc i', 'PCI'],  // Common Whisper transcription error
       ['angiogram', 'angiogram'],
       ['angio gram', 'angiogram'],
       ['catheterization', 'catheterisation'],
@@ -48,7 +50,9 @@ export class TranscriptionService {
       
       // Valve terms
       ['mitral', 'mitral'],
+      ['my trial', 'mitral'],  // Common Whisper transcription error
       ['aortic', 'aortic'],
+      ['a ortic', 'aortic'],  // Common Whisper transcription error
       ['tricuspid', 'tricuspid'],
       ['pulmonary', 'pulmonary'],
       ['stenosis', 'stenosis'],
@@ -79,10 +83,12 @@ export class TranscriptionService {
       ['rv', 'RV'],
       ['l a d', 'LAD'],
       ['lad', 'LAD'],
+      ['led', 'LAD'],  // Common Whisper transcription error
       ['l cx', 'LCx'],
       ['lcx', 'LCx'],
       ['r c a', 'RCA'],
       ['rca', 'RCA'],
+      ['arca', 'RCA'],  // Common Whisper transcription error
       ['o m one', 'OM1'],
       ['om one', 'OM1'],
       ['om1', 'OM1'],
@@ -140,11 +146,17 @@ export class TranscriptionService {
       // Medications
       ['aspirin', 'aspirin'],
       ['clopidogrel', 'clopidogrel'],
+      ['clopidog rel', 'clopidogrel'],  // Common Whisper transcription error
       ['warfarin', 'warfarin'],
+      ['war farin', 'warfarin'],  // Common Whisper transcription error
       ['heparin', 'heparin'],
+      ['hep arin', 'heparin'],  // Common Whisper transcription error
       ['atorvastatin', 'atorvastatin'],
+      ['a torva statin', 'atorvastatin'],  // Common Whisper transcription error
       ['metoprolol', 'metoprolol'],
+      ['meto prolol', 'metoprolol'],  // Common Whisper transcription error
       ['lisinopril', 'lisinopril'],
+      ['lisin opril', 'lisinopril'],  // Common Whisper transcription error
       
       // Common medical words
       ['patient', 'patient'],
@@ -202,7 +214,7 @@ export class TranscriptionService {
     }
   }
 
-  public async transcribeAudio(recording: VoiceRecording): Promise<TranscriptionResult> {
+  public async transcribeAudio(recording: VoiceRecording, agentType?: string): Promise<TranscriptionResult> {
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -212,7 +224,7 @@ export class TranscriptionService {
       console.log('🎙️ Transcribing audio with MLX Whisper Large v3 Turbo...');
 
       // Call MLX Whisper transcription service via LMStudioService
-      const rawText = await this.lmStudioService.transcribeAudio(recording.audioData);
+      const rawText = await this.lmStudioService.transcribeAudio(recording.audioData, undefined, agentType);
       
       // Apply medical terminology corrections if enabled
       const transcriptionText = this.config.medicalTerminology ? 

@@ -1,0 +1,25 @@
+{
+  "id": "ex001_simple",
+  "task": "investigation-summary",
+  "complexity": "simple",
+  "transcript": "Echocardiogram shows left ventricular ejection fraction 45%, mild mitral regurgitation, normal right ventricular function. Coronary angiogram reveals 70% mid-LAD stenosis, otherwise normal coronaries. Exercise stress test positive with ST depression in inferior leads.",
+  "expected_elements": [
+    "echo findings summary",
+    "angiogram results",
+    "stress test interpretation",
+    "structured formatting",
+    "clinical correlation"
+  ],
+  "rubric_criteria": {
+    "has_echo_summary": true,
+    "has_angiogram_results": true,
+    "structured_format": true,
+    "clear_formatting": true,
+    "min_score": 65
+  },
+  "metadata": {
+    "investigation_types": ["echo", "angiogram", "stress_test"],
+    "complexity": "multi_modality",
+    "source": "Investigation summary simple case"
+  }
+}

@@ -1,7 +1,6 @@
 /**
  * Unified System prompts and medical knowledge for Angiogram/PCI Agent
  * Combines comprehensive cardiac catheterization and PCI knowledge
- * Extracted from Reflow2 with enhanced clinical terminology and assessment frameworks
  */
 
 export const ANGIOGRAM_PCI_SYSTEM_PROMPTS = {
@@ -9,59 +8,72 @@ export const ANGIOGRAM_PCI_SYSTEM_PROMPTS = {
 
 CRITICAL INSTRUCTIONS:
 - Analyze the dictation to determine the procedure type: DIAGNOSTIC ANGIOGRAM, PCI INTERVENTION, or COMBINED
-- Generate appropriate report format based on procedure type detected
+- Use a unified 4-section format with clear section separation
 - DO NOT include "Dear Doctor", "Thanks for asking me to see", or letter-style formatting
 - DO NOT include patient greeting or letter closings
-- Use structured clinical report format
+- Use structured clinical report format with narrative flow
 
 PROCEDURE TYPE DETECTION:
 **DIAGNOSTIC ANGIOGRAM ONLY** - When dictation contains vessel findings without intervention:
 - Keywords: "findings", "assessment", "stenosis", vessel descriptions
 - No intervention terminology (stent, balloon, PTCA, etc.)
-- Format: Concise 3-section format (PREAMBLE, FINDINGS, CONCLUSION)
+- Format: 4-section format (PREAMBLE, FINDINGS, PROCEDURE will be brief diagnostic summary, CONCLUSION)
 
 **PCI INTERVENTION** - When dictation includes intervention details:
 - Keywords: "stent", "PTCA", "balloon", "intervention", device specifications
-- Format: Comprehensive procedural report with intervention sections
+- Format: Full 4-section format with comprehensive procedural details
 
 **COMBINED ANGIOGRAM + PCI** - When dictation includes both diagnostic and intervention:
 - Both diagnostic findings AND intervention details
-- Format: Full procedural report covering diagnosis through intervention
+- Format: Complete 4-section format covering diagnosis through intervention
 
-DIAGNOSTIC ANGIOGRAM FORMAT (3-section):
+UNIFIED 4-SECTION REPORT FORMAT:
+Always output these four distinct sections with clear headings:
+
 **PREAMBLE**
-- Patient demographics and clinical history ONLY if explicitly mentioned
-- Procedure details (access site, catheters, technique) ONLY if specified
-- Keep concise - 2-3 sentences maximum
+- Patient demographics (age and gender) and clinical presentation if explicitly mentioned (prompt user if not mentioned)
+- Use narrative flow: "The patient was brought to the cardiac catheterisation laboratory and intravenous sedation provided with [details]."
+- Access details: "[Right/Left] radial/femoral access was gained ([size]F) and [amount] units of heparin administered [route]; an additional [amount] units was given [route] [timing]."
+- Initial vital signs if mentioned: "Initial blood pressure was [X/Y] mmHg and the patient was in sinus rhythm."
+- Equipment used: "Diagnostic angiography performed with a [size] Fr [catheter type]. [Guide catheter details] used for PCI."
+- Contrast and fluoroscopy details if provided
 
 **FINDINGS**
-Present findings in this exact order:
-- Left Main: [assessment]
-- Left Anterior Descending: [proximal, mid, distal segments and branches]  
-- Circumflex: [segments and marginal branches]
-- Right Coronary Artery: [include dominance pattern]
-- Left ventricle and valves: [LVEDP, wall motion, valve function if mentioned]
+- Start with coronary anatomy: "Coronary anatomy: [dominance] system. [Additional anatomical notes if mentioned]."
+- Individual vessel assessments with clear subheadings:
+
+Left Main
+[Assessment details]
+
+Left Anterior Descending (LAD)
+[Proximal, mid, distal segments and branch details]
+
+Left Circumflex (LCx)
+[Segments and marginal branch details]
+
+Right Coronary Artery (RCA)
+[Segment details including dominance contributions]
+
+Left Ventricle
+[LVEDP, wall motion, valve function if mentioned]
+
+**PROCEDURE**
+For diagnostic-only: Brief summary of diagnostic approach and techniques used.
+For PCI cases: Comprehensive step-by-step procedural details:
+- "The target lesion was identified in the [vessel location]. The lesion was [characteristics]."
+- "The treatment strategy was [approach]."
+- "After wiring the vessel with a [wire details], predilation was performed with a [balloon details]."
+- "[Stent type and specifications] was then deployed across the lesion."
+- "Post-dilation was carried out using [details] to ensure optimal expansion."
+- "The patient received [medication details] during the procedure."
+- "The final angiogram demonstrated [TIMI grade and flow characteristics] with [residual stenosis details]."
+- "The procedure was completed [with/without] complication."
 
 **CONCLUSION**
-- Overall disease severity assessment
-- Management recommendation (medical therapy, PCI, CABG, etc.)
-- Keep to 1-2 sentences maximum
-
-PCI INTERVENTION FORMAT (comprehensive):
-**PROCEDURE PERFORMED**: Percutaneous Coronary Intervention (PCI)
-**INDICATION**: Clinical presentation and indication
-**VASCULAR ACCESS**: Access site, sheath size, approach details
-**CORONARY ANATOMY**: Vessel dominance and baseline findings
-**TARGET LESION**: Detailed lesion characteristics and location
-**INTERVENTION STRATEGY**: Procedural approach and rationale
-**DEVICE DEPLOYMENT**: Stent/balloon specifications and deployment details
-**PROCEDURAL TECHNIQUE**: Step-by-step intervention details
-**HEMODYNAMIC ASSESSMENT**: Pressure measurements and flow assessment
-**ANGIOGRAPHIC RESULT**: Final angiographic outcome and TIMI flow
-**COMPLICATIONS**: Procedural complications and management (if applicable)
-**MEDICATION MANAGEMENT**: Antiplatelet and anticoagulation strategy
-**FINAL ASSESSMENT**: Procedural success metrics and immediate outcomes
-**RECOMMENDATIONS**: Post-procedural care and follow-up plan
+- Diagnostic-only: Overall disease severity assessment and management recommendations
+- PCI performed: 
+  - Procedural success: "Successful PCI of the [vessel location] with [intervention type], resulting in [TIMI flow] and [residual stenosis status]."
+  - Post-procedural plan with specific DAPT duration: "Dual antiplatelet therapy with aspirin and [P2Y12 inhibitor] for a minimum of [specific duration - e.g., 'six months', 'twelve months']."
 
 MEDICAL TERMINOLOGY REQUIREMENTS:
 - Use stenosis terminology EXACTLY as provided by clinician
@@ -69,12 +81,25 @@ MEDICAL TERMINOLOGY REQUIREMENTS:
 - Preserve all original medical language and terminology
 - For vessel segments: use clinician's terms (proximal, mid, distal, etc.)
 - Australian spelling (recognise, optimise, colour, favour)
-- Include specific device details (manufacturer, model, size, length) when mentioned
-- Document TIMI flow using descriptive terms as stated
+
+VESSEL TERMINOLOGY:
+- Use standard abbreviations: "LCx" for Left Circumflex, "RCA" for Right Coronary Artery
+- "LAD" for Left Anterior Descending, "LM" for Left Main
+- Maintain consistency throughout the report
+
+STENT AND DEVICE SPECIFICATIONS:
+- Use precise decimal format for stent dimensions: "X.Xx## DES" (e.g., "3.0x28 DES")
+- Include specific manufacturer names: "Xience DES", "Synergy DES", "Resolute Onyx DES"
+- Document adjunctive techniques in parentheses: "(IVL pre)", "(IVUS post)", "(OCT guided)"
+- Use "DES" for drug-eluting stents unless specific type mentioned
+
+REPORT FORMATTING:
+- Separate diagnostic findings from interventions with semicolon when both present
 - Use precise measurements (mm for stent sizes, Fr for catheter sizes, mmHg for pressures)
+- Document TIMI flow using descriptive terms as stated
 - Report procedural success using standard metrics when applicable
 
-CRITICAL: Adapt report structure based on procedure type detected in dictation.`,
+CRITICAL: Adapt content within the 4-section structure based on procedure type detected in dictation.`,
 
   procedureDetection: `You are analyzing cardiac catheterization dictation to determine procedure type.
 
@@ -104,7 +129,6 @@ ASSESS MISSING INFORMATION for the detected procedure type:
 - Vessel segments (LM, LAD, LCx, RCA, branches)
 - Procedural details (access site, catheters, contrast, fluoroscopy time)
 - Functional assessment (LVEDP, dominance, collaterals)
-- Hemodynamics (pressures, cardiac output)
 
 **FOR PCI INTERVENTION:**
 - All diagnostic elements above PLUS:
@@ -189,13 +213,38 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
   },
 
   stentManufacturers: {
-    'Abbott': ['Xience Xpedition', 'Xience Sierra', 'Xience Alpine', 'Absorb'],
-    'Boston Scientific': ['Synergy', 'Promus Premier', 'Rebel', 'Agent'],
-    'Medtronic': ['Resolute Onyx', 'Resolute Integrity', 'Resolute'],
+    'Abbott': ['Xience DES', 'Xience Skypoint', 'Xience Sierra', 'Xience Alpine', 'Absorb'],
+    'Boston Scientific': ['Synergy DES', 'Synergy', 'Promus Premier', 'Rebel', 'Agent'],
+    'Medtronic': ['Resolute Onyx DES', 'Resolute Onyx', 'Resolute Integrity', 'Resolute'],
     'Terumo': ['Ultimaster', 'Nobori'],
     'Biotronik': ['Orsiro', 'Alex Plus'],
-    'MicroPort': ['Firehawk', 'BuMA Supreme'],
     'B.Braun': ['Coroflex ISAR', 'Coroflex Please']
+  },
+
+  // Stent specification formatting
+  stentFormatting: {
+    'size_format': 'X.Xx## format (e.g., 3.0x28, 2.75x15, 4.0x32)',
+    'decimal_notation': 'Always use decimal point for diameter (3.0 not 30)',
+    'length_notation': 'Integer length in mm (28, 15, 32)',
+    'type_abbreviation': 'DES for drug-eluting stent unless specific model mentioned'
+  },
+
+  // Adjunctive technique abbreviations
+  adjunctiveTechniques: {
+    'IVL': 'Intravascular Lithotripsy',
+    'IVUS': 'Intravascular Ultrasound',
+    'OCT': 'Optical Coherence Tomography',
+    'FFR': 'Fractional Flow Reserve',
+    'iFR': 'Instantaneous Wave-Free Ratio',
+    'ROTA': 'Rotational Atherectomy',
+    'DCB': 'Drug-Coated Balloon'
+  },
+
+  // Technique timing notation
+  techniqueNotation: {
+    'pre': 'Performed before stenting (e.g., IVL pre, ROTA pre)',
+    'post': 'Performed after stenting (e.g., IVUS post, OCT post)', 
+    'guided': 'Used for guidance during procedure (e.g., OCT guided, IVUS guided)'
   },
 
   stentSizes: {
@@ -246,9 +295,10 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
   diagnosticCatheters: {
     'left_coronary': {
       'JL': 'Judkins Left (JL3.5, JL4.0, JL5.0)',
+      'TIG': 'Tiger (TIG3.0, TIG3.5, TIG4.0)',
+      'Jacky': 'Jacky (J3.0, J3.5, J4.0)',
       'EBU': 'Extra Backup (EBU3.5, EBU3.75, EBU4.0)',
-      'XBU': 'Extra Backup (XBU3.5, XBU4.0)',
-      'voda': 'Voda Left',
+      'XBU': 'Extra Backup (XB3.0, XB3.5, XB4.0)',
       'amplatz_left': 'Amplatz Left (AL1, AL2)'
     },
     'right_coronary': {
@@ -258,6 +308,47 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
       'multipurpose': 'Multipurpose (MP)',
       '3drc': '3DRC (3D Right Coronary)'
     }
+  },
+
+  // Guide catheters (PCI)
+  guideCatheters: {
+    'left': {
+      'Ikari_Left': 'Ikari Left (IL3.5, IL4.0)',
+      'XB': 'Extra Backup Guides (XB 3.0, XB 3.5, XB 4.0)',
+      'EBU': 'Extra Backup Guides (EBU 3.5, EBU 3.75, EBU 4.0)',
+      'JL_Guide': 'Judkins Left Guide (JL 3.5, JL 4.0)',
+      'AL': 'Amplatz Left (AL1, AL2)'
+    },
+    'right': {
+      'JR_Guide': 'Judkins Right Guide (JR 4.0, JR 5.0)',
+      'AR': 'Amplatz Right (AR1, AR2)'
+    }
+  },
+
+  // Coronary guidewires (common)
+  coronaryWires: {
+    'Terumo': [
+      'Runthrough NS',
+      'Runthrough Hypercoat'
+    ],
+    'Abbott Vascular': [
+      'Balance Middleweight (BMW)',
+      'BMW Universal II',
+      'Balance Heavyweight (BHW)',
+      'Whisper MS',
+      'Pilot 50',
+      'Pilot 150'
+    ],
+    'Asahi Intecc': [
+      'Sion',
+      'Sion Blue',
+      'Fielder FC',
+      'Fielder XT',
+      'Fielder XT-A',
+      'Fielder XT-R',
+      'Gaia First',
+      'Gaia Second'
+    ]
   },
 
   // Hemodynamic normal values
@@ -282,7 +373,7 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
   // Complications (combined from both agents)
   complications: {
     'access_site': {
-      'hematoma': 'Access site hematoma',
+      'haematoma': 'Access site haematoma',
       'pseudoaneurysm': 'Pseudoaneurysm formation',
       'dissection': 'Access vessel dissection'
     },
@@ -302,9 +393,9 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
 
   // Antiplatelet therapy
   antiplateletTherapy: {
-    'Aspirin': '81-325 mg loading, 81 mg maintenance',
+    'Aspirin': '300mg loading, 100 mg maintenance',
     'Clopidogrel': '600 mg loading, 75 mg daily',
-    'Ticagrelor': '180 mg loading, 90 mg BID',
+    'Ticagrelor': '180 mg loading, 90 mg BD',
     'Prasugrel': '60 mg loading, 10 mg daily (5 mg if <60 kg)'
   },
 
@@ -320,8 +411,9 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
   // Comprehensive terminology corrections
   terminologyCorrections: {
     'left anterior descending': 'LAD',
-    'left circumflex': 'LCx', 
-    'right coronary artery': 'RCA',
+    'left circumflex': 'LCx',
+    'circumflex': 'LCx',
+    'right coronary artery': 'RCA', 
     'left main': 'LM',
     'percutaneous coronary intervention': 'PCI',
     'percutaneous transluminal coronary angioplasty': 'PTCA',
@@ -331,7 +423,12 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
     'fractional flow reserve': 'FFR',
     'intravascular ultrasound': 'IVUS',
     'optical coherence tomography': 'OCT',
+    'intravascular lithotripsy': 'IVL',
     'millimeters of mercury': 'mmHg',
-    'french': 'Fr'
+    'french': 'Fr',
+    // Device name corrections
+    'zions': 'Xience DES',
+    'zion': 'Xience DES',
+    'xions': 'Xience DES'
   }
 };

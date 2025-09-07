@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Clock, FileText, X } from 'lucide-react';
+import { User, Clock, FileText, X, Phone, CreditCard } from 'lucide-react';
 import type { PatientSession } from '@/types/medical.types';
 
 interface PatientSessionHeaderProps {
@@ -33,11 +33,11 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
       <div className="flex items-center space-x-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
         <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col">
             <span className="text-sm font-semibold text-blue-900 truncate">
               {session.patient.name}
             </span>
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+            <span className="text-xs text-blue-600 font-medium">
               {session.agentName || session.agentType}
             </span>
           </div>
@@ -67,13 +67,13 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
         <div className="flex items-start space-x-3">
           <User className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
           <div className="flex-1">
-            <div className="flex items-center space-x-3 mb-2">
+            <div className="mb-2">
               <h3 className="text-lg font-semibold text-blue-900">
                 {session.patient.name}
               </h3>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 mt-1">
                 {getAgentIcon(session.agentType)}
-                <span className="text-sm font-medium text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
+                <span className="text-sm text-blue-600 font-medium">
                   {session.agentName || session.agentType}
                 </span>
               </div>
@@ -100,10 +100,10 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
             {(session.patient.phone || session.patient.medicare) && (
               <div className="text-xs text-gray-600 space-y-1">
                 {session.patient.phone && (
-                  <div>📞 {session.patient.phone}</div>
+                  <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {session.patient.phone}</div>
                 )}
                 {session.patient.medicare && (
-                  <div>💳 Medicare: {session.patient.medicare}</div>
+                  <div className="flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> Medicare: {session.patient.medicare}</div>
                 )}
               </div>
             )}

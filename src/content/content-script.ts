@@ -1,20 +1,20 @@
-// Content script for Reflow Medical Assistant Chrome Extension
+// Content script for Operator Chrome Extension
 // Handles EMR interaction and field manipulation
 
-const CONTENT_SCRIPT_VERSION = '2.6.0-ai-review-fix-5';
-console.log('🏥 Reflow Medical Assistant Content Script Loading...', window.location.href);
+const CONTENT_SCRIPT_VERSION = '2.6.1-session-name-fix';
+console.log('🏥 Operator Chrome Extension Content Script Loading...', window.location.href);
 console.log('📝 Content Script Version:', CONTENT_SCRIPT_VERSION);
 console.log('⏰ Load Time:', new Date().toISOString());
 console.log('🔧 EXTRACT_EMR_DATA handler: ENABLED');
 console.log('🔧 AI Review support: ENABLED');
 
 // Prevent duplicate injection
-if ((window as any).reflowContentScriptLoaded) {
+if ((window as any).operatorContentScriptLoaded) {
   console.log('🏥 Content script already loaded, skipping...');
-  console.log('📝 Previously loaded version:', (window as any).reflowContentScriptVersion || 'unknown');
+  console.log('📝 Previously loaded version:', (window as any).operatorContentScriptVersion || 'unknown');
 } else {
-  (window as any).reflowContentScriptLoaded = true;
-  (window as any).reflowContentScriptVersion = CONTENT_SCRIPT_VERSION;
+  (window as any).operatorContentScriptLoaded = true;
+  (window as any).operatorContentScriptVersion = CONTENT_SCRIPT_VERSION;
 
 interface EMRField {
   selector: string;
@@ -34,6 +34,7 @@ class ContentScriptHandler {
   private isInitialized = false;
   private emrSystem: EMRSystem | null = null;
   private currentTabId: number | null = null;
+  private blockGlobalFileDrop = false;
 
   constructor() {
     this.initialize();
@@ -47,7 +48,7 @@ class ContentScriptHandler {
       this.emrSystem = this.detectEMRSystem();
       
       if (this.emrSystem) {
-        console.log(`🏥 Reflow Medical Assistant: Detected ${this.emrSystem.name}`);
+        console.log(`🏥 Operator Chrome Extension: Detected ${this.emrSystem.name}`);
         this.setupEventListeners();
         this.isInitialized = true;
         console.log('🏥 Content script initialized successfully');
@@ -90,12 +91,22 @@ class ContentScriptHandler {
             selector: 'textarea[data-field="notes"], #notes, .notes textarea, #AddNoteArea',
             type: 'textarea',
             label: 'Notes'
+          },
+          testsRequested: {
+            selector: '.TestsRequested input[type="text"], .tests-requested-tagit input[type="text"], ul.TestsRequested li.tagit-new input',
+            type: 'input',
+            label: 'Tests Requested'
+          },
+          labField: {
+            selector: 'ul li input.ui-widget-content.ui-autocomplete-input, li.tagit-new input.ui-widget-content.ui-autocomplete-input, .ui-widget-content.ui-autocomplete-input:not(.PatientName):not(#PatientName), #Lab.form-control.LabForm.ui-autocomplete-input',
+            type: 'input',
+            label: 'Lab Autocomplete Field'
           }
         },
         selectors: {
           patientRecord: '.patient-record, .record-view, #patient-view',
           noteArea: '#AddNoteArea, .note-area, textarea[placeholder*="note"]',
-          quickLetter: '.quick-letter, [data-action="quick-letter"]',
+          quickLetter: '.quick-letter, .QuickLetter, [data-action="quick-letter"]',
           taskButton: '.task-button, [data-action="create-task"]'
         }
       };
@@ -116,6 +127,17 @@ class ContentScriptHandler {
     document.addEventListener('keydown', (event) => {
       this.handleKeyboardShortcut(event);
     });
+
+    // Optional global drag/drop guard to prevent browser navigation
+    const dragPreventer = (e: Event) => {
+      if (this.blockGlobalFileDrop) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false as unknown as void;
+      }
+    };
+    window.addEventListener('dragover', dragPreventer, true);
+    window.addEventListener('drop', dragPreventer, true);
 
     // Watch for DOM changes to handle dynamic content
     const observer = new MutationObserver((mutations) => {
@@ -145,6 +167,14 @@ class ContentScriptHandler {
       // Handle ping for content script readiness check
       if (type === 'PING') {
         sendResponse({ success: true, ready: true, version: CONTENT_SCRIPT_VERSION });
+        return;
+      }
+
+      // Toggle global file-drop guard (prevents browser navigation on drop)
+      if (type === 'SET_FILE_DROP_GUARD') {
+        this.blockGlobalFileDrop = !!message.enabled;
+        console.log('🛡️ File drop guard set to', this.blockGlobalFileDrop);
+        sendResponse({ success: true, enabled: this.blockGlobalFileDrop });
         return;
       }
 
@@ -211,6 +241,22 @@ class ContentScriptHandler {
         return;
       }
 
+      // Handle AI Review specific EMR data extraction (non-invasive)
+      if (type === 'EXTRACT_EMR_DATA_AI_REVIEW') {
+        console.log('🤖 Received EXTRACT_EMR_DATA_AI_REVIEW request - NON-INVASIVE EXTRACTION');
+        console.log('🤖 Request data:', data);
+        console.log('🤖 Extracting fields (non-invasive):', data?.fields || ['background', 'investigations', 'medications-problemlist']);
+        try {
+          const extractedData = await this.extractEMRDataForAIReview(data?.fields || ['background', 'investigations', 'medications-problemlist']);
+          console.log('🤖 AI Review EMR extraction completed successfully:', extractedData);
+          sendResponse({ success: true, data: extractedData });
+        } catch (error) {
+          console.error('🤖 AI Review EMR extraction failed:', error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'AI Review EMR extraction failed' });
+        }
+        return;
+      }
+
       // Handle patient data extraction from XestroBoxContent
       if (type === 'EXTRACT_PATIENT_DATA') {
         console.log('👤 Received EXTRACT_PATIENT_DATA request');
@@ -249,8 +295,24 @@ class ContentScriptHandler {
             // Extract content instead of opening
             const content = await this.extractFieldContent('Investigation Summary');
             sendResponse({ success: true, data: content });
+          } else if (data?.insertMode === 'append' && data?.content) {
+            // Append mode: Open field and append content to existing text
+            console.log('📝 Investigation Summary: Opening field and appending content');
+            await this.openInvestigationSummary();
+            await this.wait(500); // Wait for field to be ready
+            
+            const noteArea = await this.findNoteArea();
+            if (noteArea) {
+              await this.insertTextAtEndOfField(noteArea, data.content);
+              console.log('✅ Content appended to Investigation Summary field');
+            } else {
+              console.error('❌ Could not find note area for appending');
+              throw new Error('Note area not found for content insertion');
+            }
+            
+            sendResponse({ success: true });
           } else {
-            // Open Investigation Summary field for e-Intray workflow
+            // Open Investigation Summary field for manual entry or with content
             await this.openInvestigationSummary();
             
             // If there's formatted content to insert, add it to the field
@@ -268,6 +330,22 @@ class ContentScriptHandler {
             // Extract content instead of opening
             const content = await this.extractFieldContent('Background');
             sendResponse({ success: true, data: content });
+          } else if (data?.insertMode === 'append' && data?.content) {
+            // Append mode: Open field and append content to existing text
+            console.log('📝 Background: Opening field and appending content');
+            await this.openBackground();
+            await this.wait(500); // Wait for field to be ready
+            
+            const noteArea = await this.findNoteArea();
+            if (noteArea) {
+              await this.insertTextAtEndOfField(noteArea, data.content);
+              console.log('✅ Content appended to Background field');
+            } else {
+              console.error('❌ Could not find note area for appending');
+              throw new Error('Note area not found for content insertion');
+            }
+            
+            sendResponse({ success: true });
           } else {
             await this.openBackground();
             sendResponse({ success: true });
@@ -280,13 +358,62 @@ class ContentScriptHandler {
             const content = await this.extractFieldContent('Medications (Problem List for Phil)') || 
                             await this.extractFieldContent('Medications');
             sendResponse({ success: true, data: content });
+          } else if (data?.insertMode === 'append' && data?.content) {
+            // Append mode: Open field and append content to existing text
+            console.log('📝 Medications: Opening field and appending content');
+            await this.openMedications();
+            await this.wait(500); // Wait for field to be ready
+            
+            const noteArea = await this.findNoteArea();
+            if (noteArea) {
+              await this.insertTextAtEndOfField(noteArea, data.content);
+              console.log('✅ Content appended to Medications field');
+            } else {
+              console.error('❌ Could not find note area for appending');
+              throw new Error('Note area not found for content insertion');
+            }
+            
+            sendResponse({ success: true });
           } else {
             await this.openMedications();
             sendResponse({ success: true });
           }
           break;
         case 'social-history':
-          await this.openSocialHistory();
+          if (data?.insertMode === 'append' && data?.content) {
+            // Append mode: Open field and append content to existing text
+            console.log('📝 Social History: Opening field and appending content');
+            await this.openSocialHistory();
+            await this.wait(500); // Wait for field to be ready
+            
+            const noteArea = await this.findNoteArea();
+            if (noteArea) {
+              await this.insertTextAtEndOfField(noteArea, data.content);
+              console.log('✅ Content appended to Social History field');
+            } else {
+              console.error('❌ Could not find note area for appending');
+              throw new Error('Note area not found for content insertion');
+            }
+            
+            sendResponse({ success: true });
+          } else {
+            await this.openSocialHistory();
+            sendResponse({ success: true });
+          }
+          break;
+
+        case 'bloods':
+          await this.clickPathologyButton();
+          await this.setupLabField();
+          sendResponse({ success: true });
+          break;
+        case 'bloods-insert':
+          await this.insertIntoLabField(data.content);
+          sendResponse({ success: true });
+          break;
+
+        case 'imaging':
+          await this.clickRadiologyButton();
           sendResponse({ success: true });
           break;
 
@@ -578,24 +705,55 @@ class ContentScriptHandler {
   private async findInvestigationSummaryTextarea(): Promise<HTMLElement | null> {
     console.log('🔍 Looking for Investigation Summary textarea...');
     
-    // Try multiple selectors to find the correct textarea
-    const selectors = [
+    // First try to find the Investigation Summary specific textarea within the XestroBox context
+    const investigationSpecificSelectors = [
+      // Look for textarea within Investigation Summary XestroBox
+      '.XestroBox:has(.XestroBoxTitle:contains("Investigation Summary")) textarea',
+      '.XestroBox:has(.XestroBoxTitle:contains("Investigation Summary")) .AddNoteArea',
+      // Look for Investigation Summary section with textarea
+      '[data-field="investigation-summary"] textarea',
+      '#investigation-summary textarea',
+      '.investigation-summary textarea'
+    ];
+    
+    for (const selector of investigationSpecificSelectors) {
+      console.log(`🔍 Trying Investigation Summary specific selector: ${selector}`);
+      const element = await this.findElement(selector, 2000);
+      if (element && element.tagName === 'TEXTAREA') {
+        console.log(`✅ Found Investigation Summary specific textarea with selector: ${selector}`);
+        return element;
+      }
+    }
+    
+    // Fallback to generic selectors but prefer ones that are currently visible and focused
+    const genericSelectors = [
+      'textarea#AddNoteArea:focus',
+      'textarea.AddNoteArea:focus', 
       'textarea#AddNoteArea',
       'textarea.AddNoteArea',
       'textarea[placeholder*="Add a note"]',
       'textarea.form-control.AddNoteArea'
     ];
     
-    for (const selector of selectors) {
-      console.log(`🔍 Trying selector: ${selector}`);
-      const element = await this.findElement(selector, 2000);
+    for (const selector of genericSelectors) {
+      console.log(`🔍 Trying generic selector: ${selector}`);
+      const element = await this.findElement(selector, 1000);
       if (element && element.tagName === 'TEXTAREA') {
-        console.log(`✅ Found Investigation Summary textarea with selector: ${selector}`);
-        return element;
+        // Additional check: make sure this textarea is visible and not at the bottom of the page
+        const rect = element.getBoundingClientRect();
+        const isVisible = rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth;
+        const isNotAtBottom = rect.top < window.innerHeight * 0.8; // Not in bottom 20% of page
+        
+        if (isVisible && isNotAtBottom) {
+          console.log(`✅ Found suitable Investigation Summary textarea with selector: ${selector}`);
+          return element;
+        } else {
+          console.log(`⚠️ Found textarea but it appears to be at bottom of page, skipping: ${selector}`);
+        }
       }
     }
     
-    console.warn('⚠️ Could not find Investigation Summary textarea with any selector');
+    console.warn('⚠️ Could not find suitable Investigation Summary textarea with any selector');
     return null;
   }
 
@@ -603,6 +761,8 @@ class ContentScriptHandler {
     if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
       const input = element as HTMLInputElement | HTMLTextAreaElement;
       
+      console.log('📝 Inserting into input/textarea:', { id: input.id, className: input.className, length: input.value?.length || 0 });
+
       // Get current content and prepare insertion
       const currentValue = input.value;
       let textToInsert = text;
@@ -640,6 +800,8 @@ class ContentScriptHandler {
       
     } else if (element.contentEditable === 'true') {
       // Handle contenteditable elements - move to end
+      console.log('📝 Inserting into contenteditable element:', { id: element.id, className: element.className });
+      element.focus();
       const selection = window.getSelection();
       const range = document.createRange();
       
@@ -739,6 +901,13 @@ class ContentScriptHandler {
   private async findNoteArea(): Promise<HTMLElement | null> {
     console.log('🔍 Looking for Xestro note input areas...');
     
+    // Prefer the AddNoteArea textarea if present (reliable for Xestro sections)
+    const addNoteArea = document.getElementById('AddNoteArea') as HTMLTextAreaElement | null;
+    if (addNoteArea && addNoteArea.offsetParent !== null) {
+      console.log('✅ Using AddNoteArea textarea as note area');
+      return addNoteArea;
+    }
+
     // Original working Xestro selectors (contenteditable divs, not textareas)
     const xestroSelectors = [
       '#patientNotesInput',      // Primary Xestro notes area
@@ -789,7 +958,7 @@ class ContentScriptHandler {
           !textarea.disabled &&
           textarea.offsetWidth > 50 && 
           textarea.offsetHeight > 30) {
-        console.log(`✅ Found usable textarea at index ${i + 1}`);
+        console.log(`✅ Found usable textarea at index ${i + 1}${textarea.id ? ` (id: ${textarea.id})` : ''}`);
         return textarea;
       }
     }
@@ -807,6 +976,15 @@ class ContentScriptHandler {
       };
       
       const checkForTextarea = () => {
+        // Prefer AddNoteArea if it appears dynamically
+        const dynamicAddNoteArea = document.getElementById('AddNoteArea') as HTMLTextAreaElement | null;
+        if (dynamicAddNoteArea && dynamicAddNoteArea.offsetParent !== null) {
+          console.log('✅ Found AddNoteArea dynamically');
+          cleanup();
+          resolve(dynamicAddNoteArea);
+          return;
+        }
+
         // Try specific selectors first
         for (const selector of xestroSelectors) {
           const element = document.querySelector(selector) as HTMLTextAreaElement;
@@ -936,9 +1114,326 @@ class ContentScriptHandler {
     await this.openCustomField('Social & Family History');
   }
 
+  private async clickPathologyButton() {
+    console.log('🩸 Clicking Order Pathology icon in Xestro');
+    
+    // Primary: Try to find the icon by ID (most reliable)
+    let pathologyElement = document.getElementById('OrderPathologyInvestigations') as HTMLElement;
+    
+    if (!pathologyElement) {
+      console.log('🔍 Icon ID not found, trying button fallback...');
+      // Fallback: search for button elements (legacy support)
+      pathologyElement = document.querySelector('button.btn-default.NewPathology') as HTMLElement;
+      
+      if (!pathologyElement) {
+        console.log('🔍 Button selector failed, trying text-based fallback...');
+        // Final fallback: text-based search
+        const defaultButtons = document.querySelectorAll('button.btn-default');
+        for (const button of defaultButtons) {
+          const buttonText = button.textContent?.toLowerCase() || '';
+          if (buttonText.includes('pathology') || buttonText.includes('order pathology')) {
+            pathologyElement = button as HTMLElement;
+            console.log('✅ Found pathology element via text search');
+            break;
+          }
+        }
+      }
+    }
+    
+    if (pathologyElement) {
+      console.log('🩸 Found pathology element, clicking...');
+      pathologyElement.click();
+      
+      // Wait a moment for the click to process
+      await this.wait(500);
+      console.log('✅ Order Pathology clicked successfully');
+    } else {
+      console.error('❌ Order Pathology element not found');
+      throw new Error('Order Pathology element not found. Please ensure you are on the correct EMR page with pathology access.');
+    }
+  }
+
+  private async setupLabField() {
+    console.log('🩸 Setting up Lab field - typing "Generic Pathology Request" and pressing Enter');
+    
+    // Target the specific #Lab field for setup (not the tagit field)
+    // XPath: /html/body/div[2]/div[7]/div/div[3]/div/div[1]/form/div/div[1]/div[2]/div/input[1]
+    let labElement: HTMLInputElement | null = null;
+    
+    // Try direct #Lab selector first
+    labElement = document.querySelector('#Lab') as HTMLInputElement;
+    
+    if (!labElement) {
+      console.log('🔍 #Lab field not found, trying XPath-based selector...');
+      // Try XPath-based approach as fallback
+      const xpathResult = document.evaluate(
+        '/html/body/div[2]/div[7]/div/div[3]/div/div[1]/form/div/div[1]/div[2]/div/input[1]',
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      labElement = xpathResult.singleNodeValue as HTMLInputElement;
+    }
+    
+    if (!labElement) {
+      console.log('🔍 XPath failed, trying class-based fallback...');
+      // Last fallback: look for form-control LabForm field
+      labElement = document.querySelector('input.form-control.LabForm.ui-autocomplete-input') as HTMLInputElement;
+    }
+    
+    if (labElement) {
+      console.log('🩸 Found Lab setup field, typing "Generic Pathology Request"...', {
+        id: labElement.id,
+        classes: labElement.className,
+        tagName: labElement.tagName
+      });
+      
+      // Focus the field
+      labElement.focus();
+      
+      // Clear any existing value
+      labElement.value = '';
+      
+      // Type "Generic Pathology Request"
+      labElement.value = 'Generic Pathology Request';
+      
+      // Trigger input events to ensure proper form handling
+      labElement.dispatchEvent(new Event('input', { bubbles: true }));
+      labElement.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Press Enter to trigger autocomplete selection
+      labElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      labElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+      labElement.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true }));
+      
+      // Small delay then blur to ensure selection is processed
+      setTimeout(() => {
+        labElement.blur();
+      }, 100);
+      
+      console.log('✅ Lab field setup completed: typed "Generic Pathology Request" and pressed Enter');
+    } else {
+      console.warn('⚠️ Lab field (#Lab) not found - user may need to navigate manually');
+    }
+  }
+
+  private async insertIntoLabField(content: string) {
+    console.log('🩸 Inserting blood test results into tagit field:', content.substring(0, 100));
+    
+    // Target the specific tagit autocomplete field for results insertion (NOT the #Lab setup field)
+    // XPath: /html/body/div[2]/div[7]/div/div[3]/div/div[1]/form/div/div[4]/div[2]/div/ul/li/input
+    let labElement: HTMLInputElement | null = null;
+    
+    // Try XPath-based selector first for the tagit field
+    const xpathResult = document.evaluate(
+      '/html/body/div[2]/div[7]/div/div[3]/div/div[1]/form/div/div[4]/div[2]/div/ul/li/input',
+      document,
+      null,
+      XPathResult.FIRST_ORDERED_NODE_TYPE,
+      null
+    );
+    labElement = xpathResult.singleNodeValue as HTMLInputElement;
+    
+    if (!labElement) {
+      console.log('🔍 XPath failed, trying tagit-specific selectors...');
+      // Try tagit-specific selectors that exclude #Lab field
+      const fallbackSelectors = [
+        'ul li input.ui-widget-content.ui-autocomplete-input', // Specific tagit structure
+        'li.tagit-new input.ui-widget-content.ui-autocomplete-input', // Tagit new item input
+        'ul.tagit li input.ui-widget-content', // Tagit list input
+        '.ui-widget-content.ui-autocomplete-input:not(#Lab):not(.form-control)'  // Exclude #Lab field explicitly
+      ];
+      
+      for (const selector of fallbackSelectors) {
+        const candidates = document.querySelectorAll(selector) as NodeListOf<HTMLInputElement>;
+        for (const candidate of candidates) {
+          // Explicitly exclude the #Lab setup field
+          if (candidate.id === 'Lab' || candidate.classList.contains('form-control') || 
+              candidate.classList.contains('LabForm')) {
+            console.log(`🚫 Results: Skipping #Lab setup field: ${candidate.id}`);
+            continue;
+          }
+          
+          labElement = candidate;
+          console.log(`🩸 Results: Found tagit field with selector: ${selector}`, candidate);
+          break;
+        }
+        if (labElement) break;
+      }
+    }
+    
+    // Final validation: double-check we didn't get the wrong fields
+    if (labElement && (
+        labElement.id === 'PatientName' || labElement.classList.contains('PatientName') || labElement.name === 'PatientName' ||
+        labElement.id === 'Lab' || labElement.classList.contains('form-control') || labElement.classList.contains('LabForm')
+    )) {
+      console.error('🚨 ERROR: Still targeting wrong field! Aborting insertion to prevent data corruption.');
+      console.error('   Found element:', {
+        id: labElement.id,
+        classes: labElement.className,
+        name: labElement.name,
+        isPatientName: labElement.id === 'PatientName',
+        isLabSetupField: labElement.id === 'Lab'
+      });
+      return;
+    }
+    
+    if (labElement) {
+      console.log('🩸 Found correct tagit field for results insertion...', {
+        id: labElement.id,
+        classes: labElement.className,
+        name: labElement.name,
+        tagName: labElement.tagName
+      });
+      
+      // Focus the field
+      labElement.focus();
+      
+      // Clear existing content and insert new content
+      labElement.value = content;
+      
+      // Trigger input events to ensure proper form handling
+      labElement.dispatchEvent(new Event('input', { bubbles: true }));
+      labElement.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Trigger autocomplete events if it's an autocomplete field
+      if (labElement.classList.contains('ui-autocomplete-input')) {
+        // Trigger keydown events to activate autocomplete
+        labElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        labElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+        
+        // For tagit fields, trigger additional events
+        if (labElement.closest('li.tagit-new')) {
+          console.log('🩸 Detected tagit field, triggering additional events');
+          labElement.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true }));
+          labElement.dispatchEvent(new Event('blur', { bubbles: true }));
+          
+          // Small delay then focus to ensure tagit processes the input
+          setTimeout(() => {
+            if (labElement) {
+              labElement.focus();
+            }
+          }, 100);
+        }
+      }
+      
+      console.log('✅ Blood test results inserted into tagit field successfully');
+    } else {
+      console.warn('⚠️ Tagit field not found, falling back to Tests Requested field');
+      return this.insertIntoTestsRequestedField(content);
+    }
+  }
+
+  private async insertIntoTestsRequestedField(content: string) {
+    console.log('🩸 Inserting blood test content into Tests Requested field:', content.substring(0, 100));
+    
+    // Find the Tests Requested input field using our defined selector
+    const testsRequestedField = this.emrSystem?.fields.testsRequested;
+    if (!testsRequestedField) {
+      throw new Error('Tests Requested field not defined for this EMR system');
+    }
+
+    let inputElement = await this.findElement(testsRequestedField.selector, 5000);
+    
+    if (!inputElement) {
+      console.log('🔍 Tests Requested field not found, trying alternative selectors...');
+      // Try alternative selectors for the tagit widget
+      const alternativeSelectors = [
+        '.TestsRequested input',
+        '.tests-requested-tagit input', 
+        'ul.TestsRequested input',
+        '.tagit-new input',
+        '[name="Tests"] + .tagit input'
+      ];
+      
+      for (const selector of alternativeSelectors) {
+        inputElement = document.querySelector(selector) as HTMLElement;
+        if (inputElement) {
+          console.log('✅ Found Tests Requested field with selector:', selector);
+          break;
+        }
+      }
+    }
+
+    if (!inputElement) {
+      console.error('❌ Tests Requested field not found');
+      throw new Error('Tests Requested field not found. Please ensure you are on the pathology ordering page.');
+    }
+
+    // Handle the tagit widget input insertion
+    if (inputElement.tagName === 'INPUT') {
+      const input = inputElement as HTMLInputElement;
+      
+      // Clear existing content and set new content
+      input.focus();
+      input.value = content;
+      
+      // Trigger events that tagit widget expects
+      const events = ['input', 'change', 'keyup'];
+      events.forEach(eventType => {
+        const event = new Event(eventType, { bubbles: true });
+        input.dispatchEvent(event);
+      });
+
+      // Simulate Enter key if tagit expects it for adding tags
+      const enterEvent = new KeyboardEvent('keydown', { 
+        key: 'Enter', 
+        code: 'Enter', 
+        keyCode: 13,
+        bubbles: true 
+      });
+      input.dispatchEvent(enterEvent);
+
+      console.log('✅ Content inserted into Tests Requested field');
+    } else {
+      console.warn('⚠️ Found element is not an input field, treating as generic element');
+      await this.insertTextIntoElement(inputElement, content);
+    }
+  }
+
+  private async clickRadiologyButton() {
+    console.log('📷 Clicking Order Radiology icon in Xestro');
+    
+    // Primary: Try to find the icon by ID (most reliable)
+    let radiologyElement = document.getElementById('orderRadiologInvestigations') as HTMLElement;
+    
+    if (!radiologyElement) {
+      console.log('🔍 Icon ID not found, trying button fallback...');
+      // Fallback: search for button elements (legacy support)
+      radiologyElement = document.querySelector('button.btn-default.NewRadiology') as HTMLElement;
+      
+      if (!radiologyElement) {
+        console.log('🔍 Button selector failed, trying text-based fallback...');
+        // Final fallback: text-based search
+        const defaultButtons = document.querySelectorAll('button.btn-default');
+        for (const button of defaultButtons) {
+          const buttonText = button.textContent?.toLowerCase() || '';
+          if (buttonText.includes('radiology') || buttonText.includes('order radiology')) {
+            radiologyElement = button as HTMLElement;
+            console.log('✅ Found radiology element via text search');
+            break;
+          }
+        }
+      }
+    }
+    
+    if (radiologyElement) {
+      console.log('📷 Found radiology element, clicking...');
+      radiologyElement.click();
+      
+      // Wait a moment for the click to process
+      await this.wait(500);
+      console.log('✅ Order Radiology clicked successfully');
+    } else {
+      console.error('❌ Order Radiology element not found');
+      throw new Error('Order Radiology element not found. Please ensure you are on the correct EMR page with radiology access.');
+    }
+  }
+
   private async openQuickLetter() {
     const quickLetterButton = await this.findElement(
-      'button:contains("Quick Letter"), [data-action="quick-letter"], .quick-letter-btn'
+      'button:contains("Quick Letter"), [data-action="quick-letter"], .quick-letter-btn, .QuickLetter'
     );
     
     if (quickLetterButton) {
@@ -990,39 +1485,364 @@ class ContentScriptHandler {
     }
   }
 
-  // Extract patient data from Xestro EMR XestroBoxContent element
-  private extractPatientData(): any {
-    console.log('👤 Extracting patient data from XestroBoxContent');
+  // Helper method to find Patient Details XestroBoxContent specifically
+  private findPatientDetailsXestroBoxContent(): Element | null {
+    console.log('🔍 Strategy: Patient Details XestroBoxContent - looking for patient details section...');
+    
+    // Strategy A: Look for PatientDetailsContent class (most specific)
+    const patientDetailsContent = document.querySelector('.XestroBox.PatientDetailsContent .XestroBoxContent');
+    if (patientDetailsContent) {
+      console.log('✅ Found PatientDetailsContent XestroBoxContent via class selector');
+      return patientDetailsContent;
+    }
+    
+    // Strategy B: Find XestroBoxTitle that contains "Patient Details"
+    const xestroTitles = document.querySelectorAll('.XestroBoxTitle');
+    console.log(`🔍 Found ${xestroTitles.length} XestroBoxTitle elements`);
+    
+    for (let i = 0; i < xestroTitles.length; i++) {
+      const title = xestroTitles[i];
+      const titleText = title.textContent?.trim() || '';
+      console.log(`🔍 XestroBoxTitle ${i + 1}: "${titleText}"`);
+      
+      if (titleText === 'Patient Details') {
+        console.log('✅ Found "Patient Details" title, looking for next sibling XestroBoxContent...');
+        
+        // Get the next sibling XestroBoxContent
+        let sibling = title.nextElementSibling;
+        while (sibling) {
+          if (sibling.classList.contains('XestroBoxContent')) {
+            console.log('✅ Found Patient Details XestroBoxContent via title search!');
+            return sibling;
+          }
+          sibling = sibling.nextElementSibling;
+        }
+        
+        // If no immediate sibling, check parent's children
+        const parent = title.parentElement;
+        if (parent) {
+          const xestroBoxContent = parent.querySelector('.XestroBoxContent');
+          if (xestroBoxContent) {
+            console.log('✅ Found Patient Details XestroBoxContent in parent!');
+            return xestroBoxContent;
+          }
+        }
+      }
+    }
+    
+    console.log('❌ No Patient Details XestroBoxContent found');
+    return null;
+  }
+  
+  // Helper method to extract from patient selector input (fallback)
+  private extractFromPatientSelectorInput(): any | null {
+    console.log('🔍 Strategy: Patient Selector Input - checking for patient data...');
     
     try {
-      const xestroBox = document.querySelector('.XestroBoxContent');
-      if (!xestroBox) {
-        console.log('❌ XestroBoxContent not found');
-        return null;
+      const selectorInput = document.querySelector('#PatientSelectorInput') as HTMLInputElement;
+      if (selectorInput && (selectorInput.value || selectorInput.placeholder)) {
+        const patientName = (selectorInput.value || selectorInput.placeholder).trim();
+        if (patientName && !patientName.toLowerCase().includes('select') && !patientName.toLowerCase().includes('search')) {
+          console.log('✅ Found patient name in selector input:', patientName);
+          return {
+            name: patientName,
+            extractedAt: Date.now(),
+            extractionMethod: 'patientSelectorInput'
+          };
+        }
       }
+      
+      console.log('❌ No patient data found in selector input');
+      return null;
+    } catch (error) {
+      console.error('❌ Error extracting from patient selector input:', error);
+      return null;
+    }
+  }
 
-      console.log('✅ Found XestroBoxContent:', xestroBox);
+  // Helper method to extract from hidden input fields (most reliable)
+  private extractFromHiddenInputs(): any | null {
+    console.log('🔍 Strategy: Hidden Input Fields - checking for patient data...');
+    
+    try {
+      const patientData: any = {
+        extractedAt: Date.now(),
+        extractionMethod: 'hiddenInputs'
+      };
+      
+      // Extract from hidden input fields
+      const patientNameInput = document.querySelector('#PatientName') as HTMLInputElement;
+      const dialogTitleInput = document.querySelector('#DialogTitleName') as HTMLInputElement;
+      const patientIdInput = document.querySelector('#PatientID_FYI') as HTMLInputElement;
+      
+      console.log('🔍 Found input elements:', {
+        patientName: patientNameInput?.value || 'not found',
+        dialogTitle: dialogTitleInput?.value || 'not found', 
+        patientId: patientIdInput?.value || 'not found'
+      });
+      
+      // Try DialogTitleName first (contains name + ID)
+      if (dialogTitleInput && dialogTitleInput.value) {
+        const dialogValue = dialogTitleInput.value.trim(); // "Mr Adrian Test (17755)"
+        console.log('✅ Found DialogTitleName:', dialogValue);
+        
+        // Extract name and ID from dialog title
+        const match = dialogValue.match(/^(.+?)\s*\((\d+)\)$/);
+        if (match) {
+          patientData.name = match[1].trim();
+          patientData.id = match[2];
+          console.log('📝 Extracted from DialogTitleName - Name:', patientData.name, 'ID:', patientData.id);
+        } else {
+          patientData.name = dialogValue;
+          console.log('📝 Extracted name only from DialogTitleName:', patientData.name);
+        }
+      }
+      
+      // Fallback to separate PatientName input
+      if (!patientData.name && patientNameInput && patientNameInput.value) {
+        patientData.name = patientNameInput.value.trim();
+        console.log('📝 Extracted from PatientName input:', patientData.name);
+      }
+      
+      // Get Patient ID if not already extracted
+      if (!patientData.id && patientIdInput && patientIdInput.value) {
+        patientData.id = patientIdInput.value.trim();
+        console.log('📝 Extracted from PatientID_FYI input:', patientData.id);
+      }
+      
+      if (patientData.name) {
+        console.log('✅ Successfully extracted from hidden inputs:', patientData);
+        return patientData;
+      }
+      
+      console.log('❌ No patient data found in hidden inputs');
+      return null;
+    } catch (error) {
+      console.error('❌ Error extracting from hidden inputs:', error);
+      return null;
+    }
+  }
 
-      // Extract patient data from the HTML structure
+  // Extract patient data from Xestro EMR XestroBoxContent element
+  private extractPatientData(): any {
+    console.log('👤 Extracting patient data from Xestro EMR page...');
+    
+    try {
+      // Initialize patient data object
       const patientData: any = {
         extractedAt: Date.now()
       };
 
-      // Get the main content div
-      const contentDiv = xestroBox.querySelector('div');
-      if (!contentDiv) {
-        console.log('❌ No content div found in XestroBoxContent');
-        return null;
+      // Strategy 1: Extract from hidden input fields (most reliable)
+      const hiddenInputResult = this.extractFromHiddenInputs();
+      if (hiddenInputResult && hiddenInputResult.name) {
+        console.log('✅ Successfully extracted using Hidden Inputs strategy:', hiddenInputResult);
+        return hiddenInputResult;
       }
 
-      // Extract name from first text node - "Mrs Maria (Mary) Martino"
-      const nameNode = contentDiv.firstChild;
-      if (nameNode && nameNode.nodeType === Node.TEXT_NODE) {
-        patientData.name = nameNode.textContent?.trim() || '';
+      // Strategy 2: Target Patient Details XestroBoxContent specifically
+      let patientElement = this.findPatientDetailsXestroBoxContent();
+      
+      if (patientElement) {
+        console.log('✅ Strategy 2: Found Patient Details XestroBoxContent');
+        const result = this.extractFromXestroBoxContent(patientElement, patientData);
+        if (result && result.name) {
+          console.log('✅ Successfully extracted using PatientDetailsXestroBoxContent strategy:', result);
+          return result;
+        }
+      } else {
+        console.log('❌ Strategy 2: No Patient Details XestroBoxContent found');
+      }
+
+      // Strategy 3: Extract from patient selector input (fallback)
+      const selectorResult = this.extractFromPatientSelectorInput();
+      if (selectorResult && selectorResult.name) {
+        console.log('✅ Successfully extracted using PatientSelectorInput strategy:', selectorResult);
+        return selectorResult;
+      }
+
+      // Strategy 2: Look for patient details div with pull-right structure (your provided HTML)
+      const patientDetailDivs = Array.from(document.querySelectorAll('div')).filter(div => {
+        // Look for divs that contain both patient name and pull-right with ID
+        const textContent = div.textContent || '';
+        const hasPatientName = /^(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/.test(textContent.trim());
+        const hasPullRight = div.querySelector('.pull-right');
+        const hasId = textContent.includes('ID:');
+        return hasPatientName && hasPullRight && hasId;
+      });
+
+      if (patientDetailDivs.length > 0) {
+        patientElement = patientDetailDivs[0];
+        console.log(`✅ Strategy 2: Found patient data in patient details div (${patientDetailDivs.length} candidates)`);
+        const result = this.extractFromPatientDetailsDiv(patientElement, patientData);
+        if (result && result.name) {
+          console.log('✅ Successfully extracted using PatientDetailsDiv strategy:', result);
+          return result;
+        }
+      }
+
+      // Strategy 3: Look for any div with ID pattern and name pattern
+      const allDivs = document.querySelectorAll('div');
+      for (let i = 0; i < allDivs.length; i++) {
+        const div = allDivs[i];
+        const textContent = div.textContent || '';
+        
+        // Check if this div contains patient-like information
+        if (textContent.includes('ID:') && /\d{4,6}/.test(textContent)) {
+          const childDivs = div.querySelectorAll('div');
+          if (childDivs.length >= 3) { // Should have multiple child divs for different info
+            console.log('✅ Strategy 3: Found potential patient data in generic div');
+            const result = this.extractFromGenericPatientDiv(div, patientData);
+            if (result && result.name) {
+              console.log('✅ Successfully extracted using GenericPatientDiv strategy:', result);
+              return result;
+            }
+          }
+        }
+      }
+
+      // Strategy 4: Fallback - try to extract from any element containing patient-like data
+      console.log('⚠️ All primary strategies failed, attempting fallback extraction...');
+      const fallbackResult = this.extractPatientDataFallback(patientData);
+      if (fallbackResult && fallbackResult.name) {
+        console.log('✅ Successfully extracted using fallback strategy:', fallbackResult);
+        return fallbackResult;
+      }
+
+      console.log(`❌ All extraction strategies failed. Page structure might be different.`);
+      console.log('🔍 Available elements for debugging:');
+      console.log('- .XestroBoxContent elements:', document.querySelectorAll('.XestroBoxContent').length);
+      console.log('- .pull-right elements:', document.querySelectorAll('.pull-right').length);
+      console.log('- Elements with "ID:" text:', Array.from(document.querySelectorAll('*')).filter(el => el.textContent?.includes('ID:')).length);
+      
+      return null;
+
+    } catch (error) {
+      console.error('❌ Error extracting patient data:', error);
+      return null;
+    }
+  }
+
+  private extractFromXestroBoxContent(xestroBox: Element, patientData: any): any {
+    console.log('📋 Extracting from XestroBoxContent...');
+    
+    // Get the main content div
+    const contentDiv = xestroBox.querySelector('div');
+    if (!contentDiv) {
+      console.log('❌ No content div found in XestroBoxContent');
+      return null;
+    }
+
+    return this.extractFromPatientDetailsDiv(contentDiv, patientData);
+  }
+
+  private extractFromPatientDetailsDiv(contentDiv: Element, patientData: any): any {
+    console.log('📋 Extracting from patient details div...');
+    
+    try {
+      // Extract name with robust, structure-aware strategies
+      let patientName = '';
+
+      // Strategy 1: Get the first child div and extract its direct text content (excluding pull-right)
+      // This matches your HTML: <div>Mr Darren Meer<div class="pull-right">...</div></div>
+      const firstChildDiv = contentDiv.querySelector(':scope > div');
+      if (firstChildDiv) {
+        console.log('🔍 Found first child div, extracting direct text content...');
+        
+        // Get all text nodes that are direct children (not inside pull-right)
+        const textNodes: string[] = [];
+        for (let i = 0; i < firstChildDiv.childNodes.length; i++) {
+          const node = firstChildDiv.childNodes[i];
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent?.trim() || '';
+            if (text) {
+              textNodes.push(text);
+            }
+          }
+        }
+        
+        if (textNodes.length > 0) {
+          patientName = textNodes.join(' ').trim();
+          console.log('✅ Extracted name from text nodes:', patientName);
+        }
+      }
+
+      // Fallback 1: Look for a name-like element that is not inside .pull-right
+      if (!patientName) {
+        console.log('🔍 Text node extraction failed, trying fallback strategies...');
+        const scoped = contentDiv as HTMLElement;
+        const candidates = Array.from(scoped.querySelectorAll(':scope > div div, :scope > div'))
+          .filter(el => !el.closest('.pull-right')) as HTMLElement[];
+        
+        for (const el of candidates) {
+          const text = (el.textContent || '').trim();
+          if (!text) continue;
+          // Heuristic: Title + name and must not contain 'ID:'
+          if (/^(Mr|Mrs|Ms|Dr|Miss)\b/.test(text) && !/\bID:\b/.test(text)) {
+            patientName = text;
+            console.log('✅ Extracted name from fallback element:', patientName);
+            break;
+          }
+        }
+      }
+
+      // Fallback 2: First text node on container
+      if (!patientName) {
+        const nameNode = contentDiv.firstChild;
+        if (nameNode && nameNode.nodeType === Node.TEXT_NODE) {
+          patientName = (nameNode.textContent || '').trim();
+        }
+      }
+
+      // Fallback 3: Container text minus first child text
+      if (!patientName) {
+        const firstChild = contentDiv.firstElementChild as HTMLElement | null;
+        if (firstChild) {
+          const allText = (contentDiv.textContent || '').trim();
+          const firstChildText = (firstChild.textContent || '').trim();
+          const stripped = allText.replace(firstChildText, '').trim();
+          if (stripped && !/\bID:\b/.test(stripped)) patientName = stripped;
+        }
+      }
+
+      // Fallback 4: Regex from full text
+      if (!patientName) {
+        const fullText = contentDiv.textContent || '';
+        const nameMatch = fullText.match(/\b(Mr|Mrs|Ms|Dr|Miss)\s+([A-Za-z\s\(\)]+?)(?=\s*ID:|$)/);
+        if (nameMatch) {
+          patientName = nameMatch[0].trim();
+        }
+      }
+
+      if (patientName) {
+        patientData.name = patientName;
         console.log('📝 Extracted name:', patientData.name);
       }
 
-      // Extract ID and DOB from pull-right div - "ID: 33710" and "06/11/1957 (67)"
+      // Extract additional demographic information
+      const allDivs = Array.from(contentDiv.querySelectorAll('div'));
+      
+      // Extract phone number
+      const phoneDiv = allDivs.find(div => {
+        const text = div.textContent?.trim() || '';
+        return /^0\d{2,3}\s?\d{3}\s?\d{3}$/.test(text.replace(/\s/g, ''));
+      });
+      if (phoneDiv) {
+        patientData.phone = phoneDiv.textContent?.trim();
+        console.log('📞 Extracted phone:', patientData.phone);
+      }
+      
+      // Extract Medicare status
+      const medicareDiv = allDivs.find(div => {
+        const text = div.textContent?.trim() || '';
+        return text.toLowerCase().includes('medicare');
+      });
+      if (medicareDiv) {
+        patientData.medicare = medicareDiv.textContent?.trim();
+        console.log('🏥 Extracted Medicare status:', patientData.medicare);
+      }
+
+      // Extract ID and DOB from pull-right div
       const pullRightDiv = contentDiv.querySelector('.pull-right');
       if (pullRightDiv) {
         const boldElement = pullRightDiv.querySelector('b');
@@ -1034,7 +1854,7 @@ class ContentScriptHandler {
           }
         }
 
-        // Extract DOB and age from text after <br>
+        // Extract DOB and age from text content
         const textContent = pullRightDiv.textContent || '';
         const dobMatch = textContent.match(/(\d{2}\/\d{2}\/\d{4})\s*\((\d+)\)/);
         if (dobMatch) {
@@ -1044,49 +1864,101 @@ class ContentScriptHandler {
         }
       }
 
-      // Extract other details from data-allow="1" divs
+      // Extract contact details from data-allow divs
       const dataAllowDivs = contentDiv.querySelectorAll('div[data-allow="1"]');
       dataAllowDivs.forEach((div, index) => {
         const text = div.textContent?.trim() || '';
         if (text) {
-          // First data-allow div is usually phone
-          if (index === 0 && /^\d{4}\s\d{3}\s\d{3}$/.test(text)) {
+          // Phone number patterns
+          if (/^[\d\s\-\(\)\+]{8,}$/.test(text)) {
             patientData.phone = text;
             console.log('📝 Extracted phone:', patientData.phone);
           }
-          // Second is usually email
-          else if (index === 1 && text.includes('@')) {
+          // Email pattern
+          else if (text.includes('@') && text.includes('.')) {
             patientData.email = text;
             console.log('📝 Extracted email:', patientData.email);
           }
-          // Last one is usually address
-          else if (text.includes('VIC') || text.includes('NSW') || text.includes('QLD') || 
-                   text.includes('SA') || text.includes('WA') || text.includes('TAS') || 
-                   text.includes('ACT') || text.includes('NT')) {
+          // Address pattern (contains Australian states/territories)
+          else if (/\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b/i.test(text)) {
             patientData.address = text;
             console.log('📝 Extracted address:', patientData.address);
           }
         }
       });
 
-      // Extract Medicare and insurance from span elements
-      const spans = contentDiv.querySelectorAll('span');
-      spans.forEach(span => {
-        const text = span.textContent?.trim() || '';
-        if (text.includes('Medicare:')) {
-          patientData.medicare = text.replace('Medicare:', '').trim();
-          console.log('📝 Extracted Medicare:', patientData.medicare);
-        } else if (text.includes('Private') && text.includes('Limited:')) {
-          patientData.insurance = text;
-          console.log('📝 Extracted insurance:', patientData.insurance);
+      // Extract Medicare and insurance info
+      allDivs.forEach(div => {
+        const text = div.textContent?.trim() || '';
+        if (text) {
+          if (text.includes('Medicare:')) {
+            const medicareMatch = text.match(/Medicare:\s*([^<]+)/);
+            if (medicareMatch) {
+              patientData.medicare = medicareMatch[1].trim();
+              console.log('📝 Extracted Medicare:', patientData.medicare);
+            }
+          } else if (text.includes('Private') || text.includes('Limited:')) {
+            patientData.insurance = text;
+            console.log('📝 Extracted insurance:', patientData.insurance);
+          }
         }
       });
 
-      console.log('✅ Successfully extracted patient data:', patientData);
       return patientData;
-
     } catch (error) {
-      console.error('❌ Error extracting patient data:', error);
+      console.error('❌ Error in extractFromPatientDetailsDiv:', error);
+      return null;
+    }
+  }
+
+  private extractFromGenericPatientDiv(div: Element, patientData: any): any {
+    console.log('📋 Extracting from generic patient div...');
+    return this.extractFromPatientDetailsDiv(div, patientData);
+  }
+
+  private extractPatientDataFallback(patientData: any): any {
+    console.log('📋 Attempting fallback patient data extraction...');
+    
+    try {
+      // Look for elements containing ID pattern
+      const elementsWithId = Array.from(document.querySelectorAll('*')).filter(el => 
+        el.textContent?.includes('ID:') && /ID:\s*\d{4,6}/.test(el.textContent)
+      );
+
+      for (const element of elementsWithId) {
+        const text = element.textContent || '';
+        
+        // Extract ID
+        const idMatch = text.match(/ID:\s*(\d+)/);
+        if (idMatch) {
+          patientData.id = idMatch[1];
+          console.log('📝 Fallback extracted ID:', patientData.id);
+        }
+        
+        // Look for name in the same element or parent
+        const nameMatch = text.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/);
+        if (nameMatch) {
+          patientData.name = nameMatch[0].trim();
+          console.log('📝 Fallback extracted name:', patientData.name);
+          break; // Found name, exit loop
+        }
+        
+        // Look for name in parent element
+        const parent = element.parentElement;
+        if (parent) {
+          const parentText = parent.textContent || '';
+          const parentNameMatch = parentText.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/);
+          if (parentNameMatch) {
+            patientData.name = parentNameMatch[0].trim();
+            console.log('📝 Fallback extracted name from parent:', patientData.name);
+            break;
+          }
+        }
+      }
+
+      return patientData.name || patientData.id ? patientData : null;
+    } catch (error) {
+      console.error('❌ Error in fallback extraction:', error);
       return null;
     }
   }
@@ -1392,15 +2264,24 @@ class ContentScriptHandler {
     console.log('📸 Handling profile photo capture:', data);
     
     if (data?.imageData) {
-      // First, navigate to the photo upload interface
-      console.log('📸 Opening photo upload interface...');
-      await this.openPhotoUploadInterface();
-      
-      // Then insert the image data into DropZone
-      await this.insertImageIntoDropZone(data.imageData, data.method || 'tab-capture');
+      try {
+        // First, navigate to the photo upload interface
+        console.log('📸 Opening photo upload interface...');
+        await this.openPhotoUploadInterface();
+        
+        // Then insert the image data into DropZone
+        await this.insertImageIntoDropZone(data.imageData, data.method || 'tab-capture');
+        
+        console.log('✅ Profile photo workflow completed successfully');
+      } catch (error) {
+        console.error('❌ Profile photo workflow failed:', error);
+        this.showErrorMessage(`Profile photo failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw error;
+      }
     } else {
       // No image data, this means we need to show instructions for manual capture
       console.log('📸 No image data provided, showing capture instructions');
+      this.showErrorMessage('Profile photo capture requires image data');
       throw new Error('Profile photo capture requires image data');
     }
   }
@@ -1409,26 +2290,63 @@ class ContentScriptHandler {
     console.log(`📸 Inserting image into DropZone using method: ${method}`);
     
     try {
-      // Find the DropZone element
+      // Find the DropZone element with validation
+      console.log('🔍 Step 4: Looking for DropZone element...');
       const dropZone = await this.findDropZone();
       if (!dropZone) {
-        console.error('❌ DropZone not found on page');
-        throw new Error('DropZone field not found');
+        console.error('❌ Step 4 failed: DropZone not found on page');
+        console.log('🔍 This usually means the Upload button click did not work properly');
+        
+        // Provide helpful debug information
+        console.log('🔍 Current page state:');
+        console.log('  - URL:', window.location.href);
+        console.log('  - Modal elements:', document.querySelectorAll('.modal, [class*="modal"]').length);
+        console.log('  - Upload elements:', document.querySelectorAll('input[type="file"], [class*="upload"], [class*="drop"]').length);
+        
+        this.showErrorMessage('Upload area not found. Please try clicking the profile photo manually and then use the extension.');
+        throw new Error('DropZone field not found - the upload interface may not have loaded properly');
       }
 
+      console.log('✅ Step 4 completed: Found DropZone element');
+      console.log('📸 DropZone details:', {
+        tagName: dropZone.tagName,
+        id: dropZone.id,
+        className: dropZone.className,
+        visible: dropZone.offsetParent !== null
+      });
+
       // Convert base64 image data to File object
+      console.log('🔄 Step 5: Converting image data to file...');
       const file = await this.base64ToFile(imageData, 'profile-photo.png');
+      console.log('✅ Step 5 completed: File created', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
       
       // Simulate file drop into DropZone
+      console.log('🔄 Step 6: Simulating file drop...');
       await this.simulateFileDrop(dropZone, file);
+      console.log('✅ Step 6 completed: File drop simulation finished');
       
-      console.log('✅ Profile photo inserted successfully');
+      // Wait a moment to see if the upload was processed
+      await this.wait(1000);
       
-      // Visual feedback
-      this.showSuccessMessage('Profile photo added successfully!');
+      // Check if the image appears to have been uploaded
+      const hasUploadedImage = document.querySelector('img[src*="blob:"], img[src*="data:"], .uploaded-image, .image-preview');
+      if (hasUploadedImage) {
+        console.log('✅ Upload appears successful - found uploaded image preview');
+        this.showSuccessMessage('Profile photo uploaded successfully!');
+      } else {
+        console.log('⚠️ Upload status unclear - no image preview detected');
+        this.showSuccessMessage('Profile photo uploaded (verification incomplete)');
+      }
+      
+      console.log('✅ Profile photo insertion workflow completed');
       
     } catch (error) {
       console.error('❌ Error inserting image into DropZone:', error);
+      this.showErrorMessage(`Failed to upload profile photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     }
   }
@@ -1437,61 +2355,102 @@ class ContentScriptHandler {
     console.log('🔄 Starting photo upload interface navigation...');
     
     try {
-      // Step 1: Click the sidebar patient photo
+      // Step 1: Click the sidebar patient photo with retry logic
       console.log('🔄 Step 1: Clicking sidebar patient photo...');
-      const patientPhoto = await this.findElement('#SidebarPatientPhoto', 3000);
+      const patientPhoto = await this.findElementWithRetry(['#SidebarPatientPhoto', '.sidebar-patient-photo', '[id*="patient"][id*="photo" i]', 'img[alt*="patient" i]'], 5000, 3);
       if (!patientPhoto) {
-        throw new Error('Could not find sidebar patient photo (#SidebarPatientPhoto)');
+        console.error('❌ Step 1 failed: Could not find sidebar patient photo');
+        console.log('🔍 Available elements on page:', document.querySelectorAll('[id*="patient"], [class*="patient"], img').length);
+        throw new Error('Could not find sidebar patient photo. The patient edit window may not have opened correctly.');
       }
+      
+      console.log('✅ Found sidebar patient photo element:', patientPhoto.id || patientPhoto.className);
       patientPhoto.click();
-      await this.wait(500); // Wait for any animations/loading
+      await this.wait(1500); // Increased wait time for UI loading
       
-      // Step 2: Click the "Profile Picture" description
-      console.log('🔄 Step 2: Clicking Profile Picture description...');
-      const profileDescriptions = document.querySelectorAll('.description');
-      let profilePictureDescription: HTMLElement | null = null;
+      // Validate that clicking opened a modal or changed the UI
+      console.log('🔍 Validating patient photo click result...');
+      await this.wait(500); // Additional wait for UI changes
       
-      for (const desc of profileDescriptions) {
-        if (desc.textContent?.includes('Profile Picture')) {
-          profilePictureDescription = desc as HTMLElement;
-          break;
-        }
-      }
+      // Step 2: Click the "Profile Picture" description with improved searching
+      console.log('🔄 Step 2: Clicking Profile Picture tab/description...');
+      const profilePictureDescription = await this.findProfilePictureTab();
       
       if (!profilePictureDescription) {
-        throw new Error('Could not find Profile Picture description element');
+        console.error('❌ Step 2 failed: Could not find Profile Picture tab');
+        console.log('🔍 Available descriptions:', Array.from(document.querySelectorAll('.description, .tab, .tab-item, [role="tab"]')).map(el => el.textContent?.trim()).filter(text => text));
+        throw new Error('Could not find Profile Picture tab. The patient modal may not have opened correctly.');
       }
+      
+      console.log('✅ Found Profile Picture tab:', profilePictureDescription.textContent?.trim());
       profilePictureDescription.click();
-      await this.wait(500); // Wait for any animations/loading
+      await this.wait(1500); // Increased wait time for tab switching
       
-      // Step 3: Click the "Upload New" button
+      // Step 3: Click the "Upload New" button with fallback selectors
       console.log('🔄 Step 3: Clicking Upload New button...');
-      const uploadButton = await this.findElement('#UploadPhotoButton', 3000);
-      if (!uploadButton) {
-        throw new Error('Could not find Upload New button (#UploadPhotoButton)');
-      }
-      uploadButton.click();
-      await this.wait(1000); // Wait for DropZone to appear
+      const uploadButton = await this.findElementWithRetry([
+        '#UploadPhotoButton', 
+        'button:contains("Upload New")', 
+        'button:contains("Upload")', 
+        'button:contains("Browse")', 
+        '[data-action="upload"]',
+        'input[type="file"]'
+      ], 5000, 3);
       
-      console.log('✅ Photo upload interface navigation completed');
+      if (!uploadButton) {
+        console.error('❌ Step 3 failed: Could not find Upload button');
+        console.log('🔍 Available buttons in profile section:', Array.from(document.querySelectorAll('button, input[type="file"]')).map(el => el.textContent?.trim() || el.getAttribute('type')).filter(text => text));
+        throw new Error('Could not find Upload New button. The Profile Picture tab may not have loaded correctly.');
+      }
+      
+      console.log('✅ Found upload button:', uploadButton.textContent?.trim() || uploadButton.tagName);
+      uploadButton.click();
+      await this.wait(2000); // Longer wait for DropZone to appear
+      
+      console.log('✅ Photo upload interface navigation completed successfully');
       
     } catch (error) {
       console.error('❌ Failed to open photo upload interface:', error);
-      throw new Error(`Navigation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Add more detailed error context
+      console.log('🔍 Current page URL:', window.location.href);
+      console.log('🔍 Current page title:', document.title);
+      console.log('🔍 Page contains patient edit elements:', document.querySelectorAll('[id*="edit"], [class*="edit"], .modal').length > 0);
+      
+      throw new Error(`Navigation failed at step: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   private async findDropZone(): Promise<HTMLElement | null> {
     console.log('🔍 Looking for DropZone element...');
     
-    // Wait for DropZone to appear after navigation
-    const dropZone = await this.waitForDropZone();
+    // First try the specific DropZone selector
+    let dropZone = await this.waitForDropZone();
     if (dropZone) {
-      console.log('✅ Found DropZone after navigation');
+      console.log('✅ Found DropZone with primary selector');
       return dropZone;
     }
     
-    console.warn('⚠️ Could not find DropZone even after navigation');
+    // Try alternative selectors for file upload areas
+    const alternativeSelectors = [
+      '[class*="dropzone" i]',
+      '[class*="drop-zone" i]',
+      '[class*="file-drop" i]',
+      '[class*="upload-zone" i]',
+      '.file-upload-area',
+      '[data-drop="true"]',
+      'input[type="file"]'
+    ];
+    
+    console.log('🔍 Trying alternative DropZone selectors...');
+    dropZone = await this.findElementWithRetry(alternativeSelectors, 5000, 2);
+    
+    if (dropZone) {
+      console.log('✅ Found DropZone with alternative selector');
+      return dropZone;
+    }
+    
+    console.warn('⚠️ Could not find DropZone even with alternative selectors');
+    console.log('🔍 Available file-related elements:', document.querySelectorAll('input[type="file"], [class*="upload"], [class*="drop"]').length);
     return null;
   }
 
@@ -2214,6 +3173,252 @@ class ContentScriptHandler {
     
     console.log('📋 EMR data extraction completed:', Object.keys(extractedData));
     return extractedData;
+  }
+
+  /**
+   * Non-invasive EMR data extraction specifically for AI Review
+   * Only reads existing content without opening/expanding any fields
+   * Includes visual field highlighting during extraction
+   */
+  private async extractEMRDataForAIReview(fields: string[]): Promise<Record<string, string>> {
+    console.log('🤖 AI REVIEW EXTRACTION: Starting non-invasive EMR extraction for fields:', fields);
+    console.log('🤖 AI REVIEW EXTRACTION: Current URL:', window.location.href);
+    console.log('🤖 AI REVIEW EXTRACTION: Page title:', document.title);
+    
+    // First, check if we're on the right page
+    if (!window.location.href.includes('my.xestro.com')) {
+      throw new Error('Not on Xestro EMR page - please navigate to my.xestro.com');
+    }
+    
+    // Check if XestroBoxes are available
+    const allXestroBoxes = document.querySelectorAll('.XestroBox');
+    console.log(`🤖 AI REVIEW EXTRACTION: Found ${allXestroBoxes.length} XestroBox elements on page`);
+    
+    if (allXestroBoxes.length === 0) {
+      throw new Error('No XestroBox elements found - please navigate to a patient record page');
+    }
+    
+    // Log all available XestroBox titles for debugging
+    console.log('🤖 AI REVIEW EXTRACTION: Available XestroBox titles:');
+    allXestroBoxes.forEach((box, index) => {
+      const titleElement = box.querySelector('.XestroBoxTitle');
+      const titleText = titleElement?.textContent || 'No title';
+      console.log(`  [${index}] "${titleText}"`);
+    });
+    
+    const extractedData: Record<string, string> = {};
+    const extractionLog: Record<string, any> = {};
+    
+    for (const fieldName of fields) {
+      console.log(`\n🤖 AI REVIEW EXTRACTION: Processing field: "${fieldName}"`);
+      let fieldValue = '';
+      let highlightedElement: HTMLElement | null = null;
+      const fieldLog: any = { fieldName, attempts: [] };
+      
+      try {
+        const normalizedFieldName = fieldName.toLowerCase();
+        
+        // Highlight field during extraction
+        highlightedElement = this.highlightFieldDuringExtraction(normalizedFieldName);
+        
+        // Add small delay to show highlighting
+        await this.wait(300);
+        
+        switch (normalizedFieldName) {
+          case 'background':
+            fieldLog.searchTerms = ['Background'];
+            fieldValue = await this.extractCustomNoteContent('Background');
+            fieldLog.attempts.push({ searchTerm: 'Background', result: fieldValue.length > 0 ? 'success' : 'empty' });
+            break;
+          case 'investigations':
+          case 'investigation-summary':
+            fieldLog.searchTerms = ['Investigation Summary'];
+            fieldValue = await this.extractCustomNoteContent('Investigation Summary');
+            fieldLog.attempts.push({ searchTerm: 'Investigation Summary', result: fieldValue.length > 0 ? 'success' : 'empty' });
+            break;
+          case 'medications-problemlist':
+            fieldLog.searchTerms = ['Medications (Problem List for Phil)'];
+            fieldValue = await this.extractCustomNoteContent('Medications (Problem List for Phil)');
+            fieldLog.attempts.push({ searchTerm: 'Medications (Problem List for Phil)', result: fieldValue.length > 0 ? 'success' : 'empty' });
+            break;
+          case 'medications':
+            console.warn('🤖 AI REVIEW EXTRACTION: Generic "medications" field requested. Trying specific fields...');
+            fieldLog.searchTerms = ['Medications (Problem List for Phil)', 'Medications'];
+            
+            fieldValue = await this.extractCustomNoteContent('Medications (Problem List for Phil)');
+            fieldLog.attempts.push({ searchTerm: 'Medications (Problem List for Phil)', result: fieldValue.length > 0 ? 'success' : 'empty' });
+            
+            if (!fieldValue) {
+              fieldValue = await this.extractCustomNoteContent('Medications');
+              fieldLog.attempts.push({ searchTerm: 'Medications', result: fieldValue.length > 0 ? 'success' : 'empty' });
+            }
+            break;
+          default:
+            fieldLog.searchTerms = [fieldName];
+            fieldValue = await this.extractCustomNoteContent(fieldName);
+            fieldLog.attempts.push({ searchTerm: fieldName, result: fieldValue.length > 0 ? 'success' : 'empty' });
+        }
+        
+        fieldLog.finalResult = {
+          success: fieldValue.length > 0,
+          contentLength: fieldValue.length,
+          preview: fieldValue.length > 0 ? fieldValue.substring(0, 100) + (fieldValue.length > 100 ? '...' : '') : 'No content'
+        };
+        
+        if (fieldValue) {
+          console.log(`✅ AI REVIEW EXTRACTION: Successfully extracted "${fieldName}": ${fieldValue.length} chars`);
+          console.log(`   Preview: "${fieldValue.substring(0, 100)}${fieldValue.length > 100 ? '...' : ''}"`);
+        } else {
+          console.log(`⚠️ AI REVIEW EXTRACTION: No content found for "${fieldName}"`);
+        }
+        
+        extractedData[fieldName] = fieldValue;
+        extractionLog[fieldName] = fieldLog;
+        
+      } catch (error) {
+        console.error(`❌ AI REVIEW EXTRACTION: Failed to extract "${fieldName}":`, error);
+        fieldLog.error = error instanceof Error ? error.message : String(error);
+        extractedData[fieldName] = '';
+        extractionLog[fieldName] = fieldLog;
+      } finally {
+        // Remove highlighting after extraction
+        if (highlightedElement) {
+          this.removeFieldHighlight(highlightedElement);
+        }
+      }
+    }
+    
+    // Summary logging
+    const successfulFields = Object.entries(extractedData).filter(([, value]) => value.length > 0);
+    const totalFields = Object.keys(extractedData).length;
+    
+    console.log('\n🤖 AI REVIEW EXTRACTION: SUMMARY');
+    console.log(`   Successful extractions: ${successfulFields.length}/${totalFields}`);
+    console.log('   Extraction details:', extractionLog);
+    console.log('   Final extracted data keys:', Object.keys(extractedData));
+    
+    if (successfulFields.length === 0) {
+      console.error('🤖 AI REVIEW EXTRACTION: No data extracted from any field');
+      console.log('🤖 AI REVIEW EXTRACTION: Diagnostic info:');
+      console.log('   - Available XestroBox titles:', Array.from(allXestroBoxes).map(box => 
+        box.querySelector('.XestroBoxTitle')?.textContent || 'No title'
+      ));
+      
+      throw new Error(`No EMR data could be extracted. Available fields: ${Array.from(allXestroBoxes).map(box => 
+        box.querySelector('.XestroBoxTitle')?.textContent || 'No title'
+      ).join(', ')}`);
+    }
+    
+    console.log('✅ AI REVIEW EXTRACTION: Non-invasive extraction completed successfully');
+    return extractedData;
+  }
+
+  /**
+   * Highlight field during extraction to provide visual feedback
+   */
+  private highlightFieldDuringExtraction(fieldName: string): HTMLElement | null {
+    try {
+      let targetElement: HTMLElement | null = null;
+      
+      // Map field names to their likely containers
+      switch (fieldName) {
+        case 'background':
+          targetElement = this.findFieldContainer('Background');
+          break;
+        case 'investigations':
+          targetElement = this.findFieldContainer('Investigation Summary') || 
+                          this.findFieldContainer('Investigations');
+          break;
+        case 'medications-problemlist':
+          targetElement = this.findFieldContainer('Medications') || 
+                          this.findFieldContainer('Problem List');
+          break;
+        default:
+          targetElement = this.findFieldContainer(fieldName);
+      }
+      
+      if (targetElement) {
+        // Add highlighting styles
+        targetElement.style.transition = 'all 0.3s ease';
+        targetElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+        targetElement.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+        targetElement.style.borderRadius = '8px';
+        
+        console.log(`✨ Highlighted field: ${fieldName}`);
+        return targetElement;
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn(`⚠️ Failed to highlight field ${fieldName}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Remove highlighting from field
+   */
+  private removeFieldHighlight(element: HTMLElement): void {
+    try {
+      // Remove highlighting styles
+      element.style.boxShadow = '';
+      element.style.backgroundColor = '';
+      element.style.borderRadius = '';
+      
+      // Remove transition after a brief delay
+      setTimeout(() => {
+        element.style.transition = '';
+      }, 300);
+      
+      console.log(`🔄 Removed field highlighting`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to remove field highlighting:`, error);
+    }
+  }
+
+  /**
+   * Find field container element for highlighting
+   */
+  private findFieldContainer(fieldDisplayName: string): HTMLElement | null {
+    try {
+      // Look for XestroBoxTitle and get parent XestroBox
+      const titles = document.querySelectorAll('.XestroBoxTitle');
+      for (const title of titles) {
+        if (title.textContent?.includes(fieldDisplayName)) {
+          const container = title.closest('.XestroBox') || title.parentElement;
+          return container as HTMLElement;
+        }
+      }
+      
+      // Alternative: Look for elements with data attributes or specific classes
+      const fieldSelectors = [
+        `[data-field="${fieldDisplayName.toLowerCase()}"]`,
+        `[data-field-name="${fieldDisplayName.toLowerCase()}"]`,
+        `.${fieldDisplayName.toLowerCase().replace(/\s+/g, '-')}-field`,
+        `.field-${fieldDisplayName.toLowerCase().replace(/\s+/g, '-')}`
+      ];
+      
+      for (const selector of fieldSelectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          return element as HTMLElement;
+        }
+      }
+      
+      // Fallback: Look for any element containing the field name in specific containers
+      const containers = document.querySelectorAll('.XestroBox, .field, .section, .form-group');
+      for (const container of containers) {
+        if (container.textContent?.includes(fieldDisplayName)) {
+          return container as HTMLElement;
+        }
+      }
+      
+      console.log(`⚠️ Could not find container for field: ${fieldDisplayName}`);
+      return null;
+    } catch (error) {
+      console.warn(`⚠️ Error finding field container for ${fieldDisplayName}:`, error);
+      return null;
+    }
   }
 
   private normalizeFieldName(fieldName: string): string {
@@ -3317,6 +4522,107 @@ class ContentScriptHandler {
       (button as HTMLElement).title?.toLowerCase().includes(buttonText.toLowerCase())
     );
     return found instanceof HTMLElement ? found : null;
+  }
+
+  /**
+   * Find element with multiple selectors and retry logic
+   */
+  private async findElementWithRetry(selectors: string[], timeout = 5000, maxRetries = 3): Promise<HTMLElement | null> {
+    for (let retry = 0; retry < maxRetries; retry++) {
+      console.log(`🔄 Attempt ${retry + 1}/${maxRetries} to find element...`);
+      
+      for (const selector of selectors) {
+        console.log(`🔍 Trying selector: ${selector}`);
+        const element = await this.findElement(selector, timeout / maxRetries);
+        if (element) {
+          console.log(`✅ Found element with selector: ${selector}`);
+          return element;
+        }
+      }
+      
+      if (retry < maxRetries - 1) {
+        console.log(`⏳ Retry ${retry + 1} failed, waiting before next attempt...`);
+        await this.wait(1000);
+      }
+    }
+    
+    console.log(`❌ All attempts failed to find element with selectors: ${selectors.join(', ')}`);
+    return null;
+  }
+
+  /**
+   * Find Profile Picture tab with multiple search strategies
+   */
+  private async findProfilePictureTab(): Promise<HTMLElement | null> {
+    console.log('🔍 Searching for Profile Picture tab with multiple strategies...');
+    
+    // Strategy 1: Look for exact "Profile Picture" text
+    const descriptions = Array.from(document.querySelectorAll('.description, .tab, .tab-item, [role="tab"], .nav-item'));
+    for (const desc of descriptions) {
+      if (desc.textContent?.includes('Profile Picture')) {
+        console.log('✅ Found Profile Picture tab via exact text match');
+        return desc as HTMLElement;
+      }
+    }
+    
+    // Strategy 2: Look for variations of profile/picture text
+    const variations = ['profile', 'picture', 'photo', 'image', 'avatar'];
+    for (const desc of descriptions) {
+      const text = desc.textContent?.toLowerCase() || '';
+      if (variations.some(variation => text.includes(variation))) {
+        console.log(`✅ Found potential Profile Picture tab via text variation: ${desc.textContent?.trim()}`);
+        return desc as HTMLElement;
+      }
+    }
+    
+    // Strategy 3: Look for tabs/descriptions in modal or patient sections
+    const modalElements = document.querySelectorAll('.modal .description, .patient-edit .description, [class*="patient"] .tab');
+    for (const element of modalElements) {
+      if (element.textContent?.toLowerCase().includes('profile') || element.textContent?.toLowerCase().includes('picture')) {
+        console.log(`✅ Found Profile Picture tab in modal/patient section: ${element.textContent?.trim()}`);
+        return element as HTMLElement;
+      }
+    }
+    
+    console.log('❌ Could not find Profile Picture tab with any strategy');
+    return null;
+  }
+
+  /**
+   * Show error message to user
+   */
+  private showErrorMessage(message: string) {
+    // Create and show error message
+    const messageDiv = document.createElement('div');
+    messageDiv.textContent = `⚠️ ${message}`;
+    messageDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ef4444;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      max-width: 400px;
+      animation: slideInRight 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 5 seconds for errors (longer than success messages)
+    setTimeout(() => {
+      messageDiv.style.animation = 'slideOutRight 0.3s ease-out';
+      setTimeout(() => {
+        if (messageDiv.parentNode) {
+          messageDiv.parentNode.removeChild(messageDiv);
+        }
+      }, 300);
+    }, 5000);
   }
 }
 

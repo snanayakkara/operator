@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function globalSetup(config: FullConfig) {
-  console.log('🚀 Starting Reflow Medical Assistant E2E Tests');
+  console.log('🚀 Starting Operator Chrome Extension E2E Tests');
   console.log('=' .repeat(50));
 
   // Start mock LMStudio server

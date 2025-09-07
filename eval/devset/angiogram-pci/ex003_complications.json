@@ -1,0 +1,33 @@
+{
+  "id": "ex003_complications",
+  "task": "angiogram-pci", 
+  "complexity": "withComplications",
+  "transcript": "Emergency PCI for STEMI complicated by cardiogenic shock. Coronary angiography revealed total occlusion of the proximal LAD with TIMI 0 flow. Multiple attempts at wire passage required due to heavy thrombus burden. Aspiration thrombectomy performed prior to balloon angioplasty. Two overlapping drug-eluting stents deployed to cover the entire lesion. Final result showed TIMI 2 flow with residual stenosis of 20%. Patient required intra-aortic balloon pump for haemodynamic support. Post-procedure echocardiography showed severe left ventricular dysfunction with ejection fraction of 25%. Transferred to intensive care unit for ongoing management.",
+  "expected_elements": [
+    "emergency indication (STEMI)",
+    "complication documentation (cardiogenic shock)",
+    "complete vessel occlusion (TIMI 0)",
+    "complex intervention techniques (thrombectomy)",
+    "multiple device deployment",
+    "suboptimal result (TIMI 2)",
+    "mechanical support requirements",
+    "post-procedural complications",
+    "intensive care management"
+  ],
+  "rubric_criteria": {
+    "has_TIMI_flow": true,
+    "has_stenosis_grading": true,
+    "has_device_specs": true,
+    "complications_documented": true,
+    "vessel_coverage": ["LAD"],
+    "min_score": 80
+  },
+  "metadata": {
+    "procedure_type": "EMERGENCY_PCI",
+    "indication": "STEMI",
+    "complications": ["cardiogenic shock", "severe LV dysfunction"],
+    "mechanical_support": "IABP",
+    "final_timi": 2,
+    "source": "MedicalDictations.ts - angiogram-pci withComplications"
+  }
+}

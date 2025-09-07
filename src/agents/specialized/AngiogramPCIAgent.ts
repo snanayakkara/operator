@@ -7,7 +7,7 @@ import type {
   MedicalCode
 } from '@/types/medical.types';
 import { ANGIOGRAM_PCI_SYSTEM_PROMPTS, ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE } from './AngiogramPCISystemPrompts';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 
 type ProcedureType = 'DIAGNOSTIC_ANGIOGRAM' | 'PCI_INTERVENTION' | 'COMBINED';
 
@@ -182,16 +182,9 @@ ${input}`;
   protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
     // Detect procedure type if not already stored in memory
     const procedureType: ProcedureType = this.getMemory().shortTerm['detectedProcedureType'] || 'DIAGNOSTIC_ANGIOGRAM';
-    // Adapt system prompt based on procedure type
-    let contextualSystemPrompt = this.systemPrompt;
-    
-    if (procedureType === 'DIAGNOSTIC_ANGIOGRAM') {
-      contextualSystemPrompt += '\n\nFORMAT: Use the concise 3-section diagnostic angiogram format (PREAMBLE, FINDINGS, CONCLUSION).';
-    } else if (procedureType === 'PCI_INTERVENTION') {
-      contextualSystemPrompt += '\n\nFORMAT: Use the comprehensive PCI procedural report format with all intervention sections.';
-    } else {
-      contextualSystemPrompt += '\n\nFORMAT: Use comprehensive format covering both diagnostic findings and intervention details.';
-    }
+    // Always use unified 3-section report format
+    const contextualSystemPrompt = this.systemPrompt +
+      '\n\nFORMAT: Use the unified three-section format (PREAMBLE, FINDINGS/PROCEDURE, CONCLUSION) regardless of procedure type. Integrate PCI details within FINDINGS/PROCEDURE when applicable.';
 
     const userPrompt = `Generate a ${procedureType.toLowerCase().replace('_', ' ')} report using the appropriate format.
 
@@ -301,14 +294,12 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     procedureData: any, 
     procedureType: ProcedureType
   ): Promise<string> {
-    console.log(`🏥 Generating ${procedureType} report with LMStudio medgemma-27b...`);
+    console.log(`🏥 Generating ${procedureType} report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
     
     try {
-      // Use processWithAgent method which takes systemPrompt and input
-      const contextualSystemPrompt = this.systemPrompt + 
-        (procedureType === 'DIAGNOSTIC_ANGIOGRAM' 
-          ? '\n\nFORMAT: Use the concise 3-section diagnostic angiogram format (PREAMBLE, FINDINGS, CONCLUSION).'
-          : '\n\nFORMAT: Use the comprehensive PCI procedural report format with all intervention sections.');
+      // Use processWithAgent with unified three-section format instruction
+      const contextualSystemPrompt = this.systemPrompt +
+        '\n\nFORMAT: Use the unified three-section format (PREAMBLE, FINDINGS/PROCEDURE, CONCLUSION). Integrate any PCI details within FINDINGS/PROCEDURE.';
       
       const report = await this.lmStudioService.processWithAgent(contextualSystemPrompt, input);
       
@@ -325,40 +316,27 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     }
   }
 
-  private generateFallbackReport(input: string, procedureData: any, procedureType: ProcedureType): string {
-    if (procedureType === 'DIAGNOSTIC_ANGIOGRAM') {
-      return `**PREAMBLE**
-Coronary angiography performed. [Procedural details not specified in dictation]
+  private generateFallbackReport(_input: string, procedureData: any, procedureType: ProcedureType): string {
+    const pciPerformed = procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED';
+    return `**PREAMBLE**
+Cardiac catheterization performed. ${procedureData.accessSite || '[Access details not specified]'}${procedureData.contrastVolume ? `, Contrast: ${procedureData.contrastVolume}` : ''}${procedureData.fluoroscopyTime ? `, Fluoroscopy: ${procedureData.fluoroscopyTime}` : ''}.
 
-**FINDINGS**
+**FINDINGS/PROCEDURE**
+Coronary anatomy and dominance: [Not specified in dictation]
 Left Main: ${this.describeLMFindings(procedureData) || '[Not specified in dictation]'}
 Left Anterior Descending: ${this.describeLADFindings(procedureData) || '[Not specified in dictation]'}
 Circumflex: ${this.describeLCxFindings(procedureData) || '[Not specified in dictation]'}
 Right Coronary Artery: ${this.describeRCAFindings(procedureData) || '[Not specified in dictation]'}
-Left ventricle and valves: ${procedureData.hemodynamics || '[Not specified in dictation]'}
+Left ventricle/valves/hemodynamics: ${procedureData.hemodynamics || '[Not specified in dictation]'}
+${pciPerformed ? `\nPCI Details:\n- Target lesion/vessel: ${procedureData.interventionDetails?.targetVessel || '[Not specified]'}\n- Lesion characteristics: ${procedureData.interventionDetails?.lesionCharacteristics || '[Not specified]'}\n- Strategy: ${procedureData.interventionDetails?.interventionType || '[Not specified]'}\n- Devices: ${procedureData.interventionDetails?.stentDetails || '[Not specified]'}\n- Result: ${procedureData.interventionDetails?.angiographicResult || '[Not specified]'}\n- Intra-procedural meds: ${procedureData.interventionDetails?.medications || '[Not specified]'}\n` : ''}
+Complications: ${procedureData.complications.length > 0 ? procedureData.complications.join(', ') : '[None specified]'}
 
 **CONCLUSION**
-${procedureData.proceduralOutcome || 'Coronary angiography completed. Clinical correlation recommended.'}
+${pciPerformed 
+      ? `${procedureData.proceduralOutcome || 'PCI completed.'} Post-procedural plan: [Not specified].`
+      : `${procedureData.proceduralOutcome || 'Coronary angiography completed.'} Clinical correlation recommended.`}
 
 Note: This report was generated with limited AI processing due to technical issues.`;
-    } else {
-      return `**PROCEDURE PERFORMED**: Percutaneous Coronary Intervention (PCI)
-
-**INDICATION**: ${procedureData.indication || '[Not specified in dictation]'}
-
-**PROCEDURE**: 
-- Access: ${procedureData.accessSite || '[Not specified]'}
-- Target Vessel: ${procedureData.interventionDetails?.targetVessel || '[Not specified]'}
-- Intervention: ${procedureData.interventionDetails?.interventionType || '[Not specified]'}
-
-**OUTCOME**: 
-- Complications: ${procedureData.complications.length > 0 ? procedureData.complications.join(', ') : '[None specified]'}
-- Result: ${procedureData.interventionDetails?.angiographicResult || '[Not specified in dictation]'}
-
-**MEDICATIONS**: ${procedureData.interventionDetails?.medications || '[Not specified in dictation]'}
-
-Note: This report was generated with limited AI processing due to technical issues.`;
-    }
   }
 
   private async detectMissingInformation(input: string, procedureType: ProcedureType): Promise<any> {
@@ -627,22 +605,19 @@ ${input}`;
   }
 
   // Section parsing helpers
-  private isSectionHeader(line: string, procedureType: ProcedureType): boolean {
-    if (procedureType === 'DIAGNOSTIC_ANGIOGRAM') {
-      const normalizedLine = line.toLowerCase().replace(/\*/g, '').trim();
-      return normalizedLine === 'preamble' || 
-             normalizedLine === 'findings' || 
-             normalizedLine === 'conclusion' ||
-             line.startsWith('**') && line.endsWith('**');
-    } else {
-      return line.startsWith('**') && line.endsWith('**') ||
-             line.toUpperCase() === line && line.length > 3;
-    }
+  private isSectionHeader(line: string, _procedureType: ProcedureType): boolean {
+    const normalizedLine = line.toLowerCase().replace(/\*/g, '').trim();
+    return normalizedLine === 'preamble' ||
+           normalizedLine === 'findings' ||
+           normalizedLine === 'findings/procedure' ||
+           normalizedLine === 'conclusion' ||
+           (line.startsWith('**') && line.endsWith('**')) ||
+           (line.toUpperCase() === line && line.length > 3);
   }
 
   private getSectionPriority(line: string, _procedureType: ProcedureType): 'high' | 'medium' | 'low' {
     const highPriority = [
-      'preamble', 'findings', 'conclusion', 'procedure', 'indication', 
+      'preamble', 'findings', 'findings/procedure', 'conclusion', 'procedure', 'indication', 
       'complications', 'assessment', 'device', 'angiographic', 'hemodynamic'
     ];
     const title = line.toLowerCase();

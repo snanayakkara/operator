@@ -24,7 +24,7 @@
 **Core Medical Procedure Agents:**
 1. **TAVI Agent** (`TAVIAgent.ts` + `TAVISystemPrompts.ts`)
    - Transcatheter Aortic Valve Implantation procedures
-   - Comprehensive hemodynamic assessment and valve sizing
+   - Comprehensive haemodynamic assessment and valve sizing
    - Pre/post-procedural measurements with quantitative analysis
 
 2. **Angiogram/PCI Agent** (`AngiogramPCIAgent.ts` + `AngiogramPCISystemPrompts.ts`)
@@ -43,9 +43,9 @@
    - Anatomical assessment and deployment guidance
 
 5. **Right Heart Cath Agent** (`RightHeartCathAgent.ts` + `RightHeartCathSystemPrompts.ts`)
-   - Right heart catheterization with hemodynamic assessment
+   - Right heart catheterization with haemodynamic assessment
    - Pulmonary hypertension evaluation
-   - Exercise hemodynamics and cardiac output measurements
+   - Exercise haemodynamics and cardiac output measurements
 
 **Documentation and Review Agents:**
 6. **Quick Letter Agent** (`QuickLetterAgent.ts` + `QuickLetterSystemPrompts.ts`)
@@ -332,7 +332,9 @@ npm run lint:src              # Source-specific linting
 npm run validate:production   # Full production validation pipeline
 npm run validate:full         # Complete validation including E2E tests
 
-# Transcription server management
+# Development server management
+./dev                                    # Ultra-short startup: all servers + dual models
+npm run dev:start                        # Alternative npm script for ./dev
 pip install -r requirements-whisper.txt  # Install MLX Whisper dependencies
 ./start-whisper-server.sh                # Start MLX Whisper server with auto-restart
 ./auto-start-whisper.sh                  # Auto-start script for development

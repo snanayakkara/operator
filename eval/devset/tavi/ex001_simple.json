@@ -1,0 +1,26 @@
+{
+  "id": "ex001_simple",
+  "task": "tavi",
+  "complexity": "simple",
+  "transcript": "78-year-old with severe aortic stenosis. Echo shows aortic valve area 0.6 cm2, mean gradient 45 mmHg. TAVI performed via transfemoral approach with 23mm Sapien S3 valve. Post-deployment echo shows trace paravalvular leak, mean gradient 8 mmHg.",
+  "expected_elements": [
+    "aortic stenosis assessment",
+    "valve sizing and selection",
+    "approach description",
+    "post-procedural assessment",
+    "hemodynamic outcomes"
+  ],
+  "rubric_criteria": {
+    "has_valve_sizing": true,
+    "has_approach_details": true,
+    "has_post_assessment": true,
+    "has_hemodynamics": true,
+    "min_score": 75
+  },
+  "metadata": {
+    "procedure_type": "TAVI",
+    "valve_type": "Sapien S3",
+    "approach": "transfemoral",
+    "source": "TAVI simple case"
+  }
+}

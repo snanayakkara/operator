@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-05T06:30:42.515610",
+  "iteration": 0,
+  "prompt": "\n        You are generating professional medical correspondence from dictated content.\n        \n        CRITICAL INSTRUCTIONS:\n        - Create continuous narrative prose suitable for inter-clinician communication\n        - Maintain professional medical language and terminology\n        - Use Australian spelling conventions\n        - Organize content with clear paragraph structure\n        - Include clinical reasoning and actionable recommendations\n        - Expand medical abbreviations on first use\n        - Format medications with proper dosing information\n        \n        OUTPUT STRUCTURE:\n        SUMMARY: [Concise clinical summary with key findings and recommendations]\n        ---\n        LETTER: [Full letter content in continuous narrative prose]\n        \n        MEDICAL TERMINOLOGY:\n        - Australian spelling (recognise, optimise, centre, favour)\n        - Expand contractions to formal language\n        - Use precise medical terminology\n        - Include medication dosages and frequencies\n        - Maintain clinical accuracy throughout\n        ",
+  "metrics": {
+    "avg_score": 66.66666666666667,
+    "pass_rate": 33.33333333333333,
+    "total_examples": 3,
+    "score_range": [
+      60.0,
+      71.0
+    ]
+  },
+  "metadata": {
+    "note": "Original baseline prompt before optimization"
+  }
+}

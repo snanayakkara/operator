@@ -4,7 +4,7 @@ import { TestOrchestrator } from './tests/helpers/TestOrchestrator.ts';
 import path from 'path';
 
 async function main() {
-  console.log('🏥 Reflow Medical Assistant - Autonomous E2E Testing Suite');
+  console.log('🏥 Operator Chrome Extension - Autonomous E2E Testing Suite');
   console.log('================================================================');
   
   // Parse command line arguments

@@ -8,15 +8,15 @@ export { ConsultationAgent } from './ConsultationAgent';
 export { InvestigationSummaryAgent } from './InvestigationSummaryAgent';
 export { BackgroundAgent } from './BackgroundAgent';
 export { MedicationAgent } from './MedicationAgent';
+export { BloodsAgent } from './BloodsAgent';
+export { ImagingAgent } from './ImagingAgent';
 
 // Additional agents (implemented)
 export { MTEERAgent } from './MTEERAgent';
 export { PFOClosureAgent } from './PFOClosureAgent';
 export { RightHeartCathAgent } from './RightHeartCathAgent';
-export { AusMedicalReviewAgent } from './AusMedicalReviewAgent';
+export { BatchPatientReviewAgent } from './BatchPatientReviewAgent';
+export { PatientEducationAgent } from './PatientEducationAgent';
 
 // Agent registration helper
-import { MedicalAgent } from '../base/MedicalAgent';
-import type { AgentType } from '@/types/medical.types';
-
-// Register implemented agents
+// All agents are exported above for lazy loading

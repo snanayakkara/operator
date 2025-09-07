@@ -40,6 +40,11 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
 
   const agentDisplayName = agentType ? agentType.toUpperCase().replace('-', ' ') : 'AI Assistant';
   const characterCount = summary.length;
+  
+  // Determine if this is a narrative letter agent or structured report agent
+  const isLetterAgent = agentType && ['quick-letter'].includes(agentType);
+  const summaryTitle = isLetterAgent ? 'Letter Summary' : 'Report Summary';
+  const summarySubtitle = isLetterAgent ? 'Key clinical highlight' : 'Key findings summary';
 
   return (
     <div className="summary-card rounded-2xl overflow-hidden shadow-lg border">
@@ -49,8 +54,8 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
           <div className="flex items-center space-x-2">
             <FileText className="w-4 h-4 text-blue-600" />
             <div>
-              <h3 className="text-gray-900 font-medium text-sm">Letter Summary</h3>
-              <p className="text-blue-700 text-xs">Key clinical highlight</p>
+              <h3 className="text-gray-900 font-medium text-sm">{summaryTitle}</h3>
+              <p className="text-blue-700 text-xs">{summarySubtitle}</p>
             </div>
           </div>
           

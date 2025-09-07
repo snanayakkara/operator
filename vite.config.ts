@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
 import { resolve } from 'path'
 import { copyFileSync, existsSync, mkdirSync } from 'fs'
 
@@ -53,6 +53,26 @@ const copyStaticFiles = () => ({
       console.log('✅ Copied BatchReviewResults.html to dist/src/components/');
     }
     
+    // Copy rules directory for declarativeNetRequest
+    const rulesDir = 'rules';
+    if (existsSync(rulesDir)) {
+      // Create rules directory in dist
+      if (!existsSync('dist/rules')) {
+        mkdirSync('dist/rules', { recursive: true });
+      }
+      
+      // Copy performance_rules.json
+      const performanceRules = 'rules/performance_rules.json';
+      if (existsSync(performanceRules)) {
+        copyFileSync(performanceRules, 'dist/rules/performance_rules.json');
+        console.log('✅ Copied performance_rules.json to dist/rules/');
+      } else {
+        console.warn('⚠️  performance_rules.json not found, skipping...');
+      }
+    } else {
+      console.warn('⚠️  rules directory not found, skipping...');
+    }
+    
     console.log('Static files copied successfully');
   }
 })
@@ -60,6 +80,18 @@ const copyStaticFiles = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), copyStaticFiles()],
+  server: {
+    // Warm up critical modules for faster startup
+    warmup: {
+      clientFiles: [
+        './src/sidepanel/OptimizedApp.tsx',
+        './src/hooks/useAppState.ts',
+        './src/hooks/useRecorder.ts',
+        './src/services/LMStudioService.ts',
+        './src/services/WhisperServerService.ts'
+      ]
+    }
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -89,11 +121,12 @@ export default defineConfig({
         },
         chunkFileNames: 'chunks/[name].[hash].js',
         assetFileNames: 'assets/[name].[ext]',
-        // Ensure proper code splitting for extensions
+        // Optimized code splitting for better caching
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          agents: ['@/agents/router/AgentRouter', '@/agents/specialized/TAVIAgent', '@/agents/specialized/AngiogramPCIAgent'],
-          services: ['@/services/LMStudioService', '@/services/TranscriptionService']
+          'vendor-ui': ['framer-motion', 'lucide-react', '@tanstack/react-query'],
+          agents: ['@/agents/router/AgentRouter'],
+          services: ['@/services/LMStudioService', '@/services/TranscriptionService', '@/services/WhisperServerService']
         }
       },
       // Exclude problematic packages from build for CSP compliance
@@ -101,17 +134,21 @@ export default defineConfig({
     },
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'es2020',
-    sourcemap: false,
-    // Disable minification for now to avoid eval issues with onnxruntime-web
-    minify: false
+    target: 'es2022',
+    sourcemap: 'hidden', // Enable hidden sourcemaps for debugging without size penalty
+    minify: 'esbuild', // Enable minification with esbuild for better performance
+    // Compression settings for large files
+    chunkSizeWarningLimit: 1000,
+    assetsInlineLimit: 4096
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
   },
   optimizeDeps: {
-    include: ['react', 'react-dom'],
-    exclude: ['@xenova/transformers'] // Excluded for CSP compliance
+    include: ['react', 'react-dom', 'framer-motion', '@tanstack/react-query'],
+    exclude: ['@xenova/transformers'], // Excluded for CSP compliance
+    // Force include for faster cold start
+    force: false
   },
   // Ensure no eval in development either
   esbuild: {

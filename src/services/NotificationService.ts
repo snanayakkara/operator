@@ -10,7 +10,7 @@ export class NotificationService {
   private static defaultConfig: NotificationConfig = {
     enabledForAllAgents: true,
     alwaysEnabledForLongProcesses: true,
-    onlyWhenUnfocused: true
+    onlyWhenUnfocused: false
   };
 
   /**
@@ -19,7 +19,8 @@ export class NotificationService {
   public static async showCompletionNotification(
     agent: AgentType, 
     processingTime: number, 
-    extraInfo?: string
+    extraInfo?: string,
+    patientName?: string
   ): Promise<void> {
     try {
       // Check if we should show notification
@@ -30,12 +31,12 @@ export class NotificationService {
       // Create the notification
       await chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48.png',
-        title: this.getAgentTitle(agent),
+        iconUrl: chrome.runtime.getURL('assets/icons/icon-48.png'),
+        title: this.getAgentTitle(agent, patientName),
         message: this.getCompletionMessage(agent, processingTime, extraInfo)
       });
 
-      console.log(`🔔 Notification sent: ${agent} completed in ${processingTime}ms`);
+      console.log(`🔔 Notification sent: ${agent} completed in ${processingTime}ms${patientName ? ` for ${patientName}` : ''}`);
     } catch (error) {
       console.error('❌ Failed to send notification:', error);
     }
@@ -52,7 +53,7 @@ export class NotificationService {
     try {
       await chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48.png',
+        iconUrl: chrome.runtime.getURL('assets/icons/icon-48.png'),
         title: `❌ ${this.getAgentDisplayName(agent)} Failed`,
         message: errorMessage || `Processing failed after ${this.formatTime(processingTime)}. Please try again.`
       });
@@ -99,7 +100,7 @@ export class NotificationService {
   /**
    * Get agent-specific notification title
    */
-  private static getAgentTitle(agent: AgentType): string {
+  private static getAgentTitle(agent: AgentType, patientName?: string): string {
     const titles: Record<AgentType, string> = {
       'tavi': '🫀 TAVI Report Complete',
       'angiogram-pci': '🩺 Angiogram/PCI Report Complete', 
@@ -108,6 +109,8 @@ export class NotificationService {
       'investigation-summary': '📊 Investigation Summary Complete',
       'background': '📋 Background Report Complete',
       'medication': '💊 Medication Report Complete',
+      'bloods': '🩸 Blood Test Order Complete',
+      'imaging': '📷 Imaging Order Complete',
       'mteer': '🫀 mTEER Report Complete',
       'tteer': '🫀 tTEER Report Complete',
       'pfo-closure': '🫀 PFO Closure Report Complete',
@@ -118,12 +121,20 @@ export class NotificationService {
       'tavi-workup': '🫀 TAVI Workup Complete',
       'ai-medical-review': '🔍 AI Medical Review Complete',
       'batch-ai-review': '📋 Batch AI Review Complete',
+      'patient-education': '🎓 Patient Education Complete',
       'enhancement': '✨ Enhancement Complete',
       'transcription': '🎤 Transcription Complete',
       'generation': '⚡ Generation Complete'
     };
 
-    return titles[agent] || '✅ Medical Report Complete';
+    const baseTitle = titles[agent] || '✅ Medical Report Complete';
+    
+    // Add patient name if available
+    if (patientName && patientName !== 'unknown patient') {
+      return `${baseTitle} - ${patientName}`;
+    }
+    
+    return baseTitle;
   }
 
   /**
@@ -170,6 +181,8 @@ export class NotificationService {
       'investigation-summary': 'Investigation Summary Agent',
       'background': 'Background Agent',
       'medication': 'Medication Agent',
+      'bloods': 'Bloods Agent',
+      'imaging': 'Imaging Agent',
       'mteer': 'mTEER Agent',
       'tteer': 'tTEER Agent',
       'pfo-closure': 'PFO Closure Agent',
@@ -180,6 +193,7 @@ export class NotificationService {
       'tavi-workup': 'TAVI Workup Agent',
       'ai-medical-review': 'AI Medical Review',
       'batch-ai-review': 'Batch AI Review',
+      'patient-education': 'Patient Education Agent',
       'enhancement': 'Enhancement Agent',
       'transcription': 'Transcription Agent', 
       'generation': 'Generation Agent'

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Xestro EMR Assistant",
-  "version": "2.5.1",
-  "description": "Xestro EMR Assistant with side panel for quick field access and task management",
+  "name": "Operator",
+  "version": "3.1.0",
+  "description": "Operator - Medical AI assistant with advanced dictation, transcription, and EMR integration capabilities",
   
   "permissions": [
     "activeTab",
@@ -14,7 +14,9 @@
     "clipboardWrite",
     "clipboardRead",
     "tabs",
-    "tabCapture"
+    "tabCapture",
+    "alarms",
+    "declarativeNetRequest"
   ],
   
   "host_permissions": [
@@ -60,7 +62,7 @@
   },
   
   "action": {
-    "default_title": "Toggle Xestro Assistant"
+    "default_title": "Toggle Operator"
   },
   
   "content_scripts": [
@@ -84,7 +86,8 @@
       "resources": [
         "assets/*",
         "chunks/*",
-        "src/components/BatchReviewResults.html"
+        "src/components/BatchReviewResults.html",
+        "workers/*"
       ],
       "matches": [
         "https://my.xestro.com/*",
@@ -92,6 +95,16 @@
       ]
     }
   ],
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "performance_rules",
+        "enabled": true,
+        "path": "rules/performance_rules.json"
+      }
+    ]
+  },
   
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:1234 https://localhost:1234 http://localhost:8001; img-src 'self' data:; font-src 'self' data:;"

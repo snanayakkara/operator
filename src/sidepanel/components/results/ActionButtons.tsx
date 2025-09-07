@@ -10,11 +10,11 @@
 
 import React, { memo, useState } from 'react';
 import { 
-  CopyIcon, 
   CheckIcon, 
   SquareIcon, 
   AlertCircleIcon 
 } from '../icons/OptimizedIcons';
+import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { Download } from 'lucide-react';
 import type { AgentType } from '@/types/medical.types';
 
@@ -85,7 +85,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
           {copiedRecently ? (
             <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" />
           ) : (
-            <CopyIcon className="w-4 h-4" />
+            <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
           )}
           <span className={`text-xs ${copiedRecently ? 'text-emerald-700' : 'text-gray-700'}`}>
             {copiedRecently ? 'Copied!' : 'Copy'}

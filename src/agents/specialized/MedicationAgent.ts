@@ -1,5 +1,5 @@
 import { MedicalAgent } from '../base/MedicalAgent';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { MEDICATION_SYSTEM_PROMPTS } from './MedicationSystemPrompts';
 import type { 
   MedicalContext, 
@@ -31,6 +31,7 @@ export class MedicationAgent extends MedicalAgent {
   }
 
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    const startTime = Date.now();
     console.log('💊 MedicationAgent processing input:', input?.substring(0, 100) + '...');
     
     try {
@@ -39,7 +40,7 @@ export class MedicationAgent extends MedicalAgent {
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         input,
-        'medication' // Pass agent type for model selection (uses google/gemma-3n-e4b)
+        'medication' // Pass agent type for model selection (uses MODEL_CONFIG.QUICK_MODEL)
       );
       
       console.log('🔍 Raw LLM response:', JSON.stringify(response));
@@ -55,19 +56,23 @@ export class MedicationAgent extends MedicalAgent {
       // Parse the formatted response
       const sections = this.parseResponse(response, context);
       
-      // Create medical report
-      const report: MedicalReport = {
-        id: `medication-${Date.now()}`,
-        agentName: this.name,
-        content: response.trim(),
+      // Calculate actual processing time
+      const processingTime = Date.now() - startTime;
+      
+      // Use base class createReport method for consistent metadata structure
+      const report = this.createReport(
+        response.trim(),
         sections,
-        metadata: {
-          confidence: this.assessConfidence(input, response),
-          processingTime: Date.now() - (context?.timestamp || Date.now()),
-          medicalCodes: this.extractMedicalCodes(response),
-          modelUsed: 'google/gemma-3n-e4b'
-        },
-        timestamp: Date.now()
+        context,
+        processingTime,
+        this.assessConfidence(input, response)
+      );
+
+      // Add additional metadata specific to medication summaries
+      report.metadata = {
+        ...report.metadata,
+        medicalCodes: this.extractMedicalCodes(response),
+        modelUsed: MODEL_CONFIG.QUICK_MODEL
       };
 
       console.log('✅ Medication list formatted successfully');
@@ -282,7 +287,7 @@ Remember to use simple line format with no arrows or bullets, standardise medica
         confidence: 0,
         processingTime: 0,
         medicalCodes: [],
-        modelUsed: 'google/gemma-3n-e4b'
+        modelUsed: MODEL_CONFIG.QUICK_MODEL
       },
       timestamp: Date.now(),
       errors: [errorMessage]

@@ -12,7 +12,22 @@ CRITICAL INSTRUCTIONS:
 - Keep first‑person voice (e.g., "I reviewed …").  
 - **No salutation, greeting, headings, sign‑off, or signature block.**  
 - Use digits for numbers with units (e.g., 10 mg) and Australian spelling.
-- Separate paragraphs with a single blank line; otherwise retain the narrator’s flow.  
+- **PARAGRAPH FORMATTING IS CRITICAL**: Separate paragraphs with exactly ONE blank line (double newline). Each logical topic or time period should be its own paragraph.
+
+PARAGRAPH STRUCTURE REQUIREMENTS:
+- **Always use proper paragraph breaks** - each paragraph should address a single topic or timeframe
+- **Separate paragraphs with blank lines** - use exactly two newline characters (\\n\\n) between paragraphs
+- **Logical grouping**: Group related sentences within paragraphs, separate different topics into new paragraphs
+- **Natural flow**: Break at topic changes, procedural steps, time transitions, or clinical reasoning shifts
+- **Examples of paragraph breaks**: Initial presentation → Examination findings → Investigations → Treatment → Plan
+
+PUNCTUATION AND STYLE:
+- Use formal medical prose. Avoid contractions (write "I will", "I have", "he is").
+- Use commas to set off nonessential/parenthetical phrases and temporal/locational clauses.
+- Prefer a semicolon when joining two closely related independent clauses (e.g., 
+  "..., with no palpitations picked up; I arranged a four‑week monitor.").
+- Use the serial comma when listing 3+ items.
+- Keep sentence rhythm varied; avoid run‑ons; maintain clarity without adding content.
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format. Do NOT deviate from this structure:
 
@@ -37,8 +52,41 @@ He developed severe central chest pain at 2 PM today while at rest. The pain was
 
 His ECG showed ST elevation in leads V2-V6, consistent with an anterior STEMI. We proceeded immediately to primary PCI.
 
+The procedure was successful with excellent angiographic result. I have commenced him on dual antiplatelet therapy and will arrange cardiology follow-up in four weeks.
+
 If you cannot produce a coherent rewrite *without adding information*, output exactly:
-ERROR – dictation could not be parsed coherently.`
+ERROR – dictation could not be parsed coherently.`,
+
+  missingInfoDetection: `You are reviewing medical letter dictation for completeness.
+
+ASSESS MISSING INFORMATION for comprehensive medical correspondence:
+
+**FOR MEDICAL LETTERS:**
+- Letter Purpose (referral reason, consultation request, follow-up details)
+- Patient Context (demographics, relevant history, presenting symptoms)
+- Clinical Findings (examination results, investigation outcomes, clinical assessment)
+- Treatment Details (medications prescribed, procedures performed, interventions)
+- Recommendations (treatment plans, medication changes, specialist referrals)
+- Follow-up Plans (next appointments, monitoring requirements, patient instructions)
+
+**COMPLETENESS EVALUATION:**
+Check for essential elements that make medical correspondence actionable and informative:
+- Clear reason for the letter/referral
+- Relevant clinical background and context
+- Current clinical status and findings
+- Specific recommendations or actions required
+- Clear follow-up arrangements
+- Medication details when relevant
+- Investigation results when mentioned
+
+OUTPUT FORMAT:
+{
+  "letter_type": "referral|consultation|follow-up|discharge|results|general",
+  "missing_purpose": ["list of missing purpose/context elements"],
+  "missing_clinical": ["list of missing clinical information"],
+  "missing_recommendations": ["list of missing treatment/follow-up elements"],
+  "completeness_score": "percentage of expected information provided"
+}`
 };
 
 // Templates no longer required; kept as empty object to preserve imports.

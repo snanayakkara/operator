@@ -12,7 +12,7 @@ import type {
   PatientReviewResult, 
   BatchAIReviewReport, 
   BatchAIReviewInput,
-  AusMedicalReviewReport 
+  BatchPatientReviewReport 
 } from '@/types/medical.types';
 
 import type {
@@ -24,13 +24,13 @@ import type {
   EnvironmentState
 } from '@/types/BatchProcessingTypes';
 
-import { AusMedicalReviewAgent } from '@/agents/specialized/AusMedicalReviewAgent';
 import { DynamicWaitUtils } from '@/utils/DynamicWaitUtils';
 import { DataValidation } from '@/utils/DataValidation';
 import { ErrorRecoveryManager } from '@/utils/ErrorRecoveryManager';
 import { CacheManager } from '@/utils/CacheManager';
 import { CheckpointManager } from './CheckpointManager';
 import { MetricsCollector } from './MetricsCollector';
+import { NotificationService } from '@/services/NotificationService';
 
 export type ProgressCallback = (progress: BatchProcessingProgress) => void;
 
@@ -47,7 +47,7 @@ export interface OrchestrationConfig {
 }
 
 export class BatchAIReviewOrchestrator {
-  private ausMedicalReviewAgent: AusMedicalReviewAgent;
+  private batchPatientReviewAgent: any;
   private dynamicWait: DynamicWaitUtils;
   private dataValidation: DataValidation;
   private errorRecovery: ErrorRecoveryManager;
@@ -62,8 +62,8 @@ export class BatchAIReviewOrchestrator {
   private currentProcessingContext: { patient: PatientAppointment } | null = null;
 
   constructor(config: Partial<OrchestrationConfig> = {}) {
-    // Initialize AI agent
-    this.ausMedicalReviewAgent = new AusMedicalReviewAgent();
+    // Initialize AI agent (will be loaded dynamically)
+    this.batchPatientReviewAgent = null;
 
     // Initialize utility classes
     this.dynamicWait = DynamicWaitUtils.getInstance();
@@ -78,6 +78,16 @@ export class BatchAIReviewOrchestrator {
     this.updateConfig(config);
 
     this.log('🚀 Enhanced Batch AI Review Orchestrator initialized');
+  }
+
+  /**
+   * Load the BatchPatientReviewAgent dynamically
+   */
+  private async loadAgent() {
+    if (!this.batchPatientReviewAgent) {
+      const { BatchPatientReviewAgent } = await import('@/agents/specialized/BatchPatientReviewAgent');
+      this.batchPatientReviewAgent = new BatchPatientReviewAgent();
+    }
   }
 
   /**
@@ -251,6 +261,23 @@ export class BatchAIReviewOrchestrator {
       );
 
       this.log(`🎉 Batch processing completed: ${patientResults.filter(r => r.success).length}/${input.selectedPatients.length} successful`);
+      
+      // Send batch completion notification
+      try {
+        const batchProcessingTime = Date.now() - startTime;
+        const successfulCount = patientResults.filter(r => r.success).length;
+        const totalCount = input.selectedPatients.length;
+        const extraInfo = `${successfulCount}/${totalCount} patients processed successfully`;
+        
+        await NotificationService.showCompletionNotification(
+          'batch-ai-review',
+          batchProcessingTime,
+          extraInfo
+        );
+        console.log(`🔔 Batch completion notification sent: ${successfulCount}/${totalCount} patients (${batchProcessingTime}ms)`);
+      } catch (notificationError) {
+        console.warn('Failed to send batch completion notification:', notificationError);
+      }
       
       return batchReport;
 
@@ -945,11 +972,11 @@ export class BatchAIReviewOrchestrator {
   private async performAIReviewWithCaching(
     extractedData: ExtractedData,
     patient: PatientAppointment
-  ): Promise<AusMedicalReviewReport> {
+  ): Promise<BatchPatientReviewReport> {
     // Check cache for AI review
     if (this.config.enableCaching) {
       const cacheKey = { patientId: patient.fileNumber, dataType: 'ai_review' as const };
-      const cachedResult = await this.cacheManager.get<AusMedicalReviewReport>(cacheKey);
+      const cachedResult = await this.cacheManager.get<BatchPatientReviewReport>(cacheKey);
       
       if (cachedResult.hit && cachedResult.data) {
         // Verify that the cached review matches current data
@@ -968,8 +995,11 @@ export class BatchAIReviewOrchestrator {
     // Format input for AI review
     const reviewInput = this.formatReviewInput(extractedData, patient);
     
-    // Run AI review using existing AusMedicalReviewAgent
-    const reviewReport = await this.ausMedicalReviewAgent.process(reviewInput);
+    // Ensure agent is loaded
+    await this.loadAgent();
+    
+    // Run AI review using existing BatchPatientReviewAgent
+    const reviewReport = await this.batchPatientReviewAgent.process(reviewInput);
 
     // Cache the AI review result
     if (this.config.enableCaching) {
@@ -977,7 +1007,7 @@ export class BatchAIReviewOrchestrator {
       await this.cacheManager.set(cacheKey, reviewReport);
     }
     
-    return reviewReport as AusMedicalReviewReport;
+    return reviewReport as BatchPatientReviewReport;
   }
 
   // ============================================================================
@@ -1077,7 +1107,7 @@ export class BatchAIReviewOrchestrator {
       metadata: {
         confidence: successfulReviews.length / input.selectedPatients.length,
         processingTime: endTime - startTime,
-        modelUsed: 'AusMedicalReviewAgent',
+        modelUsed: 'BatchPatientReviewAgent',
         enhancedFeatures: {
           intelligentWaiting: true,
           dataValidation: true,

@@ -1,9 +1,7 @@
-// Background service worker for Reflow Medical Assistant Chrome Extension
+// Background service worker for Operator Chrome Extension
 
 import type { 
-  AgentType, 
-  MedicalContext,
-  ProcessingStatus,
+  AgentType,
   ScreenshotCaptureResult
 } from '@/types/medical.types';
 import { WhisperServerService } from '@/services/WhisperServerService';
@@ -20,6 +18,7 @@ class BackgroundService {
   private activeTabs = new Set<number>();
   private whisperServerService: WhisperServerService;
   private clipboardResultPromise: { resolve: (value: any) => void; reject: (error: any) => void } | null = null;
+  private fileTabSuppression = false;
 
   constructor() {
     this.whisperServerService = WhisperServerService.getInstance();
@@ -71,6 +70,18 @@ class BackgroundService {
         url: tab.url,
         title: tab.title?.substring(0, 50) 
       });
+
+      // Guard: if a file:// tab appears while suppression is enabled, close it immediately
+      try {
+        const updatedUrl = changeInfo.url || tab.url || (changeInfo as any).pendingUrl;
+        if (this.fileTabSuppression && typeof updatedUrl === 'string' && updatedUrl.startsWith('file:') && tab.id) {
+          console.log('🛑 Closing file:// tab due to active drop guard:', { id: tab.id, url: updatedUrl });
+          await chrome.tabs.remove(tab.id);
+          return;
+        }
+      } catch (e) {
+        console.warn('⚠️ File tab suppression (onUpdated) failed:', e);
+      }
       
       if (changeInfo.status === 'complete') {
         const isEMR = this.isEMRTab(tab.url);
@@ -106,6 +117,20 @@ class BackgroundService {
             console.error('❌ Could not disable side panel for tab:', error);
           }
         }
+      }
+    });
+
+    // Guard: close newly-created file:// tabs while suppression is enabled
+    chrome.tabs.onCreated.addListener(async (tab) => {
+      try {
+        const pendingUrl = (tab as any).pendingUrl as string | undefined;
+        const url = tab.url || pendingUrl;
+        if (this.fileTabSuppression && url && url.startsWith('file:') && tab.id) {
+          console.log('🛑 Closing newly created file:// tab due to active drop guard:', { id: tab.id, url });
+          await chrome.tabs.remove(tab.id);
+        }
+      } catch (e) {
+        console.warn('⚠️ File tab suppression (onCreated) failed:', e);
       }
     });
 
@@ -270,8 +295,8 @@ class BackgroundService {
       try {
         await chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'assets/icons/icon-48.png',
-          title: 'Reflow Medical Assistant',
+          iconUrl: chrome.runtime.getURL('assets/icons/icon-48.png'),
+          title: 'Operator Chrome Extension',
           message: 'Extension installed successfully! Open the side panel to get started.'
         });
       } catch (notificationError) {
@@ -297,6 +322,42 @@ class BackgroundService {
           await this.executeAction(action!, data, tabId || sender.tab?.id, sendResponse);
           break;
 
+        case 'PAGE_DROP_GUARD_INSTALLED':
+          console.log('✅ Page drop guard installed for tab', sender.tab?.id);
+          sendResponse({ success: true });
+          break;
+
+        case 'SET_DROP_HINT': {
+          const slot = message.data?.slot ?? 1;
+          // Update overlay text on all active EMR tabs
+          try {
+            for (const id of this.activeTabs) {
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: id },
+                  func: (s: number) => {
+                    try {
+                      const overlay = document.getElementById('__operator_page_drop_overlay__');
+                      if (!overlay) return;
+                      const inner = overlay.firstElementChild as HTMLElement | null;
+                      if (inner) {
+                        inner.textContent = `Drop image for Slot ${s} to import into Annotate & Combine`;
+                      }
+                    } catch {}
+                  },
+                  args: [slot]
+                });
+              } catch (e) {
+                console.warn('SET_DROP_HINT failed for tab', id, e);
+              }
+            }
+          } catch (e) {
+            console.warn('SET_DROP_HINT broadcast failed:', e);
+          }
+          sendResponse({ success: true });
+          break;
+        }
+
         case 'SIDE_PANEL_ACTION':
           await this.handleSidePanelAction(action!, data, sendResponse);
           break;
@@ -310,10 +371,11 @@ class BackgroundService {
           sendResponse({ success: true });
           break;
 
-        case 'GET_SETTINGS':
+        case 'GET_SETTINGS': {
           const settings = await chrome.storage.local.get('settings');
           sendResponse(settings.settings || {});
           break;
+        }
 
         case 'UPDATE_SETTINGS':
           await chrome.storage.local.set({ settings: data });
@@ -324,6 +386,147 @@ class BackgroundService {
           this.handleClipboardResult(data);
           sendResponse({ success: true });
           break;
+
+        case 'EXTRACT_EMR_DATA_AI_REVIEW':
+          await this.handleEMRDataExtractionForAIReview(data, sender.tab?.id, sendResponse);
+          break;
+
+        case 'SET_FILE_DROP_GUARD': {
+          const enabled = !!message.data?.enabled || !!(message as any).enabled;
+          this.fileTabSuppression = enabled;
+          console.log('🛡️ Background file-tab suppression set to', this.fileTabSuppression);
+          // Try to notify all active EMR tabs to enable page-level guard
+          try {
+            for (const id of this.activeTabs) {
+              // Try best-effort message; do not abort injection on failure
+              try {
+                await chrome.tabs.sendMessage(id, { type: 'SET_FILE_DROP_GUARD', enabled: this.fileTabSuppression });
+              } catch (e) {
+                console.warn('SET_FILE_DROP_GUARD forward to tab failed:', id, e);
+              }
+
+              // Install a direct page guard to capture files and forward to side panel
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: id },
+                  func: (flag: boolean) => {
+                    try {
+                      const w = window as any;
+                      if (!w.__operatorInstallPageDropGuard) {
+                        w.__operatorInstallPageDropGuard = (enable: boolean) => {
+                          if (enable) {
+                            if (w.__operatorDropGuard) return;
+                            // Create overlay UI
+                            const overlayId = '__operator_page_drop_overlay__';
+                            let overlay = document.getElementById(overlayId) as HTMLDivElement | null;
+                            if (!overlay) {
+                              overlay = document.createElement('div');
+                              overlay.id = overlayId;
+                              overlay.style.position = 'fixed';
+                              overlay.style.top = '0';
+                              overlay.style.left = '0';
+                              overlay.style.width = '100vw';
+                              overlay.style.height = '100vh';
+                              overlay.style.zIndex = '2147483647';
+                              overlay.style.background = 'rgba(59,130,246,0.12)';
+                              overlay.style.border = '2px dashed rgba(37,99,235,0.7)';
+                              overlay.style.display = 'flex';
+                              overlay.style.boxSizing = 'border-box';
+                              overlay.style.alignItems = 'center';
+                              overlay.style.justifyContent = 'center';
+                              // Let window-level capture handlers receive events even if overlay is present
+                              overlay.style.pointerEvents = 'none';
+                              overlay.style.backdropFilter = 'blur(2px)';
+
+                              const inner = document.createElement('div');
+                              inner.style.padding = '16px 20px';
+                              inner.style.background = 'rgba(255,255,255,0.9)';
+                              inner.style.borderRadius = '12px';
+                              inner.style.color = '#1f2937';
+                              inner.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
+                              inner.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+                              inner.style.fontSize = '14px';
+                              inner.textContent = 'Drop image anywhere on this page to import into Annotate & Combine';
+                              overlay.appendChild(inner);
+
+                              document.body.appendChild(overlay);
+                            }
+
+                            const showOverlay = () => { if (overlay) overlay.style.display = 'flex'; };
+                            // Keep overlay persistent while the annotator is open
+                            const hideOverlay = () => { /* no-op: persist overlay */ };
+
+                            const onDragEnter = (e: DragEvent) => { e.preventDefault(); showOverlay(); };
+                            const onDragOver = (e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) { e.dataTransfer.dropEffect = 'copy'; } };
+                            const onDragLeave = (e: DragEvent) => { e.preventDefault(); /* keep overlay visible */ };
+                            const onDrop = (e: DragEvent) => {
+                              try {
+                                e.preventDefault();
+                                const dt = e.dataTransfer;
+                                if (!dt) return;
+                                let files: File[] = [];
+                                if (dt.files && dt.files.length) files = Array.from(dt.files);
+                                else if (dt.items && dt.items.length) {
+                                  for (const item of Array.from(dt.items)) {
+                                    if (item.kind === 'file') {
+                                      const f = (item as any).getAsFile?.();
+                                      if (f) files.push(f);
+                                    }
+                                  }
+                                }
+                                const img = files.find(f => f && /^image\//.test(f.type));
+                                if (!img) return;
+                                const r = new FileReader();
+                                r.onload = () => {
+                                  try {
+                                    (chrome as any).runtime.sendMessage({
+                                      type: 'PAGE_FILE_DROPPED',
+                                      payload: { dataUrl: r.result, name: img.name, type: img.type, size: img.size }
+                                    });
+                                  } catch {}
+                                };
+                                r.readAsDataURL(img);
+                              } catch {}
+                            };
+                            // Global guards to suppress browser default on page
+                            window.addEventListener('dragenter', onDragEnter, true);
+                            window.addEventListener('dragover', onDragOver, true);
+                            window.addEventListener('dragleave', onDragLeave, true);
+                            window.addEventListener('drop', onDrop, true);
+                            w.__operatorDropGuard = { onDragEnter, onDragOver, onDragLeave, onDrop, overlay };
+
+                            // Notify background for debugging
+                            try { (chrome as any).runtime.sendMessage({ type: 'PAGE_DROP_GUARD_INSTALLED' }); } catch {}
+                          } else {
+                            if (w.__operatorDropGuard) {
+                              window.removeEventListener('dragenter', w.__operatorDropGuard.onDragEnter, true);
+                              window.removeEventListener('dragover', w.__operatorDropGuard.onDragOver, true);
+                              window.removeEventListener('dragleave', w.__operatorDropGuard.onDragLeave, true);
+                              window.removeEventListener('drop', w.__operatorDropGuard.onDrop, true);
+                              try { if (w.__operatorDropGuard.overlay && w.__operatorDropGuard.overlay.parentNode) { w.__operatorDropGuard.overlay.parentNode.removeChild(w.__operatorDropGuard.overlay); } } catch {}
+                              w.__operatorDropGuard = null;
+                            }
+                          }
+                        };
+                      }
+                      w.__operatorInstallPageDropGuard(flag);
+                    } catch (e) {
+                      console.error('Page drop guard install failed', e);
+                    }
+                  },
+                  args: [this.fileTabSuppression]
+                });
+                console.log('✅ Injected drop guard overlay into tab', id);
+              } catch (e) {
+                console.error('❌ Failed to inject drop guard overlay into tab', id, e);
+              }
+            }
+          } catch (e) {
+            console.warn('SET_FILE_DROP_GUARD broadcast failed:', e);
+          }
+          sendResponse({ success: true, enabled: this.fileTabSuppression });
+          break;
+        }
 
         default:
           sendResponse({ error: 'Unknown message type' });
@@ -367,7 +570,7 @@ class BackgroundService {
         // Check if content script is already loaded
         const results = await chrome.scripting.executeScript({
           target: { tabId: tabId },
-          func: () => (window as any).reflowContentScriptLoaded === true
+          func: () => (window as any).operatorContentScriptLoaded === true
         });
         
         if (!results[0]?.result) {
@@ -395,6 +598,54 @@ class BackgroundService {
     } catch (error) {
       console.error(`❌ Action ${action} failed:`, error);
       sendResponse?.({ error: error instanceof Error ? error.message : 'Action failed' });
+    }
+  }
+
+  /**
+   * Handle EMR data extraction for AI Review using robust messaging
+   */
+  private async handleEMRDataExtractionForAIReview(
+    data: any,
+    tabId?: number,
+    sendResponse?: (response?: any) => void
+  ) {
+    console.log('🤖 Service Worker: Handling EXTRACT_EMR_DATA_AI_REVIEW request');
+    
+    try {
+      // If no tabId provided, find active EMR tab
+      if (!tabId) {
+        console.log('🔍 No tabId provided, searching for active EMR tab...');
+        const activeTab = await this.getActiveEMRTab();
+        if (!activeTab?.id) {
+          console.log('❌ No active EMR tab found');
+          sendResponse?.({ success: false, error: 'No active EMR tab found. Please ensure you\'re on my.xestro.com with a patient record open.' });
+          return;
+        }
+        tabId = activeTab.id;
+        console.log('✅ Found active EMR tab:', tabId, activeTab.url);
+      }
+
+      // Use robust sendMessageToTab with auto-retry and content script injection
+      console.log('📋 Service Worker: Sending EXTRACT_EMR_DATA_AI_REVIEW message to content script via robust method');
+      
+      const response = await this.sendMessageToTab(tabId, {
+        type: 'EXTRACT_EMR_DATA_AI_REVIEW',
+        fields: data?.fields || ['background', 'investigations', 'medications-problemlist']
+      }, {
+        retries: 3,
+        timeout: 600000, // 10 minute timeout for AI Medical Review processing
+        ensureContentScript: true // Enable automatic content script injection
+      });
+
+      console.log('✅ Service Worker: EMR data extraction completed successfully:', response);
+      sendResponse?.({ success: true, data: response.data || response });
+
+    } catch (error) {
+      console.error('❌ Service Worker: EMR data extraction failed:', error);
+      sendResponse?.({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'EMR data extraction failed' 
+      });
     }
   }
 
@@ -1057,6 +1308,7 @@ class BackgroundService {
     throw lastError || new Error('Message sending failed after all retries');
   }
 
+
   // Public methods for external access
   public async broadcastToTabs(message: any, emrOnly = true) {
     try {
@@ -1079,6 +1331,7 @@ class BackgroundService {
       console.error('Failed to broadcast to tabs:', error);
     }
   }
+
 }
 
 // Initialize the background service

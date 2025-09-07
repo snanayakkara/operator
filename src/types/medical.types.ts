@@ -115,14 +115,15 @@ export interface FailedAudioRecording {
 
 export interface LMStudioRequest {
   model: string;
-  messages: ChatMessage[];
+  messages?: ChatMessage[];
+  prompt?: string;
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
 }
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'model';
   content: string;
 }
 
@@ -146,6 +147,8 @@ export type AgentType =
   | 'investigation-summary'
   | 'background'
   | 'medication'
+  | 'bloods'
+  | 'imaging'
   | 'mteer'
   | 'tteer'
   | 'pfo-closure'
@@ -156,6 +159,7 @@ export type AgentType =
   | 'tavi-workup'
   | 'ai-medical-review'
   | 'batch-ai-review'
+  | 'patient-education'
   | 'enhancement'
   | 'transcription'
   | 'generation';
@@ -166,11 +170,17 @@ export interface AppState {
   currentAgent: AgentType | null;
   transcription: string;
   results: string;
+  resultsSummary: string;
+  aiGeneratedSummary?: string; // AI-generated summary from agents like QuickLetter
+  // Missing information detection and user-supplied answers
+  missingInfo?: any;
+  missingInfoAnswers?: Record<string, string>;
   processingStatus: ProcessingStatus;
   voiceActivityLevel: number;
   frequencyData: number[];
   modelStatus: ModelStatus;
   // Timing data for performance metrics
+  recordingTime: number | null;
   transcriptionTime: number | null;
   agentProcessingTime: number | null;
   totalProcessingTime: number | null;
@@ -180,6 +190,9 @@ export interface AppState {
   failedAudioRecordings: FailedAudioRecording[];
   // AI Review structured data
   reviewData?: any;
+  // Patient version generation
+  patientVersion: string | null;
+  isGeneratingPatientVersion: boolean;
 }
 
 export type ProcessingStatus = 
@@ -201,6 +214,7 @@ export interface ModelStatus {
   lastPing: number;
   latency: number;
   whisperServer?: WhisperServerStatus;
+  dspyServer?: DSPyServerStatus;
 }
 
 export interface WhisperServerStatus {
@@ -209,6 +223,26 @@ export interface WhisperServerStatus {
   port: number;
   error?: string;
   lastChecked: number;
+}
+
+export interface DSPyServerStatus {
+  running: boolean;
+  ready: boolean;
+  port: number;
+  error?: string;
+  lastChecked: number;
+  version?: string;
+  uptime?: number;
+  stats?: {
+    requests_processed: number;
+    errors_encountered: number;
+    active_optimizations: number;
+  };
+  dspy?: {
+    config_loaded: boolean;
+    available_agents: string[];
+    enabled_agents: string[];
+  };
 }
 
 export interface EMRField {
@@ -566,18 +600,34 @@ export interface PatientInfo {
 }
 
 // Patient session for multi-patient workflow management
+export type SessionStatus = 
+  | 'recording'
+  | 'transcribing' 
+  | 'processing'
+  | 'completed'
+  | 'error'
+  | 'cancelled';
+
 export interface PatientSession {
   id: string;
   patient: PatientInfo;
   transcription: string;
   results: string;
+  summary?: string; // Summary for dual card display (especially for QuickLetter)
   agentType: AgentType;
   agentName: string;
   timestamp: number;
-  completed: boolean;
+  status: SessionStatus;
+  completed: boolean; // Kept for backward compatibility
   processingTime?: number;
   warnings?: string[];
   errors?: string[];
+  // Additional fields for parallel processing
+  recordingStartTime?: number;
+  transcriptionStartTime?: number;
+  processingStartTime?: number;
+  completedTime?: number;
+  audioBlob?: Blob; // Store audio for reprocessing
 }
 
 export interface LetterTemplate {
@@ -862,7 +912,7 @@ export interface BatchAIReviewInput {
 
 export interface PatientReviewResult {
   patient: PatientAppointment;
-  reviewReport: any; // Will be AusMedicalReviewReport
+  reviewReport: any; // Will be BatchPatientReviewReport
   extractedData: {
     background: string;
     investigations: string;
@@ -892,14 +942,14 @@ export interface BatchAIReviewReport extends MedicalReport {
   };
 }
 
-// Australian Medical Review specific types
-export interface AusMedicalReviewInput {
+// Batch Patient Review specific types
+export interface BatchPatientReviewInput {
   background: string;
   investigations: string;
   medications: string;
 }
 
-export interface AusMedicalReviewFinding {
+export interface BatchPatientReviewFinding {
   finding: string;
   australianGuideline: string;
   clinicalReasoning: string;
@@ -908,9 +958,9 @@ export interface AusMedicalReviewFinding {
   heartFoundationLink?: string;
 }
 
-export interface AusMedicalReviewReport extends MedicalReport {
+export interface BatchPatientReviewReport extends MedicalReport {
   reviewData: {
-    findings: AusMedicalReviewFinding[];
+    findings: BatchPatientReviewFinding[];
     guidelineReferences: string[];
     heartFoundationResources: string[];
     cvdRiskCalculatorRecommended: boolean;
@@ -918,4 +968,40 @@ export interface AusMedicalReviewReport extends MedicalReport {
     qtProlongationRisk: boolean;
     medicationSafetyIssues: number;
   };
+}
+
+// Patient Education specific types
+export interface PatientEducationInput {
+  patientPriority: 'high' | 'medium' | 'low';
+  selectedModules: string[];
+  emrData?: {
+    demographics?: string;
+    background?: string;
+    medications?: string;
+    investigations?: string;
+  };
+  patientContext?: string;
+}
+
+export interface PatientEducationReport extends MedicalReport {
+  educationData: {
+    priority: string;
+    modules: string[];
+    completenessScore?: string;
+    australianGuidelines: string[];
+    patientResources: string[];
+  };
+}
+
+export interface PatientEducationModule {
+  id: string;
+  label: string;
+  description: string;
+  tooltip: string;
+  keywords: string[];
+}
+
+export interface PatientEducationConfig {
+  modules: PatientEducationModule[];
+  priorities: { value: string; label: string; description: string }[];
 }

@@ -15,12 +15,15 @@ import {
   Bot,
   Shield,
   UserCheck,
-  Users
+  Users,
+  BarChart3,
+  Combine,
+  GraduationCap,
+  TestTube,
+  Scan
 } from 'lucide-react';
 import { SmallTrophySpin, MediumTrophySpin } from './TrophySpinLoader';
-import { ExpandableInvestigationButton } from './ExpandableInvestigationButton';
-import { ExpandableBackgroundButton } from './ExpandableBackgroundButton';
-import { ExpandableMedicationButton } from './ExpandableMedicationButton';
+import { ExpandableActionButton, ExpandableActionConfig } from './ExpandableActionButton';
 import { APPOINTMENT_PRESETS, AppointmentPreset } from '../../config/appointmentPresets';
 import type { AgentType } from '../../types/medical.types';
 
@@ -45,6 +48,51 @@ const INVESTIGATION_OPTIONS: InvestigationOption[] = [
     description: 'Open field for manual entry'
   }
 ];
+
+const EXPANDABLE_ACTION_CONFIGS: Record<string, ExpandableActionConfig> = {
+  'investigation-summary': {
+    icon: Search,
+    label: 'Investigations',
+    actionId: 'investigation-summary',
+    workflowId: 'investigation-summary',
+    color: 'emerald'
+  },
+  'background': {
+    icon: User,
+    label: 'Background',
+    actionId: 'background', 
+    workflowId: 'background',
+    color: 'blue'
+  },
+  'medications': {
+    icon: Pill,
+    label: 'Medications',
+    actionId: 'medications',
+    workflowId: 'medication',
+    color: 'purple'
+  },
+  'social-history': {
+    icon: UserCheck,
+    label: 'Social History',
+    actionId: 'social-history',
+    workflowId: 'background', // Use background workflow for social history
+    color: 'indigo'
+  },
+  'bloods': {
+    icon: TestTube,
+    label: 'Bloods',
+    actionId: 'bloods',
+    workflowId: 'bloods',
+    color: 'red'
+  },
+  'imaging': {
+    icon: Scan,
+    label: 'Imaging',
+    actionId: 'imaging',
+    workflowId: 'imaging',
+    color: 'cyan'
+  }
+};
 
 interface QuickAction {
   id: string;
@@ -84,20 +132,6 @@ const QUICK_ACTIONS: QuickAction[] = [
     category: 'emr'
   },
   {
-    id: 'ai-medical-review',
-    label: 'AI Medical Review',
-    icon: Bot,
-    description: 'Australian clinical oversight and guidelines review (analyzes existing EMR data)',
-    category: 'analysis'
-  },
-  {
-    id: 'batch-ai-review',
-    label: 'Batch AI Review',
-    icon: Users,
-    description: 'AI review for multiple patients from appointment book',
-    category: 'analysis'
-  },
-  {
     id: 'social-history',
     label: 'Social History',
     icon: UserCheck,
@@ -105,10 +139,31 @@ const QUICK_ACTIONS: QuickAction[] = [
     category: 'emr'
   },
   {
+    id: 'bloods',
+    label: 'Bloods',
+    icon: TestTube,
+    description: 'Blood test results and analysis',
+    category: 'emr'
+  },
+  {
+    id: 'imaging',
+    label: 'Imaging',
+    icon: Scan,
+    description: 'Medical imaging reports and analysis',
+    category: 'emr'
+  },
+  {
     id: 'profile-photo',
     label: 'Profile Photo',
     icon: Camera,
     description: 'Capture screenshot for patient profile',
+    category: 'emr'
+  },
+  {
+    id: 'annotate-screenshots',
+    label: 'Canvas',
+    icon: Combine,
+    description: 'Capture, annotate, and combine multiple screenshots',
     category: 'emr'
   },
   {
@@ -127,10 +182,35 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: 'appointment-wrap-up',
-    label: 'Appointment Wrap-up',
+    label: 'Wrap Up',
     icon: Calendar,
     description: 'Complete appointment workflow',
     category: 'workflow'
+  },
+  {
+    id: 'patient-education',
+    label: 'Patient Education',
+    icon: GraduationCap,
+    description: 'Generate lifestyle advice and education',
+    category: 'documentation'
+  }
+];
+
+// AI Actions that will be rendered in the split cell
+const AI_ACTIONS: QuickAction[] = [
+  {
+    id: 'ai-medical-review',
+    label: 'AI Medical Review',
+    icon: Bot,
+    description: 'Australian clinical oversight and guidelines review (analyzes existing EMR data)',
+    category: 'analysis'
+  },
+  {
+    id: 'batch-ai-review',
+    label: 'Batch AI Review',
+    icon: Users,
+    description: 'AI review for multiple patients from appointment book',
+    category: 'analysis'
   }
 ];
 
@@ -151,6 +231,24 @@ export const QuickActions: React.FC<QuickActionsProps> = memo(({ onQuickAction, 
     // Show investigation options for investigation-summary
     if (actionId === 'investigation-summary' && !data) {
       setShowInvestigationOptions(true);
+      return;
+    }
+    
+    // Handle patient education - show configuration card
+    if (actionId === 'patient-education') {
+      try {
+        setProcessingAction(actionId);
+        console.log('🎓 Starting Patient Education...');
+        
+        // Trigger patient education configuration through quick action
+        await onQuickAction(actionId, { type: 'show-config' });
+        
+        console.log('✅ Patient Education config triggered');
+      } catch (error) {
+        console.error(`❌ Patient Education failed:`, error);
+      } finally {
+        setProcessingAction(null);
+      }
       return;
     }
     
@@ -183,14 +281,43 @@ export const QuickActions: React.FC<QuickActionsProps> = memo(({ onQuickAction, 
         const emrData = await extractEMRData();
         
         if (emrData) {
-          // Check if we have meaningful data (not all empty)
-          const hasData = emrData.background.trim() || emrData.investigations.trim() || emrData.medications.trim();
+          // Enhanced data validation with detailed reporting
+          const dataValidation = {
+            background: { hasContent: !!emrData.background.trim(), length: emrData.background.length },
+            investigations: { hasContent: !!emrData.investigations.trim(), length: emrData.investigations.length },
+            medications: { hasContent: !!emrData.medications.trim(), length: emrData.medications.length }
+          };
           
-          if (!hasData) {
-            throw new Error('No clinical data found in EMR fields (Background, Investigations, Medications are all empty)');
+          const fieldsWithData = Object.entries(dataValidation).filter(([, data]) => data.hasContent);
+          const totalFields = Object.keys(dataValidation).length;
+          
+          console.log('📋 EMR DATA VALIDATION:', {
+            fieldsWithData: fieldsWithData.length,
+            totalFields,
+            details: dataValidation,
+            extractionMeta: emrData.extractionMeta
+          });
+          
+          // Allow processing with partial data (at least 1 field required)
+          if (fieldsWithData.length === 0) {
+            const emptyFieldsMessage = Object.entries(dataValidation)
+              .filter(([, data]) => !data.hasContent)
+              .map(([field]) => field)
+              .join(', ');
+            
+            throw new Error(`No clinical data found - all EMR fields are empty: ${emptyFieldsMessage}. Please ensure the patient record contains data in Background, Investigations, or Medications fields.`);
           }
           
-          console.log('✅ EMR data extracted successfully');
+          // Show warning for missing fields but continue processing
+          if (fieldsWithData.length < totalFields) {
+            const missingFields = Object.entries(dataValidation)
+              .filter(([, data]) => !data.hasContent)
+              .map(([field]) => field);
+            
+            console.warn(`⚠️ EMR PARTIAL DATA: Processing with ${fieldsWithData.length}/${totalFields} fields. Missing: ${missingFields.join(', ')}`);
+          }
+          
+          console.log(`✅ EMR data validation passed: ${fieldsWithData.length}/${totalFields} fields available`);
           console.log('🔄 Processing with Australian Medical Review Agent...');
           
           // Format the data for the agent
@@ -205,14 +332,31 @@ export const QuickActions: React.FC<QuickActionsProps> = memo(({ onQuickAction, 
           
           console.log('✅ AI Medical Review completed successfully');
         } else {
-          throw new Error('Failed to extract EMR data');
+          // Enhanced error for null emrData response
+          console.error('❌ EMR EXTRACTION: extractEMRData returned null - critical extraction failure');
+          throw new Error('EMR data extraction failed - unable to connect to content script or read EMR fields. Please refresh the EMR page and ensure you are on a patient record page.');
         }
       } catch (error) {
-        console.error(`❌ AI Medical Review failed:`, error);
+        console.error(`❌ AI MEDICAL REVIEW FAILED:`, error);
         
-        // Show user-visible error notification
+        // Enhanced error handling with specific guidance
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error('AI Review Error:', errorMessage);
+        console.error('🚨 AI Review Error Details:', {
+          message: errorMessage,
+          stack: error instanceof Error ? error.stack : 'No stack trace',
+          timestamp: new Date().toISOString()
+        });
+        
+        // Provide user-friendly error messages with troubleshooting steps
+        let userMessage = `AI Medical Review Error\n\n${errorMessage}`;
+        
+        if (errorMessage.includes('Content script not responding')) {
+          userMessage += '\n\n🔧 Troubleshooting:\n1. Refresh the EMR page\n2. Make sure you are on a patient record page\n3. Try the AI Medical Review again';
+        } else if (errorMessage.includes('all EMR fields are empty')) {
+          userMessage += '\n\n🔧 Troubleshooting:\n1. Navigate to a patient record with clinical data\n2. Ensure Background, Investigations, or Medications fields contain information\n3. Try the AI Medical Review again';
+        } else if (errorMessage.includes('extraction failed')) {
+          userMessage += '\n\n🔧 Troubleshooting:\n1. Check the browser console for detailed logs\n2. Refresh the EMR page\n3. Contact support if the issue persists';
+        }
         
         // Create a simple alert for user feedback (temporary solution)
         if (typeof window !== 'undefined') {
@@ -246,76 +390,186 @@ export const QuickActions: React.FC<QuickActionsProps> = memo(({ onQuickAction, 
   };
 
   // Extract EMR data using proven working EXECUTE_ACTION system
-  const extractEMRData = async (): Promise<{ background: string; investigations: string; medications: string } | null> => {
+  const extractEMRData = async (): Promise<{ 
+    background: string; 
+    investigations: string; 
+    medications: string; 
+    extractionMeta: {
+      successfulFields: number;
+      totalFields: number;
+      failedFields: string[];
+      fieldDetails: Record<string, any>;
+    }
+  } | null> => {
     try {
-      console.log('📋 Extracting EMR data using working action system...');
+      console.log('📋 EMR EXTRACTION: Starting EMR data extraction...');
+      console.log('📋 EMR EXTRACTION: Current tab info:', await chrome.tabs.query({active: true, currentWindow: true}));
       
-      // Use individual EXECUTE_ACTION calls (same as other working buttons)
-      const [backgroundResponse, investigationResponse, medicationResponse] = await Promise.all([
-        chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: 'background',
-          data: { extractOnly: true }
-        }),
-        chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION', 
-          action: 'investigation-summary',
-          data: { extractOnly: true }
-        }),
-        chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: 'medications', 
-          data: { extractOnly: true }
-        })
-      ]);
+      // First, verify content script is responding
+      console.log('📋 EMR EXTRACTION: Testing content script connection...');
+      try {
+        const pingResponse = await chrome.runtime.sendMessage({
+          type: 'PING'
+        });
+        console.log('📋 EMR EXTRACTION: Content script ping response:', pingResponse);
+      } catch (pingError) {
+        console.error('📋 EMR EXTRACTION: Content script ping failed:', pingError);
+        throw new Error('Content script not responding - please refresh the EMR page and try again');
+      }
       
-      console.log('📋 Individual action responses:', { 
-        background: backgroundResponse, 
-        investigation: investigationResponse, 
-        medication: medicationResponse 
+      console.log('📋 EMR EXTRACTION: Making individual EXECUTE_ACTION calls...');
+      
+      // Use individual EXECUTE_ACTION calls with timeout and detailed logging
+      const extractionPromises = [
+        {
+          name: 'background',
+          promise: chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'background',
+            data: { extractOnly: true }
+          })
+        },
+        {
+          name: 'investigation-summary',
+          promise: chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION', 
+            action: 'investigation-summary',
+            data: { extractOnly: true }
+          })
+        },
+        {
+          name: 'medications',
+          promise: chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'medications', 
+            data: { extractOnly: true }
+          })
+        }
+      ];
+      
+      // Execute with detailed logging for each field
+      const results = await Promise.allSettled(extractionPromises.map(item => item.promise));
+      const [backgroundResult, investigationResult, medicationResult] = results;
+      
+      console.log('📋 EMR EXTRACTION: Detailed extraction results:');
+      results.forEach((result, index) => {
+        const fieldName = extractionPromises[index].name;
+        if (result.status === 'fulfilled') {
+          console.log(`📋 EMR EXTRACTION: ${fieldName} - SUCCESS:`, result.value);
+        } else {
+          console.error(`📋 EMR EXTRACTION: ${fieldName} - FAILED:`, result.reason);
+        }
       });
       
-      // Check if responses contain data or errors
-      console.log('📋 Response validation:', {
-        backgroundSuccess: backgroundResponse?.success,
-        backgroundHasData: !!backgroundResponse?.data,
-        investigationSuccess: investigationResponse?.success,
-        investigationHasData: !!investigationResponse?.data,
-        medicationSuccess: medicationResponse?.success,
-        medicationHasData: !!medicationResponse?.data
-      });
+      // Extract responses (handle both fulfilled and rejected promises)
+      const backgroundResponse = backgroundResult.status === 'fulfilled' ? backgroundResult.value : null;
+      const investigationResponse = investigationResult.status === 'fulfilled' ? investigationResult.value : null;
+      const medicationResponse = medicationResult.status === 'fulfilled' ? medicationResult.value : null;
       
-      // Extract text content from responses (responses may contain field data)
-      const background = extractTextFromResponse(backgroundResponse) || '';
-      const investigations = extractTextFromResponse(investigationResponse) || '';
-      const medications = extractTextFromResponse(medicationResponse) || '';
+      // Enhanced response validation with detailed field-level reporting
+      const fieldExtractions = {
+        background: {
+          response: backgroundResponse,
+          success: backgroundResponse?.success || false,
+          hasData: !!backgroundResponse?.data,
+          error: backgroundResult.status === 'rejected' ? backgroundResult.reason : null
+        },
+        investigations: {
+          response: investigationResponse,
+          success: investigationResponse?.success || false,
+          hasData: !!investigationResponse?.data,
+          error: investigationResult.status === 'rejected' ? investigationResult.reason : null
+        },
+        medications: {
+          response: medicationResponse,
+          success: medicationResponse?.success || false,
+          hasData: !!medicationResponse?.data,
+          error: medicationResult.status === 'rejected' ? medicationResult.reason : null
+        }
+      };
       
-      console.log('✅ EMR data extracted successfully via actions:', { 
-        background: background.length + ' chars',
-        investigations: investigations.length + ' chars', 
-        medications: medications.length + ' chars'
-      });
+      console.log('📋 EMR EXTRACTION: Detailed response validation:', fieldExtractions);
       
-      return { background, investigations, medications };
+      // Extract text content from responses with enhanced error handling
+      const background = extractTextFromResponse(backgroundResponse, 'Background');
+      const investigations = extractTextFromResponse(investigationResponse, 'Investigation Summary');
+      const medications = extractTextFromResponse(medicationResponse, 'Medications');
+      
+      // Report extraction results
+      const extractionSummary = {
+        background: { length: background.length, hasContent: !!background.trim() },
+        investigations: { length: investigations.length, hasContent: !!investigations.trim() },
+        medications: { length: medications.length, hasContent: !!medications.trim() }
+      };
+      
+      console.log('📋 EMR EXTRACTION: Final extraction summary:', extractionSummary);
+      
+      // Count successful extractions
+      const successfulExtractions = Object.values(extractionSummary).filter(field => field.hasContent).length;
+      console.log(`📋 EMR EXTRACTION: Successfully extracted ${successfulExtractions}/3 fields`);
+      
+      // Create detailed error message for failed extractions
+      const failedFields = [];
+      if (!extractionSummary.background.hasContent && fieldExtractions.background.error) {
+        failedFields.push(`Background: ${fieldExtractions.background.error.message || fieldExtractions.background.error}`);
+      }
+      if (!extractionSummary.investigations.hasContent && fieldExtractions.investigations.error) {
+        failedFields.push(`Investigations: ${fieldExtractions.investigations.error.message || fieldExtractions.investigations.error}`);
+      }
+      if (!extractionSummary.medications.hasContent && fieldExtractions.medications.error) {
+        failedFields.push(`Medications: ${fieldExtractions.medications.error.message || fieldExtractions.medications.error}`);
+      }
+      
+      if (failedFields.length > 0) {
+        console.warn('📋 EMR EXTRACTION: Some fields failed to extract:', failedFields);
+      }
+      
+      return { 
+        background, 
+        investigations, 
+        medications,
+        extractionMeta: {
+          successfulFields: successfulExtractions,
+          totalFields: 3,
+          failedFields,
+          fieldDetails: extractionSummary
+        }
+      };
       
     } catch (error) {
-      console.error('❌ Error extracting EMR data via actions:', error);
-      return null;
+      console.error('❌ EMR EXTRACTION: Critical error in extraction process:', error);
+      throw new Error(`EMR data extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
   // Helper function to extract text content from action responses
-  const extractTextFromResponse = (response: any): string => {
-    if (!response) return '';
+  const extractTextFromResponse = (response: any, fieldName: string = 'Unknown'): string => {
+    console.log(`📋 EMR EXTRACTION: Parsing ${fieldName} response:`, response);
+    
+    if (!response) {
+      console.log(`📋 EMR EXTRACTION: ${fieldName} - No response received`);
+      return '';
+    }
     
     // Check various possible response formats
-    if (typeof response === 'string') return response;
-    if (response.data && typeof response.data === 'string') return response.data;
-    if (response.content && typeof response.content === 'string') return response.content;
-    if (response.text && typeof response.text === 'string') return response.text;
-    if (response.value && typeof response.value === 'string') return response.value;
+    let extractedText = '';
     
-    return '';
+    if (typeof response === 'string') {
+      extractedText = response;
+    } else if (response.data && typeof response.data === 'string') {
+      extractedText = response.data;
+    } else if (response.content && typeof response.content === 'string') {
+      extractedText = response.content;
+    } else if (response.text && typeof response.text === 'string') {
+      extractedText = response.text;
+    } else if (response.value && typeof response.value === 'string') {
+      extractedText = response.value;
+    }
+    
+    console.log(`📋 EMR EXTRACTION: ${fieldName} - Extracted ${extractedText.length} characters:`, 
+      extractedText ? `"${extractedText.substring(0, 100)}${extractedText.length > 100 ? '...' : ''}"` : '(empty)');
+    
+    return extractedText;
   };
 
   // Format EMR data for the Australian medical review agent
@@ -349,7 +603,10 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
     setShowInvestigationOptions(false);
   };
 
-  const groupedActions = QUICK_ACTIONS.reduce((acc, action) => {
+  // Include all actions - analysis actions are now integrated into the Quick Actions
+  const filteredActions = QUICK_ACTIONS;
+  
+  const groupedActions = filteredActions.reduce((acc, action) => {
     if (!acc[action.category]) {
       acc[action.category] = [];
     }
@@ -401,7 +658,7 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 onClick={() => handleInvestigationOptionSelect(option)}
                 disabled={processingAction === 'investigation-summary'}
                 className={`
-                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover
+                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover shadow-none
                   ${processingAction === 'investigation-summary' ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
@@ -468,7 +725,7 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 onClick={() => handlePresetSelect(preset)}
                 disabled={processingAction === 'appointment-wrap-up'}
                 className={`
-                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover
+                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover shadow-none
                   ${processingAction === 'appointment-wrap-up' ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
@@ -513,33 +770,18 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
     return (
       <div className="bg-white">
         {/* Header */}
-        <div className="flex items-center space-x-2 mb-2">
+        <div className="flex items-center space-x-2 mb-3">
           <CheckSquare className="w-3 h-3 text-blue-600" />
           <h3 className="text-gray-900 font-medium text-xs">Quick Actions</h3>
         </div>
 
-        {/* 2x3 Grid of actions */}
-        <div className="grid grid-cols-3 gap-2">
-          {QUICK_ACTIONS.map((action) => (
-            action.id === 'investigation-summary' ? (
-              <ExpandableInvestigationButton
+        {/* 4-column grid of actions for better space utilization */}
+        <div className="grid grid-cols-4 gap-2">
+          {filteredActions.map((action) => (
+            EXPANDABLE_ACTION_CONFIGS[action.id] ? (
+              <ExpandableActionButton
                 key={action.id}
-                onStartWorkflow={onStartWorkflow}
-                onQuickAction={onQuickAction}
-                processingAction={processingAction}
-                isFooter={true}
-              />
-            ) : action.id === 'background' ? (
-              <ExpandableBackgroundButton
-                key={action.id}
-                onStartWorkflow={onStartWorkflow}
-                onQuickAction={onQuickAction}
-                processingAction={processingAction}
-                isFooter={true}
-              />
-            ) : action.id === 'medications' ? (
-              <ExpandableMedicationButton
-                key={action.id}
+                config={EXPANDABLE_ACTION_CONFIGS[action.id]}
                 onStartWorkflow={onStartWorkflow}
                 onQuickAction={onQuickAction}
                 processingAction={processingAction}
@@ -554,19 +796,20 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 }}
                 disabled={processingAction === action.id}
                 className={`
-                  glass-button relative p-2 rounded-lg transition-all text-center btn-micro-press btn-micro-hover
+                  relative p-2 rounded-2xl transition-all duration-150 text-left micro-press micro-lift min-h-10 flex items-center
+                  hover:bg-surface-primary hover:border hover:border-line-primary hover:shadow-sm
                   ${action.category === 'analysis' 
-                    ? 'hover:bg-indigo-50 border border-indigo-200 bg-indigo-50' 
-                    : 'hover:bg-gray-50'
+                    ? 'hover:border-accent-violet/30' 
+                    : ''
                   }
                   ${processingAction === action.id ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
-                <div className="flex flex-col items-center space-y-1">
+                <div className="flex items-center space-x-1.5">
                   <action.icon className={`w-3 h-3 flex-shrink-0 ${
-                    action.category === 'analysis' ? 'text-indigo-600' : 'text-blue-600'
+                    action.category === 'analysis' ? 'text-accent-violet' : 'text-accent-emerald'
                   }`} />
-                  <div className="text-gray-900 text-xs font-medium leading-tight">
+                  <div className="text-ink-primary text-[10px] font-medium leading-tight min-w-0 flex-1">
                     {action.label}
                   </div>
                 </div>
@@ -579,6 +822,41 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
               </button>
             )
           ))}
+          
+          {/* Split AI Buttons in the last cell */}
+          <div className="relative rounded-2xl min-h-10 flex transition-all duration-150 hover:bg-surface-primary hover:border hover:border-accent-violet/30">
+            <div className="flex h-full">
+              {AI_ACTIONS.map((aiAction, aiIndex) => (
+                <button
+                  key={aiAction.id}
+                  onClick={() => {
+                    console.log('🔧 AI Button clicked:', aiAction.id, 'at', new Date().toISOString());
+                    handleAction(aiAction.id);
+                  }}
+                  disabled={processingAction === aiAction.id}
+                  className={`
+                    flex-1 relative p-1 transition-all text-left micro-press micro-lift
+                    ${aiIndex === 0 ? 'rounded-l-2xl border-r border-line-primary' : 'rounded-r-2xl'}
+                    hover:bg-surface-tertiary
+                    ${processingAction === aiAction.id ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
+                >
+                  <div className="flex items-center justify-center flex-col space-y-0.5">
+                    <aiAction.icon className="w-3 h-3 flex-shrink-0 text-accent-violet" />
+                    <div className="text-ink-primary text-[9px] font-medium leading-tight text-center">
+                      {aiAction.id === 'ai-medical-review' ? 'AI Review' : 'Batch AI'}
+                    </div>
+                  </div>
+                  
+                  {processingAction === aiAction.id && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface-tertiary rounded-lg">
+                      <SmallTrophySpin />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -616,25 +894,10 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 {/* Actions Grid */}
                 <div className="grid grid-cols-1 gap-2">
                   {actions.map((action) => (
-                    action.id === 'investigation-summary' ? (
-                      <ExpandableInvestigationButton
+                    EXPANDABLE_ACTION_CONFIGS[action.id] ? (
+                      <ExpandableActionButton
                         key={action.id}
-                        onStartWorkflow={onStartWorkflow}
-                        onQuickAction={onQuickAction}
-                        processingAction={processingAction}
-                        isFooter={false}
-                      />
-                    ) : action.id === 'background' ? (
-                      <ExpandableBackgroundButton
-                        key={action.id}
-                        onStartWorkflow={onStartWorkflow}
-                        onQuickAction={onQuickAction}
-                        processingAction={processingAction}
-                        isFooter={false}
-                      />
-                    ) : action.id === 'medications' ? (
-                      <ExpandableMedicationButton
-                        key={action.id}
+                        config={EXPANDABLE_ACTION_CONFIGS[action.id]}
                         onStartWorkflow={onStartWorkflow}
                         onQuickAction={onQuickAction}
                         processingAction={processingAction}
@@ -646,23 +909,24 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                         onClick={() => handleAction(action.id)}
                         disabled={processingAction === action.id}
                         className={`
-                          glass-button p-3 rounded-lg text-left transition-all btn-micro-press btn-micro-hover
+                          p-3 rounded-2xl text-left transition-all duration-150 micro-press micro-lift
+                          hover:bg-surface-primary hover:border hover:border-line-primary hover:shadow-sm
                           ${action.category === 'analysis' 
-                            ? 'hover:bg-indigo-50 border border-indigo-200 bg-indigo-50' 
-                            : 'hover:bg-gray-50'
+                            ? 'hover:border-accent-violet/30' 
+                            : ''
                           }
                           ${processingAction === action.id ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
                       >
                         <div className="flex items-start space-x-2">
                           <action.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                            action.category === 'analysis' ? 'text-indigo-600' : 'text-blue-600'
+                            action.category === 'analysis' ? 'text-accent-violet' : 'text-accent-emerald'
                           }`} />
                           <div className="min-w-0 flex-1">
-                            <div className="text-gray-900 text-xs font-medium truncate">
+                            <div className="text-ink-primary text-xs font-medium truncate">
                               {action.label}
                             </div>
-                            <div className="text-gray-600 text-xs mt-1 leading-tight">
+                            <div className="text-ink-secondary text-xs mt-1 leading-tight">
                               {action.description}
                             </div>
                           </div>
@@ -682,8 +946,8 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
           })}
 
         {/* Footer with tip */}
-        <div className="p-4 bg-gray-50">
-          <p className="text-gray-600 text-xs">
+        <div className="p-4 bg-surface-tertiary">
+          <p className="text-ink-secondary text-xs">
             💡 <strong>Tip:</strong> Quick actions provide fast access to EMR fields and workflows
           </p>
         </div>

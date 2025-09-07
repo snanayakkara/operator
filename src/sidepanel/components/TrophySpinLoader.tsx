@@ -9,8 +9,8 @@ interface TrophySpinLoaderProps {
 }
 
 const sizeMap = {
-  sm: 16,   // Small spinner for buttons
-  md: 24,   // Medium for inline elements  
+  sm: 14,   // Small spinner for buttons (reduced from 16)
+  md: 20,   // Medium for inline elements (reduced from 24)
   lg: 32,   // Large for main loading states
   xl: 48    // Extra large for full screen loading
 };
@@ -27,8 +27,8 @@ export const TrophySpinLoader: React.FC<TrophySpinLoaderProps> = ({
     <div className={`flex items-center justify-center ${className}`}>
       <TrophySpin 
         color={color}
-        size={pixelSize}
-        speedPlus={speedPlus}
+        size={pixelSize as any}
+        speedPlus={speedPlus as any}
         style={{
           width: `${pixelSize}px`,
           height: `${pixelSize}px`

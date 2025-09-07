@@ -1,0 +1,26 @@
+{
+  "id": "ex001_simple",
+  "task": "consultation",
+  "complexity": "simple",
+  "transcript": "65-year-old referred for chest pain assessment. Exercise stress test positive at 7 minutes Bruce protocol with 2mm ST depression in leads V4-V6. Patient has hypertension and diabetes. Recommending cardiac catheterization for further evaluation.",
+  "expected_elements": [
+    "clinical presentation",
+    "investigation results",
+    "risk factor assessment",
+    "recommendations",
+    "professional consultation format"
+  ],
+  "rubric_criteria": {
+    "has_clinical_assessment": true,
+    "has_investigation_interpretation": true,
+    "has_recommendations": true,
+    "professional_tone": true,
+    "min_score": 70
+  },
+  "metadata": {
+    "consultation_type": "cardiac",
+    "investigation": "stress_test",
+    "risk_factors": ["hypertension", "diabetes"],
+    "source": "Consultation simple case"
+  }
+}

@@ -1,0 +1,392 @@
+#!/bin/bash
+# Medical AI Development Environment Startup
+#
+# Ultra-short startup script for the complete medical AI development stack:
+# - LMStudio Server (localhost:1234) with dual model loading
+# - MLX Whisper Server (localhost:8001) - Audio transcription  
+# - DSPy Server (localhost:8002) - Prompt optimization and evaluation
+# 
+# Usage:
+#   ./dev
+#
+# This script will:
+# 1. Start LMStudio server and load both medical models via CLI
+# 2. Start MLX Whisper server for transcription
+# 3. Start DSPy server for optimization
+# 4. Verify all services are healthy
+# 5. Display comprehensive status dashboard
+
+set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+NC='\033[0m'
+
+log() {
+    echo -e "${GREEN}[Dev Environment]${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}[Dev Environment] WARNING:${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[Dev Environment] ERROR:${NC} $1"
+}
+
+info() {
+    echo -e "${BLUE}[Dev Environment] INFO:${NC} $1"
+}
+
+success() {
+    echo -e "${PURPLE}[Dev Environment] SUCCESS:${NC} $1"
+}
+
+# Check if service is running on a port
+check_port() {
+    local port=$1
+    local service_name=$2
+    
+    if lsof -i ":$port" > /dev/null 2>&1; then
+        return 0  # Port is in use
+    else
+        return 1  # Port is free
+    fi
+}
+
+# Check service health via HTTP
+check_service_health() {
+    local url=$1
+    local timeout=${2:-5}
+    
+    if curl -s -f --max-time $timeout "$url" > /dev/null 2>&1; then
+        return 0  # Service is healthy
+    else
+        return 1  # Service is unhealthy
+    fi
+}
+
+# Check if lms CLI is available
+check_lms_cli() {
+    if ! command -v lms &> /dev/null; then
+        warn "LMStudio CLI (lms) not found in PATH"
+        warn "Please install LMStudio CLI: https://lmstudio.ai/docs/cli"
+        warn "Or bootstrap: ~/.lmstudio/bin/lms bootstrap"
+        return 1
+    fi
+    return 0
+}
+
+# Start LMStudio server and load both models
+ensure_lmstudio_server() {
+    info "Checking LMStudio server (localhost:1234)..."
+    
+    # Check if CLI is available
+    if ! check_lms_cli; then
+        warn "Falling back to manual LMStudio startup instructions"
+        warn "Please start LMStudio manually and load both models:"
+        warn "1. Reasoning model: lmstudio-community/medgemma-27b-text-it-MLX-4bit"
+        warn "2. Quick model: google/gemma-3n-e4b"
+        return 1
+    fi
+    
+    # Check if server is running
+    if ! check_service_health "http://localhost:1234/v1/models" 3; then
+        info "Starting LMStudio server..."
+        if ! lms server start > /dev/null 2>&1; then
+            error "Failed to start LMStudio server via CLI"
+            return 1
+        fi
+        
+        # Wait for server to start
+        local retries=0
+        while [ $retries -lt 30 ]; do
+            if check_service_health "http://localhost:1234/v1/models" 3; then
+                log "LMStudio server started successfully"
+                break
+            fi
+            sleep 1
+            ((retries++))
+        done
+        
+        if [ $retries -eq 30 ]; then
+            error "LMStudio server failed to start within 30 seconds"
+            return 1
+        fi
+    else
+        log "LMStudio server is already running"
+    fi
+    
+    # Ensure both models are loaded
+    ensure_dual_models_loaded
+    return $?
+}
+
+# Load both medical models (reasoning + quick)
+ensure_dual_models_loaded() {
+    info "Verifying medical models are loaded..."
+    
+    local models_loaded=$(lms ps 2>/dev/null | wc -l || echo "0")
+    local reasoning_loaded=0
+    local quick_loaded=0
+    
+    # Check what models are currently loaded
+    if lms ps 2>/dev/null | grep -q "medgemma-27b" 2>/dev/null; then
+        reasoning_loaded=1
+        log "✅ Reasoning model (MedGemma-27b) already loaded"
+    fi
+    
+    if lms ps 2>/dev/null | grep -q "gemma-3n-e4b" 2>/dev/null; then
+        quick_loaded=1
+        log "✅ Quick model (Gemma-3n-e4b) already loaded"
+    fi
+    
+    # Load reasoning model if needed
+    if [ $reasoning_loaded -eq 0 ]; then
+        info "Loading reasoning model: MedGemma-27b..."
+        if lms load "lmstudio-community/medgemma-27b-text-it-MLX-4bit" --identifier="reasoning-model" > /dev/null 2>&1; then
+            log "✅ Reasoning model loaded successfully"
+            reasoning_loaded=1
+        else
+            warn "Failed to load reasoning model automatically"
+            warn "Please load manually: lmstudio-community/medgemma-27b-text-it-MLX-4bit"
+        fi
+    fi
+    
+    # Load quick model if needed
+    if [ $quick_loaded -eq 0 ]; then
+        info "Loading quick model: Gemma-3n-e4b..."
+        if lms load "google/gemma-3n-e4b" --identifier="quick-model" > /dev/null 2>&1; then
+            log "✅ Quick model loaded successfully"
+            quick_loaded=1
+        else
+            warn "Failed to load quick model automatically"
+            warn "Please load manually: google/gemma-3n-e4b"
+        fi
+    fi
+    
+    # Verify both models are loaded
+    if [ $reasoning_loaded -eq 1 ] && [ $quick_loaded -eq 1 ]; then
+        success "Both medical models loaded and ready!"
+        return 0
+    else
+        warn "Not all models loaded successfully - some functionality may be limited"
+        return 1
+    fi
+}
+
+# Start MLX Whisper server if needed
+ensure_whisper_server() {
+    info "Checking MLX Whisper server (localhost:8001)..."
+    
+    if check_service_health "http://localhost:8001/v1/health"; then
+        log "MLX Whisper server is already running and healthy"
+        return 0
+    fi
+    
+    if [ -f "./start-whisper-server.sh" ]; then
+        info "Starting MLX Whisper server..."
+        ./start-whisper-server.sh start > /dev/null 2>&1 &
+        
+        # Wait for server to start
+        local retries=0
+        while [ $retries -lt 30 ]; do
+            if check_service_health "http://localhost:8001/v1/health"; then
+                log "MLX Whisper server started successfully"
+                return 0
+            fi
+            sleep 1
+            ((retries++))
+        done
+        
+        error "Failed to start MLX Whisper server"
+        return 1
+    else
+        warn "MLX Whisper startup script not found: ./start-whisper-server.sh"
+        warn "Please ensure MLX Whisper server is running manually"
+        return 1
+    fi
+}
+
+# Start DSPy server if needed  
+ensure_dspy_server() {
+    info "Checking DSPy server (localhost:8002)..."
+    
+    if check_service_health "http://localhost:8002/v1/health"; then
+        log "DSPy server is already running and healthy"
+        return 0
+    fi
+    
+    if [ -f "./start-dspy-server.sh" ]; then
+        info "Starting DSPy server..."
+        ./start-dspy-server.sh start > /dev/null 2>&1
+        
+        # Wait for server to start
+        local retries=0
+        while [ $retries -lt 20 ]; do
+            if check_service_health "http://localhost:8002/v1/health"; then
+                log "DSPy server started successfully"
+                return 0
+            fi
+            sleep 1
+            ((retries++))
+        done
+        
+        error "Failed to start DSPy server"
+        return 1
+    else
+        error "DSPy startup script not found: ./start-dspy-server.sh"
+        return 1
+    fi
+}
+
+# Display comprehensive service status with model information
+show_service_status() {
+    echo
+    success "=== Medical AI Development Environment ==="
+    echo
+    
+    # LMStudio (Model Serving) with dual model status
+    if check_service_health "http://localhost:1234/v1/models" 3; then
+        log "✅ LMStudio Server: http://localhost:1234"
+        
+        # Show loaded models with details
+        if command -v lms &> /dev/null; then
+            local models_info=$(lms ps 2>/dev/null || echo "")
+            if [ ! -z "$models_info" ]; then
+                if echo "$models_info" | grep -q "medgemma-27b" 2>/dev/null; then
+                    echo -e "${GREEN}   ├── Reasoning Model: MedGemma-27b ✅${NC}"
+                else
+                    echo -e "${YELLOW}   ├── Reasoning Model: MedGemma-27b ❌${NC}"
+                fi
+                
+                if echo "$models_info" | grep -q "gemma-3n-e4b" 2>/dev/null; then
+                    echo -e "${GREEN}   └── Quick Model: Gemma-3n-e4b ✅${NC}"
+                else
+                    echo -e "${YELLOW}   └── Quick Model: Gemma-3n-e4b ❌${NC}"
+                fi
+            fi
+        fi
+    else
+        warn "❌ LMStudio Server: http://localhost:1234 - NOT ACCESSIBLE"
+    fi
+    
+    # MLX Whisper (Transcription)
+    if check_service_health "http://localhost:8001/v1/health"; then
+        log "✅ MLX Whisper: http://localhost:8001"
+    else
+        warn "❌ MLX Whisper: http://localhost:8001 - NOT ACCESSIBLE"
+    fi
+    
+    # DSPy Server (Optimization)
+    if check_service_health "http://localhost:8002/v1/health"; then
+        log "✅ DSPy Server: http://localhost:8002"
+        
+        # Get DSPy server details
+        local dspy_status=$(curl -s "http://localhost:8002/v1/health" 2>/dev/null || echo "")
+        if [ ! -z "$dspy_status" ]; then
+            local stats_info=$(echo "$dspy_status" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    agents = data.get('dspy', {}).get('enabled_agents', [])
+    requests = data.get('stats', {}).get('requests_processed', 0)
+    print(f'   ├── Enabled agents: {len(agents)}')
+    print(f'   └── Requests processed: {requests}')
+except:
+    pass
+" 2>/dev/null || echo "   └── Status details unavailable")
+            echo -e "${BLUE}$stats_info${NC}"
+        fi
+    else
+        warn "❌ DSPy Server: http://localhost:8002 - NOT ACCESSIBLE"
+    fi
+    
+    echo
+    info "=== Quick Commands ==="
+    echo "./dev                                    # Restart all servers"
+    echo "curl http://localhost:1234/v1/models     # Check LMStudio models"
+    echo "curl http://localhost:8001/v1/health     # Check MLX Whisper"  
+    echo "curl http://localhost:8002/v1/health     # Check DSPy Server"
+    echo
+    info "=== Development Workflow ==="
+    echo "npm run eval:angiogram                   # Evaluate with DSPy"
+    echo "npm run optim:angiogram                  # GEPA optimization"
+    echo "USE_DSPY=true npm run eval:quick-letter  # Enable DSPy mode"
+    echo
+}
+
+# Main execution
+main() {
+    log "🚀 Starting Medical AI Development Environment..."
+    echo
+    
+    local lmstudio_ok=0
+    local whisper_ok=0
+    local dspy_ok=0
+    
+    # Start all services
+    if ensure_lmstudio_server; then
+        lmstudio_ok=1
+    fi
+    
+    if ensure_whisper_server; then
+        whisper_ok=1
+    fi
+    
+    if ensure_dspy_server; then
+        dspy_ok=1
+    fi
+    
+    # Show comprehensive status
+    show_service_status
+    
+    # Summary
+    local total_services=3
+    local running_services=$((lmstudio_ok + whisper_ok + dspy_ok))
+    
+    if [ $running_services -eq $total_services ]; then
+        success "🎉 Complete environment ready! All services running with dual models."
+        success "Chrome extension can now use full Medical AI + DSPy capabilities."
+    elif [ $running_services -gt 0 ]; then
+        warn "⚠️  $running_services/$total_services services running. Some functionality may be limited."
+        warn "Check the status above and restart failed services manually."
+    else
+        error "❌ No services are running. Please check the logs and try again."
+        error "Ensure LMStudio CLI is installed and models are available."
+        exit 1
+    fi
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    --help|-h)
+        echo "Medical AI Development Environment Startup"
+        echo ""
+        echo "Usage: ./dev [OPTIONS]"
+        echo ""
+        echo "OPTIONS:"
+        echo "  --help, -h     Show this help message"
+        echo "  --status, -s   Show service status only"
+        echo ""
+        echo "This script starts all required services:"
+        echo "  - LMStudio (localhost:1234) with dual models"
+        echo "  - MLX Whisper (localhost:8001) for transcription"
+        echo "  - DSPy Server (localhost:8002) for optimization"
+        exit 0
+        ;;
+    --status|-s)
+        show_service_status
+        exit 0
+        ;;
+esac
+
+# Trap signals for clean output
+trap 'echo; error "Interrupted"; exit 1' INT TERM
+
+# Run main function
+main "$@"

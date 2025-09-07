@@ -37,7 +37,7 @@ CRITICAL REQUIREMENTS:
 
 TEXT FORMATTING RULES:
 - Convert all numbers to digits with units: "10 mg", "65 years old", "3 months"
-- Medication format: "atorvastatin 20 mg daily", "metformin 500 mg twice daily"
+- Medication format: "atorvastatin 20mg daily", "metformin 500mg twice daily"
 - Use Australian spelling: recognise, optimise, centre, favour, colour
 - Use Australian units and terminology where appropriate
 
@@ -69,6 +69,7 @@ Generate coherent narrative prose suitable for medical correspondence between co
       const rawContent = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         input,
+        this.agentType
       );
 
       // Clean and normalize the content
@@ -142,9 +143,9 @@ Generate coherent narrative prose suitable for medical correspondence between co
   protected cleanNarrativeText(text: string): string {
     let cleaned = text;
 
-    // Remove salutations and sign-offs
+    // Remove salutations and sign-offs (end-only). Do NOT remove 'Thank you' in body.
     cleaned = cleaned.replace(/^(Dear\s+[^,\n]+,?\s*)/gmi, '');
-    cleaned = cleaned.replace(/(Kind\s+regards|Yours\s+sincerely|Thank\s+you|Best\s+wishes)[^]*$/gmi, '');
+    cleaned = cleaned.replace(/(?:\r?\n|\r)(Kind\s+regards|Yours\s+sincerely|Best\s+wishes)[\s\S]*$/gmi, '');
     
     // Remove section headers and formatting
     cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, ''); // Remove **headings**

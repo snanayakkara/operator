@@ -4,6 +4,8 @@ import { TAVIAgent } from '../specialized/TAVIAgent';
 import { AngiogramPCIAgent } from '../specialized/AngiogramPCIAgent';
 import { QuickLetterAgent } from '../specialized/QuickLetterAgent';
 import { ConsultationAgent } from '../specialized/ConsultationAgent';
+import { BloodsAgent } from '../specialized/BloodsAgent';
+import { ImagingAgent } from '../specialized/ImagingAgent';
 
 export class AgentRouter {
   private static instance: AgentRouter;
@@ -40,6 +42,12 @@ export class AgentRouter {
           break;
         case 'consultation':
           agent = new ConsultationAgent();
+          break;
+        case 'bloods':
+          agent = new BloodsAgent();
+          break;
+        case 'imaging':
+          agent = new ImagingAgent();
           break;
         default:
           throw new Error(`Agent type ${agentType} not supported`);

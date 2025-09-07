@@ -1,0 +1,26 @@
+{
+  "id": "ex001_simple",
+  "task": "angiogram-pci",
+  "complexity": "simple",
+  "transcript": "Coronary angiography showed 80% stenosis in the mid LAD. Successful PCI performed with drug-eluting stent deployment. TIMI 3 flow restored with excellent angiographic result.",
+  "expected_elements": [
+    "stenosis assessment",
+    "PCI intervention",  
+    "TIMI flow documentation",
+    "angiographic result",
+    "device specification"
+  ],
+  "rubric_criteria": {
+    "has_TIMI_flow": true,
+    "has_stenosis_grading": true,
+    "has_device_specs": true,
+    "vessel_coverage": ["LAD"],
+    "min_score": 75
+  },
+  "metadata": {
+    "procedure_type": "PCI_INTERVENTION",
+    "target_vessel": "LAD",
+    "intervention_type": "stenting",
+    "source": "MedicalDictations.ts - angiogram-pci simple"
+  }
+}

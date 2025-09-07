@@ -1,0 +1,39 @@
+# DSPy + GEPA Requirements
+# Install with: pip install -r requirements-dspy.txt
+#
+# This file includes dependencies for:
+# - DSPy framework and GEPA optimization
+# - HTTP server for Chrome extension integration
+# - Medical evaluation and rubric scoring
+
+# Core DSPy framework
+dspy-ai>=2.4.0
+
+# HTTP Server dependencies
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Configuration and data handling
+pyyaml>=6.0
+jsonlines>=4.0.0
+
+# Evaluation and optimization
+pandas>=2.0.0
+numpy>=1.24.0
+
+# GEPA optimization support
+# Note: GEPA may be bundled with DSPy or require separate installation
+# Check DSPy documentation for GEPA availability
+
+# Optional: Advanced optimization (if available)
+# optuna>=3.0.0  # For hyperparameter optimization
+# scikit-learn>=1.3.0  # For additional metrics
+
+# Development tools
+ipython>=8.0.0  # For interactive development
+tqdm>=4.65.0   # Progress bars for long optimizations
+
+# Medical evaluation dependencies
+# These support the medical rubric scorers
+requests>=2.31.0  # For HTTP client functionality
+pathlib  # Built-in, but listed for clarity

@@ -5,6 +5,22 @@ import type {
   ModelStatus 
 } from '@/types/medical.types';
 import { WhisperServerService } from './WhisperServerService';
+import { AudioOptimizationService } from './AudioOptimizationService';
+import { DSPyService } from './DSPyService';
+import { logger } from '@/utils/Logger';
+import { GemmaPromptFormatter } from '@/utils/GemmaPromptFormatter';
+
+/**
+ * Centralized Model Configuration
+ * 
+ * Change these model names to easily switch between different models in LMStudio:
+ * - REASONING_MODEL: Used for complex medical analysis (TAVI, PCI, AI Review, etc.)
+ * - QUICK_MODEL: Used for simple formatting tasks (investigation-summary, quick-letter, etc.)
+ */
+export const MODEL_CONFIG = {
+  REASONING_MODEL: 'lmstudio-community/medgemma-27b-text-it-MLX-4bit',
+  QUICK_MODEL: 'google/gemma-3n-e4b'
+} as const;
 
 export interface LMStudioConfig {
   baseUrl: string;
@@ -17,15 +33,35 @@ export interface LMStudioConfig {
    * Agent-specific model overrides for optimized performance
    * 
    * Different medical tasks require different model capabilities:
-   * - Complex medical reports (TAVI, PCI, etc.): Use full MedGemma-27b for detailed analysis
-   * - Simple formatting tasks (investigation-summary): Use lighter google/gemma-3n-e4b for speed
-   * - AI medical review: Use full MedGemma-27b for comprehensive clinical analysis
+   * - Complex medical reports (TAVI, PCI, etc.): Use REASONING_MODEL for detailed analysis
+   * - Simple formatting tasks (investigation-summary): Use QUICK_MODEL for speed
+   * - AI medical review: Use REASONING_MODEL for comprehensive clinical analysis
    * 
    * This directly impacts processing times:
-   * - MedGemma-27b: 3-15+ minutes for complex tasks
-   * - google/gemma-3n-e4b: 10-30 seconds for simple formatting
+   * - REASONING_MODEL: 3-15+ minutes for complex tasks
+   * - QUICK_MODEL: 10-30 seconds for simple formatting
    */
   agentModels?: Record<string, string>;
+  
+  /**
+   * Agent-specific token limits for different complexity levels
+   * 
+   * Token requirements vary by medical task:
+   * - AI Medical Review: 8000+ tokens for comprehensive clinical analysis
+   * - Complex procedures (TAVI, PCI): 6000+ tokens for detailed reports
+   * - Simple formatting: 2000-4000 tokens sufficient
+   */
+  agentTokenLimits?: Record<string, number>;
+  
+  /**
+   * Agent-specific timeout overrides for different processing requirements
+   * 
+   * Timeout requirements vary by complexity:
+   * - AI Medical Review: 10 minutes (600000ms) for comprehensive analysis
+   * - Complex procedures: 8 minutes (480000ms) for detailed processing
+   * - Simple tasks: 2 minutes (120000ms) for quick formatting
+   */
+  agentTimeouts?: Record<string, number>;
 }
 
 export class LMStudioService {
@@ -38,7 +74,7 @@ export class LMStudioService {
   private constructor(config?: Partial<LMStudioConfig>) {
     this.config = {
       baseUrl: 'http://localhost:1234',
-      processorModel: 'unsloth/medgemma27b/medgemma-27b-it-q4_k_m.gguf',
+      processorModel: MODEL_CONFIG.REASONING_MODEL,
       transcriptionModel: 'whisper-large-v3-turbo',
       transcriptionUrl: 'http://localhost:8001', // Separate MLX Whisper server
       timeout: 300000, // 5 minutes for local LLM medical report generation
@@ -46,16 +82,66 @@ export class LMStudioService {
       agentModels: {
         // OPTIMIZED MODELS FOR SPECIFIC TASKS:
         
-        // Fast formatting tasks - Use lightweight model for 10-30s processing
-        'investigation-summary': 'google/gemma-3n-e4b', // Simple investigation result formatting
+        // Fast formatting tasks - Use lightweight model for 3-8s processing
+        'investigation-summary': MODEL_CONFIG.QUICK_MODEL, // Simple investigation result formatting
+        'medication': MODEL_CONFIG.QUICK_MODEL, // Simple medication list formatting
+        'background': MODEL_CONFIG.QUICK_MODEL, // Simple medical background/history formatting with ↪ arrows
+        'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
         
-        // All other agents use default MedGemma-27b for comprehensive medical analysis:
-        // - 'ai-medical-review': Uses default MedGemma-27b (3-4min processing)
-        // - 'tavi', 'angiogram-pci', 'mteer': Use default MedGemma-27b (8-15min processing)
-        // - 'quick-letter', 'consultation': Use default MedGemma-27b (30s-4min processing)
+        // All workflow buttons use default REASONING_MODEL for comprehensive medical analysis:
+        // - 'quick-letter': Uses REASONING_MODEL for proper medical dictation processing
+        // - 'ai-medical-review': Uses REASONING_MODEL (3-4min processing)
+        // - 'tavi', 'angiogram-pci', 'mteer': Use REASONING_MODEL (8-15min processing)
+        // - 'consultation': Uses REASONING_MODEL (30s-4min processing)
         
         // This configuration ensures optimal speed for simple tasks while maintaining
         // medical accuracy for complex clinical analysis and detailed procedure reports
+      },
+      
+      agentTokenLimits: {
+        // AI Medical Review requires extensive output for comprehensive clinical analysis
+        'ai-medical-review': 10000, // Increased to 10k tokens to prevent truncation
+        
+        // Complex procedure agents need detailed reports
+        'tavi': 8000,
+        'angiogram-pci': 8000,
+        'mteer': 7000,
+        'pfo-closure': 7000,
+        'right-heart-cath': 7000,
+        
+        // Standard agents
+        'consultation': 6000,
+        'quick-letter': 5000,
+        
+        // Simple formatting tasks
+        'investigation-summary': 2000,
+        'medication': 3000, // Medication lists can be longer than investigation summaries
+        
+        // Default for unlisted agents
+        'default': 4000
+      },
+      
+      agentTimeouts: {
+        // AI Medical Review needs extended time for comprehensive analysis
+        'ai-medical-review': 600000, // 10 minutes
+        
+        // Complex procedure agents need extended processing time
+        'tavi': 480000,              // 8 minutes
+        'angiogram-pci': 480000,     // 8 minutes  
+        'mteer': 420000,             // 7 minutes
+        'pfo-closure': 360000,       // 6 minutes
+        'right-heart-cath': 360000,  // 6 minutes
+        
+        // Standard agents
+        'consultation': 240000,      // 4 minutes
+        'quick-letter': 180000,      // 3 minutes
+        
+        // Simple formatting tasks
+        'investigation-summary': 60000, // 1 minute
+        'medication': 90000, // 1.5 minutes (medication lists can be complex)
+        
+        // Default for unlisted agents
+        'default': 300000           // 5 minutes (existing default)
       },
       ...config
     };
@@ -80,7 +166,7 @@ export class LMStudioService {
   }
 
 
-  public async transcribeAudio(audioBlob: Blob, signal?: AbortSignal): Promise<string> {
+  public async transcribeAudio(audioBlob: Blob, signal?: AbortSignal, agentType?: string): Promise<string> {
     const startTime = Date.now();
     
     console.log('🎙️ LMStudioService.transcribeAudio() called:', {
@@ -101,16 +187,48 @@ export class LMStudioService {
         
         return `[MLX Whisper server not running. ${serverStatus.error || 'Please start the server manually.'}]`;
       }
+
+      // Audio optimization for better performance
+      let processedAudioBlob = audioBlob;
+      const audioOptimizer = AudioOptimizationService.getInstance();
+      
+      // Check if compression would be beneficial
+      if (audioOptimizer.shouldCompress(audioBlob)) {
+        console.log('🎵 Compressing audio for better transcription performance...');
+        try {
+          const compressionResult = await audioOptimizer.compressAudio(audioBlob);
+          processedAudioBlob = compressionResult.compressedBlob;
+          
+          console.log('✅ Audio compression completed:', {
+            originalSize: Math.round(compressionResult.originalSize / 1024) + 'KB',
+            compressedSize: Math.round(compressionResult.compressedSize / 1024) + 'KB',
+            compressionRatio: compressionResult.compressionRatio.toFixed(1) + '%',
+            processingTime: compressionResult.processingTime + 'ms'
+          });
+        } catch (compressionError) {
+          console.warn('⚠️ Audio compression failed, using original audio:', compressionError);
+          // Continue with original audio blob
+        }
+      } else {
+        console.log('📄 Audio file is small enough, skipping compression');
+      }
       // First, try the OpenAI-compatible transcription endpoint
       // eslint-disable-next-line no-undef
       const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
+      formData.append('file', processedAudioBlob, 'audio.webm');
       formData.append('model', this.config.transcriptionModel);
       formData.append('response_format', 'text');
 
       // Use separate transcription URL if configured, otherwise use base LMStudio URL
       const transcriptionUrl = this.config.transcriptionUrl || this.config.baseUrl;
-      const fullUrl = `${transcriptionUrl}/v1/audio/transcriptions`;
+      
+      // Use optimized bloods endpoint for bloods agent (faster processing, no VAD)
+      const endpoint = agentType === 'bloods' ? '/v1/audio/transcriptions/bloods' : '/v1/audio/transcriptions';
+      const fullUrl = `${transcriptionUrl}${endpoint}`;
+      
+      if (agentType === 'bloods') {
+        console.log('🩸 Using optimized bloods transcription endpoint (no VAD, fast parameters)');
+      }
       
       console.log('🌐 Sending transcription request:', {
         url: fullUrl,
@@ -235,6 +353,50 @@ export class LMStudioService {
     agentType?: string,
     signal?: AbortSignal
   ): Promise<string> {
+    // DSPy integration with feature flag
+    if (agentType) {
+      const dspyService = DSPyService.getInstance();
+      
+      try {
+        const isDSPyEnabled = await dspyService.isDSPyEnabled(agentType);
+        
+        if (isDSPyEnabled) {
+          logger.info('Routing through DSPy layer', { 
+            component: 'LMStudioService',
+            agent_type: agentType,
+            fallback_available: true
+          });
+
+          const dspyResult = await dspyService.processWithDSPy(agentType, userInput, { signal });
+          
+          if (dspyResult.success && dspyResult.result) {
+            logger.info('DSPy processing successful', { 
+              component: 'LMStudioService',
+              agent_type: agentType,
+              processing_time: dspyResult.processing_time,
+              cached: dspyResult.cached
+            });
+            return dspyResult.result;
+          } else {
+            logger.warn('DSPy processing failed, falling back to direct LLM', { 
+              component: 'LMStudioService',
+              agent_type: agentType,
+              error: dspyResult.error
+            });
+            // Continue to fallback processing below
+          }
+        }
+      } catch (error) {
+        logger.warn('DSPy integration error, falling back to direct LLM', { 
+          component: 'LMStudioService',
+          agent_type: agentType,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        // Continue to fallback processing below
+      }
+    }
+
+    // Fallback to original LMStudio processing (always available)
     const messages: ChatMessage[] = [
       { role: 'system', content: agentPrompt },
       { role: 'user', content: userInput }
@@ -245,14 +407,28 @@ export class LMStudioService {
       ? this.config.agentModels[agentType]
       : this.config.processorModel;
 
-    console.log(`🤖 Using model: ${modelToUse} for agent: ${agentType || 'default'}`);
+    // Determine agent-specific token limit
+    const tokenLimit = (agentType && this.config.agentTokenLimits?.[agentType])
+      ? this.config.agentTokenLimits[agentType]
+      : this.config.agentTokenLimits?.['default'] || 4000;
 
-    return this.makeRequest({
-      model: modelToUse,
-      messages,
+    console.log(`🤖 Using model: ${modelToUse} for agent: ${agentType || 'default'}`);
+    console.log(`🎯 Token limit: ${tokenLimit} tokens for optimal response length`);
+
+    // Create request using Gemma-aware formatting
+    const request = GemmaPromptFormatter.createGemmaRequest(messages, modelToUse, {
       temperature: 0.3,
-      max_tokens: 4000  // Increased for longer medical reports
-    }, signal);
+      max_tokens: tokenLimit
+    });
+
+    // Log format being used for debugging
+    if (GemmaPromptFormatter.isGemmaModel(modelToUse)) {
+      console.log('🔧 Using Gemma prompt format with control tokens');
+    } else {
+      console.log('📝 Using standard OpenAI message format');
+    }
+
+    return this.makeRequest(request, signal, agentType);
   }
 
   public async streamResponse(
@@ -274,19 +450,20 @@ export class LMStudioService {
       ? this.config.agentModels[agentType]
       : this.config.processorModel;
 
+    // Create request using Gemma-aware formatting
+    const request = GemmaPromptFormatter.createGemmaRequest(messages, modelToUse, {
+      temperature: 0.3,
+      max_tokens: 4000,
+      stream: true
+    });
+
     try {
       const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: modelToUse,
-          messages,
-          temperature: 0.3,
-          max_tokens: 4000,
-          stream: true
-        }),
+        body: JSON.stringify(request),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.config.timeout)]) : AbortSignal.timeout(this.config.timeout)
       });
 
@@ -339,16 +516,27 @@ export class LMStudioService {
     }
   }
 
-  public async makeRequest(request: LMStudioRequest, signal?: AbortSignal): Promise<string> {
+  public async makeRequest(request: LMStudioRequest, signal?: AbortSignal, agentType?: string): Promise<string> {
     const startTime = Date.now();
     let lastError: Error | null = null;
     
-    console.log('🚀 Starting LMStudio request with 5-minute timeout...');
+    // Determine agent-specific timeout
+    const agentTimeout = (agentType && this.config.agentTimeouts?.[agentType])
+      ? this.config.agentTimeouts[agentType]
+      : this.config.agentTimeouts?.['default'] || this.config.timeout;
     
-    // Set up timeout warning at 2 minutes
+    const timeoutMinutes = Math.round(agentTimeout / 60000);
+    console.log(`🚀 Starting LMStudio request for agent: ${agentType || 'default'}`);
+    console.log(`⏰ Timeout: ${timeoutMinutes} minutes (${agentTimeout}ms) for this agent type`);
+    
+    // Set up timeout warning at 2 minutes or 1/3 of timeout, whichever is shorter
+    const warningTime = Math.min(120000, agentTimeout / 3);
     const warningTimeout = setTimeout(() => {
-      console.warn('⏰ LMStudio request taking longer than 2 minutes - this is normal for complex medical reports');
-    }, 120000);
+      console.warn(`⏰ LMStudio request taking longer than ${Math.round(warningTime/60000)} minutes - this is normal for ${agentType || 'default'} agent`);
+      if (agentType === 'ai-medical-review') {
+        console.warn('   AI Medical Review typically takes 3-5 minutes for comprehensive analysis');
+      }
+    }, warningTime);
 
     for (let attempt = 0; attempt <= this.config.retryAttempts; attempt++) {
       try {
@@ -356,8 +544,8 @@ export class LMStudioService {
           await this.sleep(this.retryDelays[Math.min(attempt - 1, this.retryDelays.length - 1)]);
         }
 
-        // Combine user signal with timeout signal for robust cancellation
-        const timeoutSignal = AbortSignal.timeout(this.config.timeout);
+        // Combine user signal with agent-specific timeout signal for robust cancellation
+        const timeoutSignal = AbortSignal.timeout(agentTimeout);
         const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         
         const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
@@ -441,7 +629,7 @@ export class LMStudioService {
       const transcriptionUrl = this.config.transcriptionUrl || this.config.baseUrl;
       const response = await fetch(`${transcriptionUrl}/v1/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(2000) // Reduced from 5000ms to 2000ms
       });
 
       if (response.ok) {
@@ -464,14 +652,50 @@ export class LMStudioService {
     }
   }
 
+  // Enhanced request deduplication and caching
+  private lastHealthCheckTime = 0;
+  private lastHealthCheckResult: ModelStatus | null = null;
+  private readonly HEALTH_CHECK_CACHE_TTL = 120000; // 2 minutes cache for stable connections
+  private pendingHealthCheck: Promise<ModelStatus> | null = null;
+  private modelsCache: { models: string[], timestamp: number } | null = null;
+  private readonly MODELS_CACHE_TTL = 300000; // 5 minutes cache for model list
+
   public async checkConnection(): Promise<ModelStatus> {
+    const now = Date.now();
+    
+    // Return cached result if within TTL to prevent excessive requests
+    if (this.lastHealthCheckResult && 
+        now - this.lastHealthCheckTime < this.HEALTH_CHECK_CACHE_TTL) {
+      // Cache hit - eliminate logging to prevent console spam
+      // Only log if explicitly needed for debugging (can be enabled via dev tools)
+      return { ...this.lastHealthCheckResult };
+    }
+
+    // Request deduplication: If a health check is already in progress, wait for it
+    if (this.pendingHealthCheck) {
+      logger.debug('Health check already in progress, waiting for result', { component: 'health-check' });
+      return await this.pendingHealthCheck;
+    }
+
+    // Create a single health check promise to prevent concurrent requests
+    this.pendingHealthCheck = this.performHealthCheck();
+    
+    try {
+      const result = await this.pendingHealthCheck;
+      return result;
+    } finally {
+      this.pendingHealthCheck = null;
+    }
+  }
+
+  private async performHealthCheck(): Promise<ModelStatus> {
     try {
       const startTime = Date.now();
       
-      // Check LMStudio connection
+      // Check LMStudio connection with reduced timeout for faster failure detection
       const response = await fetch(`${this.config.baseUrl}/v1/models`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(2000) // Reduced from 5000ms to 2000ms
       });
 
       if (response.ok) {
@@ -490,12 +714,13 @@ export class LMStudioService {
       this.modelStatus.latency = 0;
     }
 
-    // Always check Whisper server status
+    // Check Whisper server status with caching
     try {
       const whisperStatus = await this.whisperServerService.checkServerStatus();
       this.modelStatus.whisperServer = {
         running: whisperStatus.running,
         model: whisperStatus.model || this.config.transcriptionModel,
+        port: whisperStatus.port || 8001,
         lastChecked: whisperStatus.lastChecked,
         error: whisperStatus.error
       };
@@ -504,27 +729,99 @@ export class LMStudioService {
       this.modelStatus.whisperServer = {
         running: false,
         model: this.config.transcriptionModel,
+        port: 8001,
         lastChecked: Date.now(),
         error: 'Failed to check server status'
       };
     }
 
+    // Check DSPy server status
+    try {
+      const dspyService = DSPyService.getInstance();
+      const dspyStatus = await dspyService.getServerStatus();
+      
+      if (dspyStatus) {
+        this.modelStatus.dspyServer = {
+          running: dspyStatus.status === 'healthy',
+          ready: dspyStatus.dspy?.ready || false,
+          port: dspyStatus.server?.port || 8002,
+          lastChecked: Date.now(),
+          version: dspyStatus.server?.version,
+          uptime: dspyStatus.server?.uptime_seconds,
+          stats: dspyStatus.stats ? {
+            requests_processed: dspyStatus.stats.requests_processed,
+            errors_encountered: dspyStatus.stats.errors_encountered,
+            active_optimizations: dspyStatus.stats.active_optimizations
+          } : undefined,
+          dspy: dspyStatus.dspy ? {
+            config_loaded: dspyStatus.dspy.config_loaded,
+            available_agents: dspyStatus.dspy.available_agents,
+            enabled_agents: dspyStatus.dspy.enabled_agents
+          } : undefined
+        };
+      } else {
+        this.modelStatus.dspyServer = {
+          running: false,
+          ready: false,
+          port: 8002,
+          lastChecked: Date.now(),
+          error: 'DSPy server not responding'
+        };
+      }
+    } catch (error) {
+      // DSPy server check failed - this is expected when not running
+      this.modelStatus.dspyServer = {
+        running: false,
+        ready: false,
+        port: 8002,
+        lastChecked: Date.now(),
+        error: error instanceof Error ? error.message : 'DSPy server check failed'
+      };
+    }
+
+    // Cache the result
+    const now = Date.now();
+    this.lastHealthCheckTime = now;
+    this.lastHealthCheckResult = { ...this.modelStatus };
+
     return { ...this.modelStatus };
   }
 
   public async getAvailableModels(): Promise<string[]> {
+    const now = Date.now();
+    
+    // Return cached models if available and within TTL
+    if (this.modelsCache && 
+        now - this.modelsCache.timestamp < this.MODELS_CACHE_TTL) {
+      console.debug('🔄 Models cache hit (5min TTL)');
+      return [...this.modelsCache.models];
+    }
+
     try {
       const response = await fetch(`${this.config.baseUrl}/v1/models`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(2000) // Reduced from 5000ms to 2000ms
       });
 
       if (response.ok) {
         const data = await response.json();
-        return data.data?.map((model: { id: string }) => model.id) || [];
+        const models = data.data?.map((model: { id: string }) => model.id) || [];
+        
+        // Cache the result
+        this.modelsCache = {
+          models: [...models],
+          timestamp: now
+        };
+        
+        return models;
       }
     } catch (error) {
-      // Failed to fetch available models
+      console.warn('Failed to fetch available models:', error);
+      // Return cached models if available, even if stale
+      if (this.modelsCache) {
+        console.debug('⚠️ Using stale models cache due to fetch failure');
+        return [...this.modelsCache.models];
+      }
     }
 
     return [];
@@ -551,12 +848,7 @@ export class LMStudioService {
   }
 
   private startHealthCheck(): void {
-    // Reduced frequency: Check connection every 5 minutes instead of 30 seconds
-    setInterval(async () => {
-      await this.checkConnection();
-    }, 300000); // 5 minutes = 300,000ms
-
-    // Initial connection check
+    // Initial connection check only - React Query handles periodic checks
     this.checkConnection();
   }
 

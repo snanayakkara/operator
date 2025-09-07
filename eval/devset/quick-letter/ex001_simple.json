@@ -1,0 +1,27 @@
+{
+  "id": "ex001_simple",
+  "task": "quick-letter",
+  "complexity": "simple", 
+  "transcript": "Patient seen in clinic today for follow-up of coronary artery disease. Patient reports feeling well with no chest pain or shortness of breath. Medications continue as prescribed. Plan to continue current therapy and follow up in 3 months.",
+  "expected_elements": [
+    "clinical assessment",
+    "symptom review",
+    "medication status",
+    "follow-up plan",
+    "professional letter format"
+  ],
+  "rubric_criteria": {
+    "has_clinical_content": true,
+    "has_medications": true,
+    "has_follow_up_plan": true,
+    "narrative_flow": true,
+    "min_score": 70
+  },
+  "metadata": {
+    "letter_type": "follow-up",
+    "condition": "coronary artery disease", 
+    "urgency": "routine",
+    "word_count_range": [80, 150],
+    "source": "MedicalDictations.ts - quick-letter simple"
+  }
+}

@@ -618,6 +618,97 @@ def transcribe_audio():
             }
         }), 500
 
+@app.route('/v1/audio/transcriptions/bloods', methods=['POST'])
+def transcribe_bloods():
+    """Optimized transcription endpoint specifically for blood test dictations (no VAD, fast parameters)"""
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({
+                'error': {
+                    'message': 'No audio file provided',
+                    'type': 'invalid_request_error'
+                }
+            }), 400
+        
+        audio_file = request.files['file']
+        
+        if audio_file.filename == '':
+            return jsonify({
+                'error': {
+                    'message': 'No audio file selected',
+                    'type': 'invalid_request_error'
+                }
+            }), 400
+        
+        print(f"🩸 Bloods-optimized transcription: {audio_file.filename}")
+        
+        # Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_file:
+            audio_file.save(temp_file.name)
+            audio_path = temp_file.name
+        
+        start_time = time.time()
+        
+        try:
+            # Convert audio directly without VAD processing for speed
+            processed_audio_path = convert_audio_to_wav(audio_path)
+            
+            print("🤖 Transcribing with MLX Whisper (Bloods-optimized)...")
+            
+            # Bloods-specific optimized parameters
+            result = mlx_whisper.transcribe(
+                processed_audio_path,
+                path_or_hf_repo=MODEL_NAME,
+                language='en',  # Force English for speed
+                condition_on_previous_text=False,  # No context for speed
+                temperature=0.0,  # Deterministic, faster
+                no_speech_threshold=0.8,  # Higher threshold to skip silence faster
+                compression_ratio_threshold=3.0,  # Less strict for speed
+                logprob_threshold=-0.3,  # More lenient for speed
+                initial_prompt="Medical abbreviations: FBC, EUC, LFT, CRP, TFT, HbA1c"  # Guide recognition
+            )
+            
+            # Calculate processing time
+            processing_time = time.time() - start_time
+            
+            # Extract and log results
+            text = result.get('text', '').strip()
+            language = result.get('language', 'unknown')
+            segments = result.get('segments', [])
+            
+            print(f"🌍 Detected language: {language}")
+            print(f"📍 Number of segments: {len(segments)}")
+            print(f"✅ Transcription completed in {processing_time:.2f} seconds")
+            print(f"📄 Final result: '{text}' (length: {len(text)} chars)")
+            
+            # Clean up temporary files
+            if processed_audio_path != audio_path:
+                os.unlink(processed_audio_path)
+            os.unlink(audio_path)
+            
+            # Return OpenAI-compatible response
+            return jsonify({
+                'text': text
+            })
+            
+        except Exception as e:
+            # Clean up on error
+            if 'processed_audio_path' in locals() and processed_audio_path != audio_path and os.path.exists(processed_audio_path):
+                os.unlink(processed_audio_path)
+            if os.path.exists(audio_path):
+                os.unlink(audio_path)
+            raise e
+            
+    except Exception as e:
+        print(f"❌ Bloods transcription error: {e}")
+        return jsonify({
+            'error': {
+                'message': f'Transcription error: {str(e)}',
+                'type': 'server_error'
+            }
+        }), 500
+
 @app.route('/v1/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

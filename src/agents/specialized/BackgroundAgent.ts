@@ -1,5 +1,5 @@
 import { MedicalAgent } from '../base/MedicalAgent';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { BACKGROUND_SYSTEM_PROMPTS } from './BackgroundSystemPrompts';
 import type { 
   MedicalContext, 
@@ -31,15 +31,16 @@ export class BackgroundAgent extends MedicalAgent {
   }
 
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    const startTime = Date.now();
     console.log('🏥 BackgroundAgent processing input:', input?.substring(0, 100) + '...');
     
     try {
-      // Get formatted background from configured model (Google Gemma-3n-e4b for this agent)
-      console.log('🤖 Sending to LLM for medical background formatting...');
+      // Get formatted background from lightweight quick model (Google Gemma-3n-e4b for fast formatting)
+      console.log('🤖 Sending to lightweight LLM for medical background formatting...');
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         input,
-        'background' // Pass agent type for model selection (uses google/gemma-3n-e4b)
+        'background' // Pass agent type for model selection (uses MODEL_CONFIG.QUICK_MODEL for 3-8s processing)
       );
       
       console.log('🔍 Raw LLM response:', JSON.stringify(response));
@@ -55,19 +56,23 @@ export class BackgroundAgent extends MedicalAgent {
       // Parse the formatted response
       const sections = this.parseResponse(response, context);
       
-      // Create medical report
-      const report: MedicalReport = {
-        id: `background-${Date.now()}`,
-        agentName: this.name,
-        content: response.trim(),
+      // Calculate actual processing time
+      const processingTime = Date.now() - startTime;
+      
+      // Use base class createReport method for consistent metadata structure
+      const report = this.createReport(
+        response.trim(),
         sections,
-        metadata: {
-          confidence: this.assessConfidence(input, response),
-          processingTime: Date.now() - (context?.timestamp || Date.now()),
-          medicalCodes: this.extractMedicalCodes(response),
-          modelUsed: 'google/gemma-3n-e4b'
-        },
-        timestamp: Date.now()
+        context,
+        processingTime,
+        this.assessConfidence(input, response)
+      );
+
+      // Add additional metadata specific to background summaries
+      report.metadata = {
+        ...report.metadata,
+        medicalCodes: this.extractMedicalCodes(response),
+        modelUsed: MODEL_CONFIG.QUICK_MODEL // Now correctly using the quick model for background formatting
       };
 
       console.log('✅ Medical background formatted successfully');
@@ -226,7 +231,7 @@ Remember to use ↪ for each major condition and - for sub-details, preserve all
         confidence: 0,
         processingTime: 0,
         medicalCodes: [],
-        modelUsed: 'google/gemma-3n-e4b'
+        modelUsed: MODEL_CONFIG.QUICK_MODEL
       },
       timestamp: Date.now(),
       errors: [errorMessage]

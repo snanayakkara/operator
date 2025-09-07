@@ -1,0 +1,82 @@
+# DSPy + GEPA Configuration for Medical Dictation System
+# Offline-first: All processing on localhost unless explicitly configured
+
+# Base LM Configuration
+api_base: "http://localhost:1234/v1"  # LM Studio default
+api_key: "local"  # Not used for local endpoints
+model_name: "lmstudio-community/medgemma-27b-text-it-MLX-4bit"
+model_type: "chat"
+
+# Feature Flags
+use_dspy: true  # Enable DSPy processing layer
+cache_enabled: true
+cache_dir: ".cache/dspy"
+
+# Timeout Configuration (milliseconds)
+default_timeout: 300000  # 5 minutes
+agent_timeouts:
+  angiogram-pci: 480000  # 8 minutes for complex procedures
+  tavi: 480000           # 8 minutes for TAVI procedures
+  quick-letter: 180000   # 3 minutes for letters
+  consultation: 240000   # 4 minutes for consultations
+  investigation-summary: 60000   # 1 minute for simple formatting
+  medication: 90000      # 1.5 minutes for medication review
+  background: 90000      # 1.5 minutes for background formatting
+  ai-medical-review: 600000  # 10 minutes for comprehensive review
+
+# Agent-Specific Configuration
+agents:
+  angiogram-pci:
+    enabled: true
+    model_override: null  # Uses default model_name
+    max_tokens: 8000
+    temperature: 0.3
+    description: "Cardiac catheterization and PCI procedures"
+    
+  quick-letter:
+    enabled: true
+    model_override: "medgemma-27b-text-it-mlx"  # Main medical model
+    max_tokens: 5000
+    temperature: 0.3
+    description: "Medical correspondence and letters"
+    
+  tavi:
+    enabled: true  # Enabled for Phase 5
+    model_override: null
+    max_tokens: 8000
+    temperature: 0.3
+    description: "TAVI procedure documentation"
+    
+  consultation:
+    enabled: true  # Enabled for Phase 5  
+    model_override: null
+    max_tokens: 6000
+    temperature: 0.3
+    description: "Medical consultations and assessments"
+    
+  investigation-summary:
+    enabled: true  # Enabled for Phase 5
+    model_override: "google/gemma-3n-e4b"
+    max_tokens: 2000
+    temperature: 0.2
+    description: "Investigation result formatting"
+
+# Evaluation Settings
+evaluation:
+  dev_set_size: 20  # Number of examples per agent
+  batch_size: 5     # Process N examples at once
+  rubric_threshold: 0.75  # Minimum score to pass
+  
+# GEPA Optimization Settings  
+optimization:
+  max_iterations: 5
+  improvement_threshold: 0.1  # Minimum improvement to continue
+  human_feedback_weight: 0.3  # How much to weight human vs automatic feedback
+  prompt_version_history: 10  # Keep N versions of each prompt
+  
+# Safety and Privacy
+safety:
+  no_external_calls: true  # Enforce localhost-only processing
+  audit_prompt_changes: true  # Log all prompt modifications
+  require_human_approval: true  # Human review before deploying optimized prompts
+  max_prompt_length: 4000  # Prevent prompt bloat

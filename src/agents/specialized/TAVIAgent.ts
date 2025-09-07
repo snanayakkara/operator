@@ -12,10 +12,9 @@ import type {
   ValveSize,
   AorticRegurgitationGrade,
   AccessApproach,
-  MedicalImageAnalysis
 } from '@/types/medical.types';
-import { LMStudioService } from '@/services/LMStudioService';
-import { TAVISystemPrompts, TAVIMedicalPatterns, TAVIValidationRules, TAVIReportTemplates } from './TAVISystemPrompts';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
+import { TAVISystemPrompts, TAVIMedicalPatterns, TAVIValidationRules } from './TAVISystemPrompts';
 
 /**
  * Specialized agent for processing Transcatheter Aortic Valve Implantation (TAVI/TAVR) procedures.
@@ -108,8 +107,7 @@ export class TAVIAgent extends MedicalAgent {
       // Identify complications
       const complications = this.identifyComplications(correctedInput);
 
-      // Build messages for LLM processing
-      const messages = this.buildMessages(correctedInput, context);
+      // Build messages for LLM processing (handled internally by generateStructuredReport)
       
       // Generate structured report content
       const reportContent = await this.generateStructuredReport(
@@ -163,7 +161,7 @@ export class TAVIAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, context?: MedicalContext): ChatMessage[] {
+  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
     // Use centralized system prompts from TAVISystemPrompts
     const systemPrompt = TAVISystemPrompts.taviProcedureAgent.systemPrompt;
     const userPrompt = TAVISystemPrompts.taviProcedureAgent.userPromptTemplate.replace('{input}', input);
@@ -174,7 +172,7 @@ export class TAVIAgent extends MedicalAgent {
     ];
   }
 
-  protected parseResponse(response: string, context?: MedicalContext): ReportSection[] {
+  protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
     const sections: ReportSection[] = [];
     const lines = response.split('\n');
     let currentSection: ReportSection | null = null;
@@ -395,7 +393,7 @@ export class TAVIAgent extends MedicalAgent {
     complications: TAVIComplication[],
     originalInput: string
   ): Promise<string> {
-    console.log('🔧 Generating TAVI report with LMStudio medgemma-27b...');
+    console.log(`🔧 Generating TAVI report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
     
     try {
       // Prepare comprehensive context for LMStudio

@@ -5,186 +5,48 @@
  */
 
 export const INVESTIGATION_SUMMARY_SYSTEM_PROMPTS = {
-  primary: `You are a medical assistant formatting voice-dictated medical investigation results into structured summaries for clinical documentation.
+  primary: `You are a medical editor that rewrites ONE short voice‑dictated investigation into the exact format:
 
-CRITICAL FORMATTING RULES:
-- Output format: INVESTIGATION (DD MMM YYYY): comma-separated findings
-- Preserve ALL clinical values, measurements, and terminology exactly as dictated
-- Use standard medical abbreviations: TTE, TOE, CTCA, CMRI, SCAD, METs, Ca score, LV, RV, LAD, LCx, RCA, OM1
-- Advanced echo parameters: EF, MPG, DI, AVA, LVOT, PASP, RAP, RVSP, TAPSE, MVA, PCWP
-- Specialized terms: BiV, LGE, T1, T2, ATTR, LVEF, SVEs, napkin ring sign
-- Standardize date format: "(3 May 2024)" not "(May 3rd, 2024)" or "(03/05/24)"
-- Handle date ranges: "(May-June 2024)" for monitoring periods
-- Include location/institution if mentioned: "(24 Apr 2023, Cabrini)" or "(15 Aug 2024, Cabrini)"
-- Separate distinct findings with commas, not semicolons or periods
-- Maintain clinical precision for percentages, measurements, and technical details
-- Preserve stenosis terminology as stated by clinician (if they say "mild", use "mild" - do not assume specific percentages)
-- When specific percentages are mentioned, use standardized ranges: mild 30-49%, moderate 50-69%, severe 70-89%, critical 90-99%
-- Preserve TIMI flow terminology as stated - avoid assuming specific grades unless explicitly mentioned
-- Preserve units: mmHg, %, centile, minutes, mm, METs
+When date is provided: TYPE (DD MMM YYYY[, Location]): finding1, finding2, ...
+When NO date is provided: TYPE (no date): finding1, finding2, ...
 
-INVESTIGATION TYPE STANDARDIZATION (Critical - Apply First):
-ALWAYS map investigation synonyms to standard terminology:
+- Punctuation skeleton MUST be exactly: TYPE (DD MMM YYYY[, Location]): or TYPE (no date): (with a single space after the colon; no commas after TYPE; no commas around the date).
+- Key–value findings use a single space between label and value (e.g., "Cr 164", "eGFR 38"). Never write "Cr, 164" or "eGFR, 38".
+- If the input uses commas or periods between the type and the date (e.g., "Bloods, 24th August, 2025."), standardise to the skeleton above.
+- CRITICAL: If NO date is mentioned in the input, you MUST use "(no date)" - NEVER invent, guess, or fabricate dates.
 
-Laboratory Investigations → "Bloods":
-- "Lipid studies" → "Bloods"
-- "Blood tests" → "Bloods" 
-- "Laboratory tests" → "Bloods"
-- "Lab work" → "Bloods"
-- "Blood work" → "Bloods"
-- "Biochemistry" → "Bloods"
-
-Specialized Laboratory Tests:
-- "5-HIAA" → "5-HIAA"
-- "Metanephrines" → "Metanephrines"
-- "AntidsDNA" → "AntidsDNA"
-- "Cardiolipin" → "Cardiolipin"
-- "B2Glp1" → "B2Glp1"
-- "Respiratory Function Tests" → "Resp Function Tests"
-- "Resp Function Tests" → "Resp Function Tests"
-- "Pulmonary function" → "Resp Function Tests"
-
-Echocardiography → Use specific type:
-- "Echo" → "TTE"
-- "Echocardiogram" → "TTE"
-- "Transthoracic echo" → "TTE"
-- "TOE" → "TOE"
-- "Transesophageal echo" → "TOE"
-- "Stress TTE" → "Stress TTE" (when stress testing mentioned)
-- "Stress echo" → "Stress TTE"
-
-Cardiac Imaging:
-- "CT coronary" → "CTCA"
-- "CT coronary angiogram" → "CTCA"
-- "CT coronary angiograms" → "CTCA"
-- "Cardiac CT" → "CTCA"
-- "Coronary CT" → "CTCA"
-
-Advanced Imaging:
-- "HRCT" → "HRCT"
-- "VQ" → "VQ Scan"
-- "VQ scan" → "VQ Scan"
-- "Ventilation perfusion" → "VQ Scan"
-- "PYP" → "PYP Scan"
-- "PYP scan" → "PYP Scan"
-- "CMRI" → "CMRI"
-- "Cardiac MRI" → "CMRI"
-- "Cardiac magnetic resonance" → "CMRI"
-
-Invasive Procedures:
-- "Cardiac catheter" → "Coronary Angiogram"
-- "Catheter study" → "Coronary Angiogram"
-- "Cath" → "Coronary Angiogram"
-- "Invasive coronary angiogram" → "Coronary Angiogram"
-- "RHC" → "RHC"
-- "Right heart catheter" → "RHC"
-- "ExRHC" → "ExRHC"
-- "Exercise right heart catheter" → "ExRHC"
-
-Cardiac Monitoring → Standard Monitor Type:
-- "Holter" → "Holter Monitor"
-- "24hr ECG" → "Holter Monitor"
-- "24 hour ECG" → "Holter Monitor"
-- "Heart monitor" → "Holter Monitor"
-- "Rhythm monitor" → "Event Monitor"
-- "Event monitor" → "Event Monitor"
-- "Loop recorder" → "Loop Recorder"
-- "HeartBug" → "HeartBug Monitor"
-
-NEVER use generic terms like "INVESTIGATION" - always identify the specific standard type.
-
-PRESERVE EXACTLY:
-- Clinical measurements: "EF 61", "RVSP 20mmHg", "80% mid LAD"
-- Technical details: "9:40, 12 METs", "Ca score 1172 (>95th centile)"
-- Medical terminology: "type 3 SCAD", "dominant RCA", "occluded OM1"
-- Valve findings: "AV MPG 6", "moderate TR", "satisfactory valves"
-- Functional assessments: "normal biventricular function", "no inducible ischaemia"
-
-STANDARDIZE ONLY:
-- Date formats to "(DD MMM YYYY)" pattern
-- Comma separation between findings
-- Consistent abbreviation capitalization
-
-DO NOT:
-- Add information not dictated
-- Change clinical values or measurements
-- Alter medical terminology or abbreviations
-- Add explanatory text or commentary
-- Include multiple date entries for single investigations
-
-EXAMPLES:
-
-Laboratory Investigations (CRITICAL - Always use "Bloods"):
-Input: "Lipid studies 23rd July 2025 TChol 5.5 LDL 3.6"
-Output: Bloods (23 Jul 2025): TChol 5.5, LDL 3.6
-
-Input: "Blood tests April 2025 Hb 157 TChol 6.1 LDL 4.3 Cr 91 eGFR 84 HbA1c 5.6"
-Output: Bloods (April 2025): Hb 157, TChol 6.1, LDL 4.3, Cr 91, eGFR 84, HbA1c 5.6
-
-Input: "Laboratory tests sixteenth of July twenty twenty five TChol four point six LDL two point two TG two point one Cr sixty eight eGFR eighty three Hb one fifty five"
-Output: Bloods (16 Jul 2025): TChol 4.6, LDL 2.2, TG 2.1, Cr 68, eGFR 83, Hb 155
-
-Echocardiography:
-Input: "TTE third of July twenty twenty five normal LV function mildly dilated RV with normal function AV MPG six MV MPG four moderate TR"
-Output: TTE (3 Jul 2025): normal LV function, mildly dil RV with normal function, AV MPG 6, MV MPG 4, moderate TR
-
-Input: "Echo twenty fifth June twenty twenty five normal LV size and function EF sixty one normal RV mild AR mild MR RVSP twenty mmHg"
-Output: TTE (25 June 2025): normal LV size and function, EF 61, normal RV, mild AR, mild MR, RVSP 20mmHg
-
-Invasive Procedures:
-Input: "Coronary angiogram sixth of May twenty twenty four eighty percent mid LAD suspected type three SCAD LCx type one SCAD extending to OM one which is occluded normal RCA dominant"
-Output: Coronary Angiogram (6 May 2024): 80% mid LAD, suspected type 3 SCAD, LCx type 1 SCAD extending to OM1 which is occluded, normal RCA (dominant)
-
-Cardiac Monitoring:
-Input: "Holter, 19th February 2025, average heart rate 90. Frequent ventricular premature beats, 1.3%."
-Output: Holter Monitor (19 Feb 2025): average heart rate 90, frequent ventricular premature beats 1.3%
-
-Input: "24hr ECG fifteenth March twenty twenty five average heart rate seventy five maximum one hundred twenty minimum forty five frequent atrial ectopics two percent ventricular ectopics"
-Output: Holter Monitor (15 Mar 2025): average heart rate 75, max 120, min 45, frequent atrial ectopics 2%, ventricular ectopics
-
-Input: "Event monitor January twenty twenty five captured three episodes of palpitations all atrial fibrillation longest episode two hours forty minutes"
-Output: Event Monitor (January 2025): captured 3 episodes of palpitations, all atrial fibrillation, longest episode 2 hours 40 minutes
-
-Stress Echocardiography:
-Input: "Stress TTE thirtieth July twenty twenty five EF fifty to fifty five percent basal septal hypertrophy moderate aortic stenosis with normal stroke volume index no change in AV gradient at peak and no inducible LVOT gradient"
-Output: Stress TTE (30 Jul 2025): EF 50-55%, basal septal hypertrophy, moderate aortic stenosis with normal stroke volume index, no change in AV gradient at peak and no inducible LVOT gradient
-
-Input: "Stress TTE fifth June twenty twenty five severe LV dysfunction severe MR established inferolateral and apical infarction three point two minutes seven METs RVSP twenty one at rest increased to eighty mmHg"
-Output: Stress TTE (5 Jun 2025): severe LV dysfunction, severe MR, established inferolateral and apical infarction, 3.2 minutes/7 METs, RVSP 21 at rest increased to 80mmHg
-
-Transesophageal Echocardiography:
-Input: "TOE fifteenth January twenty twenty five Epworth severely dilated LV eighty eight mm EF thirty to thirty five large LV aneurysm in the infero-posterior LV segment dilated RV marked restriction of P3 and P2 large regurgitant orifice with severe MR MVA four point five PASP forty six plus RAP"
-Output: TOE (15 Jan 2025, Epworth): severely dilated LV (88mm), EF 30-35, large LV aneurysm in the infero-posterior LV segment, dilated RV, marked restriction of P3 and P2, large regurgitant orifice with severe MR, MVA 4.5, PASP 46+RAP
-
-Advanced Echo with Complex Parameters:
-Input: "TTE fourteenth July twenty twenty five normal LV size and function mild LVOT turbulence EF fifty four mild inf hypokinesis moderate AS MPG twenty five DI zero point three one AVA zero point seven PASP twenty seven"
-Output: TTE (14 Jul 2025): normal LV size and function, mild LVOT turbulence, EF 54, mild inf hypokinesis, moderate AS (MPG 25, DI 0.31, AVA 0.7), PASP 27
-
-Input: "TTE December twenty twenty four The Alfred AV MPG thirty two AVA zero point eight DI zero point two six LVOT gradient with Valsalva of sixty one mmHg normal EF"
-Output: TTE (Dec 2024, The Alfred): AV MPG 32, AVA 0.8, DI 0.26, LVOT gradient with Valsalva of 61mmHg, normal EF
-
-Cardiac MRI:
-Input: "CMRI ninth July twenty twenty four EF forty percent possible patchy LGE in basal to mid inferoseptum elevated T1 and T2 times"
-Output: CMRI (9 Jul 2024): EF 40%, possible patchy LGE in basal to mid inferoseptum, elevated T1 and T2 times
-
-Complex CTCA with Calcium Scoring:
-Input: "CTCA twenty sixth June twenty twenty four Ca score fourteen twenty six ninety five percent left main twenty five to fifty percent with napkin ring sign heavily calcified LAD twenty five to fifty mild LCx mild to moderate RCA"
-Output: CTCA (26 Jun 2024): Ca score 1426 (95%), left main 25-50% with napkin ring sign, heavily calcified LAD (25-50), mild LCx, mild-mod RCA
-
-Combined Procedures with Hemodynamics:
-Input: "Coronary Angiogram fifteenth January twenty twenty five mild irregularities through left system sixty to seventy percent mid RCA RHC RA four RV twenty five over four PA twenty nine over sixteen mean twenty three PCWP twelve"
-Output: Coronary Angiogram (15 Jan 2025): mild irregularities through left system, 60-70% mid RCA; RHC RA 4, RV 25/4, PA 29/16, mean 23, PCWP 12
-
-Extended Holter with Arrhythmia Analysis:
-Input: "Holter second June twenty twenty four mean HR ninety four intermittent bundle branch block and ectopic atrial rhythm frequent SVEs one percent"
-Output: Holter Monitor (2 Jun 2024): mean HR 94, intermittent bundle branch block and ectopic atrial rhythm, frequent SVEs (1%)
-
-Multi-Parameter Blood Tests:
-Input: "Bloods April to May twenty twenty four HbA1c six point five Hb one forty two MCV eighty Cr eighty one GFR eighty nine Ferr fifteen TChol six point five LDL four point five T4 twenty point nine"
-Output: Bloods (April-May 2024): HbA1c 6.5, Hb 142, MCV 80, Cr 81, GFR 89, Ferr 15, TChol 6.5, LDL 4.5, T4 20.9
-
-If you cannot produce a coherent formatted summary without adding information, output exactly:
+Rules (follow strictly):
+- The output MUST begin with one of these types exactly: TTE, TOE, Stress TTE, CTCA, CMRI, Coronary Angiogram, RHC, ExRHC, Holter Monitor, Event Monitor, Loop Recorder, ABPM, Bloods. Never print the word "INVESTIGATION".
+- Preserve all numbers and units exactly; do NOT invent, convert, or average values. You may standardise wording only by applying the canonical abbreviation list below.
+- Use canonical cardiology abbreviations when applicable:
+  biventricular → BiV; left atrium/atrial → LA; right atrium/atrial → RA; left ventricle/ventricular → LV; right ventricle/ventricular → RV; proximal → prox; ostial → ostial.
+- Use valve and measurement abbreviations:
+  aortic valve → AV; mitral valve → MV; tricuspid valve → TV; pulmonary valve → PV; mean pressure gradient → MPG; peak pressure gradient → PPG.
+- Use regurgitation abbreviations:
+  mitral regurgitation → MR; aortic regurgitation → AR; pulmonary regurgitation → PR; tricuspid regurgitation → TR.
+- Use hemodynamic and RHC abbreviations:
+  PA mean → PAm; pulmonary capillary wedge pressure → PCWP; cardiac output → CO; cardiac index → CI; right ventricular stroke work index → RVSWI; pulmonary artery systolic pressure → PASP; right ventricular systolic pressure → RVSP; right atrial pressure → RAP; stroke volume index → SVI.
+- Ejection fraction MUST include percentage: "EF XX%" with space before percentage symbol.
+- For Bloods, use these exact lab abbreviations when spoken equivalents occur:
+  total cholesterol → TChol; triglycerides → TG; HDL cholesterol → HDL; LDL cholesterol → LDL; non‑HDL cholesterol → non‑HDL; haemoglobin A1c → HbA1c; creatinine → Cr; estimated GFR → eGFR; ferritin → Ferr; haemoglobin/hemoglobin → Hb; troponin → Tn; B‑type natriuretic peptide → BNP.
+- Wording case: descriptors like normal/mild/moderate/severe/satisfactory should be lower‑case; abbreviations (LV, RV, BiV, EF, mmHg, HbA1c, LDL, HDL, BNP, MR, AR, PR, TR, PAm, PCWP, CO, CI, RVSWI, PASP, RAP, SVI) stay uppercase/mixed-case exactly as shown.
+- Add standard units where appropriate: TAPSE measurements in mm, PASP/RVSP measurements in mmHg (e.g., "TAPSE 22mm", "PASP >38mmHg", "RVSP from 23 to 57mmHg"). Use parentheses for dimension measurements (e.g., "(39mm)", "(42mm)").
+- Exercise testing terminology: Use "Bruce Stage X" (capitalized), "exercised for X minutes", and convert second numerical values to METs when appropriate (e.g., "exercised for 8.3 minutes, 13.7 METs").
+- Date handling rules:
+  • If a specific date is mentioned (e.g., "9th of February 2024"), format as "(DD MMM YYYY)" → "(9 Feb 2024)"
+  • If NO date is mentioned in the dictation, use "(no date)" - never invent dates
+  • Date ranges → "(MMM–MMM YYYY)"
+  • Relative dates like "yesterday", "last week", "this morning" should be treated as "(no date)" unless you can determine the exact date
+- If a location/institution is spoken, include it after the date as ", Location".
+- Punctuation rules: Use commas within findings of the same anatomical territory or category; use semicolons to separate different vessel territories or distinct anatomical regions. Examples: "moderate LAD stenosis, mild LCx disease; severe RCA occlusion" or "normal LV function, mild LA enlargement; moderate MV regurgitation". Ensure proper spacing after commas. For calcium scores, use format "Ca Score XXX/percentile" (e.g., "Ca Score 795/50-75th centile"). No extra commentary or text before/after the line.
+- If you cannot safely format without inventing information (including dates), output exactly:
 ERROR – investigation dictation could not be parsed coherently.`
+};
+
+export const INVESTIGATION_SUMMARY_LLM_HINTS = {
+  temperature: 0,
+  maxTokens: 80,
+  stop: ["\n"]
 };
 
 export const INVESTIGATION_SUMMARY_MEDICAL_KNOWLEDGE = {
@@ -192,7 +54,7 @@ export const INVESTIGATION_SUMMARY_MEDICAL_KNOWLEDGE = {
   investigations: {
     'echocardiography': ['TTE', 'TOE', 'Stress TTE', 'Exercise Echo'],
     'cardiac_imaging': ['CTCA', 'CT Coronary Angiogram', 'CT Calcium Score', 'Cardiac MRI'],
-    'general_imaging': ['CT COW', 'CT Thoracic Aorta', 'CT Abdomen', 'MRI'],
+    'general_imaging': ['CT COW', 'CT Thoracic Aorta', 'CT Abdomen', 'MRI', 'PYP'],
     'invasive': ['Coronary Angiogram', 'PCI', 'Right Heart Catheter'],
     'monitoring': ['HeartBug', 'Holter Monitor', 'Event Monitor', '24hr ECG'],
     'laboratory': ['Bloods', 'Lipids', 'HbA1c', 'Troponin', 'BNP', 'D-dimer'],
@@ -201,10 +63,14 @@ export const INVESTIGATION_SUMMARY_MEDICAL_KNOWLEDGE = {
 
   // Standard medical terminology preservation
   cardiology_terms: {
-    'anatomy': ['LV', 'RV', 'LA', 'RA', 'LAD', 'LCx', 'RCA', 'OM1', 'OM2', 'D1', 'D2'],
+    'anatomy': ['LV', 'RV', 'LA', 'RA', 'LAD', 'LCx', 'RCA', 'OM1', 'OM2', 'D1', 'D2', 'ostial', 'prox'],
     'pathology': ['SCAD', 'type 1', 'type 2', 'type 3', 'stenosis', 'occlusion'],
-    'measurements': ['EF', 'MPG', 'RVSP', 'Ca score', 'METs', 'mmHg', '%'],
-    'findings': ['normal', 'mild', 'moderate', 'severe', 'satisfactory', 'dominant']
+    'measurements': ['EF', 'MPG', 'PPG', 'RVSP', 'PASP', 'TAPSE', 'Ca score', 'METs', 'mmHg', 'mm', '%'],
+    'hemodynamics': ['PAm', 'PCWP', 'CO', 'CI', 'RVSWI', 'RAP', 'SVI', 'PA', 'PVR', 'SVR', 'RVSP'],
+    'exercise': ['Bruce Stage', 'exercised for', 'METs', 'minutes', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage 4', 'Stage 5'],
+    'valves': ['AV', 'MV', 'TV', 'PV', 'AV MPG', 'MV MPG', 'TV MPG', 'PV MPG'],
+    'regurgitation': ['MR', 'AR', 'PR', 'TR', 'mild MR', 'moderate PR', 'severe TR', 'mod-sev TR'],
+    'findings': ['normal', 'mild', 'moderate', 'severe', 'mod-sev', 'satisfactory', 'dominant']
   },
 
   // Date format patterns
@@ -214,3 +80,136 @@ export const INVESTIGATION_SUMMARY_MEDICAL_KNOWLEDGE = {
     'months': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   }
 };
+
+import { getCombinedPatterns, type ReplacementPattern } from '../../utils/ASRCorrections';
+
+/**
+ * Pre-normalise dictated text before sending to the LLM.
+ * - Applies a SMALL, SAFE set of replacements (word-boundary, case-insensitive)
+ * - Never changes numbers or units
+ * - Focuses on canonical abbreviations + lab names + common anatomy
+ * - Uses centralized ASR corrections from utils/ASRCorrections.ts
+ *
+ * Usage:
+ *   const cleaned = preNormalizeInvestigationText(rawDictation);
+ *   // then send `cleaned` to the LLM with the micro prompt
+ */
+export function preNormalizeInvestigationText(input: string): string {
+  let s = input;
+
+  type Replacement = ReplacementPattern;
+
+  // Get centralized correction patterns
+  const CENTRALIZED_PATTERNS = getCombinedPatterns(['laboratory', 'cardiology', 'valves', 'severity']);
+
+  // Apply specific ASR correction patterns for common transcription errors
+  const ASR_CORRECTION_PATTERNS: Replacement[] = [
+    [/\bLED\b/gi, 'LAD'], // "LED stenosis" -> "LAD stenosis" (common ASR error)
+    [/\bosteocircumflex\b/gi, 'ostial circumflex'], // "osteocircumflex" -> "ostial circumflex"
+    [/\bPeritin\b/gi, 'Ferritin'], // "Peritin" -> "Ferritin" (common transcription error)
+    [/\bRBSP\b/gi, 'RVSP'], // "RBSP" -> "RVSP" (common transcription error for Right Ventricular Systolic Pressure)
+    [/\b(?:EGFR|eGFR)\s+greater\s+than\s+(\d+)/gi, 'eGFR >$1'], // "EGFR greater than 90" -> "eGFR >90"
+    [/\bgreater\s+than\s+(\d+)/gi, '>$1'], // "greater than 90" -> ">90" (general pattern)
+    [/\bproximal\b/gi, 'prox'], // "proximal" -> "prox"
+    [/\b(\d+)\s*millimeters?\b/gi, '($1mm)'], // "39 millimeters" -> "(39mm)"
+    [/\b(\d+)\s*mm(?!Hg)\b/gi, '($1mm)'], // "39mm" -> "(39mm)" (not mmHg)
+    [/\bCalcium score,?\s*(\d+)[.,]?\s*([0-9-]+(?:st|nd|rd|th)\s*centile)/gi, 'Ca Score $1/$2'], // "Calcium score, 795. 50 to 75th centile" -> "Ca Score 795/50-75th centile"
+    // Exercise test corrections
+    [/\bbruce\s+stage\s+(\d+)\b/gi, 'Bruce Stage $1'], // "bruce stage 4" -> "Bruce Stage 4"
+    [/\bexercise\s+for\b/gi, 'exercised for'], // "exercise for 8.3 minutes" -> "exercised for 8.3 minutes"
+    // RHC and hemodynamic abbreviations
+    [/\bPA\s+mean\b/gi, 'PAm'], // "PA mean" -> "PAm"
+    [/\bpulmonary\s+capillary\s+wedge\s+pressure\b/gi, 'PCWP'], // "pulmonary capillary wedge pressure" -> "PCWP"
+    [/\bcardiac\s+output\b/gi, 'CO'], // "cardiac output" -> "CO"
+    [/\bcardiac\s+index\b/gi, 'CI'], // "cardiac index" -> "CI"
+    [/\bright\s+ventricular\s+stroke\s+work\s+index\b/gi, 'RVSWI'], // "right ventricular stroke work index" -> "RVSWI"
+    [/\bpulmonary\s+artery\s+systolic\s+pressure\b/gi, 'PASP'], // "pulmonary artery systolic pressure" -> "PASP"
+    [/\bright\s+atrial\s+pressure\b/gi, 'RAP'], // "right atrial pressure" -> "RAP"
+    [/\bstroke\s+volume\s+index\b/gi, 'SVI'], // "stroke volume index" -> "SVI"
+  ];
+
+  // Apply ASR corrections first
+  for (const [pattern, repl] of ASR_CORRECTION_PATTERNS) {
+    s = s.replace(pattern, repl);
+  }
+
+  // Apply investigation type conversions FIRST (before date normalization)
+  const INVESTIGATION_CONVERSION_PATTERNS: Replacement[] = [
+    [/\bstress\s+echo\s*cardiogram\b/gi, 'Stress TTE'], // "stress echo cardiogram" -> "Stress TTE" (MUST come before TTE patterns)
+    [/\btrans\s*thoracic\s*echo(?:cardiogram)?\b/gi, 'TTE'], // "trans thoracic echo" -> "TTE" (MUST come before other echo patterns)
+    [/\btrans\s*oesophageal\s*echo(?:cardiogram)?\b/gi, 'TOE'], // "trans oesophageal echo" -> "TOE"
+    [/\btrans\s*esophageal\s*echo(?:cardiogram)?\b/gi, 'TOE'], // US spelling
+    [/\bCT\s+coronary\s+angiogram\b/gi, 'CTCA'], // "CT coronary angiogram" -> "CTCA"
+    [/\bAmbulatory\s+Blood\s+Pressure\s+Monitor\b/gi, 'ABPM'], // "Ambulatory Blood Pressure Monitor" -> "ABPM" (specific first)
+    [/\bBlood\s+Pressure\s+Monitor\b/gi, 'ABPM'], // "Blood Pressure Monitor" -> "ABPM"
+    [/\bright\s+heart\s+catheter\b/gi, 'RHC'] // "right heart catheter" -> "RHC"
+  ];
+
+  for (const [pattern, repl] of INVESTIGATION_CONVERSION_PATTERNS) {
+    s = s.replace(pattern, repl);
+  }
+
+  const MONTH_MAP: Record<string, string> = { january:'Jan', february:'Feb', march:'Mar', april:'Apr', may:'May', june:'Jun', july:'Jul', august:'Aug', september:'Sep', october:'Oct', november:'Nov', december:'Dec' };
+
+  // 2a) If the string begins with "TYPE, <date>" or "TYPE <date>", convert to "TYPE (DD Mon YYYY): "
+  s = s.replace(
+    /^(TTE|TOE|Stress\s*TTE|CTCA|CMRI|Coronary Angiogram|RHC|ExRHC|Holter Monitor|Event Monitor|Loop Recorder|ABPM|Bloods)\s*[,:.-]?\s*(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s*,?\s*(\d{4})\s*[.:;,\s]*/i,
+    (_, type, d, month, y) => `${type} (${d} ${MONTH_MAP[month.toLowerCase()]} ${y}): `
+  );
+  
+  // 2b) If it's already TYPE (date) but wrong trailing punctuation, fix to colon
+  s = s.replace(
+    /^(TTE|TOE|Stress\s*TTE|CTCA|CMRI|Coronary Angiogram|RHC|ExRHC|Holter Monitor|Event Monitor|Loop Recorder|ABPM|Bloods)\s*\(\s*(\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4})(?:,\s*[^)]*)?\s*\)\s*[,.:.-]?\s*/i,
+    (_, type, date) => `${type} (${date}): `
+  );
+
+  // 2c) If it's TYPE followed by colon and findings (no date), ensure proper format for undated investigations
+  // This handles cases like "TTE: normal function" or "Bloods normal results"
+  s = s.replace(
+    /^(TTE|TOE|Stress\s*TTE|CTCA|CMRI|Coronary Angiogram|RHC|ExRHC|Holter Monitor|Event Monitor|Loop Recorder|ABPM|Bloods)\s*[:\s]+(?!\()/i,
+    '$1: '
+  );
+
+  // 3) Convert "Label, 123" → "Label 123" for common labs
+  s = s.replace(/\b(TChol|TG|HDL|LDL|non-HDL|HbA1c|Cr|eGFR|Ferr|Tn|BNP)\s*,\s*(\d+(?:\.\d+)?)/g, '$1 $2');
+
+  // 3b) Fix HbA1c formatting - ensure proper spacing and percentage symbol
+  s = s.replace(/\bHbA1c\s*(\d+(?:\.\d+)?)(?!%)/gi, 'HbA1c $1%'); // "HbA1c6" -> "HbA1c 6%" or "HbA1c 6.5" -> "HbA1c 6.5%"
+
+  // Apply remaining ASR corrections
+  const REMAINING_PATTERNS: Replacement[] = [
+    ...CENTRALIZED_PATTERNS,
+    // Keep other investigation patterns except the type conversions we already did
+    [/\b(AV|MV|TV|PV)\s+gradient\b/gi, '$1 MPG'],
+    [/\biotic\s+valve\s+gradient\b/gi, 'AV MPG'], // "Iotic Valve gradient" -> "AV MPG"
+    [/\biotic\s+valve\b/gi, 'AV'], // "Iotic Valve" -> "AV" (fallback)
+    // Lab abbreviations
+    [/\bHemoglobin\b/gi, 'Hb'], // "Hemoglobin" -> "Hb"
+    [/\bHaemoglobin\b/gi, 'Hb'], // "Haemoglobin" -> "Hb" (British spelling)
+    // Severity combinations for regurgitation
+    [/\bmoderate\s+to\s+severe\b/gi, 'mod-sev'],
+    [/\bmild\s+to\s+moderate\b/gi, 'mild-mod'],
+    // Greater than symbol for PASP
+    [/\bPASP\s+(\d+)\b/gi, 'PASP >$1'],
+    // Units for pressure measurements (add mmHg to RVSP when not already present)
+    [/\bRVSP\s+(?:from\s+)?(\d+)\s+to\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP from $1 to $2mmHg'],
+    [/\bRVSP\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP $1mmHg']
+  ];
+
+  for (const [pattern, repl] of REMAINING_PATTERNS) {
+    s = s.replace(pattern, repl);
+  }
+
+  // Exercise test specific patterns (apply after other corrections)
+  // Handle METs in exercise testing context - only convert numbers after exercise duration when they appear to be METs
+  // Pattern: "exercised for X minutes, Y minutes" where Y is likely METs
+  s = s.replace(/\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\s+minutes?\b/gi, 'exercised for $1 minutes, $2 METs');
+  
+  // Also handle cases where the second number is just floating without "minutes"
+  s = s.replace(/\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\.?\s+/gi, 'exercised for $1 minutes, $2 METs; ');
+
+  // Normalise whitespace (but preserve punctuation and numbers)
+  s = s.replace(/\s+/g, ' ').trim();
+
+  return s;
+}

@@ -1,6 +1,6 @@
 import { MedicalAgent } from '../base/MedicalAgent';
-import { LMStudioService } from '@/services/LMStudioService';
-import { INVESTIGATION_SUMMARY_SYSTEM_PROMPTS } from './InvestigationSummarySystemPrompts';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
+import { INVESTIGATION_SUMMARY_SYSTEM_PROMPTS, preNormalizeInvestigationText } from './InvestigationSummarySystemPrompts';
 import type { 
   MedicalContext, 
   MedicalReport, 
@@ -31,14 +31,19 @@ export class InvestigationSummaryAgent extends MedicalAgent {
   }
 
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    const startTime = Date.now();
     console.log('🔬 InvestigationSummaryAgent processing input:', input?.substring(0, 100) + '...');
     
     try {
+      // Pre-normalize the input text to apply medical abbreviation rules
+      const normalizedInput = preNormalizeInvestigationText(input);
+      console.log('📝 Pre-normalized input applied abbreviation rules');
+      
       // Get formatted summary from configured model (Google Gemma-3n-e4b for this agent)
       console.log('🤖 Sending to LLM for investigation formatting...');
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
-        input,
+        normalizedInput,
         'investigation-summary' // Pass agent type for model selection
       );
       
@@ -55,19 +60,23 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       // Parse the formatted response
       const sections = this.parseResponse(response, context);
       
-      // Create medical report
-      const report: MedicalReport = {
-        id: `investigation-summary-${Date.now()}`,
-        agentName: this.name,
-        content: response.trim(),
+      // Calculate actual processing time
+      const processingTime = Date.now() - startTime;
+      
+      // Use base class createReport method for consistent metadata structure
+      const report = this.createReport(
+        response.trim(),
         sections,
-        metadata: {
-          confidence: this.assessConfidence(input, response),
-          processingTime: Date.now() - (context?.timestamp || Date.now()),
-          medicalCodes: this.extractMedicalCodes(response),
-          modelUsed: 'google/gemma-3n-e4b'
-        },
-        timestamp: Date.now()
+        context,
+        processingTime,
+        this.assessConfidence(input, response)
+      );
+
+      // Add additional metadata specific to investigation summaries
+      report.metadata = {
+        ...report.metadata,
+        medicalCodes: this.extractMedicalCodes(response),
+        modelUsed: MODEL_CONFIG.QUICK_MODEL
       };
 
       console.log('✅ Investigation summary formatted successfully');
@@ -209,7 +218,7 @@ Remember to maintain the exact format: "INVESTIGATION (DD MMM YYYY): comma-separ
         confidence: 0,
         processingTime: 0,
         medicalCodes: [],
-        modelUsed: 'google/gemma-3n-e4b'
+        modelUsed: MODEL_CONFIG.QUICK_MODEL
       },
       timestamp: Date.now(),
       errors: [errorMessage]

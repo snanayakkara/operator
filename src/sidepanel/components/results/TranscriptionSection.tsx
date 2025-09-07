@@ -11,13 +11,14 @@
 import React, { memo, useState } from 'react';
 import { 
   FileTextIcon, 
-  CopyIcon, 
   CheckIcon, 
   SquareIcon, 
   ChevronDownIcon, 
   ChevronUpIcon 
 } from '../icons/OptimizedIcons';
+import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { RefreshCw } from 'lucide-react';
+import { AudioPlayback } from '../AudioPlayback';
 import type { AgentType } from '@/types/medical.types';
 
 interface TranscriptionSectionProps {
@@ -28,6 +29,15 @@ interface TranscriptionSectionProps {
   currentAgent?: AgentType | null;
   isProcessing?: boolean;
   className?: string;
+  audioBlob?: Blob | null;
+  /**
+   * Expand transcription by default (e.g., while waiting for results)
+   */
+  defaultExpanded?: boolean;
+  /**
+   * When this becomes true, auto-collapse the transcription view
+   */
+  collapseWhen?: boolean;
 }
 
 const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
@@ -37,11 +47,23 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   onAgentReprocess,
   currentAgent,
   isProcessing = false,
-  className = ''
+  className = '',
+  audioBlob,
+  defaultExpanded = false,
+  collapseWhen
 }) => {
-  const [transcriptionExpanded, setTranscriptionExpanded] = useState(false);
+  const [transcriptionExpanded, setTranscriptionExpanded] = useState(!!defaultExpanded);
   const [transcriptionCopied, setTranscriptionCopied] = useState(false);
   const [transcriptionInserted, setTranscriptionInserted] = useState(false);
+
+  // Component renders optimally when memoized properly
+
+  // Auto-collapse when signaled (e.g., once results are ready)
+  React.useEffect(() => {
+    if (collapseWhen && transcriptionExpanded) {
+      setTranscriptionExpanded(false);
+    }
+  }, [collapseWhen]);
 
   // Available agents for reprocessing
   const availableAgents = [
@@ -83,34 +105,54 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   };
 
   return (
-    <div className={`border-b border-gray-200/50 ${className}`}>
+    <div className={`border-b border-gray-200/50 ${className} ${
+      isProcessing ? 'bg-blue-50/30 border-b-blue-200/50' : ''
+    }`}>
       <button
         onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
-        className="w-full p-4 text-left hover:bg-gray-50/50 transition-colors flex items-center justify-between"
+        className={`w-full p-4 text-left transition-colors flex items-center justify-between ${
+          isProcessing 
+            ? 'hover:bg-blue-50/60' 
+            : 'hover:bg-gray-50/50'
+        }`}
       >
         <div className="flex items-center space-x-2">
-          <FileTextIcon className="w-4 h-4 text-gray-600" />
-          <span className="text-gray-900 font-medium text-sm">Original Transcription</span>
+          <FileTextIcon className={`w-4 h-4 ${isProcessing ? 'text-blue-600' : 'text-gray-600'}`} />
+          <span className={`font-medium text-sm ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
+            Original Transcription
+          </span>
+          {isProcessing && (
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+              Processing...
+            </span>
+          )}
           <span className="text-xs text-gray-500">
             {originalTranscription.split(' ').length} words
           </span>
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* Transcription Actions */}
+          {/* Transcription Actions - Enhanced during processing */}
           {onTranscriptionCopy && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleTranscriptionCopy();
               }}
-              className="p-1.5 rounded hover:bg-gray-100 transition-colors"
-              title="Copy transcription"
+              className={`px-2 py-1.5 rounded transition-all duration-200 flex items-center space-x-1 ${
+                isProcessing 
+                  ? 'bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-sm' 
+                  : 'p-1.5 hover:bg-gray-100'
+              }`}
+              title={isProcessing ? "Copy raw transcription" : "Copy transcription"}
             >
               {transcriptionCopied ? (
                 <CheckIcon className="w-3.5 h-3.5 text-green-600" />
               ) : (
-                <CopyIcon className="w-3.5 h-3.5 text-gray-500" />
+                <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />
+              )}
+              {isProcessing && (
+                <span className="text-xs text-blue-700 font-medium">Copy Raw</span>
               )}
             </button>
           )}
@@ -155,6 +197,17 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
               {originalTranscription}
             </p>
           </div>
+
+          {/* Audio Playback Component */}
+          {audioBlob && (
+            <div className="mt-3">
+              <AudioPlayback 
+                audioBlob={audioBlob}
+                fileName={`transcription-${currentAgent || 'recording'}`}
+                className="bg-white border-gray-200"
+              />
+            </div>
+          )}
           
           {/* Reprocess agents */}
           {onAgentReprocess && (

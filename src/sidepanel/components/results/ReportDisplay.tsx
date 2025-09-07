@@ -88,6 +88,8 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       'investigation-summary': 'Investigation Summary',
       'background': 'Background Summary',
       'medication': 'Medication Review',
+      'bloods': 'Blood Test Order',
+      'imaging': 'Imaging Order',
       'mteer': 'mTEER Report',
       'tteer': 'TTEER Report',
       'pfo-closure': 'PFO Closure Report',
@@ -98,6 +100,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       'tavi-workup': 'TAVI Workup',
       'ai-medical-review': 'AI Medical Review',
       'batch-ai-review': 'Batch AI Review',
+      'patient-education': 'Patient Education',
       'enhancement': 'Enhanced Report',
       'transcription': 'Transcription',
       'generation': 'Generated Report'

@@ -1,0 +1,29 @@
+{
+  "id": "ex002_complex", 
+  "task": "angiogram-pci",
+  "complexity": "complex",
+  "transcript": "Diagnostic coronary angiography revealed triple vessel disease with 90% stenosis in the proximal LAD involving the diagonal branch, 75% stenosis in the mid RCA, and 85% stenosis in the distal circumflex artery. Left ventricular angiography showed anterior wall hypokinesis with ejection fraction estimated at 45%. PCI performed to the LAD lesion using a 3.0mm x 28mm drug-eluting stent following pre-dilatation with a 2.5mm balloon. Side branch protected with wire. Final angiography demonstrated excellent result with less than 10% residual stenosis and TIMI 3 flow. Patient remained haemodynamically stable throughout the procedure. Plan for staged PCI to remaining vessels pending clinical assessment.",
+  "expected_elements": [
+    "comprehensive vessel assessment",
+    "multiple vessel stenosis quantification", 
+    "left ventricular function assessment",
+    "detailed PCI technique description",
+    "device specifications with dimensions",
+    "procedural outcome with TIMI flow",
+    "staging plan for remaining vessels"
+  ],
+  "rubric_criteria": {
+    "has_TIMI_flow": true,
+    "has_stenosis_grading": true,
+    "has_device_specs": true,
+    "vessel_coverage": ["LAD", "RCA", "circumflex"],
+    "min_score": 85
+  },
+  "metadata": {
+    "procedure_type": "COMBINED",
+    "disease_extent": "triple vessel",
+    "ejection_fraction": "45%",
+    "staged_approach": true,
+    "source": "MedicalDictations.ts - angiogram-pci complex"
+  }
+}

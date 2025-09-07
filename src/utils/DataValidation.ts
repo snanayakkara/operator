@@ -181,7 +181,7 @@ export class DataValidation {
    */
   public assessDataQuality(data: ExtractedData): DataQualityReport {
     const fields = ['background', 'investigations', 'medications'];
-    let totalFields = fields.length;
+    const totalFields = fields.length;
     let populatedFields = 0;
     let totalWordCount = 0;
     let totalMedicalTerms = 0;

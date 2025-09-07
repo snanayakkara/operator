@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.0.3-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -298,7 +298,10 @@ npm run lint
 # Testing
 npm run test:e2e  # Playwright E2E tests
 
-# MLX Whisper transcription server
+# Development environment (complete medical AI stack)
+./dev                          # Ultra-short startup: all servers + dual models
+
+# Individual server management
 pip install -r requirements-whisper.txt
 ./start-whisper-server.sh      # Start transcription server
 python3 whisper-server.py     # Direct server start

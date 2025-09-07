@@ -12,7 +12,7 @@ import type {
   VenousAccess,
   RHCIndication
 } from '@/types/medical.types';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { RightHeartCathSystemPrompts, RightHeartCathMedicalPatterns, RightHeartCathValidationRules } from './RightHeartCathSystemPrompts';
 
 /**
@@ -374,7 +374,7 @@ export class RightHeartCathAgent extends MedicalAgent {
     complications: RHCComplication[],
     originalInput: string
   ): Promise<string> {
-    console.log('🔧 Generating RHC report with LMStudio medgemma-27b...');
+    console.log(`🔧 Generating RHC report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
     
     try {
       // Prepare comprehensive context for LMStudio
@@ -386,8 +386,8 @@ export class RightHeartCathAgent extends MedicalAgent {
         complications
       };
       
-      // Use LMStudio for content generation with extracted data context
-      const contextualPrompt = `${this.systemPrompt}
+      // Use proper RHC system prompts for content generation with extracted data context
+      const contextualPrompt = `${RightHeartCathSystemPrompts.rightHeartCathProcedureAgent.systemPrompt}
 
 EXTRACTED DATA CONTEXT:
 ${JSON.stringify(extractedData, null, 2)}
@@ -493,7 +493,7 @@ Note: This report was generated with limited AI processing. Clinical review is r
     return match ? match[1].trim() : undefined;
   }
 
-  private calculateExerciseResponse(input: string): string {
+  private calculateExerciseResponse(_input: string): string {
     // Simple exercise response calculation - could be enhanced
     return 'Exercise response assessed with pressure changes documented';
   }

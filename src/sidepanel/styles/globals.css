@@ -1,101 +1,214 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+@import './utilities.css';
 
-/* Semantic Medical Theme Components */
+/* Z-Index Layering Hierarchy */
+@layer base {
+  :root {
+    --z-dropdown: 999999;
+    --z-modal: 999998;
+    --z-tooltip: 999997;
+    --z-sticky: 100;
+    --z-fixed: 200;
+  }
+}
+
+/* Monochrome-First Components */
 @layer components {
+  /* Base surfaces with soft depth */
+  .surface-primary {
+    @apply bg-surface-primary border border-line-primary;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  }
+  
+  /* Pill-shaped interactive elements */
+  .pill-button {
+    @apply surface-primary rounded-full px-4 py-2 text-ink-primary;
+    @apply hover:shadow-sm focus:ring-2 focus:ring-accent-violet/20;
+    @apply transition-all duration-150 cursor-pointer select-none;
+    border: 1px solid theme('colors.line.primary');
+  }
+  
+  .pill-button:hover {
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  }
+  
+  .pill-button:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  }
+  
+  /* Pill inputs */
+  .pill-input {
+    @apply surface-primary rounded-full px-4 py-2 text-ink-primary;
+    @apply border border-line-primary placeholder-ink-tertiary;
+    @apply focus:ring-2 focus:ring-accent-violet/20 focus:border-accent-violet/30;
+    @apply transition-all duration-150;
+  }
+  
+  /* Cards with soft depth */
+  .card-primary {
+    @apply surface-primary rounded-2xl p-4;
+    border: 1px solid theme('colors.line.primary');
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  }
+  
+  .card-primary:hover {
+    box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.06);
+  }
+  
+  /* Legacy glass components (for gradual migration) */
   .glass {
-    @apply bg-white border border-gray-200 shadow-lg;
+    @apply transition-all duration-150;
+  }
+  
+  .glass:hover {
+    @apply bg-surface-primary border border-line-primary;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   }
   
   .glass-button {
-    @apply glass hover:bg-gray-50 active:bg-gray-100 transition-all duration-200 cursor-pointer select-none;
+    @apply glass hover:bg-surface-tertiary active:bg-line-secondary transition-all duration-150 cursor-pointer select-none;
   }
   
   .glass-input {
-    @apply glass bg-gray-50 border-gray-200 placeholder-gray-400 text-gray-900;
+    @apply glass bg-surface-tertiary border-line-primary placeholder-ink-tertiary text-ink-primary;
   }
   
   .glass-card {
-    @apply glass p-4 rounded-xl;
+    @apply glass p-4 rounded-2xl;
+  }
+
+  /* Dropdown and Portal Components */
+  .dropdown-portal {
+    z-index: var(--z-dropdown) !important;
+  }
+
+  .dropdown-menu {
+    z-index: var(--z-dropdown) !important;
+    position: fixed !important;
+  }
+
+  .modal-overlay {
+    z-index: var(--z-modal) !important;
+  }
+
+  /* Ensure no element can override critical z-index values */
+  .dropdown-portal * {
+    max-height: calc(100vh - 32px) !important;
   }
   
-  /* Workflow Type Cards */
+  /* Workflow Type Cards - Monochrome with accent tokens */
+  .workflow-card {
+    @apply surface-primary text-ink-primary rounded-2xl;
+    border: 1px solid theme('colors.line.primary');
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  }
+  
+  .workflow-card:hover {
+    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+    transform: translateY(-0.5px);
+  }
+  
+  .workflow-card.active {
+    border: 1px solid theme('colors.accent.violet');
+    box-shadow: 0 0 0 1px theme('colors.accent.violet / 0.1');
+  }
+  
+  /* Legacy cards for gradual migration */
   .procedure-card {
-    background: var(--procedure-light);
-    border-color: var(--procedure-border);
-    color: var(--procedure-text);
+    @apply workflow-card;
   }
   
   .documentation-card {
-    background: var(--documentation-light);
-    border-color: var(--documentation-border);
-    color: var(--documentation-text);
+    @apply workflow-card;
   }
   
   .investigation-card {
-    background: var(--investigation-light);
-    border-color: var(--investigation-border);
-    color: var(--investigation-text);
+    @apply workflow-card;
   }
   
-  /* Primary Action Buttons */
+  /* Primary Action Buttons - Monochrome with minimal accent */
+  .btn-primary {
+    @apply bg-ink-primary text-surface-primary rounded-full px-4 py-2;
+    @apply hover:bg-ink-secondary focus:ring-2 focus:ring-ink-primary/20;
+    @apply transition-all duration-150;
+    border: 1px solid theme('colors.ink.primary');
+  }
+  
+  .btn-primary:hover {
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.1);
+  }
+  
+  /* Secondary buttons */
+  .btn-secondary {
+    @apply surface-primary text-ink-primary rounded-full px-4 py-2;
+    @apply hover:bg-surface-tertiary focus:ring-2 focus:ring-accent-violet/20;
+    @apply transition-all duration-150;
+    border: 1px solid theme('colors.line.primary');
+  }
+  
+  .btn-secondary:hover {
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  }
+  
+  /* Legacy buttons for gradual migration */
   .btn-procedure {
-    background: var(--procedure-primary);
-    border-color: var(--procedure-primary);
-    @apply text-white hover:opacity-90 transition-all;
+    @apply btn-primary;
   }
   
   .btn-documentation {
-    background: var(--documentation-primary);
-    border-color: var(--documentation-primary);
-    @apply text-white hover:opacity-90 transition-all;
+    @apply btn-primary;
   }
   
   .btn-investigation {
-    background: var(--investigation-primary);
-    border-color: var(--investigation-primary);
-    @apply text-white hover:opacity-90 transition-all;
+    @apply btn-primary;
   }
   
-  /* Secondary Action Buttons - Enhanced with Peak-End Design */
+  /* Outline Buttons - Monochrome with subtle accent on interaction */
+  .btn-outline {
+    @apply surface-primary text-ink-secondary rounded-full px-4 py-2;
+    @apply hover:text-ink-primary hover:bg-surface-tertiary;
+    @apply focus:ring-2 focus:ring-accent-violet/20;
+    @apply transition-all duration-150;
+    border: 1px solid theme('colors.line.primary');
+  }
+  
+  .btn-outline:hover {
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+  }
+  
+  .btn-outline.accent-emerald:hover {
+    border-color: theme('colors.accent.emerald');
+    box-shadow: 0 0 0 1px theme('colors.accent.emerald / 0.1');
+  }
+  
+  .btn-outline.accent-violet:hover {
+    border-color: theme('colors.accent.violet');
+    box-shadow: 0 0 0 1px theme('colors.accent.violet / 0.1');
+  }
+  
+  .btn-outline.accent-amber:hover {
+    border-color: theme('colors.accent.amber');
+    box-shadow: 0 0 0 1px theme('colors.accent.amber / 0.1');
+  }
+  
+  /* Legacy outline buttons */
   .btn-procedure-outline {
-    border-color: var(--procedure-border);
-    color: theme('colors.gray.600'); /* Muted by default */
-    @apply bg-white transition-all duration-300 btn-micro-press;
-  }
-  
-  .btn-procedure-outline:hover {
-    color: var(--procedure-primary); /* Vibrant on hover */
-    border-color: var(--procedure-primary);
-    transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+    @apply btn-outline accent-amber;
   }
   
   .btn-documentation-outline {
-    border-color: var(--documentation-border);
-    color: theme('colors.gray.600'); /* Muted by default */
-    @apply bg-white transition-all duration-300 btn-micro-press;
-  }
-  
-  .btn-documentation-outline:hover {
-    color: var(--documentation-primary); /* Vibrant on hover */
-    border-color: var(--documentation-primary);
-    transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+    @apply btn-outline accent-violet;
   }
   
   .btn-investigation-outline {
-    border-color: var(--investigation-border);
-    color: theme('colors.gray.600'); /* Muted by default */
-    @apply bg-white transition-all duration-300 btn-micro-press;
-  }
-  
-  .btn-investigation-outline:hover {
-    color: var(--investigation-primary); /* Vibrant on hover */
-    border-color: var(--investigation-primary);
-    transform: translateY(-1px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.1);
+    @apply btn-outline accent-emerald;
   }
   
   /* Legacy Components (Updated) */
@@ -188,6 +301,26 @@
     will-change: transform, box-shadow;
     transform: translate3d(0, 0, 0);
   }
+
+  /* Record Panel Animations */
+  .record-button-idle {
+    animation: record-breathing 3s ease-in-out infinite;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .record-button-recording {
+    animation: record-recording-pulse 2s ease-in-out infinite;
+    will-change: transform, box-shadow;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .record-card {
+    animation: record-card-appear 200ms ease-out;
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+    transform-origin: top center;
+  }
 }
 
 /* Semantic Medical Color System */
@@ -243,7 +376,8 @@ body {
   width: 420px; /* Chrome side panel width */
   min-height: 600px;
   overflow-x: hidden;
-  background: white;
+  background: theme('colors.surface.secondary'); /* Light canvas background */
+  color: theme('colors.ink.primary');
 }
 
 /* Custom Scrollbar */
@@ -388,6 +522,57 @@ body {
   }
 }
 
+/* Record Panel Animations */
+@keyframes record-breathing {
+  0%, 100% { 
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% { 
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+}
+
+@keyframes record-recording-pulse {
+  0%, 100% { 
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+  25% { 
+    transform: translate3d(0, 0, 0) scale(1.08) rotate(1deg);
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
+  }
+  50% { 
+    transform: translate3d(0, 0, 0) scale(1.1) rotate(0deg);
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.8);
+  }
+  75% { 
+    transform: translate3d(0, 0, 0) scale(1.08) rotate(-1deg);
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.6);
+  }
+}
+
+@keyframes record-card-slide-down {
+  0% { 
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px) scale(0.95);
+  }
+  100% { 
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes record-card-appear {
+  0% { 
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.9) translateY(-10px);
+  }
+  100% { 
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) translateY(0);
+  }
+}
+
 /* Text Animations */
 @keyframes typewriter {
   from { width: 0; }
@@ -473,11 +658,13 @@ body {
   /* Already optimized for dark theme */
 }
 
-/* Focus Styles */
+/* Focus Styles - Two-layer ring system */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  @apply outline-none ring-2 ring-blue-500/50 ring-offset-2 ring-offset-white;
+  @apply outline-none ring-2 ring-accent-violet/20 ring-offset-2;
+  ring-offset-color: theme('colors.surface.secondary');
+  box-shadow: 0 0 0 2px theme('colors.surface.secondary'), 0 0 0 4px theme('colors.accent.violet / 0.2');
 }
 
 /* Selection Styles */

@@ -51,7 +51,7 @@ export const DropdownPortal: React.FC<DropdownPortalProps> = ({
         right: 0,
         bottom: 0,
         pointerEvents: 'none', // Let clicks pass through the backdrop
-        zIndex: 999999
+        zIndex: 50
       }}
     >
       <div style={{ pointerEvents: 'auto' }}>

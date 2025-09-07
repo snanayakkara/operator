@@ -1,0 +1,32 @@
+{
+  "id": "ex003_complications",
+  "task": "quick-letter",
+  "complexity": "withComplications", 
+  "transcript": "Patient presents with recurrent chest pain despite optimal medical therapy following recent PCI. Troponin levels remain elevated at 150 ng/L. ECG shows new T-wave inversions in leads V2-V4. Given the clinical presentation, urgent coronary angiography is recommended to assess for in-stent restenosis or progression of native vessel disease. Patient advised to continue current medications and return immediately if symptoms worsen.",
+  "expected_elements": [
+    "clinical deterioration documentation",
+    "objective findings (troponin, ECG)",
+    "clinical reasoning for urgent intervention",
+    "clear recommendations for immediate action",
+    "safety instructions for patient",
+    "professional urgency communication"
+  ],
+  "rubric_criteria": {
+    "has_clinical_content": true,
+    "clinical_urgency": true,
+    "objective_findings": true,
+    "clear_recommendations": true,
+    "safety_instructions": true,
+    "narrative_flow": true,
+    "min_score": 75
+  },
+  "metadata": {
+    "letter_type": "urgent_clinical_update",
+    "clinical_concern": "recurrent chest pain post-PCI",
+    "investigations": ["troponin", "ECG"],
+    "recommendation": "urgent coronary angiography",
+    "urgency": "urgent",
+    "word_count_range": [120, 200],
+    "source": "MedicalDictations.ts - quick-letter withComplications"
+  }
+}

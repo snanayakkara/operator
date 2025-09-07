@@ -265,7 +265,7 @@ export class TestOrchestrator {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Reflow Medical Assistant E2E Test Report</title>
+    <title>Operator Chrome Extension E2E Test Report</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .header { background: #2196F3; color: white; padding: 20px; border-radius: 5px; }
@@ -287,7 +287,7 @@ export class TestOrchestrator {
 </head>
 <body>
     <div class="header">
-        <h1>🏥 Reflow Medical Assistant E2E Test Report</h1>
+        <h1>🏥 Operator Chrome Extension E2E Test Report</h1>
         <p>Generated: ${timestamp}</p>
     </div>
 

@@ -12,7 +12,7 @@ The content script changes will NOT take effect until the extension is properly 
 
 ### Step 1: Reload Extension in Chrome
 1. Open Chrome and navigate to `chrome://extensions/`
-2. Find "Reflow Medical Assistant" extension
+2. Find "Operator Chrome Extension" extension
 3. Click the **"Reload"** button (refresh icon) for this extension
 4. **Wait 3-5 seconds** for the reload to complete
 

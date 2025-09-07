@@ -8,6 +8,14 @@ export interface RecorderState {
   frequencyData: number[];
   hasPermission: boolean | null;
   isRequestingPermission: boolean;
+  activeDeviceInfo: {
+    label: string;
+    deviceId: string;
+    isWorking: boolean;
+    hasMismatch?: boolean;
+    requestedDeviceId?: string;
+  } | null;
+  audioLevelHistory: number[];
 }
 
 export interface RecorderOptions {
@@ -16,6 +24,7 @@ export interface RecorderOptions {
   onRecordingTimeUpdate?: (time: number) => void;
   onError?: (error: Error) => void;
   selectedMicrophoneId?: string;
+  getMicrophoneId?: () => string | null;
 }
 
 /**
@@ -28,7 +37,8 @@ export function useRecorder(options: RecorderOptions) {
     onVoiceActivityUpdate,
     onRecordingTimeUpdate,
     onError,
-    selectedMicrophoneId
+    selectedMicrophoneId,
+    getMicrophoneId
   } = options;
 
   const [state, setState] = useState<RecorderState>({
@@ -38,7 +48,9 @@ export function useRecorder(options: RecorderOptions) {
     voiceActivityLevel: 0,
     frequencyData: [],
     hasPermission: null,
-    isRequestingPermission: false
+    isRequestingPermission: false,
+    activeDeviceInfo: null,
+    audioLevelHistory: []
   });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -48,23 +60,83 @@ export function useRecorder(options: RecorderOptions) {
   const audioChunksRef = useRef<Blob[]>([]);
   const animationFrameRef = useRef<number>();
   const intervalRef = useRef<number>();
+  const isRecordingRef = useRef<boolean>(false);
 
-  // Voice activity detection
-  const detectVoiceActivity = useCallback(() => {
-    const analyser = analyserRef.current;
-    if (!analyser || !state.isRecording) return;
+  // Voice activity detection with device validation
+  const detectVoiceActivity = useCallback(async () => {
+    try {
+      const analyser = analyserRef.current;
+      const audioContext = audioContextRef.current;
+      
+      // Enhanced debug logging
+      if (!analyser) {
+        console.log('🔇 detectVoiceActivity: analyser is null');
+        return;
+      }
+      
+      if (!isRecordingRef.current) {
+        console.log('🔇 detectVoiceActivity: not recording (ref check)');
+        return;
+      }
+      
+      if (!audioContext) {
+        console.log('🔇 detectVoiceActivity: audio context is null');
+        return;
+      }
+      
+      if (audioContext.state !== 'running') {
+        console.log('🔇 detectVoiceActivity: audio context state is', audioContext.state);
+        // Try to resume audio context if suspended
+        if (audioContext.state === 'suspended') {
+          console.log('🎤 Attempting to resume suspended audio context...');
+          try {
+            await audioContext.resume();
+            console.log('✅ Audio context resumed successfully');
+          } catch (resumeError) {
+            console.error('❌ Failed to resume audio context:', resumeError);
+            return;
+          }
+        } else {
+          return;
+        }
+      }
 
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    analyser.getByteFrequencyData(dataArray);
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Enhanced debug logging for data flow verification
+      const maxValue = Math.max(...dataArray);
+      const hasAudioData = maxValue > 0;
+      
+      if (Math.random() < 0.01) { // 1% chance for minimal spam
+        console.log('🎤 detectVoiceActivity debug:', {
+          bufferLength,
+          firstFewValues: Array.from(dataArray.slice(0, 5)),
+          maxValue,
+          hasAudioData,
+          contextState: audioContext.state,
+          analyserConnected: analyser.numberOfInputs > 0
+        });
+      }
+      
+      // More frequent logging if no audio data is detected
+      if (!hasAudioData && Math.random() < 0.05) {
+        console.warn('⚠️ No audio data detected in frequency analysis:', {
+          contextState: audioContext.state,
+          analyserFftSize: analyser.fftSize,
+          bufferLength,
+          isRecording: isRecordingRef.current
+        });
+      }
     
     // Calculate average volume for overall level
     const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
     const normalizedLevel = Math.min(average / 128, 1);
     
     // Create frequency spectrum bars by grouping frequency bins
-    const numBars = 10;
+    const numBars = 64; // Increased from 10 to 64 for smoother waveform visualization
     const frequencies: number[] = [];
     const binSize = Math.floor(bufferLength / numBars);
     
@@ -82,18 +154,51 @@ export function useRecorder(options: RecorderOptions) {
       frequencies.push(Math.pow(barValue, 0.7)); // Apply curve for better visual range
     }
     
-    setState(prev => ({
-      ...prev,
-      voiceActivityLevel: normalizedLevel,
-      frequencyData: frequencies
-    }));
+    setState(prev => {
+      // Update audio level history (keep last 30 samples for ~1 second at 30fps)
+      const newHistory = [...prev.audioLevelHistory, normalizedLevel].slice(-30);
+      
+      // Check if device is working based on recent audio levels
+      const recentAverageLevel = newHistory.length > 10 ? 
+        newHistory.slice(-10).reduce((sum, level) => sum + level, 0) / 10 : 0;
+      
+      const deviceIsWorking = recentAverageLevel > 0.01 || normalizedLevel > 0.05; // Working if recent activity
+      
+      // Debug logging for frequency data (only log every 30 frames to avoid spam)
+      if (normalizedLevel > 0.05 && Math.random() < 0.03) {
+        console.log('🎤 Audio Debug:', {
+          level: Math.round(normalizedLevel * 100) + '%',
+          frequencyBars: frequencies.length,
+          avgFreq: Math.round((frequencies.reduce((sum, f) => sum + f, 0) / frequencies.length) * 100) + '%',
+          maxFreq: Math.round(Math.max(...frequencies) * 100) + '%'
+        });
+      }
+      
+      return {
+        ...prev,
+        voiceActivityLevel: normalizedLevel,
+        frequencyData: frequencies,
+        audioLevelHistory: newHistory,
+        activeDeviceInfo: prev.activeDeviceInfo ? {
+          ...prev.activeDeviceInfo,
+          isWorking: deviceIsWorking
+        } : null
+      };
+    });
     
     onVoiceActivityUpdate?.(normalizedLevel, frequencies);
     
-    if (state.isRecording) {
-      animationFrameRef.current = requestAnimationFrame(detectVoiceActivity);
+      if (isRecordingRef.current) {
+        animationFrameRef.current = requestAnimationFrame(() => detectVoiceActivity());
+      }
+    } catch (error) {
+      console.error('🔇 detectVoiceActivity error:', error);
+      // Continue with animation frame even on error to avoid stopping completely
+      if (isRecordingRef.current) {
+        animationFrameRef.current = requestAnimationFrame(() => detectVoiceActivity());
+      }
     }
-  }, [state.isRecording, onVoiceActivityUpdate]);
+  }, [onVoiceActivityUpdate]);
 
   // Start recording timer
   const startTimer = useCallback(() => {
@@ -137,9 +242,12 @@ export function useRecorder(options: RecorderOptions) {
     setState(prev => ({ ...prev, isRequestingPermission: true }));
     
     try {
+      // Get the current microphone ID from either prop or function
+      const currentMicrophoneId = getMicrophoneId?.() || selectedMicrophoneId;
+      
       const constraints = {
-        audio: selectedMicrophoneId ? {
-          deviceId: selectedMicrophoneId,
+        audio: currentMicrophoneId ? {
+          deviceId: { exact: currentMicrophoneId }, // Force exact device match
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -152,8 +260,116 @@ export function useRecorder(options: RecorderOptions) {
         }
       };
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (exactConstraintError: any) {
+        if (currentMicrophoneId) {
+          console.warn('⚠️ Exact device constraint failed, attempting fallback:', {
+            requestedDevice: currentMicrophoneId,
+            error: exactConstraintError?.message || 'Unknown error'
+          });
+          
+          // Fallback to non-exact constraint
+          const fallbackConstraints = {
+            audio: {
+              deviceId: currentMicrophoneId, // Non-exact fallback
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 16000
+            }
+          };
+          
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+            console.log('✅ Fallback constraint succeeded');
+          } catch (fallbackError) {
+            console.error('❌ Both exact and fallback constraints failed:', fallbackError);
+            throw fallbackError;
+          }
+        } else {
+          throw exactConstraintError;
+        }
+      }
+      
       streamRef.current = stream;
+      
+      // Get actual device info from the stream
+      const audioTracks = stream.getAudioTracks();
+      let activeDeviceInfo: {
+        label: string;
+        deviceId: string;
+        isWorking: boolean;
+        hasMismatch?: boolean;
+        requestedDeviceId?: string;
+      } | null = null;
+      
+      if (audioTracks.length > 0) {
+        const track = audioTracks[0];
+        const settings = track.getSettings();
+        const constraints = track.getConstraints();
+        
+        activeDeviceInfo = {
+          label: track.label || 'Unknown Microphone',
+          deviceId: settings.deviceId || 'unknown',
+          isWorking: false, // Will be updated by voice activity detection
+          hasMismatch: false
+        };
+        
+        console.log('🎤 Audio device details:', {
+          label: track.label,
+          deviceId: settings.deviceId,
+          requestedDeviceId: currentMicrophoneId,
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+          constraints: constraints,
+          deviceMatch: settings.deviceId === currentMicrophoneId
+        });
+        
+        // Enhanced device verification and error handling
+        if (currentMicrophoneId && settings.deviceId !== currentMicrophoneId) {
+          const deviceMismatchWarning = {
+            requested: currentMicrophoneId,
+            actual: settings.deviceId,
+            actualLabel: track.label,
+            isExactConstraint: constraints.deviceId && typeof constraints.deviceId === 'object' && 'exact' in constraints.deviceId,
+            isDefaultDevice: settings.deviceId === 'default' || !settings.deviceId
+          };
+          
+          console.warn('⚠️ Device mismatch detected:', deviceMismatchWarning);
+          
+          // More specific warnings based on the type of mismatch
+          if (deviceMismatchWarning.isDefaultDevice) {
+            console.warn('💡 Falling back to system default microphone');
+            console.warn('   - AirPods may not be properly connected or available');
+            console.warn('   - Check Bluetooth connection and system audio settings');
+          } else {
+            console.warn('💡 Using different device than requested:');
+            console.warn(`   - Requested: ${currentMicrophoneId}`);
+            console.warn(`   - Actually using: "${track.label}" (${settings.deviceId})`);
+            console.warn('   - This may indicate device availability issues');
+          }
+          
+          // Store device mismatch info for user notification
+          if (activeDeviceInfo) {
+            activeDeviceInfo.hasMismatch = true;
+            activeDeviceInfo.requestedDeviceId = currentMicrophoneId;
+          }
+        } else if (currentMicrophoneId) {
+          console.log('✅ Device match confirmed:', {
+            requested: currentMicrophoneId,
+            actual: settings.deviceId,
+            label: track.label
+          });
+          if (activeDeviceInfo) {
+            activeDeviceInfo.hasMismatch = false;
+          }
+        }
+      }
+
+      // Update the ref before setting state to ensure detectVoiceActivity has correct value
+      isRecordingRef.current = true;
       
       setState(prev => ({ 
         ...prev, 
@@ -161,21 +377,10 @@ export function useRecorder(options: RecorderOptions) {
         isRequestingPermission: false,
         isRecording: true,
         voiceActivityLevel: 0,
-        frequencyData: []
+        frequencyData: [],
+        activeDeviceInfo,
+        audioLevelHistory: []
       }));
-
-      // Log the actual microphone being used
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        const track = audioTracks[0];
-        const settings = track.getSettings();
-        console.log('🎤 Using microphone:', {
-          label: track.label,
-          deviceId: settings.deviceId,
-          sampleRate: settings.sampleRate,
-          channelCount: settings.channelCount
-        });
-      }
 
       // Set up audio context for voice activity detection
       const context = new AudioContext();
@@ -186,8 +391,21 @@ export function useRecorder(options: RecorderOptions) {
       analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
       
+      console.log('🎤 Web Audio API setup:', {
+        contextState: context.state,
+        analyserFFTSize: analyser.fftSize,
+        frequencyBinCount: analyser.frequencyBinCount,
+        sampleRate: context.sampleRate
+      });
+      
       audioContextRef.current = context;
       analyserRef.current = analyser;
+      
+      // Ensure audio context is running
+      if (context.state === 'suspended') {
+        console.log('🎤 Resuming suspended audio context...');
+        await context.resume();
+      }
 
       // Set up media recorder
       const recorder = new MediaRecorder(stream, {
@@ -222,10 +440,16 @@ export function useRecorder(options: RecorderOptions) {
       mediaRecorderRef.current = recorder;
       
       startTimer();
-      detectVoiceActivity();
+      
+      // Delay voice activity detection to ensure Web Audio API is ready
+      setTimeout(async () => {
+        console.log('🎤 Starting voice activity detection...');
+        await detectVoiceActivity();
+      }, 100); // 100ms delay to ensure initialization
       
     } catch (error) {
       console.error('🎤 Recording start failed:', error);
+      isRecordingRef.current = false; // Reset ref on error
       setState(prev => ({ 
         ...prev, 
         hasPermission: false, 
@@ -239,6 +463,9 @@ export function useRecorder(options: RecorderOptions) {
   const stopRecording = useCallback(() => {
     console.log('🛑 useRecorder.stopRecording() called');
     
+    // Stop the ref first to prevent further animation frames
+    isRecordingRef.current = false;
+    
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
@@ -248,15 +475,18 @@ export function useRecorder(options: RecorderOptions) {
     
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
     }
   }, [stopTimer]);
 
   // Cleanup function
   const cleanup = useCallback(() => {
+    isRecordingRef.current = false; // Ensure ref is reset
     stopTimer();
     
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
     }
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -277,7 +507,9 @@ export function useRecorder(options: RecorderOptions) {
       ...prev,
       isRecording: false,
       voiceActivityLevel: 0,
-      frequencyData: []
+      frequencyData: [],
+      activeDeviceInfo: null,
+      audioLevelHistory: []
     }));
   }, [stopTimer]);
 

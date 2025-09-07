@@ -17,9 +17,19 @@ interface UIState {
   // UI visibility state
   showAlerts: boolean;
   showPatientSelectionModal: boolean;
+  showScreenshotAnnotationModal: boolean;
+  showPatientEducationConfig: boolean;
   showMainMenu: boolean;
+  showRecordingPrompts: boolean;
+  showMetricsDashboard: boolean;
   isExtractingPatients: boolean;
   isBatchProcessing: boolean;
+  
+  // AI Medical Review overlay states
+  showFieldIngestionOverlay: boolean;
+  showProcessingPhase: boolean;
+  processingProgress: number;
+  processingStartTime: number;
   
   // Content state
   warnings: string[];
@@ -43,6 +53,8 @@ interface CombinedAppState extends AppState {
   // Patient session management
   patientSessions: PatientSession[];
   currentPatientInfo: PatientInfo | null;
+  currentSessionId: string | null; // Track the currently recording session
+  selectedSessionId: string | null; // Track the session being viewed in the UI
 }
 
 // Action types for state updates
@@ -52,10 +64,15 @@ type AppAction =
   | { type: 'SET_CURRENT_AGENT'; payload: AgentType | null }
   | { type: 'SET_TRANSCRIPTION'; payload: string }
   | { type: 'SET_RESULTS'; payload: string }
+  | { type: 'SET_RESULTS_SUMMARY'; payload: string }
+  | { type: 'SET_AI_GENERATED_SUMMARY'; payload: string | undefined }
+  | { type: 'SET_MISSING_INFO'; payload: any | null }
+  | { type: 'SET_MISSING_INFO_ANSWERS'; payload: Record<string, string> }
+  | { type: 'CLEAR_MISSING_INFO' }
   | { type: 'SET_PROCESSING_STATUS'; payload: ProcessingStatus }
   | { type: 'SET_VOICE_ACTIVITY'; payload: { level: number; frequencyData: number[] } }
   | { type: 'SET_MODEL_STATUS'; payload: AppState['modelStatus'] }
-  | { type: 'SET_TIMING_DATA'; payload: Partial<Pick<AppState, 'transcriptionTime' | 'agentProcessingTime' | 'totalProcessingTime' | 'processingStartTime'>> }
+  | { type: 'SET_TIMING_DATA'; payload: Partial<Pick<AppState, 'recordingTime' | 'transcriptionTime' | 'agentProcessingTime' | 'totalProcessingTime' | 'processingStartTime'>> }
   | { type: 'SET_CURRENT_AGENT_NAME'; payload: string | null }
   | { type: 'SET_FAILED_RECORDINGS'; payload: FailedAudioRecording[] }
   | { type: 'SET_REVIEW_DATA'; payload: BatchAIReviewReport | null }
@@ -66,7 +83,11 @@ type AppAction =
   | { type: 'SET_ALERTS_VISIBLE'; payload: boolean }
   | { type: 'SET_RESULT_SUMMARY'; payload: string }
   | { type: 'SET_PATIENT_MODAL'; payload: boolean }
+  | { type: 'SET_SCREENSHOT_ANNOTATION_MODAL'; payload: boolean }
+  | { type: 'SET_PATIENT_EDUCATION_CONFIG'; payload: boolean }
   | { type: 'SET_MAIN_MENU'; payload: boolean }
+  | { type: 'SET_RECORDING_PROMPTS'; payload: boolean }
+  | { type: 'SET_METRICS_DASHBOARD'; payload: boolean }
   | { type: 'SET_CALENDAR_DATA'; payload: UIState['calendarData'] }
   | { type: 'SET_EXTRACTING_PATIENTS'; payload: boolean }
   | { type: 'SET_EXTRACT_ERROR'; payload: string | null }
@@ -79,7 +100,15 @@ type AppAction =
   | { type: 'ADD_PATIENT_SESSION'; payload: PatientSession }
   | { type: 'UPDATE_PATIENT_SESSION'; payload: { id: string; updates: Partial<PatientSession> } }
   | { type: 'REMOVE_PATIENT_SESSION'; payload: string }
-  | { type: 'CLEAR_PATIENT_SESSIONS' };
+  | { type: 'CLEAR_PATIENT_SESSIONS' }
+  | { type: 'SET_CURRENT_SESSION_ID'; payload: string | null }
+  | { type: 'SET_SELECTED_SESSION_ID'; payload: string | null }
+  | { type: 'SET_FIELD_INGESTION_OVERLAY'; payload: boolean }
+  | { type: 'SET_PROCESSING_PHASE'; payload: boolean }
+  | { type: 'SET_PROCESSING_PROGRESS'; payload: number }
+  | { type: 'SET_AI_REVIEW_START_TIME'; payload: number }
+  | { type: 'SET_PATIENT_VERSION'; payload: string | null }
+  | { type: 'SET_GENERATING_PATIENT_VERSION'; payload: boolean };
 
 // Initial state
 const initialState: CombinedAppState = {
@@ -89,6 +118,10 @@ const initialState: CombinedAppState = {
   currentAgent: null,
   transcription: '',
   results: '',
+  resultsSummary: '',
+  aiGeneratedSummary: undefined,
+  missingInfo: null,
+  missingInfoAnswers: {},
   processingStatus: 'idle',
   voiceActivityLevel: 0,
   frequencyData: [],
@@ -99,6 +132,7 @@ const initialState: CombinedAppState = {
     lastPing: 0,
     latency: 0
   },
+  recordingTime: null,
   transcriptionTime: null,
   agentProcessingTime: null,
   totalProcessingTime: null,
@@ -106,10 +140,14 @@ const initialState: CombinedAppState = {
   processingStartTime: null,
   failedAudioRecordings: [],
   reviewData: null,
+  patientVersion: null,
+  isGeneratingPatientVersion: false,
   
   // Patient session management
   patientSessions: [],
   currentPatientInfo: null,
+  currentSessionId: null,
+  selectedSessionId: null,
   
   // UI state
   ui: {
@@ -117,9 +155,20 @@ const initialState: CombinedAppState = {
     isCancelling: false,
     showAlerts: true,
     showPatientSelectionModal: false,
+    showScreenshotAnnotationModal: false,
+    showPatientEducationConfig: false,
     showMainMenu: false,
+    showRecordingPrompts: false,
+    showMetricsDashboard: false,
     isExtractingPatients: false,
     isBatchProcessing: false,
+    
+    // AI Medical Review overlay states
+    showFieldIngestionOverlay: false,
+    showProcessingPhase: false,
+    processingProgress: 0,
+    processingStartTime: 0,
+    
     warnings: [],
     errors: [],
     resultSummary: '',
@@ -151,6 +200,23 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_RESULTS':
       if (state.results === action.payload) return state;
       return { ...state, results: action.payload };
+      
+    case 'SET_RESULTS_SUMMARY':
+      if (state.resultsSummary === action.payload) return state;
+      return { ...state, resultsSummary: action.payload };
+      
+    case 'SET_AI_GENERATED_SUMMARY':
+      if (state.aiGeneratedSummary === action.payload) return state;
+      return { ...state, aiGeneratedSummary: action.payload };
+    
+    case 'SET_MISSING_INFO':
+      return { ...state, missingInfo: action.payload };
+    
+    case 'SET_MISSING_INFO_ANSWERS':
+      return { ...state, missingInfoAnswers: action.payload };
+    
+    case 'CLEAR_MISSING_INFO':
+      return { ...state, missingInfo: null, missingInfoAnswers: {} };
       
     case 'SET_PROCESSING_STATUS':
       if (state.processingStatus === action.payload) return state;
@@ -210,9 +276,25 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       if (state.ui.showPatientSelectionModal === action.payload) return state;
       return { ...state, ui: { ...state.ui, showPatientSelectionModal: action.payload } };
       
+    case 'SET_SCREENSHOT_ANNOTATION_MODAL':
+      if (state.ui.showScreenshotAnnotationModal === action.payload) return state;
+      return { ...state, ui: { ...state.ui, showScreenshotAnnotationModal: action.payload } };
+      
+    case 'SET_PATIENT_EDUCATION_CONFIG':
+      if (state.ui.showPatientEducationConfig === action.payload) return state;
+      return { ...state, ui: { ...state.ui, showPatientEducationConfig: action.payload } };
+      
     case 'SET_MAIN_MENU':
       if (state.ui.showMainMenu === action.payload) return state;
       return { ...state, ui: { ...state.ui, showMainMenu: action.payload } };
+      
+    case 'SET_RECORDING_PROMPTS':
+      if (state.ui.showRecordingPrompts === action.payload) return state;
+      return { ...state, ui: { ...state.ui, showRecordingPrompts: action.payload } };
+      
+    case 'SET_METRICS_DASHBOARD':
+      if (state.ui.showMetricsDashboard === action.payload) return state;
+      return { ...state, ui: { ...state.ui, showMetricsDashboard: action.payload } };
       
     case 'SET_CALENDAR_DATA':
       return { ...state, ui: { ...state.ui, calendarData: action.payload } };
@@ -239,13 +321,23 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       return initialState;
       
     case 'CLEAR_RECORDING':
+      console.log('🔄 CLEAR_RECORDING: Clearing state for new recording', {
+        hadResults: !!state.results,
+        hadReviewData: !!state.reviewData,
+        currentAgent: state.currentAgent,
+        processingStatus: state.processingStatus
+      });
       return {
         ...state,
         transcription: '',
         results: '',
+        resultsSummary: '',
+        aiGeneratedSummary: undefined,
+        patientVersion: null,
         processingStatus: 'idle',
         currentAgent: null,
         currentAgentName: null,
+        recordingTime: null,
         transcriptionTime: null,
         agentProcessingTime: null,
         totalProcessingTime: null,
@@ -284,7 +376,33 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       };
       
     case 'CLEAR_PATIENT_SESSIONS':
-      return { ...state, patientSessions: [], currentPatientInfo: null };
+      return { ...state, patientSessions: [], currentPatientInfo: null, currentSessionId: null, selectedSessionId: null };
+      
+    case 'SET_CURRENT_SESSION_ID':
+      return { ...state, currentSessionId: action.payload };
+      
+    case 'SET_SELECTED_SESSION_ID':
+      return { ...state, selectedSessionId: action.payload };
+      
+    case 'SET_FIELD_INGESTION_OVERLAY':
+      return { ...state, ui: { ...state.ui, showFieldIngestionOverlay: action.payload } };
+      
+    case 'SET_PROCESSING_PHASE':
+      return { ...state, ui: { ...state.ui, showProcessingPhase: action.payload } };
+      
+    case 'SET_PROCESSING_PROGRESS':
+      return { ...state, ui: { ...state.ui, processingProgress: action.payload } };
+      
+    case 'SET_AI_REVIEW_START_TIME':
+      return { ...state, ui: { ...state.ui, processingStartTime: action.payload } };
+      
+    case 'SET_PATIENT_VERSION':
+      if (state.patientVersion === action.payload) return state;
+      return { ...state, patientVersion: action.payload };
+      
+    case 'SET_GENERATING_PATIENT_VERSION':
+      if (state.isGeneratingPatientVersion === action.payload) return state;
+      return { ...state, isGeneratingPatientVersion: action.payload };
       
     default:
       return state;
@@ -320,6 +438,26 @@ export function useAppState() {
       dispatch({ type: 'SET_RESULTS', payload: results });
     }, []),
     
+    setResultsSummary: useCallback((summary: string) => {
+      dispatch({ type: 'SET_RESULTS_SUMMARY', payload: summary });
+    }, []),
+    
+    setAiGeneratedSummary: useCallback((summary: string | undefined) => {
+      dispatch({ type: 'SET_AI_GENERATED_SUMMARY', payload: summary });
+    }, []),
+
+    setMissingInfo: useCallback((missing: any | null) => {
+      dispatch({ type: 'SET_MISSING_INFO', payload: missing });
+    }, []),
+
+    setMissingInfoAnswers: useCallback((answers: Record<string, string>) => {
+      dispatch({ type: 'SET_MISSING_INFO_ANSWERS', payload: answers });
+    }, []),
+
+    clearMissingInfo: useCallback(() => {
+      dispatch({ type: 'CLEAR_MISSING_INFO' });
+    }, []),
+    
     setProcessingStatus: useCallback((status: ProcessingStatus) => {
       dispatch({ type: 'SET_PROCESSING_STATUS', payload: status });
     }, []),
@@ -336,7 +474,7 @@ export function useAppState() {
       dispatch({ type: 'SET_MODEL_STATUS', payload: status });
     }, []),
     
-    setTimingData: useCallback((timing: Partial<Pick<AppState, 'transcriptionTime' | 'agentProcessingTime' | 'totalProcessingTime' | 'processingStartTime'>>) => {
+    setTimingData: useCallback((timing: Partial<Pick<AppState, 'recordingTime' | 'transcriptionTime' | 'agentProcessingTime' | 'totalProcessingTime' | 'processingStartTime'>>) => {
       dispatch({ type: 'SET_TIMING_DATA', payload: timing });
     }, []),
     
@@ -380,8 +518,24 @@ export function useAppState() {
       dispatch({ type: 'SET_PATIENT_MODAL', payload: show });
     }, []),
     
+    setScreenshotAnnotationModal: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_SCREENSHOT_ANNOTATION_MODAL', payload: show });
+    }, []),
+    
+    setPatientEducationConfig: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_PATIENT_EDUCATION_CONFIG', payload: show });
+    }, []),
+    
     setMainMenu: useCallback((show: boolean) => {
       dispatch({ type: 'SET_MAIN_MENU', payload: show });
+    }, []),
+    
+    setRecordingPrompts: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_RECORDING_PROMPTS', payload: show });
+    }, []),
+    
+    setMetricsDashboard: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_METRICS_DASHBOARD', payload: show });
     }, []),
     
     setCalendarData: useCallback((data: UIState['calendarData']) => {
@@ -435,6 +589,39 @@ export function useAppState() {
     
     clearPatientSessions: useCallback(() => {
       dispatch({ type: 'CLEAR_PATIENT_SESSIONS' });
+    }, []),
+    
+    setCurrentSessionId: useCallback((sessionId: string | null) => {
+      dispatch({ type: 'SET_CURRENT_SESSION_ID', payload: sessionId });
+    }, []),
+    
+    setSelectedSessionId: useCallback((sessionId: string | null) => {
+      dispatch({ type: 'SET_SELECTED_SESSION_ID', payload: sessionId });
+    }, []),
+    
+    // AI Medical Review overlay actions
+    setFieldIngestionOverlay: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_FIELD_INGESTION_OVERLAY', payload: show });
+    }, []),
+    
+    setProcessingPhase: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_PROCESSING_PHASE', payload: show });
+    }, []),
+    
+    setProcessingProgress: useCallback((progress: number) => {
+      dispatch({ type: 'SET_PROCESSING_PROGRESS', payload: progress });
+    }, []),
+    
+    setAIReviewStartTime: useCallback((time: number) => {
+      dispatch({ type: 'SET_AI_REVIEW_START_TIME', payload: time });
+    }, []),
+    
+    setPatientVersion: useCallback((version: string | null) => {
+      dispatch({ type: 'SET_PATIENT_VERSION', payload: version });
+    }, []),
+    
+    setGeneratingPatientVersion: useCallback((generating: boolean) => {
+      dispatch({ type: 'SET_GENERATING_PATIENT_VERSION', payload: generating });
     }, [])
   };
   

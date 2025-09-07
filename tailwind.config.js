@@ -8,6 +8,29 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Monochrome-first neutrals
+        ink: {
+          primary: '#1a1a1a',     // Near-black text
+          secondary: '#525252',    // Muted text
+          tertiary: '#a3a3a3',    // Disabled text
+        },
+        surface: {
+          primary: '#ffffff',      // White surfaces
+          secondary: '#f8fafc',    // Light canvas background
+          tertiary: '#f1f5f9',     // Subtle backgrounds
+        },
+        line: {
+          primary: '#e5e7eb',      // Hairline borders
+          secondary: '#f3f4f6',    // Subtle dividers
+        },
+        // Meaningful accent colors (used sparingly)
+        accent: {
+          emerald: '#10b981',      // Success/health states
+          violet: '#8b5cf6',       // Processing/active states
+          amber: '#f59e0b',        // Warnings/caution
+          red: '#ef4444',          // Errors/critical states
+        },
+        // Legacy medical colors (deprecated - for gradual migration)
         medical: {
           primary: '#2563eb',
           secondary: '#1e40af',

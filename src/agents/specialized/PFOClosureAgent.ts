@@ -11,7 +11,7 @@ import type {
   OccluderType,
   ClosureIndication
 } from '@/types/medical.types';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { PFOClosureSystemPrompts, PFOClosureMedicalPatterns, PFOClosureValidationRules } from './PFOClosureSystemPrompts';
 
 /**
@@ -364,7 +364,7 @@ export class PFOClosureAgent extends MedicalAgent {
     complications: PFOClosureComplication[],
     originalInput: string
   ): Promise<string> {
-    console.log('🔧 Generating PFO closure report with LMStudio medgemma-27b...');
+    console.log(`🔧 Generating PFO closure report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
     
     try {
       // Prepare comprehensive context for LMStudio

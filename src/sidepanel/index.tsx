@@ -3,6 +3,27 @@ import { createRoot } from 'react-dom/client';
 import OptimizedApp from './OptimizedApp';
 import './styles/globals.css';
 
+// Hard-stop default browser handling of OS file drops in the side panel
+// Attach ASAP at module load with capture + non-passive listeners
+const preventDropNavigation = () => {
+  const prevent = (e: Event) => {
+    // Only prevent default; do not stop propagation so drop zones still receive events
+    e.preventDefault();
+  };
+
+  // Capture on all major roots
+  window.addEventListener('dragover', prevent, { capture: true });
+  window.addEventListener('drop', prevent, { capture: true });
+  document.addEventListener('dragover', prevent, { capture: true });
+  document.addEventListener('drop', prevent, { capture: true });
+  document.documentElement?.addEventListener?.('dragover', prevent as any, { capture: true } as any);
+  document.documentElement?.addEventListener?.('drop', prevent as any, { capture: true } as any);
+  document.body?.addEventListener?.('dragover', prevent as any, { capture: true } as any);
+  document.body?.addEventListener?.('drop', prevent as any, { capture: true } as any);
+};
+
+preventDropNavigation();
+
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -30,7 +51,7 @@ class ErrorBoundary extends React.Component<
               Extension Error
             </h1>
             <p className="text-white/80 mb-4">
-              The Reflow Medical Assistant encountered an error.
+              The Operator Chrome Extension encountered an error.
             </p>
             <button
               onClick={() => window.location.reload()}
@@ -68,7 +89,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Initialize React app
 function initializeApp() {
-  console.log('🏥 Initializing Reflow Medical Assistant...', new Date().toISOString());
+  console.log('🏥 Initializing Operator Chrome Extension...', new Date().toISOString());
   console.log('🔧 Extension context check:', typeof chrome !== 'undefined' && chrome.runtime);
   
   const rootElement = document.getElementById('root');
@@ -133,12 +154,12 @@ if (document.readyState === 'loading') {
 
 // Add debugging info to window for testing
 if (typeof window !== 'undefined') {
-  (window as any).reflowDebug = {
+  (window as any).operatorDebug = {
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     userAgent: navigator.userAgent,
     chromeAvailable: typeof chrome !== 'undefined',
     extensionId: chrome?.runtime?.id || 'unknown'
   };
-  console.log('🔧 Debug info:', (window as any).reflowDebug);
+  console.log('🔧 Debug info:', (window as any).operatorDebug);
 }

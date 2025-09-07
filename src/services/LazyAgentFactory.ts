@@ -75,6 +75,11 @@ export class LazyAgentFactory {
           AgentClass = medicationModule.MedicationAgent;
           break;
           
+        case 'bloods':
+          const bloodsModule = await import('@/agents/specialized/BloodsAgent');
+          AgentClass = bloodsModule.BloodsAgent;
+          break;
+          
         case 'mteer':
           const mteerModule = await import('@/agents/specialized/MTEERAgent');
           AgentClass = mteerModule.MTEERAgent;
@@ -91,8 +96,13 @@ export class LazyAgentFactory {
           break;
           
         case 'ai-medical-review':
-          const aiReviewModule = await import('@/agents/specialized/AusMedicalReviewAgent');
-          AgentClass = aiReviewModule.AusMedicalReviewAgent;
+          const aiReviewModule = await import('@/agents/specialized/BatchPatientReviewAgent');
+          AgentClass = aiReviewModule.BatchPatientReviewAgent;
+          break;
+          
+        case 'patient-education':
+          const patientEducationModule = await import('@/agents/specialized/PatientEducationAgent');
+          AgentClass = patientEducationModule.PatientEducationAgent;
           break;
           
         default:
@@ -140,28 +150,57 @@ export class LazyAgentFactory {
   }
 
   /**
-   * Preload agents that are likely to be used
+   * Preload agents that are likely to be used based on usage patterns
    */
   async preloadCommonAgents(): Promise<void> {
+    // Priority order: most commonly used agents first
     const commonAgents: AgentType[] = [
-      'quick-letter',
-      'investigation-summary',
-      'background'
+      'quick-letter',        // Most frequently used for simple reports
+      'investigation-summary', // Commonly used for test results
+      'background',          // Often needed for patient context
+      'tavi',               // High-impact procedure agent
+      'angiogram-pci',      // Another frequently used procedure agent
+      'consultation'        // Common for general assessments
     ];
     
-    console.log('🔄 Preloading common agents...');
+    console.log('🔄 Preloading common agents for performance optimization...');
+    const startTime = Date.now();
     
-    const preloadPromises = commonAgents.map(async (agentType) => {
+    // Load agents sequentially to avoid overwhelming the system
+    for (const agentType of commonAgents) {
       try {
         await this.loadAgent(agentType);
-        console.log(`✅ Preloaded ${agentType}`);
+        console.log(`✅ Preloaded ${agentType} agent`);
       } catch (error) {
         console.warn(`⚠️ Failed to preload ${agentType}:`, error);
+      }
+    }
+    
+    const loadTime = Date.now() - startTime;
+    console.log(`✅ Preloaded ${commonAgents.length} common agents in ${loadTime}ms`);
+  }
+
+  /**
+   * Preload specific high-priority agents (for immediate use)
+   */
+  async preloadCriticalAgents(): Promise<void> {
+    const criticalAgents: AgentType[] = ['quick-letter', 'investigation-summary'];
+    
+    console.log('🚀 Preloading critical agents for immediate use...');
+    const startTime = Date.now();
+    
+    const preloadPromises = criticalAgents.map(async (agentType) => {
+      try {
+        await this.loadAgent(agentType);
+        console.log(`⚡ Critical agent ${agentType} preloaded`);
+      } catch (error) {
+        console.warn(`⚠️ Failed to preload critical agent ${agentType}:`, error);
       }
     });
     
     await Promise.allSettled(preloadPromises);
-    console.log('✅ Common agents preloading completed');
+    const loadTime = Date.now() - startTime;
+    console.log(`⚡ Critical agents preloaded in ${loadTime}ms`);
   }
 
   /**
@@ -176,6 +215,7 @@ export class LazyAgentFactory {
       'investigation-summary',
       'background',
       'medication',
+      'bloods',
       'mteer',
       'pfo-closure',
       'right-heart-cath',
@@ -196,6 +236,35 @@ export class LazyAgentFactory {
   clearCache(): void {
     console.log('🗑️ Clearing agent cache');
     agentCache.clear();
+  }
+
+  /**
+   * Smart cache cleanup - keep frequently used agents, clear others
+   */
+  optimizeCache(): void {
+    const criticalAgents: AgentType[] = ['quick-letter', 'investigation-summary', 'background'];
+    const currentAgents = Array.from(agentCache.keys());
+    const agentsToRemove = currentAgents.filter(agent => !criticalAgents.includes(agent));
+    
+    console.log(`🧹 Optimizing cache: keeping ${criticalAgents.length} critical agents, removing ${agentsToRemove.length} others`);
+    
+    agentsToRemove.forEach(agent => {
+      agentCache.delete(agent);
+      console.log(`🗑️ Removed ${agent} from cache`);
+    });
+    
+    console.log(`✅ Cache optimized: ${agentCache.size} agents remaining`);
+  }
+
+  /**
+   * Get memory usage estimation for agents
+   */
+  getMemoryEstimate(): { totalAgents: number; estimatedMemoryMB: number } {
+    const averageAgentSizeMB = 2; // Estimated size per agent in MB
+    const totalAgents = agentCache.size;
+    const estimatedMemoryMB = totalAgents * averageAgentSizeMB;
+    
+    return { totalAgents, estimatedMemoryMB };
   }
 
   /**

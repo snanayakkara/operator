@@ -18,36 +18,55 @@ CRITICAL INSTRUCTIONS:
 - Generate a PROCEDURAL REPORT in operation report style, NOT a consultation letter
 - DO NOT include "Dear Doctor", "Thanks for asking me to see", or letter-style formatting
 - DO NOT include patient greeting or letter closings
-- Use professional, clinical language matching interventional cardiology standards
-- Structure report in exactly THREE sections with specific clinical content
+- Use professional, clinical language with narrative flow matching interventional cardiology standards
+- Structure report in exactly FOUR sections with clear section separation and comprehensive clinical content
 
 Required sections (use exactly these headers):
 
 **PREAMBLE**:
-- Patient demographics with indication for TAVI
-- Preoperative CT findings: "suitable anatomy for valve implant from percutaneous approach"
-- Valve morphology: tricuspid/bicuspid, calcification burden, calcium score
-- Coronary disease assessment and existing stents
+- Patient demographics and clinical presentation if mentioned
+- Use narrative flow: "The patient was brought to the cardiac catheterisation laboratory for transcatheter aortic valve implantation."
+- Indication and clinical background in narrative form
+- Procedure approach: "The procedure was performed under local anaesthesia and deep sedation."
+
+**FINDINGS**:
+- Pre-procedural assessments with structured subheadings:
+
+Pre-procedural CT Assessment
+- Annular measurements and sizing parameters
+- LVOT calcium burden and distribution
+- Access vessel suitability: "suitable anatomy for valve implant from percutaneous approach"
+
+Echocardiographic Assessment  
 - Transthoracic echo findings with mean gradient and systolic function
-- Valve selection rationale: "Based on annular perimeter and area, and burden of LVOT calcium, a [manufacturer] [size] valve was chosen"
+- Valve morphology: tricuspid/bicuspid, calcification burden, calcium score
+- Left ventricular function assessment
+
+Coronary Assessment
+- Coronary disease status and existing interventions
+- Vessel patency and anatomical considerations
+
+Valve Selection
+- Sizing rationale: "Based on annular perimeter and area, and burden of LVOT calcium, a [manufacturer] [size] valve was chosen"
 
 **PROCEDURE**:
-- Anaesthesia approach: "under local anaesthesia and deep sedation"
-- Vascular access: radial for planning, femoral with ultrasound guidance
-- Pre-closure technique: "ProStyle sutures" or equivalent closure devices
-- Sheath exchange: specific French sizes (e.g., "16F Cook sheath")
-- Valve crossing and wire placement: "AL1 and straight wire", "invasive gradient", "LVEDP"
-- Guide wire: "Lunderquist wire placed at left ventricular apex"
-- Pre-dilation: balloon size and technique
-- Valve deployment: "at the level of the annular plane" with positioning details
-- Immediate assessment: aortic regurgitation grade, coronary patency
-- Closure: arteriotomy site closure with specific devices
-- Post-operative echo findings
+- Comprehensive step-by-step procedural narrative:
+- "From the right radial approach, a [size]F sheath was inserted and planning aortography performed."
+- "Right femoral arterial access was gained under ultrasound guidance, with adequate puncture confirmed on fluoroscopy."
+- "Pre-closure was performed with [number] ProStyle sutures."
+- "The right femoral sheath was exchanged for the [size]F Cook sheath."
+- "The valve was crossed using an AL1 and straight wire, with an invasive gradient of [value]mmHg and an LVEDP of [value]mmHg."
+- "A Lunderquist wire was placed at the left ventricular apex, exchanged into position using an angled pigtail."
+- "Pre-dilation was performed with a [size]mm balloon."
+- "The [manufacturer] [size] valve was deployed at the level of the annular plane, followed by [partial recaptures/positioning adjustments] for optimal positioning."
+- "There was [grade] aortic regurgitation on aortography and patent coronaries."
+- "The arteriotomy site was closed with [closure devices]."
+- "Post operative echocardiography demonstrated a well-seated valve with [grade] aortic regurgitation."
 
 **CONCLUSION**:
-- Simple success statement: "Successful implant of a [size] [manufacturer] valve"
-- Final valve function assessment
-- Post-procedural valve performance
+- Procedural success: "Successful implant of a [size] [manufacturer] valve."
+- Immediate valve performance: "Well-seated valve with [grade] aortic regurgitation and patent coronaries."
+- Post-procedural monitoring and follow-up recommendations: "The patient will require ongoing echocardiographic surveillance and clinical follow-up as per TAVI protocol."
 
 CLINICAL LANGUAGE REQUIREMENTS:
 - Australian spelling: anaesthesia, recognised, utilised, colour
@@ -70,34 +89,43 @@ HEMODYNAMIC DOCUMENTATION:
 - Aortic regurgitation grading: none/trace/mild/moderate/severe
 - Valve area calculations when relevant
 
-Use standard interventional cardiology procedural documentation format.
+Use standard interventional cardiology procedural documentation format with enhanced narrative flow.
 Target audience: Medical record documentation for interventional cardiologists, cardiothoracic surgeons, and referring physicians.`,
 
-    userPromptTemplate: `Generate a comprehensive TAVI procedural report using the THREE-SECTION format based on the following procedural dictation:
+    userPromptTemplate: `Generate a comprehensive TAVI procedural report using the FOUR-SECTION format based on the following procedural dictation:
 
 {input}
 
-Structure the report with exactly these three sections:
+Structure the report with exactly these four sections:
 
 **PREAMBLE**:
-- Start with patient demographics and indication
-- Include preoperative CT findings and valve morphology
-- Document echo measurements and valve selection rationale
-- Use clinical language: "suitable anatomy for valve implant", "heavily calcified", "Based on annular perimeter and area..."
+- Use narrative flow: "The patient was brought to the cardiac catheterisation laboratory for transcatheter aortic valve implantation."
+- Include patient demographics and clinical indication in narrative form
+- Document procedure approach: "The procedure was performed under local anaesthesia and deep sedation."
+
+**FINDINGS**:
+- Structure with clear subheadings for pre-procedural assessments:
+  - Pre-procedural CT Assessment: annular measurements, LVOT calcium, access suitability
+  - Echocardiographic Assessment: gradients, valve morphology, LV function
+  - Coronary Assessment: disease status, existing interventions
+  - Valve Selection: sizing rationale with specific measurements
 
 **PROCEDURE**:
-- Document anaesthesia and access approach
-- Include specific technical details: wire types, sheath sizes, closure methods
-- Describe valve deployment with positioning details
-- Document immediate outcomes and measurements
-- Use procedural terminology: "under ultrasound guidance", "pre-closure performed", "at the level of the annular plane"
+- Document step-by-step procedural narrative with detailed flow:
+- Access approach and planning aortography
+- Femoral access under ultrasound guidance
+- Pre-closure technique and sheath exchange
+- Valve crossing and wire placement with hemodynamic measurements
+- Pre-dilation and valve deployment details
+- Immediate assessment of valve function and coronary patency
+- Closure technique and post-procedural echocardiography
 
 **CONCLUSION**:
-- Provide simple success statement: "Successful implant of a [size] [manufacturer] valve"
-- Document final valve function
-- Include immediate post-procedural status
+- Procedural success statement: "Successful implant of a [size] [manufacturer] valve"
+- Immediate valve performance assessment
+- Specific follow-up recommendations: "The patient will require ongoing echocardiographic surveillance and clinical follow-up as per TAVI protocol"
 
-Preserve all medical facts accurately with Australian spelling and interventional cardiology terminology. Use precise measurements with units (mmHg, cm², French sizes).`
+Preserve all medical facts accurately with Australian spelling and interventional cardiology terminology. Use precise measurements with units (mmHg, cm², French sizes) and maintain narrative flow throughout.`
   },
 
 
@@ -212,6 +240,7 @@ export const TAVIValidationRules = {
   
   requiredSections: [
     'preamble',
+    'findings',
     'procedure', 
     'conclusion'
   ],
@@ -243,20 +272,26 @@ export const TAVIValidationRules = {
   sectionRequirements: {
     preamble: [
       'indication',
-      'preoperative CT',
-      'transthoracic echo',
-      'valve selection'
+      'narrative flow',
+      'clinical presentation'
+    ],
+    findings: [
+      'preoperative CT assessment',
+      'echocardiographic assessment',
+      'coronary assessment',
+      'valve selection rationale'
     ],
     procedure: [
       'anaesthesia',
-      'access',
+      'access approach',
       'valve deployment',
-      'immediate assessment'
+      'immediate assessment',
+      'post-procedural echo'
     ],
     conclusion: [
-      'successful implant',
-      'valve function',
-      'post-procedural status'
+      'procedural success',
+      'immediate valve performance',
+      'follow-up recommendations'
     ]
   }
 };

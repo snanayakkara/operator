@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+dist/
+
+# Python
+venv-whisper/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Development
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test artifacts
+test-results/
+artifacts/
+/test-report.html
+playwright-report/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+test-*.js
+test-*.cjs
+offline-check.py
+*.backup

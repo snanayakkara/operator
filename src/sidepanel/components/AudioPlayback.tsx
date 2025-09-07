@@ -31,10 +31,13 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   const [waveformData, setWaveformData] = useState<number[]>([]);
   const [audioUrl, setAudioUrl] = useState<string>('');
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [isUserInteracting, setIsUserInteracting] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number>();
+  const seekTimeoutRef = useRef<number>();
 
   // Create audio URL when component mounts
   useEffect(() => {
@@ -150,26 +153,36 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
     const maxAmplitude = Math.max(...waveformData);
     
     waveformData.forEach((amplitude, i) => {
-      const barHeight = (amplitude / maxAmplitude) * height * 0.8;
+      const barHeight = Math.max(2, (amplitude / maxAmplitude) * height * 0.8);
       const x = i * barWidth;
       const y = (height - barHeight) / 2;
       
-      // Color based on progress
+      // Color based on progress with improved contrast
       const barProgress = i / waveformData.length;
-      ctx.fillStyle = barProgress <= progress ? '#3b82f6' : '#e5e7eb';
+      if (barProgress <= progress) {
+        ctx.fillStyle = isSeeking ? '#1d4ed8' : '#3b82f6'; // Darker blue when seeking
+      } else {
+        ctx.fillStyle = '#d1d5db'; // Lighter gray for unplayed
+      }
       
       ctx.fillRect(x, y, Math.max(1, barWidth - 1), barHeight);
     });
     
-    // Draw progress line
+    // Draw progress line with enhanced visibility
     const progressX = progress * width;
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = isSeeking ? '#dc2626' : '#ef4444'; // Darker red when seeking
+    ctx.lineWidth = isSeeking ? 3 : 2;
     ctx.beginPath();
     ctx.moveTo(progressX, 0);
     ctx.lineTo(progressX, height);
     ctx.stroke();
-  }, [waveformData, currentTime, duration]);
+    
+    // Add seeking indicator
+    if (isSeeking) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+      ctx.fillRect(progressX - 2, 0, 4, height);
+    }
+  }, [waveformData, currentTime, duration, isSeeking]);
 
   // Update waveform on time changes
   useEffect(() => {
@@ -178,7 +191,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
 
   // Audio event handlers
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
+    if (audioRef.current && !isSeeking && !isUserInteracting) {
       setCurrentTime(audioRef.current.currentTime);
     }
   };
@@ -191,48 +204,162 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
 
   const handleEnded = () => {
     setIsPlaying(false);
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
+    stopProgressAnimation();
   };
 
-  const togglePlayback = () => {
-    if (!audioRef.current) return;
+  const handleSeeked = useCallback(() => {
+    console.log('✅ Audio seeked event fired');
+    if (seekTimeoutRef.current) {
+      window.clearTimeout(seekTimeoutRef.current);
+      seekTimeoutRef.current = undefined;
+    }
+    setIsSeeking(false);
+    // Sync current time with actual audio time after seeking
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  }, []);
+
+  const handleSeekError = useCallback(() => {
+    console.error('❌ Audio seek error occurred');
+    if (seekTimeoutRef.current) {
+      window.clearTimeout(seekTimeoutRef.current);
+      seekTimeoutRef.current = undefined;
+    }
+    setIsSeeking(false);
+    // Reset to current audio time on error
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  }, []);
+
+  const startProgressAnimation = useCallback(() => {
+    if (!isPlaying || !audioRef.current || isSeeking || isUserInteracting) return;
+    
+    const updateProgress = () => {
+      if (audioRef.current && isPlaying && !isSeeking && !isUserInteracting) {
+        setCurrentTime(audioRef.current.currentTime);
+        animationFrameRef.current = requestAnimationFrame(updateProgress);
+      }
+    };
+    
+    animationFrameRef.current = requestAnimationFrame(updateProgress);
+  }, [isPlaying, isSeeking, isUserInteracting]);
+
+  const stopProgressAnimation = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+  }, []);
+
+  const togglePlayback = useCallback(() => {
+    if (!audioRef.current || isSeeking) return;
 
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
+      stopProgressAnimation();
     } else {
-      audioRef.current.play();
-      setIsPlaying(true);
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+        if (!isUserInteracting && !isSeeking) {
+          startProgressAnimation();
+        }
+      }).catch(error => {
+        console.error('Audio playback failed:', error);
+        setIsPlaying(false);
+      });
     }
-  };
+  }, [isPlaying, isSeeking, isUserInteracting, startProgressAnimation, stopProgressAnimation]);
 
-  const seekTo = (percentage: number) => {
+  const seekTo = useCallback((percentage: number) => {
     if (!audioRef.current || !duration) return;
     
-    const newTime = (percentage / 100) * duration;
-    audioRef.current.currentTime = newTime;
+    // Don't start new seek if one is already in progress
+    if (isSeeking) {
+      console.log('⏭️ Seek already in progress, ignoring new seek request');
+      return;
+    }
+    
+    setIsSeeking(true);
+    
+    const newTime = Math.max(0, Math.min(duration, (percentage / 100) * duration));
+    
+    // Clear any existing seek timeout
+    if (seekTimeoutRef.current) {
+      window.clearTimeout(seekTimeoutRef.current);
+    }
+    
+    console.log('🎯 Seeking to:', { percentage: percentage.toFixed(2), newTime: newTime.toFixed(2) });
+    
+    // Update current time immediately for visual feedback
     setCurrentTime(newTime);
-  };
+    
+    try {
+      // Set audio element time
+      audioRef.current.currentTime = newTime;
+      
+      // Set a fallback timeout in case the seeked event doesn't fire
+      // The seeked event handler will clear this timeout when it fires
+      seekTimeoutRef.current = window.setTimeout(() => {
+        console.log('⚠️ Seek timeout fallback triggered - seeked event may not have fired');
+        setIsSeeking(false);
+        // Sync current time with actual audio time
+        if (audioRef.current) {
+          setCurrentTime(audioRef.current.currentTime);
+        }
+      }, 300); // Longer fallback timeout for safety
+      
+    } catch (error) {
+      console.error('❌ Seek failed:', error);
+      setIsSeeking(false);
+      if (seekTimeoutRef.current) {
+        window.clearTimeout(seekTimeoutRef.current);
+      }
+    }
+  }, [duration, isSeeking]);
 
-  const handleWaveformClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleWaveformClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !duration) {
+      console.log('❌ Cannot seek: canvas or duration not available', { 
+        canvas: !!canvas, 
+        duration 
+      });
+      return;
+    }
+
+    if (isSeeking) {
+      console.log('⏭️ Seek already in progress, ignoring click');
+      return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    const percentage = (x / rect.width) * 100;
-    seekTo(percentage);
-  };
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    
+    console.log('🎯 Waveform clicked:', { x, width: rect.width, percentage: percentage.toFixed(2) });
+    
+    try {
+      seekTo(percentage);
+    } catch (error) {
+      console.error('❌ Waveform seek failed:', error);
+    }
+  }, [duration, isSeeking, seekTo]);
 
-  const resetPlayback = () => {
-    seekTo(0);
+  const resetPlayback = useCallback(() => {
+    stopProgressAnimation();
     setIsPlaying(false);
+    setIsUserInteracting(false);
     if (audioRef.current) {
       audioRef.current.pause();
     }
-  };
+    seekTo(0);
+  }, [seekTo, stopProgressAnimation]);
 
   const downloadAudio = () => {
     const url = URL.createObjectURL(audioBlob);
@@ -269,6 +396,32 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
     }
   };
 
+  // Clean up animation frame when playback state changes
+  useEffect(() => {
+    if (!isPlaying) {
+      stopProgressAnimation();
+    }
+  }, [isPlaying, stopProgressAnimation]);
+  
+  // Handle seeking state cleanup
+  useEffect(() => {
+    return () => {
+      if (seekTimeoutRef.current) {
+        window.clearTimeout(seekTimeoutRef.current);
+      }
+    };
+  }, []);
+  
+  // Final cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      stopProgressAnimation();
+      if (seekTimeoutRef.current) {
+        window.clearTimeout(seekTimeoutRef.current);
+      }
+    };
+  }, [stopProgressAnimation]);
+
   return (
     <div className={`space-y-4 p-4 bg-gray-50 rounded-lg border ${className}`}>
       {/* Hidden audio element */}
@@ -278,6 +431,8 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleEnded}
+        onSeeked={handleSeeked}
+        onError={handleSeekError}
         onRateChange={() => setPlaybackRate(audioRef.current?.playbackRate || 1)}
         preload="metadata"
       />
@@ -324,13 +479,76 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
           ref={canvasRef}
           width={400}
           height={80}
-          className="w-full h-20 bg-white rounded border cursor-pointer"
+          className={`w-full h-20 bg-white rounded border transition-all duration-200 ${
+            isSeeking 
+              ? 'cursor-grabbing border-blue-400 shadow-md' 
+              : 'cursor-pointer hover:bg-gray-50 hover:border-gray-300'
+          }`}
           onClick={handleWaveformClick}
+          onMouseMove={(e) => {
+            const canvas = canvasRef.current;
+            if (canvas && duration && !isSeeking) {
+              const rect = canvas.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const percentage = (x / rect.width) * 100;
+              canvas.title = `Click to seek to ${formatTime((percentage / 100) * duration)}`;
+            } else if (canvas && isSeeking) {
+              canvas.title = 'Seeking...';
+            }
+          }}
+          style={{ touchAction: 'none' }}
         />
         <div className="flex items-center justify-between text-xs text-gray-500">
           <span>{formatTime(currentTime)}</span>
-          <span>Click waveform to seek</span>
+          <span className={isSeeking ? 'text-blue-600 font-medium' : ''}>
+            {isSeeking ? 'Seeking...' : 'Click waveform to seek'}
+          </span>
           <span>{formatTime(duration)}</span>
+        </div>
+        
+        {/* Alternative: Progress/Seek Slider */}
+        <div className="space-y-1">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="0.1"
+            value={duration ? (currentTime / duration) * 100 : 0}
+            onMouseDown={() => {
+              setIsUserInteracting(true);
+              stopProgressAnimation();
+            }}
+            onMouseUp={() => {
+              setIsUserInteracting(false);
+              if (isPlaying && !isSeeking) {
+                startProgressAnimation();
+              }
+            }}
+            onTouchStart={() => {
+              setIsUserInteracting(true);
+              stopProgressAnimation();
+            }}
+            onTouchEnd={() => {
+              setIsUserInteracting(false);
+              if (isPlaying && !isSeeking) {
+                startProgressAnimation();
+              }
+            }}
+            onInput={(e) => {
+              if (isUserInteracting) {
+                const percentage = parseFloat((e.target as HTMLInputElement).value);
+                seekTo(percentage);
+              }
+            }}
+            onChange={() => {
+              // Prevent onChange feedback loops - all seeking handled by onInput
+            }}
+            className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            disabled={!duration}
+          />
+          <div className="text-xs text-gray-400 text-center">
+            Alternative: Use slider above to seek
+          </div>
         </div>
       </div>
 

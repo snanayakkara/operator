@@ -1,4 +1,4 @@
-// Popup script for Reflow Medical Assistant Chrome Extension
+// Popup script for Operator Chrome Extension
 
 class PopupManager {
   constructor() {
@@ -70,22 +70,34 @@ class PopupManager {
       const statusDot = statusElement.querySelector('.status-dot');
       
       if (this.isEMRSite(activeTab?.url)) {
-        // Check LMStudio connection
+        // Use cached status from extension storage instead of making API calls
         try {
-          const response = await fetch('http://localhost:1234/v1/models', {
-            method: 'GET',
-            signal: AbortSignal.timeout(3000)
-          });
+          // Get cached model status from the main extension
+          const cachedStatus = await chrome.storage.session.get(['modelStatus', 'lastStatusCheck']);
+          const now = Date.now();
+          const statusAge = now - (cachedStatus.lastStatusCheck || 0);
           
-          if (response.ok) {
-            statusDot.className = 'status-dot status-online';
-            statusElement.lastChild.textContent = 'Ready for medical dictation';
+          // Use cached status if it's less than 5 minutes old
+          if (cachedStatus.modelStatus && statusAge < 300000) {
+            const isConnected = cachedStatus.modelStatus.isConnected;
+            const whisperRunning = cachedStatus.modelStatus.whisperServer?.running;
+            
+            if (isConnected || whisperRunning) {
+              statusDot.className = 'status-dot status-online';
+              statusElement.lastChild.textContent = 'Ready for medical dictation';
+            } else {
+              statusDot.className = 'status-dot status-offline';
+              statusElement.lastChild.textContent = 'Services not connected';
+            }
           } else {
-            throw new Error('LMStudio not responding');
+            // No recent cached status available
+            statusDot.className = 'status-dot status-offline';
+            statusElement.lastChild.textContent = 'Status check pending...';
           }
         } catch (error) {
+          console.warn('Failed to get cached status:', error);
           statusDot.className = 'status-dot status-offline';
-          statusElement.lastChild.textContent = 'LMStudio not connected';
+          statusElement.lastChild.textContent = 'Status unavailable';
         }
       } else {
         statusDot.className = 'status-dot status-offline';

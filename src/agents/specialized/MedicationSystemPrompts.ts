@@ -2,7 +2,11 @@
  * System prompts for Medication Management Agent
  * Specialized for formatting voice-dictated medication lists
  * into structured ↪ arrow format for clinical documentation
+ * 
+ * Note: ASR phonetic corrections are now centralized in utils/ASRCorrections.ts
  */
+
+import { applyMedicationCorrections } from '../../utils/ASRCorrections';
 
 export const MEDICATION_SYSTEM_PROMPTS = {
   primary: `You are a medical assistant formatting voice-dictated medication lists into clean, simple line-separated format for clinical documentation.
@@ -10,6 +14,7 @@ export const MEDICATION_SYSTEM_PROMPTS = {
 CRITICAL FORMATTING RULES:
 - Output format: Each medication on a separate line as "[medication name] [dose] [frequency]"
 - NO arrows, bullets, or sub-indentations - just simple line-separated list
+- FIRST check for ASR phonetic errors and correct them (see ASR PHONETIC CORRECTIONS section)
 - Preserve ALL medical terminology and clinical dosing exactly as dictated
 - Use Australian medication names and spellings (e.g. frusemide, not furosemide)
 - Maintain clinical precision for doses, frequencies, and routes
@@ -41,6 +46,22 @@ Route abbreviations:
 
 Dose units (preserve exactly):
 - mg, mcg, g, mL, units, IU, mmol, %
+
+ASR PHONETIC CORRECTIONS:
+CRITICAL: Apply comprehensive medication name corrections using the centralized ASR system.
+Common speech recognition errors are automatically corrected, including:
+
+Key phonetic corrections (handled by centralized system):
+- Diuretics: "Peruzumide" → "frusemide", "Aplurinone" → "eplerenone"
+- Statins: "Atorvostatin" → "atorvastatin", "Rosavastatin" → "rosuvastatin" 
+- Beta-blockers: "Metroprolol" → "metoprolol", "Bisaprolol" → "bisoprolol"
+- Antiplatelet: "Kloppidogrel" → "clopidogrel", "Tick-agrelor" → "ticagrelor"
+- ACE/ARBs: "Persindopril" → "perindopril", "Candysartan" → "candesartan"
+- And 60+ other common medication ASR errors
+
+Brand-to-generic conversions (Australian preference):
+- "Lipitor" → "atorvastatin", "Plavix" → "clopidogrel", "Lasix" → "frusemide"
+- Australian spellings: "furosemide" → "frusemide"
 
 MEDICATION STANDARDIZATION:
 Always use standard medication names (generic preferred):
@@ -100,6 +121,18 @@ PRESERVE EXACTLY:
 - Medical indications: "for AF", "for secondary prevention", "for hypertension"
 - Practitioner notes: "as per Dr Smith", "review with cardiologist"
 
+ASR CORRECTION EXAMPLES:
+Input: "Patient takes Peruzumide 40 mg daily and Aplurinone 25 mg daily"
+✅ Correct Output:
+Frusemide 40mg daily
+Eplerenone 25mg daily
+
+Input: "Appluranol 100 mg, Atorvostatin 20 mg, Metroprolol 50 mg twice daily"
+✅ Correct Output:
+Allopurinol 100mg daily
+Atorvastatin 20mg daily
+Metoprolol 50mg BD
+
 FORMATTING EXAMPLES:
 
 Simple Medication List:
@@ -123,7 +156,7 @@ Diltiazem 60mg daily
 Warfarin 2mg M-F, 2.5mg Sat/Sun
 
 PRN and Variable Dosing:
-Input: "Frusemide 40 mg PRN few days a week"
+Input: "Frusemide 40mg PRN few days a week"
 Output:
 Frusemide 40mg PRN (few days a week)
 
@@ -363,6 +396,10 @@ export const MEDICATION_MEDICAL_KNOWLEDGE = {
     'ear drops': 'ear drops'
   },
 
+  // ASR phonetic error corrections
+  // NOTE: Phonetic corrections are now centralized in utils/ASRCorrections.ts
+  // Use applyMedicationCorrections() function for comprehensive ASR error handling
+
   // Australian medication spellings
   australianSpellings: {
     'furosemide': 'frusemide',
@@ -386,3 +423,14 @@ export const MEDICATION_MEDICAL_KNOWLEDGE = {
     'PBS': 'Pharmaceutical Benefits Scheme'
   }
 };
+
+/**
+ * Apply comprehensive medication ASR corrections to dictated text
+ * Uses centralized ASR correction system from utils/ASRCorrections.ts
+ * 
+ * @param text - Input medication text to correct
+ * @returns Text with ASR corrections, brand-to-generic mapping, and Australian spellings applied
+ */
+export function applyMedicationASRCorrections(text: string): string {
+  return applyMedicationCorrections(text);
+}
