@@ -420,10 +420,10 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               <button
                 onClick={onNewRecording}
                 disabled={isRecording || ['recording', 'transcribing', 'processing', 'enhancing', 'cancelling'].includes(status)}
-                className={`glass-button p-2 rounded-lg transition-all ${
+                className={`bg-white border border-gray-200 transition-all duration-200 ease-out rounded-lg p-2 ${
                   isRecording || ['recording', 'transcribing', 'processing', 'enhancing', 'cancelling'].includes(status)
-                    ? 'opacity-50 cursor-not-allowed bg-surface-tertiary' 
-                    : 'hover:bg-green-50 hover:border-green-300 bg-surface-tertiary'
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'hover:bg-gray-50 hover:border-gray-300 cursor-pointer'
                 }`}
                 title="Clear previous recording and start fresh"
               >
@@ -440,7 +440,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               <div className="relative">
                 <button
                   onClick={() => setShowSessionDropdown(!showSessionDropdown)}
-                  className={`glass-button p-2 rounded-lg transition-all bg-surface-tertiary hover:bg-surface-primary relative ${
+                  className={`bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded-lg p-2 relative ${
                     isRecording ? 'scale-90' : ''
                   }`}
                   title={`${patientSessions.length} recent session${patientSessions.length !== 1 ? 's' : ''}`}
@@ -539,7 +539,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 <button
                   onClick={handleRefreshServices}
                   disabled={isRefreshing}
-                  className="glass-button p-1.5 rounded hover:bg-white/20 transition-colors"
+                  className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded p-1.5"
                   title="Refresh all services"
                 >
                   <RefreshCw className={`w-3 h-3 text-accent-violet ${isRefreshing ? 'motion-safe:animate-spin' : ''}`} />
@@ -547,7 +547,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 
                 <button
                   onClick={() => setShowServicesDetails(false)}
-                  className="glass-button p-1.5 rounded hover:bg-white/20 transition-colors"
+                  className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded p-1.5"
                   title="Close"
                 >
                   <X className="w-3 h-3 text-ink-secondary" />
@@ -667,7 +667,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               <div className="border-t border-gray-200 pt-3">
                 <button 
                   onClick={onShowMetrics}
-                  className="w-full glass-button p-2 rounded flex items-center justify-center space-x-2 hover:bg-gray-50 transition-colors"
+                  className="w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded p-2 flex items-center justify-center space-x-2"
                 >
                   <BarChart3 className="w-3 h-3 text-accent-violet" />
                   <span className="text-ink-primary text-xs">Performance Metrics</span>
@@ -677,7 +677,19 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             
             {/* Settings Link */}
             <div className="border-t border-gray-200 pt-3">
-              <button className="w-full glass-button p-2 rounded flex items-center justify-center space-x-2 hover:bg-surface-tertiary transition-colors">
+              <button 
+                onClick={() => {
+                  // Open options page in new tab
+                  if (chrome?.runtime?.openOptionsPage) {
+                    chrome.runtime.openOptionsPage();
+                  } else {
+                    // Fallback for development or if API is unavailable
+                    window.open(chrome.runtime.getURL('src/options/index.html'), '_blank');
+                  }
+                }}
+                className="w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded p-2 flex items-center justify-center space-x-2"
+                title="Open settings page in new tab"
+              >
                 <Settings className="w-3 h-3 text-ink-secondary" />
                 <span className="text-ink-primary text-xs">Open Settings</span>
               </button>

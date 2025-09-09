@@ -199,6 +199,15 @@ const RECORDING_PROMPTS = [
 
 ## Recent Major Updates
 
+### Full-Page Settings System (v3.2.1 - September 2025)
+- **Chrome Extension Options Page**: Complete full-page settings interface accessible via new tab
+- **Enhanced Transcription Management**: Full-screen interface for viewing and editing ASR corrections with advanced filtering, sorting, pagination, and bulk operations
+- **Professional Data Table**: 25 items per page with search, agent filtering, date ranges, and confidence levels
+- **Expanded Optimization Panel**: Full-page layout for ASR and GEPA optimization with better spacing and organization
+- **Functional Settings Button**: Fixed non-functional "Open Settings" button in StatusIndicator with proper Chrome extension API integration
+- **Monochrome Design System**: Professional medical-appropriate interface with sidebar navigation and responsive layout
+- **Enhanced UX**: Export functionality, bulk delete operations, advanced filtering, and comfortable editing experience
+
 ### Unified Recording Interface (v3.1.0 - August 2025)
 - **Consistent Recording Experience**: Eliminated interface inconsistencies between workflow and quick action recordings
 - **Vertical Stacked Layout**: LiveAudioVisualizer + RecordingPromptCard displayed together during ALL recordings
@@ -276,7 +285,7 @@ const RECORDING_PROMPTS = [
 - **Minor (x.X.0)**: New features, major agent enhancements, new investigation types, UX improvements
 - **Major (X.0.0)**: Breaking changes, architectural overhauls, new core functionality
 
-**Current Version**: **3.1.0** (synchronized across package.json and manifest.json)
+**Current Version**: **3.2.1** (synchronized across package.json and manifest.json)
 
 ## Recent Code Quality Improvements (January 2025)
 
@@ -300,6 +309,7 @@ const RECORDING_PROMPTS = [
 - **Type Updates**: Updated `PatientAppointment` interface to reflect ID-based pattern usage
 
 **Recent Version History**:
+- **3.2.1**: Full-Page Settings System - Chrome extension options page with enhanced transcription management, professional data table with filtering/sorting/pagination, expanded optimization panel, functional settings button, monochrome design system
 - **3.1.0**: Unified Recording Interface - consistent recording experience for all agent types, vertical stacked layout with LiveAudioVisualizer + RecordingPromptCard, universal prompt cards for quick actions, CompactMode implementation for space optimization
 - **3.0.3**: Major expansion - 11 total agents, comprehensive batch processing with Australian Medical Review, advanced patient session management, enhanced UI components
 - **2.5.0**: Major architectural improvements - agent-specific model configuration, comprehensive cancellation system, UI space optimization with embedded transcription, enhanced letter intelligence with medical pattern recognition
@@ -371,6 +381,13 @@ xestro-investigation-extension/
 │   │   │   └── index.ts                 # Agent exports
 │   │   └── router/
 │   │       └── AgentRouter.ts           # Direct agent routing
+│   ├── options/                         # Full-page settings interface
+│   │   ├── index.html                   # Options page HTML entry point
+│   │   ├── index.tsx                    # React entry point for options
+│   │   ├── OptionsApp.tsx               # Main options application
+│   │   └── components/                  # Options-specific components
+│   │       ├── FullPageOptimizationPanel.tsx  # Expanded optimization interface
+│   │       └── FullPageCorrectionsViewer.tsx  # Enhanced transcription management
 │   ├── orchestrators/                   # Advanced workflow orchestration
 │   │   ├── BatchAIReviewOrchestrator.ts # Multi-patient processing
 │   │   ├── CheckpointManager.ts         # Process state management
@@ -566,7 +583,7 @@ class XestroFieldManager {
   
   // Quick Actions integration
   async handleQuickAction(actionId: string, data: any): Promise<void> {
-    switch (actionId) {
+    switch (actionId) { 
       case 'investigation-summary':
         await this.insertInvestigationSummary(data.content);
         break;
@@ -709,6 +726,126 @@ try {
 }
 ```
 
+## UI Design System
+
+### Monochrome Clean Design System (v3.2.0 - September 2025)
+
+The application now uses a **clean celebratory stat-card + Apple-style blueprint line art** aesthetic with strict monochrome UI design principles.
+
+#### Design Principles
+- **Monochrome Foundation**: Primary design uses grayscale with sparing color usage only for semantic meaning
+- **Minimalist Approach**: Clean, uncluttered interfaces with generous whitespace
+- **Celebratory Elements**: Subtle stat-card styling for key metrics and results
+- **Apple Blueprint Inspiration**: Precise line work, technical drawing aesthetics
+- **Medical Professionalism**: Clean, trustworthy interface appropriate for healthcare settings
+
+#### Color Palette
+```css
+/* Primary Monochrome Palette */
+--surface-primary: #ffffff;      /* Pure white backgrounds */
+--surface-secondary: #f8f9fa;    /* Light gray secondary backgrounds */
+--surface-tertiary: #f1f3f4;     /* Subtle gray for cards */
+--ink-primary: #1f2937;          /* Dark gray primary text */
+--ink-secondary: #6b7280;        /* Medium gray secondary text */
+--ink-tertiary: #9ca3af;         /* Light gray tertiary text */
+
+/* Semantic Colors (Sparing Usage) */
+--accent-success: #10b981;       /* Success states only */
+--accent-warning: #f59e0b;       /* Warning states only */
+--accent-error: #ef4444;         /* Error states only */
+--accent-info: #3b82f6;          /* Recording/active states only */
+
+/* Blueprint Line Art */
+--line-primary: #e5e7eb;         /* Primary border color */
+--line-secondary: #d1d5db;       /* Secondary border color */
+--line-accent: #9ca3af;          /* Accent lines for technical elements */
+```
+
+#### Component Design Patterns
+
+**Button Styles:**
+```css
+/* Primary Button - Monochrome with subtle elevation */
+.mono-button-primary {
+  @apply bg-white border-2 border-gray-300 text-gray-900 
+         hover:border-gray-400 hover:shadow-sm 
+         transition-all duration-200 ease-out
+         font-medium rounded-lg px-4 py-2;
+}
+
+/* Secondary Button - Minimal ghost style */
+.mono-button-secondary {
+  @apply bg-transparent border border-gray-200 text-gray-700
+         hover:bg-gray-50 hover:border-gray-300
+         transition-all duration-200 ease-out
+         rounded-lg px-3 py-1.5;
+}
+
+/* Icon Button - Subtle and minimal */
+.mono-button-icon {
+  @apply bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50
+         transition-all duration-200 ease-out
+         rounded-md p-2;
+}
+```
+
+**Card Styles:**
+```css
+/* Stat Card - Celebratory but clean */
+.mono-stat-card {
+  @apply bg-white border border-gray-200 rounded-xl shadow-sm
+         hover:shadow-md transition-all duration-300 ease-out
+         p-6 space-y-4;
+}
+
+/* Content Card - Minimal container */
+.mono-content-card {
+  @apply bg-white border border-gray-100 rounded-lg
+         p-4 space-y-3;
+}
+
+/* Blueprint Card - Technical drawing style */
+.mono-blueprint-card {
+  @apply bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg
+         p-4 relative;
+}
+```
+
+**Typography Scale:**
+```css
+/* Monochrome text hierarchy */
+.mono-heading-xl { @apply text-3xl font-bold text-gray-900 tracking-tight; }
+.mono-heading-lg { @apply text-2xl font-semibold text-gray-900; }
+.mono-heading-md { @apply text-xl font-semibold text-gray-800; }
+.mono-heading-sm { @apply text-lg font-medium text-gray-800; }
+.mono-body-lg { @apply text-base text-gray-700 leading-relaxed; }
+.mono-body-md { @apply text-sm text-gray-600; }
+.mono-body-sm { @apply text-xs text-gray-500; }
+.mono-label { @apply text-xs font-medium text-gray-800 uppercase tracking-wide; }
+```
+
+#### Animation Guidelines
+- **Timing**: Medical-appropriate timing (300-500ms) for professional feel
+- **Easing**: `ease-out` for natural, non-distracting motion
+- **Subtlety**: Gentle animations that enhance usability without drawing attention
+- **Purpose**: Animations should provide visual feedback and guide user flow
+
+#### Implementation Notes
+- **No Glass Effects**: Removed all glassmorphism styling (`glass-button`, backdrop-blur, etc.)
+- **Subtle Shadows**: Minimal shadow usage for depth, primarily on hover states
+- **Clean Borders**: Precise 1-2px borders in grayscale tones
+- **Generous Spacing**: Adequate padding and margins for breathing room
+- **Medical Context**: Professional appearance suitable for healthcare environments
+
+#### Color Usage Guidelines
+- **Primary UI**: Strictly monochrome (grays and whites)
+- **Semantic Only**: Color reserved for:
+  - Success indicators (green)
+  - Warning states (amber) 
+  - Error messages (red)
+  - Recording/active states (blue)
+- **No Decorative Color**: No color used purely for aesthetic purposes
+
 ## Development Best Practices
 
 ### Code Quality Standards
@@ -731,10 +868,11 @@ try {
 
 ### Implemented Features ✅
 - **11 Medical Agents**: Complete expansion including TAVI, AngiogramPCI, mTEER, PFO Closure, Right Heart Cath, Quick Letter, Consultation, Investigation Summary, Australian Medical Review, Background, and Medication agents
+- **Full-Page Settings System**: Chrome extension options page with enhanced transcription management, professional data table, advanced filtering/sorting/pagination, bulk operations
 - **SystemPrompts Architecture**: Dedicated medical knowledge files per agent with Australian compliance
 - **Batch Processing Capabilities**: Multi-patient clinical review workflows with Australian guideline integration
 - **Advanced Session Management**: Patient session tracking with comprehensive state management
-- **Enhanced UI Components**: PatientSelectionModal, SessionsPanel, AIReviewSection, and ProcessingPhaseIndicator
+- **Enhanced UI Components**: PatientSelectionModal, SessionsPanel, AIReviewSection, ProcessingPhaseIndicator, and full-page settings interface
 - **MLX Whisper Integration**: High-performance local transcription
 - **Direct Workflow Selection**: No classification step required
 - **Comprehensive Testing**: 11 E2E test suites with advanced orchestration
@@ -742,6 +880,7 @@ try {
 - **Error Recovery**: Intelligent error handling and user guidance
 - **Real-time Monitoring**: Service status and health checking
 - **Australian Compliance**: Heart Foundation guideline integration and local medical standards
+- **Professional Design System**: Monochrome medical-appropriate interface with responsive layout
 
 ### Development Roadmap
 - **Additional Procedure Agents**: TTEER, ASD Closure, PVL Plug, Bypass Graft (defined in AgentType but not yet implemented)
@@ -803,8 +942,8 @@ curl http://localhost:1234/v1/models  # LMStudio
 
 ---
 
-**Current Version**: 3.1.0
-**Last Updated**: August 2025  
-**Architecture**: 11-agent medical AI system with unified recording interface, batch processing capabilities, Australian compliance, and advanced session management
-**Primary Focus**: Comprehensive medical documentation automation with consistent UX, multi-patient processing, and local-first AI
-**Medical Accuracy**: Clinically validated system prompts with Australian guideline compliance and universal recording guidance
+**Current Version**: 3.2.1
+**Last Updated**: September 2025  
+**Architecture**: 11-agent medical AI system with full-page settings interface, enhanced transcription management, unified recording interface, batch processing capabilities, Australian compliance, and advanced session management
+**Primary Focus**: Comprehensive medical documentation automation with professional full-screen settings, advanced transcription management, consistent UX, multi-patient processing, and local-first AI
+**Medical Accuracy**: Clinically validated system prompts with Australian guideline compliance, universal recording guidance, and enhanced data management capabilities

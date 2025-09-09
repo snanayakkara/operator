@@ -85,6 +85,7 @@ export default defineConfig({
     warmup: {
       clientFiles: [
         './src/sidepanel/OptimizedApp.tsx',
+        './src/options/OptionsApp.tsx',
         './src/hooks/useAppState.ts',
         './src/hooks/useRecorder.ts',
         './src/services/LMStudioService.ts',
@@ -105,6 +106,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         sidepanel: resolve(__dirname, 'src/sidepanel/index.html'),
+        options: resolve(__dirname, 'src/options/index.html'),
         popup: resolve(__dirname, 'src/popup/index.html'),
         background: resolve(__dirname, 'src/background/service-worker.ts'),
         content: resolve(__dirname, 'src/content/content-script.ts'),
@@ -126,7 +128,8 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           'vendor-ui': ['framer-motion', 'lucide-react', '@tanstack/react-query'],
           agents: ['@/agents/router/AgentRouter'],
-          services: ['@/services/LMStudioService', '@/services/TranscriptionService', '@/services/WhisperServerService']
+          services: ['@/services/LMStudioService', '@/services/TranscriptionService', '@/services/WhisperServerService'],
+          'settings-components': ['@/components/settings/OptimizationPanel', '@/components/settings/LocalCorrectionsViewer']
         }
       },
       // Exclude problematic packages from build for CSP compliance
