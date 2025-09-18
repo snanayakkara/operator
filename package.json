@@ -1,6 +1,6 @@
 {
   "name": "operator",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Operator - Advanced medical AI assistant Chrome extension with specialized agents and EMR integration",
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
     "dev:start": "./dev",
     "dspy:auto-start": "./dev",
     "eval:angiogram": "source dspy-env/bin/activate && python -m llm.evaluate --task angiogram-pci",
-    "eval:quick-letter": "source dspy-env/bin/activate && python -m llm.evaluate --task quick-letter", 
+    "eval:quick-letter": "source dspy-env/bin/activate && python -m llm.evaluate --task quick-letter",
     "eval:tavi": "source dspy-env/bin/activate && python -m llm.evaluate --task tavi",
     "eval:consultation": "source dspy-env/bin/activate && python -m llm.evaluate --task consultation",
     "eval:investigation-summary": "source dspy-env/bin/activate && python -m llm.evaluate --task investigation-summary",
@@ -35,7 +35,8 @@
     "optim:consultation": "source dspy-env/bin/activate && python -m llm.optim_gepa --task consultation --iterations 3",
     "optim:angiogram:human": "source dspy-env/bin/activate && python -m llm.optim_gepa --task angiogram-pci --iterations 5 --with-human",
     "optim:quick-letter:human": "source dspy-env/bin/activate && python -m llm.optim_gepa --task quick-letter --iterations 5 --with-human",
-    "optim:tavi:human": "source dspy-env/bin/activate && python -m llm.optim_gepa --task tavi --iterations 5 --with-human"
+    "optim:tavi:human": "source dspy-env/bin/activate && python -m llm.optim_gepa --task tavi --iterations 5 --with-human",
+    "optim:quick-letter:with-exemplars": "source dspy-env/bin/activate && python -m llm.optim_gepa --task quick-letter --iterations 5 --with-exemplars"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.85.5",
@@ -47,7 +48,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.8",
-    "react-loading-indicators": "^1.0.1"
+    "react-loading-indicators": "^1.0.1",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2",

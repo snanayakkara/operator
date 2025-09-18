@@ -6,7 +6,7 @@
  * Note: ASR phonetic corrections are now centralized in utils/ASRCorrections.ts
  */
 
-import { applyMedicationCorrections } from '../../utils/ASRCorrections';
+import { ASRCorrectionEngine } from '../../utils/asr/ASRCorrectionEngine';
 
 export const MEDICATION_SYSTEM_PROMPTS = {
   primary: `You are a medical assistant formatting voice-dictated medication lists into clean, simple line-separated format for clinical documentation.
@@ -426,11 +426,12 @@ export const MEDICATION_MEDICAL_KNOWLEDGE = {
 
 /**
  * Apply comprehensive medication ASR corrections to dictated text
- * Uses centralized ASR correction system from utils/ASRCorrections.ts
+ * Uses consolidated ASRCorrectionEngine for medication-specific corrections
  * 
  * @param text - Input medication text to correct
  * @returns Text with ASR corrections, brand-to-generic mapping, and Australian spellings applied
  */
-export function applyMedicationASRCorrections(text: string): string {
-  return applyMedicationCorrections(text);
+export async function applyMedicationASRCorrections(text: string): Promise<string> {
+  const asrEngine = ASRCorrectionEngine.getInstance();
+  return asrEngine.applyMedicationCorrections(text);
 }

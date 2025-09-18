@@ -343,7 +343,10 @@ class BackgroundService {
                       if (inner) {
                         inner.textContent = `Drop image for Slot ${s} to import into Annotate & Combine`;
                       }
-                    } catch {}
+                    } catch (overlayError) {
+                      // Failed to update drop overlay hint - non-critical for functionality
+                      console.debug('Drop overlay hint update failed:', overlayError instanceof Error ? overlayError.message : overlayError);
+                    }
                   },
                   args: [slot]
                 });
@@ -483,10 +486,16 @@ class BackgroundService {
                                       type: 'PAGE_FILE_DROPPED',
                                       payload: { dataUrl: r.result, name: img.name, type: img.type, size: img.size }
                                     });
-                                  } catch {}
+                                  } catch (messageError) {
+                                    // Failed to send file drop message - log for debugging
+                                    console.debug('Failed to send PAGE_FILE_DROPPED message:', messageError instanceof Error ? messageError.message : messageError);
+                                  }
                                 };
                                 r.readAsDataURL(img);
-                              } catch {}
+                              } catch (fileReadError) {
+                                // Failed to read dropped file - log for debugging
+                                console.debug('Failed to read dropped file:', fileReadError instanceof Error ? fileReadError.message : fileReadError);
+                              }
                             };
                             // Global guards to suppress browser default on page
                             window.addEventListener('dragenter', onDragEnter, true);
@@ -496,14 +505,26 @@ class BackgroundService {
                             w.__operatorDropGuard = { onDragEnter, onDragOver, onDragLeave, onDrop, overlay };
 
                             // Notify background for debugging
-                            try { (chrome as any).runtime.sendMessage({ type: 'PAGE_DROP_GUARD_INSTALLED' }); } catch {}
+                            try { 
+                              (chrome as any).runtime.sendMessage({ type: 'PAGE_DROP_GUARD_INSTALLED' }); 
+                            } catch (notifyError) {
+                              // Failed to send debug notification - non-critical
+                              console.debug('Failed to send PAGE_DROP_GUARD_INSTALLED notification:', notifyError instanceof Error ? notifyError.message : notifyError);
+                            }
                           } else {
                             if (w.__operatorDropGuard) {
                               window.removeEventListener('dragenter', w.__operatorDropGuard.onDragEnter, true);
                               window.removeEventListener('dragover', w.__operatorDropGuard.onDragOver, true);
                               window.removeEventListener('dragleave', w.__operatorDropGuard.onDragLeave, true);
                               window.removeEventListener('drop', w.__operatorDropGuard.onDrop, true);
-                              try { if (w.__operatorDropGuard.overlay && w.__operatorDropGuard.overlay.parentNode) { w.__operatorDropGuard.overlay.parentNode.removeChild(w.__operatorDropGuard.overlay); } } catch {}
+                              try { 
+                                if (w.__operatorDropGuard.overlay && w.__operatorDropGuard.overlay.parentNode) { 
+                                  w.__operatorDropGuard.overlay.parentNode.removeChild(w.__operatorDropGuard.overlay); 
+                                } 
+                              } catch (cleanupError) {
+                                // Failed to remove drop overlay - log for debugging but don't throw
+                                console.debug('Failed to remove drop guard overlay:', cleanupError instanceof Error ? cleanupError.message : cleanupError);
+                              }
                               w.__operatorDropGuard = null;
                             }
                           }

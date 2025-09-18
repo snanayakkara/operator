@@ -171,7 +171,7 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
               onClick={() => handleAction(action.id)}
               disabled={isProcessing(action.id)}
               className={`
-                glass-button relative p-2 rounded-lg transition-all text-center btn-micro-press btn-micro-hover shadow-none
+                bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 relative p-2 rounded-lg transition-all text-center btn-micro-press btn-micro-hover shadow-none
                 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50
                 ${isProcessing(action.id) ? 'opacity-50 cursor-not-allowed' : ''}
               `}
@@ -218,7 +218,7 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
               onClick={() => handleAction(action.id)}
               disabled={isProcessing(action.id)}
               className={`
-                glass-button p-3 rounded-lg text-left transition-all btn-micro-press btn-micro-hover shadow-none
+                bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 p-3 rounded-lg text-left transition-all btn-micro-press btn-micro-hover shadow-none
                 hover:bg-indigo-50 border border-indigo-200 bg-indigo-50
                 ${isProcessing(action.id) ? 'opacity-50 cursor-not-allowed' : ''}
               `}

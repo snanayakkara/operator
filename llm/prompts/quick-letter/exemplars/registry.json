@@ -1,0 +1,64 @@
+{
+  "exemplars": [
+    {
+      "file": "new-referral.md",
+      "tags": ["new-referral", "consultation", "first-visit"],
+      "patient_context": "New referral for cardiac assessment",
+      "audience": "GP",
+      "tone": "professional",
+      "summary": "New patient referral letter with initial assessment and plan"
+    },
+    {
+      "file": "post-angiogram.md",
+      "tags": ["post-angiogram", "procedure-followup", "CAD", "PCI"],
+      "patient_context": "Post-angiogram follow-up",
+      "audience": "cardiologist",
+      "tone": "technical",
+      "summary": "Post-angiogram results communication and management plan"
+    },
+    {
+      "file": "hf-followup.md",
+      "tags": ["HF", "heart-failure", "follow-up", "medication-review"],
+      "patient_context": "Heart failure follow-up visit",
+      "audience": "GP",
+      "tone": "collaborative",
+      "summary": "Heart failure management update with medication adjustments"
+    },
+    {
+      "file": "post-tavi-clinic.md",
+      "tags": ["post-TAVI", "valve", "procedure-followup", "clinic-visit"],
+      "patient_context": "Post-TAVI procedure follow-up",
+      "audience": "specialist",
+      "tone": "clinical",
+      "summary": "TAVI procedure follow-up assessment and outcomes"
+    },
+    {
+      "file": "palpitations.md",
+      "tags": ["palpitations", "arrhythmia", "symptoms", "investigation"],
+      "patient_context": "Palpitation assessment",
+      "audience": "GP",
+      "tone": "reassuring",
+      "summary": "Palpitation evaluation with investigation plan"
+    },
+    {
+      "file": "syncope.md",
+      "tags": ["syncope", "collapse", "investigation", "risk-stratification"],
+      "patient_context": "Syncope evaluation",
+      "audience": "emergency-physician",
+      "tone": "urgent",
+      "summary": "Syncope assessment with risk stratification and next steps"
+    }
+  ],
+  "tags": {
+    "new-referral": "New patient referrals for cardiac assessment",
+    "post-angiogram": "Post-angiogram procedure communications",
+    "HF": "Heart failure management communications",
+    "post-TAVI": "Post-TAVI procedure follow-up",
+    "palpitations": "Palpitation and arrhythmia assessments",
+    "syncope": "Syncope evaluation and risk stratification",
+    "follow-up": "Follow-up visit communications",
+    "procedure-followup": "Post-procedure follow-up letters",
+    "consultation": "Consultation and assessment letters",
+    "medication-review": "Medication management communications"
+  }
+}

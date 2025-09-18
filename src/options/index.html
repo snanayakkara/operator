@@ -112,23 +112,27 @@
       }
       
       .settings-container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 24px;
+        margin: 0;
+        padding: 24px 32px;
+        min-height: 100vh;
       }
       
       .settings-header {
         background: var(--surface-primary);
         border-bottom: 2px solid var(--line-primary);
         padding: 32px 0;
-        margin-bottom: 32px;
+        margin: 0 -32px 32px -32px;
+        padding-left: 32px;
+        padding-right: 32px;
       }
       
       .settings-content {
         display: grid;
-        grid-template-columns: 280px 1fr;
+        grid-template-columns: minmax(280px, 320px) 1fr;
         gap: 32px;
         min-height: calc(100vh - 200px);
+        max-width: none;
+        width: 100%;
       }
       
       @media (max-width: 1024px) {
@@ -138,7 +142,13 @@
         }
         
         .settings-container {
-          padding: 16px;
+          padding: 16px 20px;
+        }
+        
+        .settings-header {
+          margin: 0 -20px 24px -20px;
+          padding-left: 20px;
+          padding-right: 20px;
         }
       }
       
@@ -158,7 +168,8 @@
         border: 2px solid var(--line-primary);
         border-radius: 12px;
         padding: 32px;
-        min-height: 600px;
+        min-height: calc(100vh - 240px);
+        height: fit-content;
       }
       
       /* Mono button styles for settings */
@@ -196,6 +207,93 @@
         border-color: var(--line-secondary);
         color: var(--ink-primary);
       }
+      
+      /* Utility classes for React components */
+      .text-ink-primary { color: var(--ink-primary); }
+      .text-ink-secondary { color: var(--ink-secondary); }
+      .text-ink-tertiary { color: var(--ink-tertiary); }
+      .text-accent-success { color: var(--accent-success); }
+      .text-accent-error { color: var(--accent-error); }
+      .text-accent-warning { color: var(--accent-warning); }
+      .text-accent-info { color: var(--accent-info); }
+      
+      .bg-surface-primary { background-color: var(--surface-primary); }
+      .bg-surface-secondary { background-color: var(--surface-secondary); }
+      .bg-surface-tertiary { background-color: var(--surface-tertiary); }
+      
+      .border-line-primary { border-color: var(--line-primary); }
+      .border-line-secondary { border-color: var(--line-secondary); }
+      .border-line-accent { border-color: var(--line-accent); }
+      
+      /* Layout utilities */
+      .flex { display: flex; }
+      .grid { display: grid; }
+      .space-y-2 > * + * { margin-top: 0.5rem; }
+      .space-y-3 > * + * { margin-top: 0.75rem; }
+      .space-y-6 > * + * { margin-top: 1.5rem; }
+      .space-x-2 > * + * { margin-left: 0.5rem; }
+      .space-x-3 > * + * { margin-left: 0.75rem; }
+      .items-center { align-items: center; }
+      .items-start { align-items: flex-start; }
+      .justify-between { justify-content: space-between; }
+      .justify-center { justify-content: center; }
+      
+      /* Grid utilities */
+      .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+      .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .gap-3 { gap: 0.75rem; }
+      .gap-6 { gap: 1.5rem; }
+      
+      /* Typography utilities */
+      .text-xs { font-size: 0.75rem; line-height: 1rem; }
+      .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+      .text-base { font-size: 1rem; line-height: 1.5rem; }
+      .text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+      .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+      .text-2xl { font-size: 1.5rem; line-height: 2rem; }
+      .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+      .font-medium { font-weight: 500; }
+      .font-semibold { font-weight: 600; }
+      .font-bold { font-weight: 700; }
+      .font-mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace; }
+      .tracking-tight { letter-spacing: -0.025em; }
+      
+      /* Spacing utilities */
+      .p-5 { padding: 1.25rem; }
+      .mb-3 { margin-bottom: 0.75rem; }
+      .mt-1 { margin-top: 0.25rem; }
+      
+      /* Border utilities */
+      .border-2 { border-width: 2px; }
+      .rounded-xl { border-radius: 0.75rem; }
+      
+      /* Size utilities */
+      .w-4 { width: 1rem; }
+      .w-5 { width: 1.25rem; }
+      .w-6 { width: 1.5rem; }
+      .w-8 { width: 2rem; }
+      .h-4 { height: 1rem; }
+      .h-5 { height: 1.25rem; }
+      .h-6 { height: 1.5rem; }
+      .h-8 { height: 2rem; }
+      
+      /* Animation utilities */
+      .motion-safe\\:animate-spin {
+        animation: spin 1s linear infinite;
+      }
+      
+      @media (max-width: 768px) {
+        .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      
+      @media (min-width: 1024px) {
+        .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      
+      /* Color-specific utilities for Lucide icons */
+      .text-purple-600 { color: #9333ea; }
+      .text-indigo-600 { color: #4f46e5; }
     </style>
   </head>
   <body>

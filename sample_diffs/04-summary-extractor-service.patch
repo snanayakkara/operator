@@ -1,0 +1,689 @@
+# Medical Summary Extraction Service  
+# Consolidates summary generation and text extraction logic
+# Files affected: QuickLetterSummaryExtractor.ts, QuickLetterAgent.ts, NarrativeLetterAgent.ts
+
+--- /dev/null
++++ b/src/utils/text-extraction/SummaryExtractor.ts
+@@ -0,0 +1,220 @@
++/**
++ * Medical Summary Extraction Service
++ * Consolidates summary generation and text extraction logic
++ * 
++ * Replaces:
++ * - QuickLetterSummaryExtractor.generateIntelligentSummary()
++ * - QuickLetterSummaryExtractor.extractFallbackSummary()
++ * - QuickLetterAgent summary generation logic
++ */
++
++import { logger } from '@/utils/Logger';
++import { MedicalPatternService, type MedicalTerm } from '@/utils/medical-text/MedicalPatternService';
++
++export interface SummaryConfig {
++  strategy: 'intelligent' | 'sentence-based' | 'pattern-based' | 'hybrid';
++  maxLength?: number;
++  focusDomains?: string[];
++  preserveMedicalTerms?: boolean;
++  extractClinicalFindings?: boolean;
++}
++
++export interface ClinicalFinding {
++  type: 'diagnosis' | 'symptom' | 'measurement' | 'medication' | 'procedure';
++  text: string;
++  confidence: number;
++  medicalDomain: string;
++}
++
++export interface ParsedResponse {
++  summary: string;
++  letterContent: string;
++  hasStructuredMarkers: boolean;
++}
++
++export interface QualityMetrics {
++  completeness: number;
++  clinicalAccuracy: number;
++  readability: number;
++  overallScore: number;
++}
++
++export interface ValidationResult {
++  isValid: boolean;
++  issues: string[];
++  suggestions: string[];
++}
++
++export interface SummaryResult {
++  summary: string;
++  confidence: number;
++  clinicalFindings: ClinicalFinding[];
++  keyTerms: string[];
++  qualityScore: number;
++  strategy: string;
++}
++
++export class MedicalSummaryExtractor {
++  private static instance: MedicalSummaryExtractor;
++  private patternService: MedicalPatternService;
++
++  private constructor() {
++    this.patternService = MedicalPatternService.getInstance();
++    logger.info('MedicalSummaryExtractor initialized');
++  }
++
++  public static getInstance(): MedicalSummaryExtractor {
++    if (!MedicalSummaryExtractor.instance) {
++      MedicalSummaryExtractor.instance = new MedicalSummaryExtractor();
++    }
++    return MedicalSummaryExtractor.instance;
++  }
++
++  /**
++   * Primary summary extraction interface
++   * Consolidates all existing summary extraction logic
++   */
++  extractSummary(content: string, config?: SummaryConfig): SummaryResult {
++    const defaultConfig: SummaryConfig = {
++      strategy: 'intelligent',
++      maxLength: 200,
++      preserveMedicalTerms: true,
++      extractClinicalFindings: true
++    };
++
++    const finalConfig = { ...defaultConfig, ...config };
++    
++    let summary: string;
++    let confidence: number;
++    let strategy: string;
++
++    switch (finalConfig.strategy) {
++      case 'intelligent':
++        summary = this.extractIntelligentSummary(content);
++        confidence = 0.9;
++        strategy = 'intelligent';
++        break;
++      case 'sentence-based':
++        summary = this.extractFallbackSummary(content);
++        confidence = 0.7;
++        strategy = 'sentence-based';
++        break;
++      case 'pattern-based':
++        summary = this.extractPatternBasedSummary(content);
++        confidence = 0.8;
++        strategy = 'pattern-based';
++        break;
++      case 'hybrid':
++        summary = this.extractHybridSummary(content);
++        confidence = 0.85;
++        strategy = 'hybrid';
++        break;
++      default:
++        summary = this.extractIntelligentSummary(content);
++        confidence = 0.9;
++        strategy = 'intelligent';
++    }
++
++    // Enforce max length if specified
++    if (finalConfig.maxLength && summary.length > finalConfig.maxLength) {
++      summary = summary.substring(0, finalConfig.maxLength - 3) + '...';
++    }
++
++    // Extract clinical findings
++    const clinicalFindings = finalConfig.extractClinicalFindings 
++      ? this.extractClinicalFindings(content)
++      : [];
++
++    // Extract key medical terms
++    const medicalTerms = this.patternService.extractMedicalTerms(content);
++    const keyTerms = medicalTerms.slice(0, 10).map(term => term.term);
++
++    // Assess quality
++    const qualityScore = this.assessSummaryQuality(summary, content).overallScore;
++
++    logger.debug('Summary extracted', {
++      strategy,
++      summaryLength: summary.length,
++      clinicalFindings: clinicalFindings.length,
++      keyTerms: keyTerms.length,
++      qualityScore
++    });
++
++    return {
++      summary,
++      confidence,
++      clinicalFindings,
++      keyTerms,
++      qualityScore,
++      strategy
++    };
++  }
++
++  /**
++   * Intelligent medical summary generation using clinical pattern recognition
++   * Replaces: QuickLetterSummaryExtractor.generateIntelligentSummary()
++   */
++  extractIntelligentSummary(content: string): string {
++    // Extract clinical findings using medical pattern service
++    const findings = this.extractClinicalFindings(content);
++    
++    if (findings.length > 0) {
++      // Create summary from findings
++      const summaryParts: string[] = [];
++      
++      // Group findings by type
++      const conditions = findings.filter(f => f.type === 'diagnosis');
++      const symptoms = findings.filter(f => f.type === 'symptom');
++      const measurements = findings.filter(f => f.type === 'measurement');
++      
++      if (conditions.length > 0) {
++        summaryParts.push(`Patient with ${conditions.slice(0, 2).map(f => f.text).join(' and ')}`);
++      }
++      if (symptoms.length > 0) {
++        summaryParts.push(`presenting with ${symptoms.slice(0, 2).map(f => f.text).join(' and ')}`);
++      }
++      if (measurements.length > 0) {
++        summaryParts.push(`${measurements.slice(0, 2).map(f => f.text).join(', ')}`);
++      }
++      
++      if (summaryParts.length > 0) {
++        return this.cleanUpSummary(summaryParts.join('. ') + '.');
++      }
++    }
++    
++    // Fallback to sentence extraction
++    return this.extractFallbackSummary(content);
++  }
++
++  /**
++   * Fallback summary extraction using sentence analysis
++   * Replaces: QuickLetterSummaryExtractor.extractFallbackSummary()
++   */
++  extractFallbackSummary(content: string): string {
++    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 15);
++    
++    // Filter out greeting and closing sentences
++    const clinicalSentences = sentences.filter(s => {
++      const lower = s.toLowerCase();
++      return !lower.includes('thank you') &&
++             !lower.includes('dear') &&
++             !lower.includes('kind regards') &&
++             !lower.includes('yours sincerely') &&
++             !lower.includes('best wishes');
++    });
++    
++    // Take the first 2-3 meaningful clinical sentences
++    const summaryParts = clinicalSentences.slice(0, 3);
++    if (summaryParts.length === 0) {
++      // If no clinical sentences found, use first sentence
++      return sentences.length > 0 ? sentences[0].trim() + '.' : 'No summary available.';
++    }
++    
++    return this.cleanUpSummary(summaryParts.join('. ').trim() + '.');
++  }
++
++  /**
++   * Pattern-based summary extraction focusing on medical terminology
++   */
++  private extractPatternBasedSummary(content: string): string {
++    // Extract high-confidence medical terms
++    const terms = this.patternService.extractMedicalTerms(content, {
++      domains: ['cardiology', 'medication', 'pathology'],
++      extractionMode: 'focused'
++    });
++
++    // Create summary from most significant terms
++    const significantTerms = terms
++      .filter(term => term.confidence > 0.8)
++      .slice(0, 5)
++      .map(term => term.term);
++
++    if (significantTerms.length > 0) {
++      return `Clinical findings include ${significantTerms.join(', ')}.`;
++    }
++
++    // Fallback if no significant terms found
++    return this.extractFallbackSummary(content);
++  }
++
++  /**
++   * Hybrid approach combining intelligent and pattern-based extraction
++   */
++  private extractHybridSummary(content: string): string {
++    const intelligentSummary = this.extractIntelligentSummary(content);
++    const patternSummary = this.extractPatternBasedSummary(content);
++
++    // Choose the more informative summary
++    return intelligentSummary.length > patternSummary.length 
++      ? intelligentSummary 
++      : patternSummary;
++  }
++
++  /**
++   * Extract clinical findings from text using medical pattern recognition
++   */
++  extractClinicalFindings(text: string): ClinicalFinding[] {
++    const findings: ClinicalFinding[] = [];
++    
++    // Use pattern service to extract medical terms
++    const medicalTerms = this.patternService.extractMedicalTerms(text);
++    
++    for (const term of medicalTerms) {
++      let findingType: ClinicalFinding['type'];
++      
++      // Classify finding type based on medical domain and category
++      if (term.category.includes('cardiac') || term.category.includes('valve')) {
++        findingType = 'diagnosis';
++      } else if (term.category.includes('medication')) {
++        findingType = 'medication';
++      } else if (term.category.includes('blood_test') || term.category.includes('vital_signs')) {
++        findingType = 'measurement';
++      } else {
++        findingType = 'diagnosis'; // Default
++      }
++
++      findings.push({
++        type: findingType,
++        text: term.term,
++        confidence: term.confidence,
++        medicalDomain: term.medicalDomain
++      });
++    }
++    
++    return findings.sort((a, b) => b.confidence - a.confidence);
++  }
++
++  /**
++   * Parse structured response with SUMMARY: and LETTER: sections
++   * Replaces: QuickLetterSummaryExtractor.parseQuickLetterStructuredResponse()
++   */
++  parseStructuredResponse(outputText: string): ParsedResponse {
++    try {
++      logger.debug('Parsing structured response for SUMMARY: and LETTER: markers');
++      
++      const summaryIdx = outputText.indexOf('SUMMARY:');
++      const letterIdx = outputText.indexOf('LETTER:');
++
++      if (summaryIdx !== -1 && letterIdx !== -1 && summaryIdx < letterIdx) {
++        logger.debug('Found both SUMMARY: and LETTER: markers in correct order');
++        
++        const summaryRaw = outputText
++          .substring(summaryIdx + 'SUMMARY:'.length, letterIdx)
++          .trim();
++        const letterContent = outputText
++          .substring(letterIdx + 'LETTER:'.length)
++          .trim();
++        
++        const summary = this.cleanSummaryText(summaryRaw);
++        
++        return {
++          summary,
++          letterContent,
++          hasStructuredMarkers: true
++        };
++      }
++
++      // Fallback: treat entire output as letter content and synthesize summary
++      logger.debug('No structured markers found, using fallback parsing');
++      const fallbackSummary = this.extractIntelligentSummary(outputText);
++      
++      return {
++        summary: fallbackSummary.length > 150 
++          ? fallbackSummary.substring(0, 147) + '...'
++          : fallbackSummary,
++        letterContent: outputText,
++        hasStructuredMarkers: false
++      };
++      
++    } catch (error) {
++      logger.warn('Error parsing structured response', { error });
++      
++      const emergencyFallback = outputText.length > 150
++        ? outputText.substring(0, 147) + '...'
++        : outputText;
++        
++      return {
++        summary: emergencyFallback,
++        letterContent: outputText,
++        hasStructuredMarkers: false
++      };
++    }
++  }
++
++  /**
++   * Assess summary quality metrics
++   */
++  assessSummaryQuality(summary: string, original: string): QualityMetrics {
++    // Completeness: ratio of important terms preserved
++    const originalTerms = this.patternService.extractMedicalTerms(original);
++    const summaryTerms = this.patternService.extractMedicalTerms(summary);
++    
++    const completeness = originalTerms.length > 0 
++      ? Math.min(summaryTerms.length / originalTerms.length, 1.0)
++      : 1.0;
++
++    // Clinical accuracy: presence of medical terms
++    const clinicalAccuracy = summaryTerms.length > 0 ? 0.9 : 0.5;
++
++    // Readability: sentence structure and length
++    const readability = this.assessReadability(summary);
++
++    // Overall score
++    const overallScore = (completeness * 0.4 + clinicalAccuracy * 0.4 + readability * 0.2);
++
++    return {
++      completeness,
++      clinicalAccuracy,
++      readability,
++      overallScore
++    };
++  }
++
++  /**
++   * Validate medical accuracy of summary
++   */
++  validateMedicalAccuracy(summary: string): ValidationResult {
++    const issues: string[] = [];
++    const suggestions: string[] = [];
++
++    // Check for medical terms
++    const medicalTerms = this.patternService.extractMedicalTerms(summary);
++    if (medicalTerms.length === 0) {
++      issues.push('No medical terms detected in summary');
++      suggestions.push('Include relevant medical terminology');
++    }
++
++    // Check for Australian compliance
++    const complianceResult = this.patternService.validateAustralianCompliance(summary);
++    if (!complianceResult.compliant) {
++      issues.push(...complianceResult.issues);
++      suggestions.push(...complianceResult.suggestions);
++    }
+
++    return {
++      isValid: issues.length === 0,
++      issues,
++      suggestions
++    };
++  }
+
++  // Private helper methods
++
++  private cleanUpSummary(summary: string): string {
++    return summary
++      .replace(/\s+/g, ' ')
++      .replace(/\.\s*\./g, '.')
++      .replace(/;\s*;/g, ';')
++      .replace(/,\s*,/g, ',')
++      .trim();
++  }
++
++  private cleanSummaryText(summaryText: string): string {
++    return summaryText
++      .trim()
++      .replace(/[-–—]+\s*$/, '')  // Remove trailing dashes
++      .trim();
++  }
++
++  private assessReadability(text: string): number {
++    // Simple readability assessment
++    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
++    const avgSentenceLength = text.split(' ').length / sentences.length;
++    
++    // Optimal sentence length for medical summaries: 10-20 words
++    if (avgSentenceLength >= 10 && avgSentenceLength <= 20) {
++      return 1.0;
++    } else if (avgSentenceLength >= 8 && avgSentenceLength <= 25) {
++      return 0.8;
++    } else {
++      return 0.6;
++    }
++  }
++}
++
++// Convenience functions for backward compatibility
++export function extractIntelligentSummary(content: string): string {
++  return MedicalSummaryExtractor.getInstance().extractIntelligentSummary(content);
++}
++
++export function parseQuickLetterStructuredResponse(outputText: string): ParsedResponse {
++  return MedicalSummaryExtractor.getInstance().parseStructuredResponse(outputText);
++}
+
+--- a/src/utils/QuickLetterSummaryExtractor.ts
++++ b/src/utils/QuickLetterSummaryExtractor.ts
+@@ -1,219 +1,20 @@
+ /**
+- * QuickLetter Summary Extraction Utilities
+- * 
+- * Extracted from QuickLetterAgent to support summary generation
+- * in streaming completion flow without full agent processing.
++ * Legacy QuickLetter Summary Extractor - DEPRECATED
++ * This file is kept for backward compatibility during migration
++ * Please use MedicalSummaryExtractor from @utils/text-extraction/SummaryExtractor instead
+  */
+ 
+-/**
+- * Clean summary text to remove trailing dashes and separators
+- */
+-function cleanSummaryText(summaryText: string): string {
+-  return summaryText
+-    .trim()
+-    // Remove trailing dashes of various types
+-    .replace(/[-–—]+\s*$/, '')
+-    // Remove any remaining trailing whitespace
+-    .trim();
+-}
+-
+-/**
+- * Clean up and format the summary
+- */
+-function cleanUpSummary(summary: string): string {
+-  return summary
+-    .replace(/\s+/g, ' ')
+-    .replace(/\.\s*\./g, '.')
+-    .replace(/;\s*;/g, ';')
+-    .replace(/,\s*,/g, ',')
+-    .trim();
+-}
+-
+-/**
+- * Extract clinical findings from text for intelligent summary generation
+- */
+-function extractClinicalFindings(text: string): string[] {
+-  const findings: string[] = [];
+-  const lowerText = text.toLowerCase();
+-  
+-  // Look for common medical findings patterns
+-  const patterns = [
+-    // Cardiac findings
+-    /(?:ejection fraction|ef)\s+(?:of\s+)?(\d+%?)/gi,
+-    /(?:blood pressure|bp)\s+(?:of\s+)?(\d+\/\d+)/gi,
+-    /(?:heart rate|hr)\s+(?:of\s+)?(\d+)/gi,
+-    
+-    // Symptoms
+-    /(?:chest pain|dyspnoea|palpitations|dizziness|syncope)/gi,
+-    
+-    // Conditions
+-    /(?:atrial fibrillation|af|coronary artery disease|cad|heart failure|hypertension)/gi,
+-    
+-    // Medications
+-    /(?:aspirin|metoprolol|ramipril|atorvastatin|warfarin|apixaban)/gi
+-  ];
+-  
+-  patterns.forEach(pattern => {
+-    const matches = text.match(pattern);
+-    if (matches) {
+-      matches.forEach(match => {
+-        if (!findings.some(f => f.toLowerCase().includes(match.toLowerCase()))) {
+-          findings.push(match);
+-        }
+-      });
+-    }
+-  });
+-  
+-  // Look for specific value findings
+-  if (text.includes('normal') && (text.includes('ejection fraction') || text.includes('ef'))) {
+-    findings.push('Normal EF');
+-  }
+-  
+-  return findings;
+-}
+-
+-/**
+- * Fallback summary extraction for cases where pattern matching fails
+- */
+-function extractFallbackSummary(content: string): string {
+-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 15);
+-  
+-  // Filter out greeting and closing sentences
+-  const clinicalSentences = sentences.filter(s => {
+-    const lower = s.toLowerCase();
+-    return !lower.includes('thank you') &&
+-           !lower.includes('dear') &&
+-           !lower.includes('kind regards') &&
+-           !lower.includes('yours sincerely') &&
+-           !lower.includes('best wishes');
+-  });
+-  
+-  // Take the first 2-3 meaningful clinical sentences
+-  const summaryParts = clinicalSentences.slice(0, 3);
+-  if (summaryParts.length === 0) {
+-    // If no clinical sentences found, use first sentence
+-    return sentences.length > 0 ? sentences[0].trim() + '.' : 'No summary available.';
+-  }
+-  
+-  return summaryParts.join('. ').trim() + '.';
+-}
+-
+-/**
+- * Generate intelligent summary from letter content using medical pattern recognition
+- */
+-function generateIntelligentSummary(content: string): string {
+-  // Extract clinical findings
+-  const findings = extractClinicalFindings(content);
+-  
+-  if (findings.length > 0) {
+-    // Create summary from findings
+-    const summaryParts: string[] = [];
+-    
+-    // Group findings by type
+-    const conditions = findings.filter(f => 
+-      /(?:atrial fibrillation|af|coronary artery disease|cad|heart failure|hypertension)/i.test(f)
+-    );
+-    const values = findings.filter(f => 
+-      /(?:ejection fraction|blood pressure|heart rate)/i.test(f)
+-    );
+-    const symptoms = findings.filter(f => 
+-      /(?:chest pain|dyspnoea|palpitations|dizziness|syncope)/i.test(f)
+-    );
+-    
+-    if (conditions.length > 0) {
+-      summaryParts.push(`Patient with ${conditions.slice(0, 2).join(' and ')}`);
+-    }
+-    if (symptoms.length > 0) {
+-      summaryParts.push(`presenting with ${symptoms.slice(0, 2).join(' and ')}`);
+-    }
+-    if (values.length > 0) {
+-      summaryParts.push(`${values.slice(0, 2).join(', ')}`);
+-    }
+-    
+-    if (summaryParts.length > 0) {
+-      return summaryParts.join('. ') + '.';
+-    }
+-  }
+-  
+-  // Fallback to sentence extraction
+-  return extractFallbackSummary(content);
+-}
+-
+-/**
+- * Parse structured response with SUMMARY: and LETTER: sections
+- * Extracted from QuickLetterAgent for reuse in streaming completion
+- */
+-export function parseQuickLetterStructuredResponse(outputText: string): { summary: string; letterContent: string } {
+-  try {
+-    console.log('🔧 Parsing QuickLetter structured response for SUMMARY: and LETTER: markers');
+-    
+-    // Robust parsing that does not depend on a '---' divider
+-    // 1) Prefer explicit markers if present (even if formatting was cleaned)
+-    const summaryIdx = outputText.indexOf('SUMMARY:');
+-    const letterIdx = outputText.indexOf('LETTER:');
+-
+-    console.log('🔍 Found SUMMARY: at index:', summaryIdx);
+-    console.log('🔍 Found LETTER: at index:', letterIdx);
+-
+-    if (summaryIdx !== -1 && letterIdx !== -1 && summaryIdx < letterIdx) {
+-      console.log('✅ Found both SUMMARY: and LETTER: markers in correct order');
+-      const summaryRaw = outputText
+-        .substring(summaryIdx + 'SUMMARY:'.length, letterIdx)
+-        .trim();
+-      const letterContent = outputText
+-        .substring(letterIdx + 'LETTER:'.length)
+-        .trim();
+-
+-      console.log('📋 Extracted summary raw:', summaryRaw.substring(0, 100) + '...');
+-      console.log('📝 Extracted letter content length:', letterContent.length);
+-      
+-      // Clean the extracted summary to remove trailing dashes
+-      const summary = cleanSummaryText(summaryRaw);
+-      console.log('🧹 Cleaned summary:', summary);
+-      return { summary, letterContent };
+-    }
+-
+-    // 2) Legacy pattern with explicit '---' divider (if it survived cleaning)
+-    console.log('🔍 Checking for legacy --- divider pattern');
+-    const legacySummaryMatch = outputText.match(/SUMMARY:\s*([\s\S]+?)(?=---)/);
+-    const legacyLetterMatch = outputText.match(/LETTER:\s*([\s\S]*)/);  
+-    if (legacySummaryMatch && legacyLetterMatch) {
+-      console.log('✅ Found legacy pattern with --- divider');
+-      const summary = cleanSummaryText(legacySummaryMatch[1].trim());
+-      const letterContent = legacyLetterMatch[1].trim();
+-      return { summary, letterContent };
+-    }
+-
+-    // 3) Fallback: treat entire output as letter content and synthesize a summary
+-    console.log('⚠️ No SUMMARY:/LETTER: markers found, using fallback parsing');
+-    console.log('📄 Raw output for fallback:', outputText.substring(0, 200) + '...');
+-    const intelligentSummary = generateIntelligentSummary(outputText);
+-    const fallbackSummary = intelligentSummary.length > 150
+-      ? intelligentSummary.substring(0, 147) + '...'
+-      : intelligentSummary;
+-
+-    console.log('🔄 Generated fallback summary:', fallbackSummary);
+-    console.log('📝 Using entire output as letter content (length:', outputText.length, ')');
+-
+-    return {
+-      summary: fallbackSummary,
+-      letterContent: outputText
+-    };
+-  } catch (error) {
+-    console.warn('❌ Error parsing structured response:', error);
+-    const fallbackSummary = outputText.length > 150
+-      ? outputText.substring(0, 147) + '...'
+-      : outputText;
+-    console.log('🚨 Using emergency fallback parsing');
+-    return { summary: fallbackSummary, letterContent: outputText };
+-  }
++import { 
++  MedicalSummaryExtractor, 
++  parseQuickLetterStructuredResponse as newParseFunction,
++  extractIntelligentSummary as newExtractFunction
++} from './text-extraction/SummaryExtractor';
++
++// Legacy function - redirects to new implementation
++export function parseQuickLetterStructuredResponse(outputText: string): { summary: string; letterContent: string } {
++  const result = newParseFunction(outputText);
++  return {
++    summary: result.summary,
++    letterContent: result.letterContent
++  };
+ }
+ 
+ /**
+@@ -221,7 +22,6 @@ export function parseQuickLetterStructuredResponse(outputText: string): { summa
+  * This function handles the summary generation that was missing in the streaming flow
+  */
+ export function extractQuickLetterSummary(streamedOutput: string): string {
+-  const { summary } = parseQuickLetterStructuredResponse(streamedOutput);
+-  return cleanUpSummary(summary);
++  return MedicalSummaryExtractor.getInstance().extractSummary(streamedOutput).summary;
+ }

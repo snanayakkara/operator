@@ -89,7 +89,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
           }}
           disabled={disabled}
           className={`
-            w-full glass-button p-3 rounded-lg flex items-center justify-between transition-all
+            w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 p-3 rounded-lg flex items-center justify-between transition-all
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}
           `}
         >

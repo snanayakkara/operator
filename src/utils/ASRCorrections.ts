@@ -1,6 +1,14 @@
 /**
  * Centralized ASR (Automatic Speech Recognition) Error Corrections
  * 
+ * @deprecated This file is being replaced by ASRCorrectionEngine for better consistency
+ * and functionality. Use `import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine'`
+ * instead for new code.
+ * 
+ * Migration guide:
+ *   Old: applyASRCorrections(text, ['medication'])
+ *   New: await ASRCorrectionEngine.getInstance().applyMedicationCorrections(text)
+ * 
  * This utility provides common ASR phonetic error corrections used across
  * multiple medical agents to ensure consistency and maintainability.
  * 
@@ -188,7 +196,10 @@ export const ASRCorrections: ASRCorrectionCategories = {
     [/\bOvernight\s+(\d{2,3})\s+on\s+(\d{2,3})\b/g, 'overnight $1/$2'], // e.g., "Overnight 116 on 66" -> "overnight 116/66"
     [/\bDaytime\s+(\d{2,3})\s+on\s+(\d{2,3})\b/g, 'daytime $1/$2'], // e.g., "Daytime 130 on 80" -> "daytime 130/80"
     [/\bMean\s+(\d{2,3})\s+on\s+(\d{2,3})\b/g, 'mean $1/$2'], // e.g., "Mean 125 on 75" -> "mean 125/75"
-    [/\b(\d{2,3})\s+on\s+(\d{2,3})\b/g, '$1/$2'] // e.g., "126 on 77" -> "126/77" (catch-all, keep last)
+    [/\b(\d{2,3})\s+on\s+(\d{2,3})\b/g, '$1/$2'], // e.g., "126 on 77" -> "126/77" (catch-all, keep last)
+    
+    // Laboratory value format conversions 
+    [/\bgreater than\s+(\d+)\b/gi, '>$1'], // e.g., "greater than 90" -> ">90"
   ],
 
   /**
@@ -215,6 +226,7 @@ export const ASRCorrections: ASRCorrectionCategories = {
     [/\btrans\s*thoracic\s*echo(?:cardiogram)?\b/gi, 'TTE'],
     [/\btrans\s*oesophageal\s*echo(?:cardiogram)?\b/gi, 'TOE'],
     [/\btrans\s*esophageal\s*echo(?:cardiogram)?\b/gi, 'TOE'], // US spelling
+    [/\bstress\s+echo\s*(?:cardiogram)?\b/gi, 'Stress TTE'], // e.g., "stress echo cardiogram" -> "Stress TTE"
     // Cardiac measurement corrections
     [/\bTAPC\b/gi, 'TAPSE'],
     [/\btapc\b/gi, 'TAPSE'],
@@ -226,10 +238,30 @@ export const ASRCorrections: ASRCorrectionCategories = {
     [/\baortic\s+regurgitation\b/gi, 'AR'],
     [/\bpulmonary\s+regurgitation\b/gi, 'PR'],
     [/\btricuspid\s+regurgitation\b/gi, 'TR'],
-    // Units for common cardiac measurements
+    // Units for common cardiac measurements - no spaces between number and unit
+    [/\bTAPSE\s+(\d+)\s*mm\b/gi, 'TAPSE $1mm'],
     [/\bTAPSE\s+(\d+)(?!\s*mm)\b/gi, 'TAPSE $1mm'],
     [/\bPASP\s+(\d+)(?!\s*mmHg)\b/gi, 'PASP $1mmHg'],
-    [/\bRV\s+basal\s+diameter\s+(\d+)(?!\s*mm)\b/gi, 'RV basal diameter $1mm']
+    [/\bRV\s+basal\s+diameter\s+(\d+)\s*mm\b/gi, 'RV basal diameter $1mm'],
+    [/\bRV\s+basal\s+diameter\s+(\d+)(?!\s*mm)\b/gi, 'RV basal diameter $1mm'],
+    // Common units and terminology corrections
+    [/\bmillimeters?\s+of\s+mercury\b/gi, 'mmHg'],
+    [/\bmm\s+of\s+mercury\b/gi, 'mmHg'],
+    [/\bpulmonary\s+hypertension\b/gi, 'pulm HTN'],
+    [/\bmoderate\s+to\s+severe\b/gi, 'mod-sev'],
+    [/\bseptal\s+thickness\s+(\d+)\s*mm\b/gi, 'septal thickness $1mm'],
+    // EF formatting - ensure space before number
+    [/\bEF(\d+)\b/gi, 'EF $1'],
+    [/\bEF\s*(\d+)%\b/gi, 'EF $1%'],
+    // Left ventricle abbreviations
+    [/\bleft\s+ventricle\b/gi, 'LV'],
+    [/\bleft\s+ventricular\b/gi, 'LV'],
+    // Diastolic diameter abbreviation
+    [/\bdiastolic\s+diameter\b/gi, 'LVEDD'],
+    [/\bend\s*diastolic\s+diameter\b/gi, 'LVEDD'],
+    [/\bLV\s+end\s*diastolic\s+diameter\b/gi, 'LVEDD'],
+    // Conjunction improvements for comma separation
+    [/\s+and\s+/gi, ', ']
   ],
 
   /**

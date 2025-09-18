@@ -1,9 +1,11 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
-import type { 
-  MedicalContext, 
-  ChatMessage, 
-  ReportSection, 
+import type {
+  MedicalContext,
+  ChatMessage,
+  ReportSection,
   TAVIReport,
+  TAVIReportStructured,
+  TAVIReportData,
   TAVIData,
   HemodynamicData,
   ValveAssessment,
@@ -13,6 +15,7 @@ import type {
   AorticRegurgitationGrade,
   AccessApproach,
 } from '@/types/medical.types';
+import { TAVIReportSchema } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { TAVISystemPrompts, TAVIMedicalPatterns, TAVIValidationRules } from './TAVISystemPrompts';
 
@@ -77,14 +80,14 @@ export class TAVIAgent extends MedicalAgent {
     super(
       'TAVI Procedure Agent',
       'Interventional Cardiology',
-      'Generates comprehensive TAVI procedural reports with valve assessment and hemodynamic analysis',
+      'Generates comprehensive TAVI procedural reports with structured JSON data and narrative analysis',
       'tavi',
-      'You are a specialist interventional cardiologist generating TAVI procedural reports for medical records.'
+      TAVISystemPrompts.taviProcedureAgent.systemPrompt
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
-  async process(input: string, context?: MedicalContext): Promise<TAVIReport> {
+  async process(input: string, context?: MedicalContext): Promise<TAVIReportStructured> {
     const startTime = Date.now();
     
     try {
@@ -109,26 +112,32 @@ export class TAVIAgent extends MedicalAgent {
 
       // Build messages for LLM processing (handled internally by generateStructuredReport)
       
-      // Generate structured report content
+      // Generate structured report content with JSON + narrative
       const reportContent = await this.generateStructuredReport(
-        taviData, 
-        hemodynamics, 
-        valveAssessment, 
+        taviData,
+        hemodynamics,
+        valveAssessment,
         complications,
         correctedInput
       );
 
-      // Parse response into sections
-      const sections = this.parseResponse(reportContent, context);
+      // Parse and validate JSON data from response
+      const { jsonData, validationErrors, narrativeContent } = this.parseJSONAndNarrative(reportContent);
 
-      // Create comprehensive TAVI report
+      // Parse response into sections (using the narrative part)
+      const sections = this.parseResponse(narrativeContent, context);
+
+      // Create comprehensive TAVI report with structured JSON data
       const processingTime = Date.now() - startTime;
-      const report: TAVIReport = {
-        ...this.createReport(reportContent, sections, context, processingTime, 0.95),
+      const report: TAVIReportStructured = {
+        ...this.createReport(narrativeContent, sections, context, processingTime, 0.95),
         taviData,
         hemodynamics,
         valveAssessment,
-        complications
+        complications,
+        taviJsonData: jsonData,
+        validationErrors,
+        isValidJson: validationErrors.length === 0
       };
 
       // Store procedure in memory
@@ -404,15 +413,16 @@ export class TAVIAgent extends MedicalAgent {
         complications
       };
       
-      // Use LMStudio for content generation with extracted data context
+      // Use enhanced TAVI system prompt with JSON requirements
       const contextualPrompt = `${this.systemPrompt}
 
 EXTRACTED DATA CONTEXT:
-${JSON.stringify(extractedData, null, 2)}
+${JSON.stringify(extractedData, null, 2)}`;
 
-Generate a comprehensive TAVI procedural report using the above extracted data and the following dictation. Include all relevant valve specifications, hemodynamic measurements, deployment details, and outcomes. Use proper medical terminology and structured formatting.`;
+      // Use the enhanced user prompt template for JSON + narrative output
+      const userPrompt = TAVISystemPrompts.taviProcedureAgent.userPromptTemplate.replace('{input}', originalInput);
 
-      const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
+      const report = await this.lmStudioService.processWithAgent(contextualPrompt, userPrompt);
       
       console.log('✅ TAVI report generated successfully');
       return report;
@@ -732,5 +742,75 @@ Note: This report was generated with limited AI processing due to technical issu
     }
     
     return 'medium';
+  }
+
+  /**
+   * Parse JSON data and narrative content from TAVI LLM response
+   * Expected format: JSON block first, then narrative report
+   */
+  private parseJSONAndNarrative(response: string): {
+    jsonData: TAVIReportData | null;
+    validationErrors: string[];
+    narrativeContent: string;
+  } {
+    const validationErrors: string[] = [];
+    let jsonData: TAVIReportData | null = null;
+    let narrativeContent = response;
+
+    try {
+      // Look for JSON block at the beginning of the response
+      const jsonBlockMatch = response.match(/^\s*\{[\s\S]*?\}(?=\n|$)/);
+
+      if (jsonBlockMatch) {
+        const jsonString = jsonBlockMatch[0];
+        console.log('🔍 Found JSON block in TAVI response:', jsonString.substring(0, 200) + '...');
+
+        try {
+          // Parse and validate the JSON
+          const parsedJson = JSON.parse(jsonString);
+          const validationResult = TAVIReportSchema.safeParse(parsedJson);
+
+          if (validationResult.success) {
+            jsonData = validationResult.data;
+            console.log('✅ TAVI JSON validation successful');
+
+            // Remove JSON block from narrative content
+            narrativeContent = response.substring(jsonString.length).trim();
+
+            // Log missing fields if any
+            if (jsonData.missingFields && jsonData.missingFields.length > 0) {
+              console.log('⚠️ Missing fields in TAVI data:', jsonData.missingFields);
+              validationErrors.push(`Missing fields: ${jsonData.missingFields.join(', ')}`);
+            }
+          } else {
+            console.warn('❌ TAVI JSON validation failed:', validationResult.error.errors);
+            validationErrors.push('JSON schema validation failed');
+            validationErrors.push(...validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`));
+          }
+        } catch (parseError) {
+          console.warn('❌ Failed to parse TAVI JSON:', parseError);
+          validationErrors.push('Invalid JSON format');
+        }
+      } else {
+        console.log('ℹ️ No JSON block found in TAVI response, using narrative-only');
+        validationErrors.push('No JSON data block found in response');
+      }
+    } catch (error) {
+      console.error('❌ Error parsing TAVI JSON and narrative:', error);
+      validationErrors.push('Failed to parse response format');
+    }
+
+    // Fallback: if no narrative content after JSON removal, use full response
+    if (!narrativeContent || narrativeContent.trim().length === 0) {
+      narrativeContent = response;
+    }
+
+    console.log(`📊 TAVI parsing result: JSON=${jsonData ? 'valid' : 'invalid'}, errors=${validationErrors.length}, narrative=${narrativeContent.length} chars`);
+
+    return {
+      jsonData,
+      validationErrors,
+      narrativeContent
+    };
   }
 }

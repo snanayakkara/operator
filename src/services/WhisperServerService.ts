@@ -27,104 +27,121 @@ export class WhisperServerService {
     return WhisperServerService.instance;
   }
 
-  public async checkServerStatus(skipCache = false): Promise<ServerStatus> {
+  public async checkServerStatus(skipCache = false, options: { timeout?: number; retries?: number } = {}): Promise<ServerStatus> {
     const now = Date.now();
-    
+    const { timeout = 3000, retries = 1 } = options;
+
     // Return cached result if within TTL to prevent excessive requests (unless explicitly skipping cache)
-    if (!skipCache && this.lastStatusResult && 
+    if (!skipCache && this.lastStatusResult &&
         now - this.lastStatusCheckTime < this.STATUS_CACHE_TTL) {
       console.debug('🔄 Returning cached Whisper server status (within 5s TTL)');
       return { ...this.lastStatusResult };
     }
 
-    try {
-      console.debug('🔍 Checking Whisper server status at', this.healthCheckUrl);
-      
-      const response = await fetch(this.healthCheckUrl, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000), // Increased to 3000ms for better detection
-        cache: 'no-cache',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+    // Retry logic for resilient status checking
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.debug(`🔍 Checking Whisper server status (attempt ${attempt}/${retries})`, this.healthCheckUrl);
+
+        const response = await fetch(this.healthCheckUrl, {
+          method: 'GET',
+          signal: AbortSignal.timeout(timeout),
+          cache: 'no-cache',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
+        if (response.ok) {
+          let model = 'whisper-large-v3-turbo';
+          try {
+            const healthData = await response.json();
+            model = healthData.model || model;
+          } catch (jsonError) {
+            console.warn('⚠️ Could not parse health response JSON, using default model');
+          }
+
+          const result: ServerStatus = {
+            running: true,
+            model,
+            port: this.port,
+            lastChecked: now
+          };
+
+          console.debug('✅ Whisper server is running:', result);
+
+          // Cache the successful result
+          this.lastStatusCheckTime = now;
+          this.lastStatusResult = result;
+
+          return result;
+        } else {
+          const result: ServerStatus = {
+            running: false,
+            port: this.port,
+            error: `Server responded with status ${response.status}: ${response.statusText}`,
+            lastChecked: now
+          };
+
+          console.warn('⚠️ Whisper server health check failed:', result.error);
+
+          // For non-OK responses, don't retry - cache the failed result
+          this.lastStatusCheckTime = now;
+          this.lastStatusResult = result;
+
+          return result;
         }
-      });
 
-      if (response.ok) {
-        let model = 'whisper-large-v3-turbo';
-        try {
-          const healthData = await response.json();
-          model = healthData.model || model;
-        } catch (jsonError) {
-          console.warn('⚠️ Could not parse health response JSON, using default model');
+      } catch (attemptError) {
+        const isTimeout = attemptError instanceof Error && attemptError.name === 'TimeoutError';
+
+        // If timeout and we have more attempts, wait and retry
+        if (isTimeout && attempt < retries) {
+          console.warn(`⏳ Whisper server timeout on attempt ${attempt}/${retries}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+          continue;
         }
 
-        const result: ServerStatus = {
-          running: true,
-          model,
-          port: this.port,
-          lastChecked: now
-        };
+        // Last attempt failed or non-timeout error - handle the error
+        const isNetworkError = attemptError instanceof Error && (
+          attemptError.message.includes('fetch') ||
+          attemptError.message.includes('network') ||
+          attemptError.message.includes('Failed to fetch')
+        );
 
-        console.debug('✅ Whisper server is running:', result);
-        
-        // Cache the successful result
-        this.lastStatusCheckTime = now;
-        this.lastStatusResult = result;
-        
-        return result;
-      } else {
+        let errorMessage: string;
+        if (isTimeout) {
+          errorMessage = `Connection timeout after ${retries} attempt${retries > 1 ? 's' : ''} - server may be busy processing`;
+        } else if (isNetworkError) {
+          errorMessage = 'Server not running on localhost:8001';
+        } else {
+          errorMessage = attemptError instanceof Error ? attemptError.message : 'Unknown connection error';
+        }
+
         const result: ServerStatus = {
           running: false,
           port: this.port,
-          error: `Server responded with status ${response.status}: ${response.statusText}`,
+          error: errorMessage,
           lastChecked: now
         };
 
-        console.warn('⚠️ Whisper server health check failed:', result.error);
-        
-        // Cache failed results with shorter TTL
+        console.warn(`❌ Whisper server connection failed after ${attempt} attempt${attempt > 1 ? 's' : ''}:`, errorMessage);
+
+        // Cache failed results but with reduced TTL for timeout errors (allow quicker retry)
         this.lastStatusCheckTime = now;
         this.lastStatusResult = result;
-        
+
         return result;
       }
-    } catch (error) {
-      const isTimeout = error instanceof Error && error.name === 'TimeoutError';
-      const isNetworkError = error instanceof Error && (
-        error.message.includes('fetch') || 
-        error.message.includes('network') ||
-        error.message.includes('Failed to fetch')
-      );
-
-      let errorMessage: string;
-      if (isTimeout) {
-        errorMessage = 'Connection timeout - server may be starting up';
-      } else if (isNetworkError) {
-        errorMessage = 'Server not running on localhost:8001';
-      } else {
-        errorMessage = error instanceof Error ? error.message : 'Unknown connection error';
-      }
-
-      const result: ServerStatus = {
-        running: false,
-        port: this.port,
-        error: errorMessage,
-        lastChecked: now
-      };
-
-      console.warn('❌ Whisper server connection failed:', errorMessage);
-      
-      // Cache failed results but allow quicker retry for manual checks
-      this.lastStatusCheckTime = now;
-      this.lastStatusResult = result;
-      
-      return result;
     }
+
+    // This should never be reached due to the return statements above, but TypeScript requires it
+    throw new Error('Unexpected end of checkServerStatus method');
   }
 
   public invalidateCache(): void {
-    console.debug('🗑️ Invalidating Whisper server status cache');
+    console.debug('🗑️ Invalidating Whisper server status cache - CALL STACK:', new Error().stack);
     this.lastStatusCheckTime = 0;
     this.lastStatusResult = null;
   }

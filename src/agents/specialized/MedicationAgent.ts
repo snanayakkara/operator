@@ -16,7 +16,7 @@ import type {
  * raw transcription into structured format: "↪ medication dose frequency"
  */
 export class MedicationAgent extends MedicalAgent {
-  private lmStudioService: LMStudioService;
+  protected lmStudioService: LMStudioService;
 
   constructor() {
     super(

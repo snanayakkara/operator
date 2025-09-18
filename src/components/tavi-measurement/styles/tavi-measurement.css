@@ -1,0 +1,838 @@
+/* TAVI Measurement Interface Styles */
+.tavi-measurement-interface {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.tavi-measurement-header {
+  background: #ffffff;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.tavi-measurement-header h2 {
+  margin: 0 0 1rem 0;
+  color: #1f2937;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Button Styles - Teal Theme, Flat Design */
+.btn-primary,
+.tool-btn.active,
+.measurement-complete,
+.back-to-grid-btn {
+  background: #14b8a6;
+  color: #ffffff;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+  box-shadow: none;
+  outline: none;
+}
+
+.btn-primary:hover,
+.tool-btn.active:hover,
+.measurement-complete:hover,
+.back-to-grid-btn:hover {
+  background: #0f766e;
+}
+
+.btn-primary:disabled,
+.measurement-complete:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.btn-secondary,
+.tool-btn,
+.clear-measurements {
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  box-shadow: none;
+  outline: none;
+}
+
+.btn-secondary:hover,
+.tool-btn:hover,
+.clear-measurements:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.tool-btn.cancel {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.tool-btn.cancel:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* Back to Grid Button - Narrow Width */
+.back-to-grid-btn {
+  width: fit-content;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  margin-right: 1rem;
+}
+
+/* Valve Selector Styles */
+.tavi-valve-selector {
+  margin-top: 1rem;
+}
+
+.selector-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.selector-row {
+  display: flex;
+  gap: 2rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.valve-type-dropdown {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  color: #1f2937;
+  min-width: 180px;
+  outline: none;
+}
+
+.valve-type-dropdown:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 1px #14b8a6;
+}
+
+.native-measurements {
+  display: flex;
+  gap: 1rem;
+}
+
+.native-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+}
+
+.input-with-unit input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem;
+  width: 80px;
+}
+
+.input-with-unit .unit {
+  color: #6b7280;
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+
+.balloon-volume-display {
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease-in-out;
+  min-width: 120px;
+}
+
+.balloon-volume-display:hover {
+  background: #f1f5f9;
+}
+
+.balloon-volume-display .volume-value {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.balloon-volume-display .edit-hint {
+  color: #6b7280;
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.selector-info {
+  display: flex;
+  gap: 2rem;
+  color: #6b7280;
+  font-size: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.info-item strong {
+  color: #374151;
+}
+
+/* Grid View Styles */
+.tavi-grid-view {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.grid-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.grid-header h2 {
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.grid-header p {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.measurement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.tavi-measurement-thumbnail {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.tavi-measurement-thumbnail:hover {
+  border-color: #14b8a6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.thumbnail-image-container {
+  position: relative;
+  height: 200px;
+  overflow: hidden;
+}
+
+.thumbnail-image {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.thumbnail-image.blank {
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumbnail-image.with-measurements {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.thumbnail-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #9ca3af;
+}
+
+.placeholder-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.placeholder-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.measurement-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.measurement-line {
+  position: absolute;
+  background: #14b8a6;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.measurement-line::before,
+.measurement-line::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #14b8a6;
+  border-radius: 50%;
+  top: -2px;
+}
+
+.measurement-line::before {
+  left: -3px;
+}
+
+.measurement-line::after {
+  right: -3px;
+}
+
+.measurement-label {
+  position: absolute;
+  top: -25px;
+  background: rgba(20, 184, 166, 0.9);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.thumbnail-info {
+  padding: 1rem;
+}
+
+.thumbnail-title {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+}
+
+.thumbnail-view {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.thumbnail-status {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.status-completed,
+.status-pending {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.status-completed {
+  color: #059669;
+}
+
+.status-pending {
+  color: #6b7280;
+}
+
+.status-icon {
+  font-weight: 600;
+}
+
+.measurement-summary {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 0.75rem;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.summary-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.summary-value {
+  color: #1f2937;
+}
+
+.summary-percentage {
+  color: #059669;
+  font-weight: 500;
+}
+
+.summary-more {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Results Section */
+.results-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+}
+
+.measurement-results-table {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.measurement-results-table h3 {
+  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.table-container {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+th {
+  background: #f8fafc;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+td {
+  color: #1f2937;
+  font-size: 0.875rem;
+}
+
+tr.completed td {
+  background: #f0fdf4;
+}
+
+.measurement-name .name-primary {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.measurement-name .name-secondary {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.status-complete {
+  color: #059669;
+  font-weight: 500;
+}
+
+.status-pending {
+  color: #6b7280;
+}
+
+.percentage-value {
+  font-weight: 600;
+  color: #059669;
+  font-size: 0.75rem;
+}
+
+.overall-progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.progress-label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #14b8a6;
+  transition: width 0.3s ease-in-out;
+}
+
+.progress-text {
+  font-weight: 600;
+  color: #059669;
+  font-size: 0.875rem;
+}
+
+.post-deployment-expansion {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+
+.post-deployment-expansion h3 {
+  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.expansion-values {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.expansion-mm,
+.expansion-percentage {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 0.375rem;
+}
+
+.value-label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.value-number {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 1rem;
+}
+
+/* Measurement View Styles */
+.tavi-measurement-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f8fafc;
+}
+
+.measurement-view-header {
+  background: #ffffff;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.measurement-view-title {
+  flex: 1;
+}
+
+.measurement-view-title h1 {
+  color: #1f2937;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+}
+
+.measurement-subtitle {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.measurement-view-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  overflow: hidden;
+}
+
+.measurement-image-section {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.measurement-tools-container {
+  margin-bottom: 1rem;
+}
+
+.measurement-image-container {
+  flex: 1;
+  position: relative;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  cursor: crosshair;
+  background: #ffffff;
+}
+
+.medical-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}
+
+.image-content {
+  text-align: center;
+  color: #6b7280;
+}
+
+.image-placeholder-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.image-content p {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.image-instructions {
+  font-style: italic;
+  color: #9ca3af;
+}
+
+.measurement-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Measurement Tools */
+.tavi-measurement-tools {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.tools-header h3 {
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+}
+
+.tools-header p {
+  color: #6b7280;
+  font-size: 0.75rem;
+  margin: 0 0 1rem 0;
+}
+
+.tools-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  text-align: center;
+  min-width: 80px;
+}
+
+.tool-icon {
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.tool-label {
+  font-weight: 500;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.tool-description {
+  font-size: 0.625rem;
+  color: #6b7280;
+}
+
+.measurement-instructions {
+  background: #f8fafc;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+}
+
+.instructions-active strong {
+  color: #059669;
+}
+
+.instructions-active p,
+.instructions-inactive p {
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Measurement Sidebar */
+.measurement-sidebar {
+  background: #ffffff;
+  border-left: 1px solid #e2e8f0;
+  padding: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.measurements-empty {
+  color: #6b7280;
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.875rem;
+}
+
+.measurements-list {
+  flex: 1;
+}
+
+.measurements-list h3 {
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.measurement-item {
+  background: #f8fafc;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid #e2e8f0;
+}
+
+.measurement-label-text {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.measurement-percentage {
+  color: #059669;
+  font-weight: 600;
+}
+
+.measurement-expected {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.measurement-actions {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .measurement-view-content {
+    grid-template-columns: 1fr;
+  }
+
+  .measurement-sidebar {
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .selector-row {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .results-section {
+    grid-template-columns: 1fr;
+  }
+
+  .measurement-grid {
+    grid-template-columns: 1fr;
+  }
+}

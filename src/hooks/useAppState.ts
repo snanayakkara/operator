@@ -7,6 +7,8 @@
 
 import { useReducer, useCallback, useRef } from 'react';
 import type { AppState, AgentType, ProcessingStatus, FailedAudioRecording, PatientAppointment, BatchAIReviewReport, PatientSession, PatientInfo } from '@/types/medical.types';
+import type { TranscriptionApprovalState } from '@/types/optimization';
+import type { PatientNameComparison } from '@/utils/PatientNameValidator';
 
 // Consolidated UI state interface
 interface UIState {
@@ -19,6 +21,7 @@ interface UIState {
   showPatientSelectionModal: boolean;
   showScreenshotAnnotationModal: boolean;
   showPatientEducationConfig: boolean;
+  showPatientMismatchModal: boolean;
   showMainMenu: boolean;
   showRecordingPrompts: boolean;
   showMetricsDashboard: boolean;
@@ -47,6 +50,18 @@ interface UIState {
   batchProcessingProgress: any;
 }
 
+// Display state for viewing completed sessions (isolated from active recording)
+interface DisplaySessionState {
+  isDisplayingSession: boolean;
+  displaySessionId: string | null;
+  displayTranscription: string;
+  displayResults: string;
+  displaySummary?: string;
+  displayAgent?: AgentType | null;
+  displayAgentName?: string | null;
+  displayPatientInfo?: PatientInfo | null;
+}
+
 // Combined app state
 interface CombinedAppState extends AppState {
   ui: UIState;
@@ -55,6 +70,24 @@ interface CombinedAppState extends AppState {
   currentPatientInfo: PatientInfo | null;
   currentSessionId: string | null; // Track the currently recording session
   selectedSessionId: string | null; // Track the session being viewed in the UI
+
+  // Session display isolation - prevents cross-contamination between active recording and viewing completed sessions
+  displaySession: DisplaySessionState;
+
+  // Streaming generation state
+  streamBuffer?: string;
+  ttftMs?: number | null;
+  streaming?: boolean;
+  // Transcription approval tracking
+  transcriptionApproval: TranscriptionApprovalState;
+
+  // Patient name mismatch validation
+  patientMismatchData: {
+    comparison: PatientNameComparison | null;
+    textToInsert: string | null;
+    onConfirm: (() => void) | null;
+    onCancel: (() => void) | null;
+  };
 }
 
 // Action types for state updates
@@ -85,6 +118,8 @@ type AppAction =
   | { type: 'SET_PATIENT_MODAL'; payload: boolean }
   | { type: 'SET_SCREENSHOT_ANNOTATION_MODAL'; payload: boolean }
   | { type: 'SET_PATIENT_EDUCATION_CONFIG'; payload: boolean }
+  | { type: 'SET_PATIENT_MISMATCH_MODAL'; payload: boolean }
+  | { type: 'SET_PATIENT_MISMATCH_DATA'; payload: CombinedAppState['patientMismatchData'] }
   | { type: 'SET_MAIN_MENU'; payload: boolean }
   | { type: 'SET_RECORDING_PROMPTS'; payload: boolean }
   | { type: 'SET_METRICS_DASHBOARD'; payload: boolean }
@@ -108,7 +143,19 @@ type AppAction =
   | { type: 'SET_PROCESSING_PROGRESS'; payload: number }
   | { type: 'SET_AI_REVIEW_START_TIME'; payload: number }
   | { type: 'SET_PATIENT_VERSION'; payload: string | null }
-  | { type: 'SET_GENERATING_PATIENT_VERSION'; payload: boolean };
+  | { type: 'SET_GENERATING_PATIENT_VERSION'; payload: boolean }
+  // Streaming actions
+  | { type: 'RESULTS_APPEND_STREAM_CHUNK'; payload: string }
+  | { type: 'RESULTS_TTFT'; payload: number }
+  | { type: 'RESULTS_STREAM_DONE'; payload: { final: string; usage?: any; ttftMs?: number | null } }
+  | { type: 'RESULTS_STREAM_ERROR'; payload: string }
+  | { type: 'RESULTS_STREAM_CANCELLED' }
+  | { type: 'RESULTS_STREAMING'; payload: boolean }
+  | { type: 'RESULTS_CLEAR_STREAM' }
+  | { type: 'SET_TRANSCRIPTION_APPROVAL'; payload: TranscriptionApprovalState }
+  // Display session actions for isolation
+  | { type: 'SET_DISPLAY_SESSION'; payload: { session: PatientSession } }
+  | { type: 'CLEAR_DISPLAY_SESSION' };
 
 // Initial state
 const initialState: CombinedAppState = {
@@ -142,12 +189,44 @@ const initialState: CombinedAppState = {
   reviewData: null,
   patientVersion: null,
   isGeneratingPatientVersion: false,
+  // Streaming
+  streamBuffer: '',
+  ttftMs: null,
+  streaming: false,
+  
+  // Transcription approval tracking
+  transcriptionApproval: {
+    status: 'pending',
+    originalText: '',
+    currentText: '',
+    hasBeenEdited: false
+  },
+
+  // Patient name mismatch validation
+  patientMismatchData: {
+    comparison: null,
+    textToInsert: null,
+    onConfirm: null,
+    onCancel: null
+  },
   
   // Patient session management
   patientSessions: [],
   currentPatientInfo: null,
   currentSessionId: null,
   selectedSessionId: null,
+
+  // Session display isolation
+  displaySession: {
+    isDisplayingSession: false,
+    displaySessionId: null,
+    displayTranscription: '',
+    displayResults: '',
+    displaySummary: undefined,
+    displayAgent: null,
+    displayAgentName: null,
+    displayPatientInfo: null
+  },
   
   // UI state
   ui: {
@@ -157,6 +236,7 @@ const initialState: CombinedAppState = {
     showPatientSelectionModal: false,
     showScreenshotAnnotationModal: false,
     showPatientEducationConfig: false,
+    showPatientMismatchModal: false,
     showMainMenu: false,
     showRecordingPrompts: false,
     showMetricsDashboard: false,
@@ -283,6 +363,13 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_PATIENT_EDUCATION_CONFIG':
       if (state.ui.showPatientEducationConfig === action.payload) return state;
       return { ...state, ui: { ...state.ui, showPatientEducationConfig: action.payload } };
+
+    case 'SET_PATIENT_MISMATCH_MODAL':
+      if (state.ui.showPatientMismatchModal === action.payload) return state;
+      return { ...state, ui: { ...state.ui, showPatientMismatchModal: action.payload } };
+
+    case 'SET_PATIENT_MISMATCH_DATA':
+      return { ...state, patientMismatchData: action.payload };
       
     case 'SET_MAIN_MENU':
       if (state.ui.showMainMenu === action.payload) return state;
@@ -325,7 +412,11 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         hadResults: !!state.results,
         hadReviewData: !!state.reviewData,
         currentAgent: state.currentAgent,
-        processingStatus: state.processingStatus
+        processingStatus: state.processingStatus,
+        wasDisplayingSession: state.displaySession.isDisplayingSession,
+        wasStreaming: state.streaming,
+        hadStreamBuffer: !!state.streamBuffer,
+        currentSessionId: state.currentSessionId
       });
       return {
         ...state,
@@ -343,6 +434,29 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         totalProcessingTime: null,
         processingStartTime: null,
         reviewData: null,
+        // Clear streaming state to allow record button access
+        streaming: false,
+        streamBuffer: '',
+        ttftMs: null,
+        // Clear session IDs to reset "actively working" state
+        currentSessionId: null,
+        selectedSessionId: null,
+        displaySession: {
+          isDisplayingSession: false,
+          displaySessionId: null,
+          displayTranscription: '',
+          displayResults: '',
+          displaySummary: undefined,
+          displayAgent: null,
+          displayAgentName: null,
+          displayPatientInfo: null
+        },
+        transcriptionApproval: {
+          status: 'pending',
+          originalText: '',
+          currentText: '',
+          hasBeenEdited: false
+        },
         ui: {
           ...state.ui,
           activeWorkflow: null,
@@ -403,7 +517,70 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_GENERATING_PATIENT_VERSION':
       if (state.isGeneratingPatientVersion === action.payload) return state;
       return { ...state, isGeneratingPatientVersion: action.payload };
-      
+
+    // Streaming reducer cases
+    case 'RESULTS_STREAMING':
+      return { ...state, streaming: action.payload };
+    case 'RESULTS_CLEAR_STREAM':
+      return { ...state, streamBuffer: '', ttftMs: null };
+    case 'RESULTS_APPEND_STREAM_CHUNK':
+      return { ...state, streamBuffer: (state.streamBuffer || '') + action.payload };
+    case 'RESULTS_TTFT':
+      return { ...state, ttftMs: action.payload };
+    case 'RESULTS_STREAM_DONE':
+      return {
+        ...state,
+        results: action.payload.final,
+        streamBuffer: '',
+        streaming: false,
+        ttftMs: action.payload.ttftMs ?? state.ttftMs ?? null,
+        processingStatus: 'complete'
+      };
+    case 'RESULTS_STREAM_ERROR':
+      return {
+        ...state,
+        ui: { ...state.ui, errors: [...state.ui.errors, action.payload] },
+        streaming: false
+      };
+    case 'RESULTS_STREAM_CANCELLED':
+      return { ...state, streaming: false };
+    
+    case 'SET_TRANSCRIPTION_APPROVAL':
+      return { ...state, transcriptionApproval: action.payload };
+
+    case 'SET_DISPLAY_SESSION':
+      const session = action.payload.session;
+      return {
+        ...state,
+        selectedSessionId: session.id,
+        displaySession: {
+          isDisplayingSession: true,
+          displaySessionId: session.id,
+          displayTranscription: session.transcription || '',
+          displayResults: session.results || '',
+          displaySummary: session.summary,
+          displayAgent: session.agentType || null,
+          displayAgentName: session.agentName || null,
+          displayPatientInfo: session.patient || null
+        }
+      };
+
+    case 'CLEAR_DISPLAY_SESSION':
+      return {
+        ...state,
+        selectedSessionId: null,
+        displaySession: {
+          isDisplayingSession: false,
+          displaySessionId: null,
+          displayTranscription: '',
+          displayResults: '',
+          displaySummary: undefined,
+          displayAgent: null,
+          displayAgentName: null,
+          displayPatientInfo: null
+        }
+      };
+
     default:
       return state;
   }
@@ -525,6 +702,14 @@ export function useAppState() {
     setPatientEducationConfig: useCallback((show: boolean) => {
       dispatch({ type: 'SET_PATIENT_EDUCATION_CONFIG', payload: show });
     }, []),
+
+    setPatientMismatchModal: useCallback((show: boolean) => {
+      dispatch({ type: 'SET_PATIENT_MISMATCH_MODAL', payload: show });
+    }, []),
+
+    setPatientMismatchData: useCallback((data: CombinedAppState['patientMismatchData']) => {
+      dispatch({ type: 'SET_PATIENT_MISMATCH_DATA', payload: data });
+    }, []),
     
     setMainMenu: useCallback((show: boolean) => {
       dispatch({ type: 'SET_MAIN_MENU', payload: show });
@@ -622,6 +807,43 @@ export function useAppState() {
     
     setGeneratingPatientVersion: useCallback((generating: boolean) => {
       dispatch({ type: 'SET_GENERATING_PATIENT_VERSION', payload: generating });
+    }, []),
+
+    // Streaming helpers
+    setStreaming: useCallback((streaming: boolean) => {
+      dispatch({ type: 'RESULTS_STREAMING', payload: streaming });
+    }, []),
+    clearStream: useCallback(() => {
+      dispatch({ type: 'RESULTS_CLEAR_STREAM' });
+    }, []),
+    appendStreamChunk: useCallback((chunk: string) => {
+      dispatch({ type: 'RESULTS_APPEND_STREAM_CHUNK', payload: chunk });
+    }, []),
+    setTTFT: useCallback((ms: number) => {
+      dispatch({ type: 'RESULTS_TTFT', payload: ms });
+    }, []),
+    streamDone: useCallback((final: string, usage?: any, ttftMs?: number | null) => {
+      dispatch({ type: 'RESULTS_STREAM_DONE', payload: { final, usage, ttftMs } });
+    }, []),
+    streamError: useCallback((msg: string) => {
+      dispatch({ type: 'RESULTS_STREAM_ERROR', payload: msg });
+    }, []),
+    streamCancelled: useCallback(() => {
+      dispatch({ type: 'RESULTS_STREAM_CANCELLED' });
+    }, []),
+    
+    // Transcription approval action
+    setTranscriptionApproval: useCallback((approval: TranscriptionApprovalState) => {
+      dispatch({ type: 'SET_TRANSCRIPTION_APPROVAL', payload: approval });
+    }, []),
+
+    // Display session actions for isolation
+    setDisplaySession: useCallback((session: PatientSession) => {
+      dispatch({ type: 'SET_DISPLAY_SESSION', payload: { session } });
+    }, []),
+
+    clearDisplaySession: useCallback(() => {
+      dispatch({ type: 'CLEAR_DISPLAY_SESSION' });
     }, [])
   };
   

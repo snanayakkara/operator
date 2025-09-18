@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Mic, 
   Brain, 
@@ -18,16 +18,22 @@ import {
   AlertTriangle,
   Bell,
   Square,
-  BarChart3
+  BarChart3,
+  Sparkles,
+  Users,
+  Target,
+  TrendingUp
 } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus, PatientSession } from '@/types/medical.types';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
 import { RecordPanel } from './RecordPanel';
 import { SessionDropdown } from './SessionDropdown';
+import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { ToastService } from '@/services/ToastService';
 import { AudioDeviceSelector } from './AudioDeviceSelector';
 import { CompactAudioDeviceDisplay } from './CompactAudioDeviceDisplay';
+import { AgentFactory } from '@/services/AgentFactory';
 
 interface StatusIndicatorProps {
   status: ProcessingStatus;
@@ -60,7 +66,7 @@ interface StatusIndicatorProps {
 const STATUS_CONFIGS = {
   idle: {
     icon: Mic,
-    label: 'Ready',
+    label: 'operator',
     description: 'Ready to record',
     color: 'text-ink-secondary',
     bgColor: 'bg-surface-tertiary',
@@ -190,9 +196,14 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const [showServicesDetails, setShowServicesDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // Phase 4 Intelligence State
+  const [phase4Stats, setPhase4Stats] = useState<any>(null);
+  
   // Session notification state
   const [showSessionDropdown, setShowSessionDropdown] = useState(false);
-  
+  const [isOpeningSessions, setIsOpeningSessions] = useState(false);
+  const bellButtonRef = useRef<HTMLButtonElement>(null);
+
   const { triggerRef, position } = useDropdownPosition({
     isOpen: showServicesDetails,
     alignment: 'right',
@@ -214,17 +225,26 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
     }
   }, [showServicesDetails]);
 
-  // Close session dropdown when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showSessionDropdown && !(event.target as Element).closest('.relative')) {
-        setShowSessionDropdown(false);
+  // Click-outside handling is managed by DropdownPortal component
+
+  // Load Phase 4 statistics
+  useEffect(() => {
+    const loadPhase4Stats = () => {
+      try {
+        const stats = AgentFactory.getPhase4PerformanceStats();
+        setPhase4Stats(stats);
+      } catch (error) {
+        console.warn('Phase 4 stats not available:', error);
+        setPhase4Stats(null);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showSessionDropdown]);
+    // Load stats initially and every 30 seconds
+    loadPhase4Stats();
+    const interval = setInterval(loadPhase4Stats, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
   
   const getDetailedDescription = () => {
     if (isExtractingPatients) {
@@ -334,7 +354,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 onWorkflowSelect={onWorkflowSelect}
                 activeWorkflow={activeWorkflow}
                 isRecording={isRecording}
-                disabled={status === 'processing' || status === 'transcribing'}
+                disabled={false}
                 voiceActivityLevel={voiceActivityLevel}
                 recordingTime={recordingTime}
                 whisperServerRunning={modelStatus.whisperServer?.running}
@@ -376,6 +396,11 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   <CompactAudioDeviceDisplay disabled={false} />
                 </div>
               )}
+            </div>
+
+            {/* Audio Processing Queue Status */}
+            <div className="flex-shrink-0">
+              <QueueStatusDisplay isCompact={true} className="mx-2" />
             </div>
 
             {/* Cancel Button - Compact version, positioned to avoid overlap */}
@@ -439,7 +464,28 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             {patientSessions.length > 0 && (
               <div className="relative">
                 <button
-                  onClick={() => setShowSessionDropdown(!showSessionDropdown)}
+                  ref={bellButtonRef}
+                  onClick={() => {
+                    console.time('🔔 Notification Bell Click Performance');
+                    const startTime = performance.now();
+                    console.log('🔔 Bell clicked, opening sessions dropdown...', {
+                      sessionCount: patientSessions.length,
+                      timestamp: Date.now()
+                    });
+
+                    setIsOpeningSessions(true);
+                    setShowSessionDropdown(!showSessionDropdown);
+
+                    setTimeout(() => {
+                      setIsOpeningSessions(false);
+                      const endTime = performance.now();
+                      console.timeEnd('🔔 Notification Bell Click Performance');
+                      console.log('🔔 Bell opening completed', {
+                        duration: `${(endTime - startTime).toFixed(2)}ms`,
+                        sessionCount: patientSessions.length
+                      });
+                    }, 180);
+                  }}
                   className={`bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded-lg p-2 relative ${
                     isRecording ? 'scale-90' : ''
                   }`}
@@ -447,6 +493,11 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   data-dropdown-trigger
                 >
                   <Bell className="w-4 h-4 text-accent-violet" />
+                  {isOpeningSessions && (
+                    <span className="absolute -top-1 -left-1">
+                      <Loader2 className="w-3 h-3 text-accent-violet animate-spin" />
+                    </span>
+                  )}
                   
                   {/* Red notification badge - smaller during recording */}
                   <div className={`absolute -top-1 -right-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-white ${
@@ -468,28 +519,22 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   onSessionSelect={onSessionSelect}
                   isOpen={showSessionDropdown}
                   onClose={() => setShowSessionDropdown(false)}
+                  triggerRef={bellButtonRef}
                 />
               </div>
             )}
 
-            {/* AI Services status icon (color indicates health) */}
+
+            {/* Settings quick view trigger */}
             <button
               ref={triggerRef}
               data-dropdown-trigger
               onClick={() => setShowServicesDetails(!showServicesDetails)}
               className="inline-flex items-center justify-center w-11 h-11 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              aria-label="AI services status"
-              title="AI Services Status"
+              aria-label="Settings quick view"
+              title="Settings Quick View"
             >
-              <Server
-                className={`w-5 h-5 ${
-                  getOverallSystemStatus() === 'healthy'
-                    ? 'text-accent-emerald'
-                    : getOverallSystemStatus() === 'partial'
-                    ? 'text-accent-amber'
-                    : 'text-accent-red'
-                }`}
-              />
+              <Settings className="w-5 h-5 text-ink-secondary" />
             </button>
           </div>
         </div>
@@ -531,8 +576,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between">
               <h4 className="text-ink-primary font-medium text-sm flex items-center space-x-2">
-                <Server className="w-4 h-4" />
-                <span>AI Services Status</span>
+                <Settings className="w-4 h-4" />
+                <span>Settings Quick View</span>
               </h4>
               
               <div className="flex items-center space-x-2">
@@ -553,6 +598,49 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   <X className="w-3 h-3 text-ink-secondary" />
                 </button>
               </div>
+            </div>
+
+            {/* Phase 4 Intelligence Quick View */}
+            <div className="border border-gray-100 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <span className="text-ink-primary text-sm font-medium">Phase 4 Intelligence</span>
+                </div>
+                <div className="text-xs text-ink-secondary">
+                  {phase4Stats ? 'Active' : 'Loading...'}
+                </div>
+              </div>
+              {phase4Stats ? (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-ink-secondary">Agent Cache:</span>
+                    <span className="text-ink-primary ml-1">
+                      {Math.round((phase4Stats.agentLoader?.cacheHitRate || 0) * 100)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-ink-secondary">Avg Load:</span>
+                    <span className="text-ink-primary ml-1">
+                      {(phase4Stats.agentLoader?.averageLoadTime || 0) > 0 ? `${Math.round(phase4Stats.agentLoader.averageLoadTime)}ms` : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-ink-secondary">Cross-Agent:</span>
+                    <span className="text-ink-primary ml-1">
+                      {phase4Stats.crossAgentIntelligence?.globalInsights || 'Learning'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-ink-secondary">Profiles:</span>
+                    <span className="text-ink-primary ml-1">
+                      {phase4Stats.crossAgentIntelligence?.activeProfiles || '—'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-ink-tertiary">Gathering performance metrics…</div>
+              )}
             </div>
 
             {/* LMStudio Status Section */}
@@ -691,12 +779,13 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 title="Open settings page in new tab"
               >
                 <Settings className="w-3 h-3 text-ink-secondary" />
-                <span className="text-ink-primary text-xs">Open Settings</span>
+                <span className="text-ink-primary text-xs">Open Full Settings</span>
               </button>
             </div>
           </div>
         </div>
       </DropdownPortal>
+
     </>
   );
 };

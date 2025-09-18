@@ -1,14 +1,16 @@
-import type { 
-  LMStudioRequest, 
-  LMStudioResponse, 
-  ChatMessage, 
-  ModelStatus 
+import type {
+  LMStudioRequest,
+  LMStudioResponse,
+  ChatMessage,
+  ModelStatus
 } from '@/types/medical.types';
 import { WhisperServerService } from './WhisperServerService';
 import { AudioOptimizationService } from './AudioOptimizationService';
 import { DSPyService } from './DSPyService';
+import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine';
 import { logger } from '@/utils/Logger';
 import { GemmaPromptFormatter } from '@/utils/GemmaPromptFormatter';
+import { StreamingParser } from '@/utils/StreamingParser';
 
 /**
  * Centralized Model Configuration
@@ -169,21 +171,24 @@ export class LMStudioService {
   public async transcribeAudio(audioBlob: Blob, signal?: AbortSignal, agentType?: string): Promise<string> {
     const startTime = Date.now();
     
-    console.log('🎙️ LMStudioService.transcribeAudio() called:', {
+    logger.info('LMStudioService.transcribeAudio() called', {
+      component: 'lm-studio',
+      operation: 'transcribe-start',
       blobSize: audioBlob.size,
       blobType: audioBlob.type,
       transcriptionUrl: this.config.transcriptionUrl,
-      model: this.config.transcriptionModel,
-      timestamp: new Date().toISOString()
+      model: this.config.transcriptionModel
     });
     
     try {
       // Ensure Whisper server is running before attempting transcription
       const serverStatus = await this.whisperServerService.ensureServerRunning();
       if (!serverStatus.running) {
-        console.warn('⚠️ MLX Whisper server is not running');
-        console.warn('💡 To start the server manually, run: ./start-whisper-server.sh');
-        console.warn('💡 Or run: source venv-whisper/bin/activate && python whisper-server.py');
+        logger.warn('MLX Whisper server is not running', {
+          component: 'lm-studio',
+          operation: 'transcribe-whisper-check',
+          instructions: ['./start-whisper-server.sh', 'source venv-whisper/bin/activate && python whisper-server.py']
+        });
         
         return `[MLX Whisper server not running. ${serverStatus.error || 'Please start the server manually.'}]`;
       }
@@ -194,30 +199,69 @@ export class LMStudioService {
       
       // Check if compression would be beneficial
       if (audioOptimizer.shouldCompress(audioBlob)) {
-        console.log('🎵 Compressing audio for better transcription performance...');
+        logger.info('Compressing audio for better transcription performance', {
+          component: 'lm-studio',
+          operation: 'audio-compression-start'
+        });
         try {
           const compressionResult = await audioOptimizer.compressAudio(audioBlob);
           processedAudioBlob = compressionResult.compressedBlob;
           
-          console.log('✅ Audio compression completed:', {
+          logger.info('Audio compression completed', {
+            component: 'lm-studio',
+            operation: 'audio-compression-success',
             originalSize: Math.round(compressionResult.originalSize / 1024) + 'KB',
             compressedSize: Math.round(compressionResult.compressedSize / 1024) + 'KB',
             compressionRatio: compressionResult.compressionRatio.toFixed(1) + '%',
             processingTime: compressionResult.processingTime + 'ms'
           });
         } catch (compressionError) {
-          console.warn('⚠️ Audio compression failed, using original audio:', compressionError);
+          logger.warn('Audio compression failed, using original audio', {
+            component: 'lm-studio',
+            operation: 'audio-compression-error',
+            error: compressionError instanceof Error ? compressionError.message : String(compressionError)
+          });
           // Continue with original audio blob
         }
       } else {
-        console.log('📄 Audio file is small enough, skipping compression');
+        logger.info('Audio file is small enough, skipping compression', {
+          component: 'lm-studio',
+          operation: 'audio-compression-skip',
+          size: audioBlob.size
+        });
       }
+      // Get glossary terms for Whisper prompt seeding
+      let glossaryPrompt = '';
+      try {
+        const asrEngine = ASRCorrectionEngine.getInstance();
+        const glossaryTerms = await asrEngine.getGlossaryTerms(30); // Limit to 30 terms to stay within token limit
+        if (glossaryTerms.length > 0) {
+          glossaryPrompt = glossaryTerms.join(', ');
+          logger.info('Using medical glossary prompt', {
+            component: 'lm-studio',
+            operation: 'glossary-load',
+            promptPreview: glossaryPrompt.substring(0, 100) + '...'
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to load glossary terms for Whisper prompt', {
+          component: 'lm-studio',
+          operation: 'glossary-load-error',
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      
       // First, try the OpenAI-compatible transcription endpoint
       // eslint-disable-next-line no-undef
       const formData = new FormData();
       formData.append('file', processedAudioBlob, 'audio.webm');
       formData.append('model', this.config.transcriptionModel);
       formData.append('response_format', 'text');
+      
+      // Add medical glossary as prompt if available
+      if (glossaryPrompt) {
+        formData.append('prompt', glossaryPrompt);
+      }
 
       // Use separate transcription URL if configured, otherwise use base LMStudio URL
       const transcriptionUrl = this.config.transcriptionUrl || this.config.baseUrl;
@@ -294,7 +338,7 @@ export class LMStudioService {
         // Check if this is the MLX Whisper server
         if (this.config.transcriptionUrl && this.config.transcriptionUrl.includes('8001')) {
           const errorText = await response.text().catch(() => 'Unknown error');
-          const placeholderText = `[MLX Whisper transcription failed (${response.status}): ${errorText}. Please check if the whisper-server.py is running on port 8001.]`;
+          const placeholderText = `[MLX Whisper server unavailable (HTTP ${response.status}). To resolve: 1) Run './start-whisper-server.sh' or 2) Check server logs for errors. The audio was recorded successfully and can be reprocessed once the server is running.]`;
           
           console.error('❌ MLX Whisper server error:', response.status, errorText);
           console.warn('💡 To fix this:');
@@ -306,7 +350,7 @@ export class LMStudioService {
           return placeholderText;
         } else {
           // Generic transcription service error
-          const placeholderText = '[Audio transcription service unavailable. Please configure a transcription provider.]';
+          const placeholderText = '[Audio transcription unavailable. Set up MLX Whisper server by running "./start-whisper-server.sh" or configure an alternative transcription service. Your audio recording is saved and ready for processing.]';
           
           console.warn('⚠️ Transcription service not available. Returning placeholder text.');
           console.warn('💡 To fix this:');
@@ -323,7 +367,7 @@ export class LMStudioService {
       
       // Check if this is a timeout error
       if (error instanceof Error && error.name === 'TimeoutError') {
-        const timeoutMessage = `[MLX Whisper transcription timed out after ${this.config.timeout/1000}s. The model may be loading for the first time.]`;
+        const timeoutMessage = `[MLX Whisper server timeout after ${this.config.timeout/1000}s. First-time model loading can take 2-5 minutes. Your audio is saved - try reprocessing after the server finishes loading.]`;
         
         console.error('❌ MLX Whisper timeout:', error.message);
         console.warn('💡 This is normal for the first transcription. The model is loading...');
@@ -335,7 +379,7 @@ export class LMStudioService {
       }
       
       // Provide helpful error message for other errors
-      const errorMessage = `[Audio transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please check MLX Whisper server.]`;
+      const errorMessage = `[Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check if MLX Whisper server is running with './start-whisper-server.sh'. Audio is saved for later processing.]`;
       
       console.error('❌ Transcription error:', error);
       console.warn('💡 To fix this:');
@@ -429,6 +473,100 @@ export class LMStudioService {
     }
 
     return this.makeRequest(request, signal, agentType);
+  }
+
+  /**
+   * Generate streaming response with real-time token delivery
+   * Compatible with OpenAI streaming API format
+   */
+  public async generateStream(
+    messages: ChatMessage[],
+    onToken: (delta: string) => void,
+    signal?: AbortSignal,
+    modelOverride?: string
+  ): Promise<string> {
+    const startTime = Date.now();
+
+    // Determine which model to use
+    const modelToUse = modelOverride || this.config.processorModel;
+
+    console.log(`🚀 Starting streaming request with model: ${modelToUse}`);
+
+    // Create request using Gemma-aware formatting
+    const request = GemmaPromptFormatter.createGemmaRequest(messages, modelToUse, {
+      temperature: 0.3,
+      max_tokens: 4000,
+      stream: true
+    });
+
+    // Log format being used for debugging
+    if (GemmaPromptFormatter.isGemmaModel(modelToUse)) {
+      console.log('🔧 Using Gemma prompt format with control tokens for streaming');
+    } else {
+      console.log('📝 Using standard OpenAI message format for streaming');
+    }
+
+    // Combine user signal with timeout signal for robust cancellation
+    const timeoutSignal = AbortSignal.timeout(this.config.timeout);
+    const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+        signal: combinedSignal
+      });
+
+      if (!response.ok) {
+        throw new Error(`LMStudio streaming API error: ${response.status} ${response.statusText}`);
+      }
+
+      // Process streaming response using StreamingParser
+      return new Promise<string>((resolve, reject) => {
+        let fullText = '';
+
+        StreamingParser.processStreamResponse(
+          response,
+          (delta: string) => {
+            fullText += delta;
+            onToken(delta);
+          },
+          (finalText: string, usage?: any) => {
+            console.log(`⏱️ Streaming request completed in ${Date.now() - startTime}ms`);
+
+            // Update model status on success
+            this.modelStatus.isConnected = true;
+            this.modelStatus.lastPing = Date.now();
+            this.modelStatus.latency = Date.now() - startTime;
+
+            if (usage) {
+              console.log('📊 Token usage:', usage);
+            }
+
+            resolve(finalText || fullText);
+          },
+          (error: Error) => {
+            console.error('❌ Streaming error:', error);
+            this.modelStatus.isConnected = false;
+            reject(error);
+          }
+        );
+      });
+
+    } catch (error) {
+      this.modelStatus.isConnected = false;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('🛑 Streaming request cancelled by user');
+        throw new Error('Streaming request cancelled');
+      }
+
+      console.error('❌ Streaming request failed:', error);
+      throw new Error(`Streaming request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   public async streamResponse(
@@ -856,4 +994,93 @@ export class LMStudioService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+}
+
+// Streaming types and helpers for SSE chat completions
+export type StreamOpts = {
+  model: string;
+  messages: { role: 'system'|'user'|'assistant'; content: string }[];
+  temperature?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+  onToken?: (t: string) => void;
+  onMessage?: (json: any) => void;
+  onEnd?: (finalText: string, usage?: any) => void;
+  onError?: (err: Error) => void;
+};
+
+function splitSSEFrames(buf: string): string[] {
+  return buf.replace(/\r\n/g, '\n').split('\n\n');
+}
+
+export async function streamChatCompletion(opts: StreamOpts): Promise<void> {
+  try {
+    const body: any = {
+      model: opts.model,
+      messages: opts.messages,
+      temperature: opts.temperature,
+      max_tokens: opts.maxTokens,
+      stream: true,
+    };
+
+    const res = await fetch('http://localhost:1234/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: opts.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    let finalText = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      const frames = splitSSEFrames(pending);
+      pending = frames.pop() ?? '';
+      for (const frame of frames) {
+        for (const line of frame.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (!data) continue;
+          if (data === '[DONE]') {
+            opts.onEnd?.(finalText);
+            return;
+          }
+          try {
+            const json = JSON.parse(data);
+            opts.onMessage?.(json);
+            const delta = json?.choices?.[0]?.delta?.content ?? '';
+            if (delta) {
+              finalText += delta;
+              opts.onToken?.(delta);
+            }
+            const usage = json?.usage;
+            if (usage && !delta) {
+              opts.onEnd?.(finalText, usage);
+              return;
+            }
+          } catch {
+            // Ignore partial/keepalive lines
+          }
+        }
+      }
+    }
+    opts.onEnd?.(finalText);
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      // Propagate abort as Error for unified handling
+      opts.onError?.(err);
+      return;
+    }
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+  }
 }

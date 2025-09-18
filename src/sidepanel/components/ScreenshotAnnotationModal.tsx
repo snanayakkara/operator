@@ -1,8 +1,20 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { Upload, Combine, Copy, Trash2, X, ImageIcon } from 'lucide-react';
+import {
+  modalVariants,
+  backdropVariants,
+  staggerContainer,
+  listItemVariants,
+  buttonVariants,
+  textVariants,
+  withReducedMotion,
+  STAGGER_CONFIGS,
+  ANIMATION_DURATIONS
+} from '@/utils/animations';
 import { ScreenshotCombiner, AnnotatedScreenshot } from '../../services/ScreenshotCombiner';
-import { ToastService } from '../../services/ToastService';
+import { FileToasts } from '@/utils/toastHelpers';
 
 interface ScreenshotAnnotationModalProps {
   isOpen: boolean;
@@ -33,7 +45,10 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
         const tabId = tabs?.[0]?.id;
         if (tabId) chrome.tabs.sendMessage(tabId, { type: 'SET_FILE_DROP_GUARD', enabled: false });
       });
-    } catch {}
+    } catch (guardError) {
+      // Failed to disable file drop guard - non-critical for modal functionality
+      console.debug('Failed to disable file drop guard on modal close:', guardError instanceof Error ? guardError.message : guardError);
+    }
     onClose();
   };
 
@@ -66,7 +81,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
 
   const handleFileSelect = useCallback((file: File, index: number) => {
     if (!file.type.startsWith('image/')) {
-      ToastService.getInstance().error('Invalid File', 'Please select an image file (PNG, JPG, GIF)');
+      FileToasts.invalidFile();
       return;
     }
 
@@ -89,7 +104,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
           return updated;
         });
         
-        ToastService.getInstance().success('Image Added', `Screenshot ${index + 1} loaded successfully`);
+        FileToasts.imageAdded(index);
       };
       img.src = dataUrl;
     };
@@ -110,7 +125,10 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     try {
       const slotNumber = (targetSlot ?? 0) + 1;
       chrome.runtime.sendMessage({ type: 'SET_DROP_HINT', data: { slot: slotNumber } });
-    } catch {}
+    } catch (hintError) {
+      // Failed to send drop hint message - non-critical UI feedback
+      console.debug('Failed to send drop hint message for slot', (targetSlot ?? 0) + 1, ':', hintError instanceof Error ? hintError.message : hintError);
+    }
   }, [targetSlot]);
 
   const handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
@@ -122,7 +140,12 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
   const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (e.dataTransfer) {
-      try { e.dataTransfer.dropEffect = 'copy'; } catch {}
+      try { 
+        e.dataTransfer.dropEffect = 'copy'; 
+      } catch (dropEffectError) {
+        // Failed to set dropEffect - browser security restriction, continue operation
+        console.debug('Cannot set dropEffect on dataTransfer (browser security):', dropEffectError instanceof Error ? dropEffectError.message : dropEffectError);
+      }
     }
     setDragOverIndex(index);
   }, []);
@@ -136,7 +159,12 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
   const handleDrop = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (e.dataTransfer) {
-      try { e.dataTransfer.dropEffect = 'copy'; } catch {}
+      try { 
+        e.dataTransfer.dropEffect = 'copy'; 
+      } catch (dropEffectError) {
+        // Failed to set dropEffect - browser security restriction, continue operation
+        console.debug('Cannot set dropEffect on dataTransfer (browser security):', dropEffectError instanceof Error ? dropEffectError.message : dropEffectError);
+      }
     }
     console.log('🎯 Drop event triggered on zone', index, 'with files:', e.dataTransfer?.files?.length ?? 0);
     
@@ -145,7 +173,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     // Enhanced validation for extension context
     if (!e.dataTransfer) {
       console.log('❌ No dataTransfer on drag event');
-      ToastService.getInstance().error('No Files', 'No files were detected in the drag operation');
+      FileToasts.noFiles();
       return false;
     }
     
@@ -166,7 +194,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     
     if (!files.length) {
       console.log('❌ No file items present in drag operation');
-      ToastService.getInstance().error('No Files', 'No files were detected in the drag operation');
+      FileToasts.noFiles();
       return false;
     }
     
@@ -179,7 +207,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       handleFileSelect(imageFile, index);
     } else {
       console.log('❌ No valid image files found');
-      ToastService.getInstance().error('Invalid File', 'Please drop an image file (PNG, JPG, GIF)');
+      FileToasts.invalidFile();
     }
     
     return false;
@@ -199,7 +227,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       updated[index] = null;
       return updated;
     });
-    ToastService.getInstance().success('Screenshot Removed', `Slot ${index + 1} cleared`);
+    FileToasts.imageRemoved(index);
   }, []);
 
   const importDataUrl = useCallback((dataUrl: string, index: number) => {
@@ -218,12 +246,12 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
           updated[index] = screenshot;
           return updated;
         });
-        ToastService.getInstance().success('Image Added', `Screenshot ${index + 1} loaded successfully`);
+        FileToasts.imageAdded(index);
       };
       img.src = dataUrl;
     } catch (e) {
       console.error('Failed to import data URL image', e);
-      ToastService.getInstance().error('Import Failed', 'Could not load dropped image');
+      FileToasts.importFailed();
     }
   }, []);
 
@@ -249,7 +277,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       if (accepted && accepted.length > 0) {
         handleFileSelect(accepted[0], index);
       } else {
-        ToastService.getInstance().error('Invalid File', 'Please drop an image file (PNG, JPG, GIF)');
+        FileToasts.invalidFile();
       }
     }, [handleFileSelect, index]);
 
@@ -337,7 +365,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
   const handleCombineAndCopy = useCallback(async () => {
     const anyScreenshots = screenshots.some((s) => s !== null);
     if (!anyScreenshots) {
-      ToastService.getInstance().error('No Screenshots', 'Please add at least one screenshot to combine');
+      FileToasts.noScreenshots();
       return;
     }
     
@@ -351,13 +379,10 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       await combinerRef.current.copyToClipboard();
       
       const count = screenshots.filter(Boolean).length;
-      ToastService.getInstance().success('Screenshots Combined!', `${count} screenshots combined and copied to clipboard`);
+      FileToasts.imagesCombined(count);
     } catch (error) {
       console.error('Failed to combine and copy screenshots:', error);
-      ToastService.getInstance().error(
-        'Combine Failed', 
-        error instanceof Error ? error.message : 'Failed to combine screenshots'
-      );
+      FileToasts.combineFailed(error instanceof Error ? error.message : undefined);
     } finally {
       setIsProcessing(false);
     }
@@ -367,7 +392,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     setScreenshots([null, null, null, null]);
     setTargetSlot(0);
     combinerRef.current.clear();
-    ToastService.getInstance().success('Cleared', 'All screenshots removed');
+    FileToasts.allCleared();
   }, []);
   
   const screenshotCount = screenshots.filter(s => s !== null).length;
@@ -399,19 +424,36 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
 
 
   return (
-    <div 
-      ref={modalRef}
-      className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center"
-      onClick={(e) => {
-        // Close modal when clicking on backdrop, not modal content
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <AnimatePresence>
+      <motion.div 
+        ref={modalRef}
+        className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center"
+        variants={withReducedMotion(backdropVariants)}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        onClick={(e) => {
+          // Close modal when clicking on backdrop, not modal content
+          if (e.target === e.currentTarget) {
+            handleClose();
+          }
+        }}
+      >
+        <motion.div 
+          className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col"
+          variants={withReducedMotion(modalVariants)}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <motion.div 
+            className="flex items-center justify-between p-6 border-b border-gray-200"
+            variants={withReducedMotion(textVariants)}
+            initial="hidden"
+            animate="visible"
+          >
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
               <Combine className="w-5 h-5 text-blue-600" />
@@ -425,13 +467,13 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
               </p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+            <button
+              onClick={handleClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </motion.div>
 
         {/* Status Bar */}
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
@@ -505,7 +547,8 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
             </button>
           </div>
         </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 };

@@ -5,7 +5,7 @@ export { TAVIAgent } from './TAVIAgent';
 export { AngiogramPCIAgent } from './AngiogramPCIAgent';
 export { QuickLetterAgent } from './QuickLetterAgent';
 export { ConsultationAgent } from './ConsultationAgent';
-export { InvestigationSummaryAgent } from './InvestigationSummaryAgent';
+export { InvestigationSummaryAgentPhase3 as InvestigationSummaryAgent } from './InvestigationSummaryAgent.Phase3';
 export { BackgroundAgent } from './BackgroundAgent';
 export { MedicationAgent } from './MedicationAgent';
 export { BloodsAgent } from './BloodsAgent';

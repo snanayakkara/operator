@@ -14,6 +14,11 @@ export interface MedicalContext {
   emrSystem?: string;
   previousReports?: MedicalReport[];
   timestamp: number;
+  isReprocessing?: boolean;
+  withMissingInfo?: boolean;
+  // Phase 3 feature flags (optional)
+  processingMode?: 'legacy' | 'phase3';
+  phase3Enhancement?: boolean;
 }
 
 export interface MedicalReport {
@@ -42,6 +47,9 @@ export interface ReportMetadata {
   confidence: number;
   processingTime: number;
   modelUsed: string;
+  // Optional Phase 3 metadata extensions
+  phase3Processing?: Record<string, unknown>;
+  validationResults?: Record<string, unknown>;
   enhancedFeatures?: {
     intelligentWaiting?: boolean;
     dataValidation?: boolean;
@@ -49,6 +57,18 @@ export interface ReportMetadata {
     caching?: boolean;
     checkpointing?: boolean;
     metrics?: boolean;
+  };
+  // AI reasoning artifacts for transparency (always captured)
+  rawAIOutput?: string;
+  reasoningArtifacts?: {
+    dictationAnalysis?: string;
+    summaryPlanning?: string;
+    letterPlanning?: string;
+    constraintChecklist?: string;
+    mentalSandbox?: string;
+    confidenceScore?: string;
+    otherArtifacts?: string[];
+    hasReasoningContent?: boolean;
   };
 }
 
@@ -1004,4 +1024,132 @@ export interface PatientEducationModule {
 export interface PatientEducationConfig {
   modules: PatientEducationModule[];
   priorities: { value: string; label: string; description: string }[];
+}
+
+// TAVI Structured JSON Schema with Zod Validation
+import { z } from 'zod';
+
+export const TAVIReportSchema = z.object({
+  ctAnnulus: z.object({
+    area_mm2: z.number().nullable(),
+    perimeter_mm: z.number().nullable(),
+    min_d_mm: z.number().nullable(),
+    max_d_mm: z.number().nullable(),
+  }),
+  lvot: z.object({
+    d1_mm: z.number().nullable().optional(),
+    d2_mm: z.number().nullable().optional(),
+  }),
+  coronaryHeights_mm: z.object({
+    left: z.number().nullable(),
+    right: z.number().nullable()
+  }),
+  angles: z.object({
+    coplanar_deg: z.number().nullable(),
+    doubleCusp_deg: z.number().nullable()
+  }),
+  device: z.object({
+    family: z.string().nullable(),
+    model: z.string().nullable(),
+    size: z.string().nullable()
+  }),
+  wire: z.string().nullable(),
+  deploymentDepth_mm: z.object({
+    NCC: z.number().nullable(),
+    LCC: z.number().nullable()
+  }),
+  predilation: z.object({
+    balloon_mm: z.number().nullable()
+  }).nullable(),
+  postdilationPlan: z.object({
+    balloon_mm: z.number().nullable(),
+    volume_ml: z.number().nullable()
+  }).nullable(),
+  recaptures: z.number().nullable(),
+  pacing: z.string().nullable(),
+  finalHemodynamics: z.object({
+    meanGradient_mmHg: z.number().nullable()
+  }),
+  PVL: z.enum(['none','trace','mild','moderate','severe']).nullable(),
+  complications: z.array(z.string()).nullable(),
+  nextSteps: z.array(z.string()).nullable(),
+  missingFields: z.array(z.string()).default([]),
+});
+
+export type TAVIReportData = z.infer<typeof TAVIReportSchema>;
+
+// Enhanced TAVI Report interface with structured JSON data
+export interface TAVIReportStructured extends MedicalReport {
+  taviJsonData?: TAVIReportData;
+  validationErrors?: string[];
+  isValidJson: boolean;
+}
+
+// TAVI Measurement Interface Types
+export interface TAVIMeasurementData {
+  id: string;
+  imageUrl: string;
+  thumbnailUrl?: string;
+  title: string;
+  view: string; // e.g., "Post-deployment + 3-cusp view"
+  measurements: TAVIMeasurement[];
+  completed: boolean;
+  timestamp: number;
+}
+
+export interface TAVIMeasurement {
+  id: string;
+  type: 'height' | 'diameter' | 'area' | 'perimeter';
+  label: string; // e.g., "H-L", "H-R"
+  value: number; // in mm or mm²
+  expectedValue?: number; // for percentage calculation
+  percentage?: number; // calculated percentage of expected
+  coordinates?: MeasurementCoordinates;
+}
+
+export interface MeasurementCoordinates {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
+export interface TAVIMeasurementSession {
+  sessionId: string;
+  patientId?: string;
+  measurements: TAVIMeasurementData[];
+  valveType: ValveTypeOption;
+  nativeAnnulus: {
+    perimeter: number;
+    area: number;
+  };
+  additionalBalloonVolume: number;
+  averagePostDeploymentExpansion: {
+    mm: number;
+    percentage: number;
+  };
+  completionStatus: MeasurementCompletionStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MeasurementCompletionStatus {
+  [measurementId: string]: {
+    completed: boolean;
+    percentage: number;
+  };
+}
+
+export type ValveTypeOption = 'Edwards Sapien' | 'Medtronic Evolut' | 'Abbott Navitor';
+
+export interface TAVIMeasurementConfig {
+  expectedValues: {
+    [valveType in ValveTypeOption]: {
+      [size in ValveSize]: {
+        height: number;
+        diameter: number;
+      };
+    };
+  };
+  balloonVolumeOptions: number[];
 }

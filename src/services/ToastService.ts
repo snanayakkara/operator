@@ -37,8 +37,11 @@ export class ToastService {
   }
 
   private notifyListeners(): void {
-    this.listeners.forEach(listener => {
-      listener([...this.toasts]);
+    // Use requestAnimationFrame to prevent blocking during error states
+    requestAnimationFrame(() => {
+      this.listeners.forEach(listener => {
+        listener([...this.toasts]);
+      });
     });
   }
 
@@ -48,7 +51,7 @@ export class ToastService {
       ...toast,
       id,
       timestamp: Date.now(),
-      duration: toast.duration ?? (toast.type === 'error' ? 8000 : 5000)
+      duration: toast.duration ?? (toast.type === 'error' ? 4000 : 3000)
     };
 
     this.toasts.unshift(newToast);

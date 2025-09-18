@@ -48,7 +48,7 @@ interface FullPageCorrectionsViewerProps {
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
-type SortField = 'timestamp' | 'agentType' | 'original' | 'corrected' | 'confidence';
+type SortField = 'timestamp' | 'agentType' | 'original' | 'corrected';
 type SortDirection = 'asc' | 'desc';
 
 interface FilterState {
@@ -124,11 +124,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       });
 
     } catch (error) {
-      logger.error('Failed to load full-page corrections', {
-        component: 'FullPageCorrectionsViewer',
-        error: error.message
+      logger.error('Failed to load full-page corrections', error instanceof Error ? error : new Error(String(error)), {
+        component: 'FullPageCorrectionsViewer'
       });
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error(String(error)));
     } finally {
       setIsLoading(false);
       onLoadingChange(false);
@@ -142,8 +141,8 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
     if (filters.searchTerm.trim()) {
       const searchLower = filters.searchTerm.toLowerCase();
       filtered = filtered.filter(correction => 
-        correction.original.toLowerCase().includes(searchLower) ||
-        correction.corrected.toLowerCase().includes(searchLower) ||
+        correction.rawText.toLowerCase().includes(searchLower) ||
+        correction.correctedText.toLowerCase().includes(searchLower) ||
         correction.agentType?.toLowerCase().includes(searchLower)
       );
     }
@@ -181,10 +180,7 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
     }
 
     // Confidence filter
-    filtered = filtered.filter(correction => 
-      correction.confidence >= filters.confidenceRange[0] && 
-      correction.confidence <= filters.confidenceRange[1]
-    );
+    // Confidence not tracked; keep all entries
 
     // Sort
     filtered.sort((a, b) => {
@@ -201,16 +197,12 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
           bValue = b.agentType || '';
           break;
         case 'original':
-          aValue = a.original.toLowerCase();
-          bValue = b.original.toLowerCase();
+          aValue = a.rawText.toLowerCase();
+          bValue = b.rawText.toLowerCase();
           break;
         case 'corrected':
-          aValue = a.corrected.toLowerCase();
-          bValue = b.corrected.toLowerCase();
-          break;
-        case 'confidence':
-          aValue = a.confidence;
-          bValue = b.confidence;
+          aValue = a.correctedText.toLowerCase();
+          bValue = b.correctedText.toLowerCase();
           break;
         default:
           aValue = a.timestamp;
@@ -236,7 +228,7 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
 
   const startEditing = useCallback((correction: ASRCorrectionsEntry) => {
     setEditingId(correction.id);
-    setEditedText(correction.corrected);
+    setEditedText(correction.correctedText);
   }, []);
 
   const saveEdit = useCallback(async (id: string) => {
@@ -249,9 +241,9 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       const correctionIndex = corrections.findIndex(c => c.id === id);
       if (correctionIndex === -1) return;
 
-      const updatedCorrection = {
+      const updatedCorrection: ASRCorrectionsEntry = {
         ...corrections[correctionIndex],
-        corrected: editedText.trim(),
+        correctedText: editedText.trim(),
         timestamp: Date.now()
       };
 
@@ -269,11 +261,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       setEditedText('');
 
     } catch (error) {
-      logger.error('Failed to save correction edit', {
-        component: 'FullPageCorrectionsViewer',
-        error: error.message
+      logger.error('Failed to save correction edit', error instanceof Error ? error : new Error(String(error)), {
+        component: 'FullPageCorrectionsViewer'
       });
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
   }, [corrections, editedText, onError]);
 
@@ -302,11 +293,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       });
 
     } catch (error) {
-      logger.error('Failed to delete correction', {
-        component: 'FullPageCorrectionsViewer',
-        error: error.message
+      logger.error('Failed to delete correction', error instanceof Error ? error : new Error(String(error)), {
+        component: 'FullPageCorrectionsViewer'
       });
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
   }, [corrections, onError]);
 
@@ -328,11 +318,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       });
 
     } catch (error) {
-      logger.error('Failed to bulk delete corrections', {
-        component: 'FullPageCorrectionsViewer',
-        error: error.message
+      logger.error('Failed to bulk delete corrections', error instanceof Error ? error : new Error(String(error)), {
+        component: 'FullPageCorrectionsViewer'
       });
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
   }, [corrections, selectedCorrections, onError]);
 
@@ -350,9 +339,8 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
           id: correction.id,
           date: new Date(correction.timestamp).toISOString(),
           agent: correction.agentType,
-          original: correction.original,
-          corrected: correction.corrected,
-          confidence: correction.confidence,
+          original: correction.rawText,
+          corrected: correction.correctedText,
           sessionId: correction.sessionId
         }))
       };
@@ -376,11 +364,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       });
 
     } catch (error) {
-      logger.error('Failed to export corrections', {
-        component: 'FullPageCorrectionsViewer',
-        error: error.message
+      logger.error('Failed to export corrections', error instanceof Error ? error : new Error(String(error)), {
+        component: 'FullPageCorrectionsViewer'
       });
-      onError(error as Error);
+      onError(error instanceof Error ? error : new Error(String(error)));
     }
   }, [filteredCorrections, selectedCorrections, filters, onError]);
 

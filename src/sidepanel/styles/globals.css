@@ -59,26 +59,51 @@
     box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.06);
   }
   
-  /* Legacy glass components (for gradual migration) */
-  .glass {
-    @apply transition-all duration-150;
+  /* Monochrome Components - Replacing Glass System */
+  .mono-button {
+    @apply bg-white border-2 border-gray-300 text-gray-900 
+           hover:border-gray-400 hover:shadow-sm 
+           transition-all duration-200 ease-out
+           font-medium rounded-lg px-4 py-2 cursor-pointer select-none;
   }
-  
-  .glass:hover {
-    @apply bg-surface-primary border border-line-primary;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+
+  .mono-button-secondary {
+    @apply bg-transparent border border-gray-200 text-gray-700
+           hover:bg-gray-50 hover:border-gray-300
+           transition-all duration-200 ease-out
+           rounded-lg px-3 py-1.5 cursor-pointer select-none;
   }
-  
+
+  .mono-button-icon {
+    @apply bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50
+           transition-all duration-200 ease-out
+           rounded-md p-2 cursor-pointer select-none;
+  }
+
+  .mono-input {
+    @apply bg-white border border-gray-300 text-gray-900
+           placeholder-gray-500 rounded-lg px-3 py-2
+           focus:border-gray-400 focus:ring-1 focus:ring-gray-400
+           transition-all duration-200 ease-out;
+  }
+
+  .mono-card {
+    @apply bg-white border border-gray-200 rounded-xl shadow-sm
+           hover:shadow-md transition-all duration-300 ease-out
+           p-4;
+  }
+
+  /* Legacy class mapping to new monochrome system */
   .glass-button {
-    @apply glass hover:bg-surface-tertiary active:bg-line-secondary transition-all duration-150 cursor-pointer select-none;
+    @apply mono-button-icon;
   }
-  
+
   .glass-input {
-    @apply glass bg-surface-tertiary border-line-primary placeholder-ink-tertiary text-ink-primary;
+    @apply mono-input;
   }
-  
+
   .glass-card {
-    @apply glass p-4 rounded-2xl;
+    @apply mono-card;
   }
 
   /* Dropdown and Portal Components */
@@ -678,19 +703,32 @@ textarea:focus-visible {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+/* Monochrome Solid Backgrounds - Replacing Backdrop Blur */
+.mono-overlay-light {
+  @apply bg-white border border-gray-200;
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.mono-overlay-medium {
+  @apply bg-gray-50 border border-gray-200;
+  background-color: rgba(249, 250, 251, 0.98);
+}
+
+.mono-overlay-strong {
+  @apply bg-white border border-gray-300 shadow-lg;
+}
+
+/* Legacy mapping */
 .backdrop-blur-sm {
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  @apply mono-overlay-light;
 }
 
 .backdrop-blur-md {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  @apply mono-overlay-medium;
 }
 
 .backdrop-blur-lg {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  @apply mono-overlay-strong;
 }
 
 /* Dropdown Z-Index Fix - Enhanced */
@@ -777,8 +815,6 @@ textarea:focus-visible {
 .footer-section {
   @apply bg-white border-t border-gray-200 shadow-lg;
   grid-row: 2;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .footer-content {

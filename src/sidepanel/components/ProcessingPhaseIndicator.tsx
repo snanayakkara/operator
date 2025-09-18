@@ -10,7 +10,20 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Brain, FileCheck, CheckCircle, Clock, TrendingUp } from 'lucide-react';
+import { 
+  progressVariants,
+  listItemVariants,
+  cardVariants,
+  textVariants,
+  staggerContainer,
+  withReducedMotion,
+  ANIMATION_DURATIONS,
+  STAGGER_CONFIGS,
+  createSpringTransition,
+  SPRING_CONFIGS
+} from '@/utils/animations';
 import { ProcessingTimePredictor, type ProcessingTimeEstimate } from '@/services/ProcessingTimePredictor';
 import type { AgentType } from '@/types/medical.types';
 
@@ -32,6 +45,9 @@ interface ProcessingPhaseIndicatorProps {
   transcriptionLength?: number;
   showTimeEstimate?: boolean;
   onProcessingComplete?: (actualTimeMs: number) => void;
+  // Streaming indicator
+  streaming?: boolean;
+  tokenCount?: number;
 }
 
 const PROCESSING_PHASES: ProcessingPhase[] = [
@@ -66,7 +82,9 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
   agentType,
   transcriptionLength,
   showTimeEstimate = true,
-  onProcessingComplete
+  onProcessingComplete,
+  streaming = false,
+  tokenCount
 }) => {
   const [activePhaseId, setActivePhaseId] = useState<string>('');
   const [completedPhases, setCompletedPhases] = useState<Set<string>>(new Set());
@@ -247,18 +265,30 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
   }
 
   return (
-    <div 
+    <motion.div 
       className={`bg-white rounded-lg border border-gray-200 p-4 ${className}`}
       role="status"
       aria-labelledby="processing-status-title"
       aria-describedby="processing-status-description"
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+      transition={createSpringTransition(SPRING_CONFIGS.gentle)}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <motion.div 
+        className="flex items-center justify-between mb-4"
+        variants={withReducedMotion(textVariants)}
+        initial="hidden"
+        animate="visible"
+      >
         <div className="flex items-center space-x-2">
           <h4 id="processing-status-title" className="text-sm font-medium text-gray-900">
             {agentType ? agentType.charAt(0).toUpperCase() + agentType.slice(1).replace('-', ' ') : 'AI Medical Review'}
           </h4>
+          {streaming && (
+            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Generating (streaming…){typeof tokenCount === 'number' ? ` • ${tokenCount}` : ''}</span>
+          )}
           <div className="flex items-center space-x-1 text-indigo-600">
             <Clock className="w-3 h-3" />
             <span className="text-xs font-mono font-medium" aria-live="polite">
@@ -283,10 +313,15 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
             {Math.round(currentProgress)}%
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* Overall Progress Bar */}
-      <div className="mb-4">
+      <motion.div 
+        className="mb-4"
+        initial={{ opacity: 0, scaleX: 0 }}
+        animate={{ opacity: 1, scaleX: 1 }}
+        transition={{ delay: 0.2, duration: ANIMATION_DURATIONS.normal }}
+      >
         <div 
           className="w-full bg-gray-200 rounded-full h-1.5"
           role="progressbar"
@@ -295,30 +330,72 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
           aria-valuemax={100}
           aria-label="Overall processing progress"
         >
-          <div 
-            className="bg-indigo-600 h-1.5 rounded-full motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none"
-            style={{ width: `${currentProgress}%` }}
+          <motion.div 
+            className="bg-indigo-600 h-1.5 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${currentProgress}%` }}
+            transition={createSpringTransition(SPRING_CONFIGS.gentle)}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Phase List */}
-      <div className="space-y-3">
+      <motion.div 
+        className="space-y-3"
+        variants={withReducedMotion(staggerContainer)}
+        initial="hidden"
+        animate="visible"
+        transition={{
+          staggerChildren: STAGGER_CONFIGS.tight,
+          delayChildren: 0.3
+        }}
+      >
         {PROCESSING_PHASES.map((phase, index) => {
           const status = getPhaseStatus(phase);
           const phaseProgress = getPhaseProgress(phase);
           
           return (
-            <div
+            <motion.div
               key={phase.id}
-              className={`relative flex items-start space-x-3 p-3 rounded-lg border motion-safe:transition-all motion-safe:duration-300 motion-reduce:transition-none ${getStatusColor(status)}`}
+              className={`relative flex items-start space-x-3 p-3 rounded-lg border ${getStatusColor(status)}`}
               role="listitem"
               aria-label={`${phase.label}: ${status === 'completed' ? 'Complete' : status === 'active' ? 'In progress' : 'Pending'}`}
+              variants={withReducedMotion(listItemVariants)}
+              animate={{
+                scale: status === 'active' ? [1, 1.02, 1] : 1,
+                borderColor: status === 'active' ? ['rgb(199, 210, 254)', 'rgb(129, 140, 248)', 'rgb(199, 210, 254)'] : undefined
+              }}
+              transition={{
+                scale: {
+                  duration: 2,
+                  repeat: status === 'active' ? Infinity : 0,
+                  ease: 'easeInOut'
+                },
+                ...createSpringTransition(SPRING_CONFIGS.gentle)
+              }}
             >
               {/* Phase Icon */}
-              <div className="flex-shrink-0 mt-0.5">
+              <motion.div 
+                className="flex-shrink-0 mt-0.5"
+                animate={{
+                  scale: status === 'active' ? [1, 1.1, 1] : 1,
+                  rotate: status === 'active' && phase.icon === Brain ? [0, 5, -5, 0] : 0
+                }}
+                transition={{
+                  scale: {
+                    duration: 1.5,
+                    repeat: status === 'active' ? Infinity : 0,
+                    ease: 'easeInOut'
+                  },
+                  rotate: {
+                    duration: 2,
+                    repeat: status === 'active' && phase.icon === Brain ? Infinity : 0,
+                    ease: 'easeInOut'
+                  }
+                }}
+              >
                 {getIconComponent(phase, status)}
-              </div>
+              </motion.div>
 
               {/* Phase Content */}
               <div className="flex-1 min-w-0">
@@ -338,34 +415,52 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
                 </p>
 
                 {/* Phase-specific Progress Bar */}
-                {status === 'active' && (
-                  <div 
-                    className="w-full bg-indigo-200 rounded-full h-1"
-                    role="progressbar"
-                    aria-valuenow={phaseProgress}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${phase.label} progress`}
-                  >
-                    <div 
-                      className="bg-indigo-600 h-1 rounded-full motion-safe:transition-all motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none"
-                      style={{ width: `${phaseProgress}%` }}
-                    />
-                  </div>
-                )}
+                <AnimatePresence>
+                  {status === 'active' && (
+                    <motion.div 
+                      className="w-full bg-indigo-200 rounded-full h-1"
+                      role="progressbar"
+                      aria-valuenow={phaseProgress}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${phase.label} progress`}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 4 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: ANIMATION_DURATIONS.quick }}
+                    >
+                      <motion.div 
+                        className="bg-indigo-600 h-1 rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${phaseProgress}%` }}
+                        transition={{
+                          type: 'spring',
+                          damping: 25,
+                          stiffness: 400,
+                          mass: 0.5
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Connection Line to Next Phase */}
               {index < PROCESSING_PHASES.length - 1 && (
                 <div className="absolute left-6 top-12 w-0.5 h-4 bg-gray-200" />
               )}
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
 
       {/* Footer */}
-      <div className="mt-4 pt-3 border-t border-gray-200">
+      <motion.div 
+        className="mt-4 pt-3 border-t border-gray-200"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, duration: ANIMATION_DURATIONS.quick }}
+      >
         <div className="flex flex-col items-center space-y-1">
           <p className="text-xs text-gray-500 text-center">
             {currentProgress >= 100 
@@ -398,7 +493,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

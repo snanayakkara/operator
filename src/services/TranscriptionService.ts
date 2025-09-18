@@ -4,6 +4,7 @@ import type {
   TranscriptionSegment 
 } from '@/types/medical.types';
 import { LMStudioService } from './LMStudioService';
+import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine';
 
 export interface TranscriptionConfig {
   language: string;
@@ -15,10 +16,10 @@ export interface TranscriptionConfig {
 export class TranscriptionService {
   private static instance: TranscriptionService;
   private lmStudioService: LMStudioService;
+  private asrEngine: ASRCorrectionEngine;
   private isInitializing = false;
   private isInitialized = false;
   private config: TranscriptionConfig;
-  private medicalTermsCorrections: Map<string, string>;
 
   private constructor(config?: Partial<TranscriptionConfig>) {
     this.config = {
@@ -30,145 +31,7 @@ export class TranscriptionService {
     };
 
     this.lmStudioService = LMStudioService.getInstance();
-
-    this.medicalTermsCorrections = new Map([
-      // Cardiology terms
-      ['taxi', 'TAVI'],
-      ['tavern', 'TAVI'],
-      ['taffy', 'TAVI'],
-      ['tabby', 'TAVI'],  // Common Whisper transcription error
-      ['p c i', 'PCI'],
-      ['p.c.i.', 'PCI'],
-      ['pci', 'PCI'],
-      ['pc i', 'PCI'],  // Common Whisper transcription error
-      ['angiogram', 'angiogram'],
-      ['angio gram', 'angiogram'],
-      ['catheterization', 'catheterisation'],
-      ['catheter', 'catheter'],
-      ['stent', 'stent'],
-      ['balloon', 'balloon'],
-      
-      // Valve terms
-      ['mitral', 'mitral'],
-      ['my trial', 'mitral'],  // Common Whisper transcription error
-      ['aortic', 'aortic'],
-      ['a ortic', 'aortic'],  // Common Whisper transcription error
-      ['tricuspid', 'tricuspid'],
-      ['pulmonary', 'pulmonary'],
-      ['stenosis', 'stenosis'],
-      ['regurgitation', 'regurgitation'],
-      ['insufficiency', 'insufficiency'],
-      
-      // Investigation types
-      ['t t e', 'TTE'],
-      ['tte', 'TTE'],
-      ['stress t t e', 'Stress TTE'],
-      ['stress tte', 'Stress TTE'],
-      ['c t c a', 'CTCA'],
-      ['ctca', 'CTCA'],
-      ['ct coronary angiogram', 'CT Coronary Angiogram'],
-      ['coronary angiogram', 'Coronary Angiogram'],
-      ['heart bug', 'HeartBug'],
-      ['ct cow', 'CT COW'],
-      ['ct thoracic aorta', 'CT Thoracic Aorta'],
-      ['ct calcium score', 'CT Calcium Score'],
-      ['c p e t', 'CPET'],
-      ['cpet', 'CPET'],
-      ['bloods', 'Bloods'],
-      
-      // Cardiology anatomy
-      ['l v', 'LV'],
-      ['lv', 'LV'],
-      ['r v', 'RV'],
-      ['rv', 'RV'],
-      ['l a d', 'LAD'],
-      ['lad', 'LAD'],
-      ['led', 'LAD'],  // Common Whisper transcription error
-      ['l cx', 'LCx'],
-      ['lcx', 'LCx'],
-      ['r c a', 'RCA'],
-      ['rca', 'RCA'],
-      ['arca', 'RCA'],  // Common Whisper transcription error
-      ['o m one', 'OM1'],
-      ['om one', 'OM1'],
-      ['om1', 'OM1'],
-      ['o m two', 'OM2'],
-      ['om two', 'OM2'],
-      ['om2', 'OM2'],
-      ['d one', 'D1'],
-      ['d1', 'D1'],
-      ['d two', 'D2'],
-      ['d2', 'D2'],
-      
-      // Medical values and measurements
-      ['ca score', 'Ca score'],
-      ['calcium score', 'Ca score'],
-      ['h b', 'Hb'],
-      ['hb', 'Hb'],
-      ['haemoglobin', 'Hb'],
-      ['t chol', 'TChol'],
-      ['total cholesterol', 'TChol'],
-      ['l d l', 'LDL'],
-      ['ldl', 'LDL'],
-      ['e g f r', 'eGFR'],
-      ['egfr', 'eGFR'],
-      ['estimated gfr', 'eGFR'],
-      ['hb a one c', 'HbA1c'],
-      ['hba1c', 'HbA1c'],
-      ['glycated haemoglobin', 'HbA1c'],
-      ['r v s p', 'RVSP'],
-      ['rvsp', 'RVSP'],
-      ['m p g', 'MPG'],
-      ['mpg', 'MPG'],
-      ['mean pressure gradient', 'MPG'],
-      ['mets', 'METs'],
-      ['metabolic equivalents', 'METs'],
-      
-      // Pathology terms
-      ['scad', 'SCAD'],
-      ['s c a d', 'SCAD'],
-      ['spontaneous coronary artery dissection', 'SCAD'],
-      ['type one', 'type 1'],
-      ['type two', 'type 2'],
-      ['type three', 'type 3'],
-      
-      // Medical measurements
-      ['millimeters', 'millimetres'],
-      ['millimeter', 'millimetre'],
-      ['mm hg', 'mmHg'],
-      ['mmhg', 'mmHg'],
-      ['b p m', 'bpm'],
-      ['bpm', 'bpm'],
-      ['ejection fraction', 'ejection fraction'],
-      ['e f', 'EF'],
-      ['ef', 'EF'],
-      
-      // Medications
-      ['aspirin', 'aspirin'],
-      ['clopidogrel', 'clopidogrel'],
-      ['clopidog rel', 'clopidogrel'],  // Common Whisper transcription error
-      ['warfarin', 'warfarin'],
-      ['war farin', 'warfarin'],  // Common Whisper transcription error
-      ['heparin', 'heparin'],
-      ['hep arin', 'heparin'],  // Common Whisper transcription error
-      ['atorvastatin', 'atorvastatin'],
-      ['a torva statin', 'atorvastatin'],  // Common Whisper transcription error
-      ['metoprolol', 'metoprolol'],
-      ['meto prolol', 'metoprolol'],  // Common Whisper transcription error
-      ['lisinopril', 'lisinopril'],
-      ['lisin opril', 'lisinopril'],  // Common Whisper transcription error
-      
-      // Common medical words
-      ['patient', 'patient'],
-      ['procedure', 'procedure'],
-      ['diagnosis', 'diagnosis'],
-      ['treatment', 'treatment'],
-      ['medication', 'medication'],
-      ['history', 'history'],
-      ['examination', 'examination'],
-      ['assessment', 'assessment'],
-      ['recommendation', 'recommendation']
-    ]);
+    this.asrEngine = ASRCorrectionEngine.getInstance();
   }
 
   public static getInstance(config?: Partial<TranscriptionConfig>): TranscriptionService {
@@ -228,7 +91,7 @@ export class TranscriptionService {
       
       // Apply medical terminology corrections if enabled
       const transcriptionText = this.config.medicalTerminology ? 
-        this.correctMedicalTerminology(rawText) : rawText;
+        await this.correctMedicalTerminology(rawText) : rawText;
 
       const processingTime = Date.now() - startTime;
 
@@ -298,16 +161,15 @@ export class TranscriptionService {
     return Math.min(confidence, 1.0);
   }
 
-  private correctMedicalTerminology(text: string): string {
-    let correctedText = text;
-
-    // Apply medical term corrections
-    for (const [incorrect, correct] of this.medicalTermsCorrections) {
-      const regex = new RegExp(`\\b${incorrect}\\b`, 'gi');
-      correctedText = correctedText.replace(regex, correct);
-    }
-
-    // Specific medical formatting corrections
+  private async correctMedicalTerminology(text: string): Promise<string> {
+    // Apply enhanced ASR corrections using consolidated engine
+    let correctedText = await this.asrEngine.applyCorrections(text, {
+      categories: 'all',
+      enableDynamic: true,
+      australianTerms: true
+    });
+    
+    // Apply additional medical formatting corrections
     correctedText = this.applyMedicalFormatting(correctedText);
     
     return correctedText;
@@ -341,14 +203,24 @@ export class TranscriptionService {
 
 
   private countMedicalTerms(text: string): number {
+    // Use ASRCorrectionEngine's patterns to count medical terms
+    const patterns = this.asrEngine.getCombinedPatterns('all');
     let count = 0;
     const lowerText = text.toLowerCase();
     
-    for (const [term] of this.medicalTermsCorrections) {
-      if (lowerText.includes(term.toLowerCase())) {
-        count++;
+    // Count occurrences of medical pattern source terms
+    patterns.forEach(([pattern, replacement]) => {
+      try {
+        if (pattern instanceof RegExp) {
+          const matches = text.match(pattern);
+          if (matches) {
+            count += matches.length;
+          }
+        }
+      } catch (error) {
+        // Skip patterns that cause regex errors
       }
-    }
+    });
     
     return count;
   }

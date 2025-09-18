@@ -7,6 +7,9 @@ import type {
   ReportSection,
   AgentType
 } from '@/types/medical.types';
+import { MedicalTextCleaner } from '@/utils/medical-text/TextCleaner';
+import { MedicalPatternService, type MedicalTerm } from '@/utils/medical-text/MedicalPatternService';
+import { logger } from '@/utils/Logger';
 
 export abstract class MedicalAgent implements IMedicalAgent {
   public readonly name: string;
@@ -16,6 +19,10 @@ export abstract class MedicalAgent implements IMedicalAgent {
   
   protected memory: AgentMemory;
   protected systemPrompt: string;
+  
+  // Consolidated capabilities
+  private textCleaner: MedicalTextCleaner;
+  private patternService: MedicalPatternService;
   
   constructor(
     name: string, 
@@ -30,6 +37,16 @@ export abstract class MedicalAgent implements IMedicalAgent {
     this.agentType = agentType;
     this.systemPrompt = systemPrompt;
     this.memory = this.initializeMemory();
+    
+    // Initialize consolidated capabilities
+    this.textCleaner = MedicalTextCleaner.getInstance();
+    this.patternService = MedicalPatternService.getInstance();
+    
+    logger.info(`Initialized MedicalAgent: ${name}`, {
+      specialty,
+      agentType,
+      description
+    });
   }
 
   abstract process(input: string, context?: MedicalContext): Promise<MedicalReport>;
@@ -99,40 +116,44 @@ export abstract class MedicalAgent implements IMedicalAgent {
     };
   }
 
+  /**
+   * Clean medical text using consolidated MedicalTextCleaner
+   * Replaces legacy cleanMedicalText implementation
+   */
   protected cleanMedicalText(text: string): string {
-    return text
-      .replace(/\s+/g, ' ')
-      .replace(/([.!?])\s*([A-Z])/g, '$1 $2')
-      .trim();
+    return this.textCleaner.clean(text, { level: 'medical' });
   }
 
+  /**
+   * Extract medical terms using consolidated MedicalPatternService
+   * Replaces legacy extractMedicalTerms implementation
+   */
   protected extractMedicalTerms(text: string): string[] {
-    const medicalPatterns = [
-      /\b(?:mg|mcg|g|ml|cc|units?)\b/gi,
-      /\b\d+\s*(?:mg|mcg|g|ml|cc|units?)\b/gi,
-      /\b(?:systolic|diastolic|blood pressure|BP)\b/gi,
-      /\b(?:EF|ejection fraction)\s*(?:of\s*)?\d+%?\b/gi,
-      /\b(?:stenosis|regurgitation|insufficiency)\b/gi,
-      // Enhanced stenosis terminology patterns - preserve qualitative terms
-      /\b(?:mild|moderate|severe|critical)\s+(?:stenosis|regurgitation|insufficiency)\b/gi,
-      /\b(?:stenosis|regurgitation|insufficiency)\s+(?:mild|moderate|severe|critical)\b/gi,
-      // TIMI flow patterns - preserve descriptive language
-      /\b(?:TIMI|timi)\s+(?:flow\s+)?(?:0|I|II|III|zero|one|two|three)\b/gi,
-      /\b(?:normal|delayed|absent|complete)\s+(?:flow|perfusion)\b/gi,
-      // Percentage patterns with context
-      /\b\d+(?:-\d+)?%\s+stenosis\b/gi,
-      /\bstenosis\s+\d+(?:-\d+)?%\b/gi
-    ];
-    
-    const terms: string[] = [];
-    medicalPatterns.forEach(pattern => {
-      const matches = text.match(pattern);
-      if (matches) {
-        terms.push(...matches);
-      }
-    });
-    
-    return [...new Set(terms)];
+    // Use legacy-compatible method for backward compatibility
+    return this.patternService.extractMedicalTermsLegacy(text);
+  }
+
+  /**
+   * Enhanced medical term extraction with detailed information
+   * Provides access to full MedicalTerm objects with confidence, context, etc.
+   */
+  protected async extractMedicalTermsDetailed(text: string): Promise<MedicalTerm[]> {
+    return await this.patternService.extractMedicalTerms(text);
+  }
+
+  /**
+   * Extract domain-specific medical terms
+   */
+  protected async extractCardiologyTerms(text: string) {
+    return await this.patternService.extractCardiologyTerms(text);
+  }
+
+  protected async extractMedicationTerms(text: string) {
+    return await this.patternService.extractMedicationTerms(text);
+  }
+
+  protected async extractPathologyTerms(text: string) {
+    return await this.patternService.extractPathologyTerms(text);
   }
 
 

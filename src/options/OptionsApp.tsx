@@ -9,83 +9,15 @@
  * - Responsive design for different screen sizes
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Settings, 
-  Zap, 
-  Moon, 
-  CheckCircle, 
-  FileText, 
-  Server, 
-  Mic,
-  User,
-  BarChart3,
-  HelpCircle,
-  ExternalLink,
-  Clock,
-  AlertCircle
-} from 'lucide-react';
-import { FullPageOptimizationPanel } from './components/FullPageOptimizationPanel';
-import { FullPageCorrectionsViewer } from './components/FullPageCorrectionsViewer';
+import React, { useState, useEffect } from 'react';
+import { Settings, ExternalLink, BookOpen, Activity } from 'lucide-react';
+import { DashboardSettings } from './components/DashboardSettings';
+import { PhrasebookPanel } from './components/PhrasebookPanel';
 import { logger } from '@/utils/Logger';
 
-type SettingsSection = 
-  | 'overview' 
-  | 'transcriptions' 
-  | 'optimization' 
-  | 'services' 
-  | 'performance' 
-  | 'help';
-
-interface SettingsSectionConfig {
-  id: SettingsSection;
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const SETTINGS_SECTIONS: SettingsSectionConfig[] = [
-  {
-    id: 'overview',
-    title: 'Overview',
-    description: 'Extension status and quick actions',
-    icon: BarChart3
-  },
-  {
-    id: 'transcriptions',
-    title: 'Transcriptions',
-    description: 'View and manage ASR corrections',
-    icon: FileText
-  },
-  {
-    id: 'optimization',
-    title: 'Optimization',
-    description: 'ASR and report quality improvements',
-    icon: Zap
-  },
-  {
-    id: 'services',
-    title: 'AI Services',
-    description: 'LMStudio and Whisper server status',
-    icon: Server
-  },
-  {
-    id: 'performance',
-    title: 'Performance',
-    description: 'Metrics and usage analytics',
-    icon: BarChart3
-  },
-  {
-    id: 'help',
-    title: 'Help & Support',
-    description: 'Documentation and troubleshooting',
-    icon: HelpCircle
-  }
-];
-
 export const OptionsApp: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'phrasebook'>('dashboard');
 
   // Initialize options app
   useEffect(() => {
@@ -128,27 +60,6 @@ export const OptionsApp: React.FC = () => {
   }
 
   // Render main content based on active section
-  const renderMainContent = () => {
-    switch (activeSection) {
-      case 'overview':
-        return <OverviewSection />;
-      case 'transcriptions':
-        return <FullPageCorrectionsViewer />;
-      case 'optimization':
-        return <FullPageOptimizationPanel />;
-      case 'services':
-        return <ServicesSection />;
-      case 'performance':
-        return <PerformanceSection />;
-      case 'help':
-        return <HelpSection />;
-      default:
-        return <OverviewSection />;
-    }
-  };
-
-  const activeConfig = SETTINGS_SECTIONS.find(section => section.id === activeSection);
-
   return (
     <div className="settings-page">
       {/* Header */}
@@ -163,7 +74,7 @@ export const OptionsApp: React.FC = () => {
                     Operator Settings
                   </h1>
                   <p className="text-ink-secondary mt-1">
-                    Configure your medical AI assistant
+                    {activeTab === 'dashboard' ? 'Dashboard view — no scrolling, quick insights' : 'Manage custom terminology preferences'}
                   </p>
                 </div>
               </div>
@@ -180,231 +91,42 @@ export const OptionsApp: React.FC = () => {
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Navigation Tabs */}
       <div className="settings-container">
-        <div className="settings-content">
-          {/* Sidebar Navigation */}
-          <div className="settings-nav">
-            <h2 className="text-lg font-semibold text-ink-primary mb-6">Settings</h2>
-            
-            <nav className="space-y-2">
-              {SETTINGS_SECTIONS.map((section) => {
-                const Icon = section.icon;
-                const isActive = activeSection === section.id;
-                
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => setActiveSection(section.id)}
-                    className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center space-x-3 ${
-                      isActive
-                        ? 'bg-surface-tertiary border-2 border-line-secondary text-ink-primary'
-                        : 'hover:bg-surface-secondary text-ink-secondary hover:text-ink-primary border-2 border-transparent'
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 ${isActive ? 'text-accent-info' : 'text-ink-tertiary'}`} />
-                    <div>
-                      <div className={`font-medium text-sm ${isActive ? 'text-ink-primary' : 'text-ink-secondary'}`}>
-                        {section.title}
-                      </div>
-                      <div className={`text-xs ${isActive ? 'text-ink-secondary' : 'text-ink-tertiary'}`}>
-                        {section.description}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+        <div className="mb-6">
+          <nav className="flex gap-1 p-1 bg-surface-secondary rounded-lg w-fit">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'dashboard'
+                  ? 'bg-white shadow-sm text-ink-primary'
+                  : 'text-ink-secondary hover:text-ink-primary'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('phrasebook')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'phrasebook'
+                  ? 'bg-white shadow-sm text-ink-primary'
+                  : 'text-ink-secondary hover:text-ink-primary'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              Phrasebook
+            </button>
+          </nav>
+        </div>
 
-          {/* Main Content Area */}
-          <div className="settings-main">
-            <div className="mb-8">
-              {activeConfig && (
-                <div className="flex items-center space-x-3 mb-2">
-                  <activeConfig.icon className="w-6 h-6 text-accent-info" />
-                  <h2 className="text-2xl font-semibold text-ink-primary">
-                    {activeConfig.title}
-                  </h2>
-                </div>
-              )}
-              {activeConfig && (
-                <p className="text-ink-secondary">
-                  {activeConfig.description}
-                </p>
-              )}
-            </div>
-
-            <div className="settings-content-area">
-              {renderMainContent()}
-            </div>
-          </div>
+        {/* Tab Content */}
+        <div className="settings-main">
+          {activeTab === 'dashboard' && <DashboardSettings />}
+          {activeTab === 'phrasebook' && <PhrasebookPanel />}
         </div>
       </div>
     </div>
   );
 };
-
-// Overview Section Component
-const OverviewSection: React.FC = () => {
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Extension Status Card */}
-        <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <CheckCircle className="w-6 h-6 text-accent-success" />
-            <h3 className="font-semibold text-ink-primary">Extension Status</h3>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Version:</span>
-              <span className="text-ink-primary font-mono">3.2.0</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Status:</span>
-              <span className="text-accent-success">Active</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Agents:</span>
-              <span className="text-ink-primary">11 Available</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions Card */}
-        <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <Zap className="w-6 h-6 text-accent-info" />
-            <h3 className="font-semibold text-ink-primary">Quick Actions</h3>
-          </div>
-          <div className="space-y-3">
-            <button className="w-full mono-button-secondary text-left">
-              Clear Storage Cache
-            </button>
-            <button className="w-full mono-button-secondary text-left">
-              Export Settings
-            </button>
-            <button className="w-full mono-button-secondary text-left">
-              Reset to Defaults
-            </button>
-          </div>
-        </div>
-
-        {/* Usage Stats Card */}
-        <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <BarChart3 className="w-6 h-6 text-accent-info" />
-            <h3 className="font-semibold text-ink-primary">Usage Stats</h3>
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Sessions Today:</span>
-              <span className="text-ink-primary">12</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Total Reports:</span>
-              <span className="text-ink-primary">247</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-ink-secondary">Corrections:</span>
-              <span className="text-ink-primary">89</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-        <h3 className="font-semibold text-ink-primary mb-4">Recent Activity</h3>
-        <div className="space-y-3">
-          <div className="flex items-center space-x-3 p-3 bg-surface-primary rounded-lg">
-            <Clock className="w-4 h-4 text-ink-tertiary" />
-            <div>
-              <div className="text-sm text-ink-primary">Quick Letter completed</div>
-              <div className="text-xs text-ink-secondary">2 minutes ago</div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-surface-primary rounded-lg">
-            <Mic className="w-4 h-4 text-ink-tertiary" />
-            <div>
-              <div className="text-sm text-ink-primary">TAVI procedure transcribed</div>
-              <div className="text-xs text-ink-secondary">15 minutes ago</div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 p-3 bg-surface-primary rounded-lg">
-            <User className="w-4 h-4 text-ink-tertiary" />
-            <div>
-              <div className="text-sm text-ink-primary">Patient session started</div>
-              <div className="text-xs text-ink-secondary">1 hour ago</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Placeholder sections (to be implemented)
-const ServicesSection: React.FC = () => (
-  <div className="text-center py-12">
-    <Server className="w-12 h-12 text-ink-tertiary mx-auto mb-4" />
-    <h3 className="text-lg font-medium text-ink-primary mb-2">AI Services</h3>
-    <p className="text-ink-secondary">Service status and configuration coming soon.</p>
-  </div>
-);
-
-const PerformanceSection: React.FC = () => (
-  <div className="text-center py-12">
-    <BarChart3 className="w-12 h-12 text-ink-tertiary mx-auto mb-4" />
-    <h3 className="text-lg font-medium text-ink-primary mb-2">Performance Metrics</h3>
-    <p className="text-ink-secondary">Detailed analytics and metrics coming soon.</p>
-  </div>
-);
-
-const HelpSection: React.FC = () => (
-  <div className="space-y-8">
-    <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-      <h3 className="font-semibold text-ink-primary mb-4">Documentation</h3>
-      <div className="space-y-3">
-        <a 
-          href="#" 
-          className="flex items-center justify-between p-3 bg-surface-primary rounded-lg hover:bg-surface-tertiary transition-colors"
-        >
-          <div>
-            <div className="text-sm font-medium text-ink-primary">User Guide</div>
-            <div className="text-xs text-ink-secondary">Complete setup and usage instructions</div>
-          </div>
-          <ExternalLink className="w-4 h-4 text-ink-tertiary" />
-        </a>
-        <a 
-          href="#" 
-          className="flex items-center justify-between p-3 bg-surface-primary rounded-lg hover:bg-surface-tertiary transition-colors"
-        >
-          <div>
-            <div className="text-sm font-medium text-ink-primary">Troubleshooting</div>
-            <div className="text-xs text-ink-secondary">Common issues and solutions</div>
-          </div>
-          <ExternalLink className="w-4 h-4 text-ink-tertiary" />
-        </a>
-      </div>
-    </div>
-
-    <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-6">
-      <h3 className="font-semibold text-ink-primary mb-4">Support</h3>
-      <div className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span className="text-ink-secondary">Extension Version:</span>
-          <span className="text-ink-primary font-mono">3.2.0</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-ink-secondary">Chrome Version:</span>
-          <span className="text-ink-primary font-mono">{navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown'}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-ink-secondary">Platform:</span>
-          <span className="text-ink-primary">{navigator.platform}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+ 

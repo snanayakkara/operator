@@ -1,17 +1,19 @@
-import React from 'react';
-import { User, Clock, FileText, X, Phone, CreditCard } from 'lucide-react';
+import React, { memo } from 'react';
+import { User, Clock, FileText, X, Phone, CreditCard, Mic, Loader2, Zap, CheckCircle, AlertCircle } from 'lucide-react';
 import type { PatientSession } from '@/types/medical.types';
 
 interface PatientSessionHeaderProps {
   session: PatientSession;
   onRemoveSession?: (sessionId: string) => void;
+  onSessionClick?: (session: PatientSession) => void;
   showRemoveButton?: boolean;
   isCompact?: boolean;
 }
 
-export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
+export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = memo(({
   session,
   onRemoveSession,
+  onSessionClick,
   showRemoveButton = false,
   isCompact = false
 }) => {
@@ -27,21 +29,90 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
     return <FileText className="w-4 h-4" />;
   };
 
+  const getStatusIndicator = (status: string) => {
+    switch (status) {
+      case 'recording':
+        return {
+          icon: <Mic className="w-3 h-3 text-red-500" />,
+          label: 'Recording',
+          bgColor: 'bg-red-50',
+          textColor: 'text-red-700',
+          borderColor: 'border-red-200'
+        };
+      case 'transcribing':
+        return {
+          icon: <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />,
+          label: 'Transcribing',
+          bgColor: 'bg-blue-50',
+          textColor: 'text-blue-700',
+          borderColor: 'border-blue-200'
+        };
+      case 'processing':
+        return {
+          icon: <Zap className="w-3 h-3 text-purple-500" />,
+          label: 'Processing',
+          bgColor: 'bg-purple-50',
+          textColor: 'text-purple-700',
+          borderColor: 'border-purple-200'
+        };
+      case 'completed':
+        return {
+          icon: <CheckCircle className="w-3 h-3 text-green-500" />,
+          label: 'Completed',
+          bgColor: 'bg-green-50',
+          textColor: 'text-green-700',
+          borderColor: 'border-green-200'
+        };
+      case 'error':
+        return {
+          icon: <AlertCircle className="w-3 h-3 text-red-500" />,
+          label: 'Error',
+          bgColor: 'bg-red-50',
+          textColor: 'text-red-700',
+          borderColor: 'border-red-200'
+        };
+      case 'cancelled':
+        return {
+          icon: <X className="w-3 h-3 text-gray-500" />,
+          label: 'Cancelled',
+          bgColor: 'bg-gray-50',
+          textColor: 'text-gray-700',
+          borderColor: 'border-gray-200'
+        };
+      default:
+        return {
+          icon: <Clock className="w-3 h-3 text-gray-500" />,
+          label: 'Unknown',
+          bgColor: 'bg-gray-50',
+          textColor: 'text-gray-700',
+          borderColor: 'border-gray-200'
+        };
+    }
+  };
+
   if (isCompact) {
-    // Compact version for use in lists
+    const statusInfo = getStatusIndicator(session.status);
+    
+    // Compact version for use in lists with enhanced status indicators
     return (
-      <div className="flex items-center space-x-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
-        <User className="w-4 h-4 text-blue-600 flex-shrink-0" />
+      <div className={`flex items-center space-x-3 p-2 ${statusInfo.bgColor} rounded-lg border ${statusInfo.borderColor}`}>
+        <User className="w-4 h-4 text-gray-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-blue-900 truncate">
-              {session.patient.name}
-            </span>
-            <span className="text-xs text-blue-600 font-medium">
-              {session.agentName || session.agentType}
-            </span>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col flex-1">
+              <span className={`text-sm font-semibold truncate ${statusInfo.textColor}`}>
+                {session.patient.name}
+              </span>
+              <span className="text-xs text-gray-600 font-medium">
+                {session.agentName || session.agentType}
+              </span>
+            </div>
+            <div className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.textColor}`}>
+              {statusInfo.icon}
+              <span>{statusInfo.label}</span>
+            </div>
           </div>
-          <div className="flex items-center space-x-2 mt-1 text-xs text-blue-700">
+          <div className="flex items-center space-x-2 mt-1 text-xs text-gray-600">
             <span>ID: {session.patient.id}</span>
             <span>•</span>
             <span>{formatTime(session.timestamp)}</span>
@@ -49,8 +120,11 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
         </div>
         {showRemoveButton && onRemoveSession && (
           <button
-            onClick={() => onRemoveSession(session.id)}
-            className="p-1 text-blue-600 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent session selection when removing
+              onRemoveSession(session.id);
+            }}
+            className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
             title="Remove session"
           >
             <X className="w-4 h-4" />
@@ -62,7 +136,12 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
 
   // Full version for use as main header
   return (
-    <div className="glass rounded-xl p-4 border-l-4 border-blue-500">
+    <div 
+      className={`glass rounded-xl p-4 border-l-4 border-blue-500 ${
+        onSessionClick ? 'cursor-pointer hover:bg-gray-50/50 transition-colors' : ''
+      }`}
+      onClick={() => onSessionClick?.(session)}
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3">
           <User className="w-6 h-6 text-blue-600 mt-1 flex-shrink-0" />
@@ -119,7 +198,10 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
           )}
           {showRemoveButton && onRemoveSession && (
             <button
-              onClick={() => onRemoveSession(session.id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent session selection when removing
+                onRemoveSession(session.id);
+              }}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Remove session"
             >
@@ -130,4 +212,4 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = ({
       </div>
     </div>
   );
-};
+});

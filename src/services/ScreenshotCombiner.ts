@@ -1,3 +1,5 @@
+import { logger } from '@/utils/Logger';
+
 export interface AnnotatedScreenshot {
   id: string;
   dataUrl: string;
@@ -26,11 +28,20 @@ export class ScreenshotCombiner {
 
   addScreenshot(screenshot: AnnotatedScreenshot): void {
     if (this.screenshots.length >= this.maxScreenshots) {
-      console.warn(`Maximum ${this.maxScreenshots} screenshots reached. Replacing oldest.`);
+      logger.warn(`Maximum ${this.maxScreenshots} screenshots reached. Replacing oldest.`, {
+        component: 'screenshot-combiner',
+        operation: 'add-screenshot',
+        maxScreenshots: this.maxScreenshots
+      });
       this.screenshots.shift();
     }
     this.screenshots.push(screenshot);
-    console.log(`Screenshot added. Total: ${this.screenshots.length}/${this.maxScreenshots}`);
+    logger.info(`Screenshot added. Total: ${this.screenshots.length}/${this.maxScreenshots}`, {
+      component: 'screenshot-combiner',
+      operation: 'add-screenshot',
+      current: this.screenshots.length,
+      max: this.maxScreenshots
+    });
   }
 
   // Set explicit 2x2 grid slots: [0]=top-left, [1]=top-right, [2]=bottom-left, [3]=bottom-right
@@ -48,7 +59,11 @@ export class ScreenshotCombiner {
     const index = this.screenshots.findIndex(s => s.id === id);
     if (index !== -1) {
       this.screenshots.splice(index, 1);
-      console.log(`Screenshot removed. Remaining: ${this.screenshots.length}`);
+      logger.info(`Screenshot removed. Remaining: ${this.screenshots.length}`, {
+        component: 'screenshot-combiner',
+        operation: 'remove-screenshot',
+        remaining: this.screenshots.length
+      });
       return true;
     }
     return false;
@@ -69,7 +84,10 @@ export class ScreenshotCombiner {
   clear(): void {
     this.screenshots = [];
     this.gridSlots = [null, null, null, null];
-    console.log('All screenshots cleared');
+    logger.info('All screenshots cleared', {
+      component: 'screenshot-combiner',
+      operation: 'clear'
+    });
   }
 
   async combineScreenshots(): Promise<CombinedScreenshotResult> {
@@ -77,7 +95,11 @@ export class ScreenshotCombiner {
       throw new Error('No screenshots to combine');
     }
 
-    console.log(`Combining ${this.screenshots.length} screenshots into 2x2 grid (10x10 cm)...`);
+    logger.info(`Combining ${this.screenshots.length} screenshots into 2x2 grid (10x10 cm)`, {
+      component: 'screenshot-combiner',
+      operation: 'combine-start',
+      count: this.screenshots.length
+    });
 
     try {
       const combinedDataUrl = await this.createCombinedCanvas();
@@ -89,10 +111,17 @@ export class ScreenshotCombiner {
         timestamp: Date.now()
       };
 
-      console.log(`✅ Successfully combined ${this.screenshots.length} screenshots`);
+      logger.info(`Successfully combined ${this.screenshots.length} screenshots`, {
+        component: 'screenshot-combiner',
+        operation: 'combine-success',
+        count: this.screenshots.length
+      });
       return result;
     } catch (error) {
-      console.error('Failed to combine screenshots:', error);
+      logger.error('Failed to combine screenshots', error instanceof Error ? error : undefined, {
+        component: 'screenshot-combiner',
+        operation: 'combine-error'
+      });
       throw new Error(`Screenshot combination failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -119,7 +148,13 @@ export class ScreenshotCombiner {
         canvas.height = totalSizePx * dpr;
         ctx.scale(dpr, dpr);
 
-        console.log(`Canvas dimensions: ${totalSizePx}x${totalSizePx} (CSS px), DPR=${dpr}`);
+        logger.debug(`Canvas dimensions: ${totalSizePx}x${totalSizePx} (CSS px), DPR=${dpr}`, {
+          component: 'screenshot-combiner',
+          operation: 'canvas-setup',
+          width: totalSizePx,
+          height: totalSizePx,
+          dpr
+        });
 
         // Fill background white
         ctx.fillStyle = '#ffffff';
@@ -167,9 +202,19 @@ export class ScreenshotCombiner {
               if (!img) continue;
               const pos = positions[i];
               drawIntoCell(img, pos.x, pos.y, cellSizePx);
-              console.log(`Drew slot ${i + 1} at (${pos.x}, ${pos.y}), cell ${cellSizePx}x${cellSizePx}`);
+              logger.debug(`Drew slot ${i + 1} at (${pos.x}, ${pos.y}), cell ${cellSizePx}x${cellSizePx}`, {
+                component: 'screenshot-combiner',
+                operation: 'draw-slot',
+                slot: i + 1,
+                x: pos.x,
+                y: pos.y,
+                cellSize: cellSizePx
+              });
             }
-            console.log('✅ Canvas combination completed');
+            logger.info('Canvas combination completed', {
+              component: 'screenshot-combiner',
+              operation: 'canvas-complete'
+            });
             resolve(canvas);
           }
         };
@@ -179,11 +224,22 @@ export class ScreenshotCombiner {
           const img = new Image();
           img.onload = () => {
             imgs[i] = img;
-            console.log(`Loaded slot ${i + 1} image - ${img.width}x${img.height}`);
+            logger.debug(`Loaded slot ${i + 1} image - ${img.width}x${img.height}`, {
+              component: 'screenshot-combiner',
+              operation: 'load-image',
+              slot: i + 1,
+              width: img.width,
+              height: img.height
+            });
             tryFinish();
           };
           img.onerror = (error) => {
-            console.error(`Failed to load slot ${i + 1} image:`, error);
+            logger.error(`Failed to load slot ${i + 1} image`, undefined, {
+              component: 'screenshot-combiner',
+              operation: 'load-image',
+              slot: i + 1,
+              error: error instanceof Error ? error.message : String(error)
+            });
             // Skip this slot but continue
             imgs[i] = null;
             tryFinish();
@@ -192,7 +248,10 @@ export class ScreenshotCombiner {
         });
 
       } catch (error) {
-        console.error('Error setting up canvas combination:', error);
+        logger.error('Error setting up canvas combination', error instanceof Error ? error : undefined, {
+          component: 'screenshot-combiner',
+          operation: 'canvas-setup'
+        });
         reject(error);
       }
     });
@@ -215,9 +274,15 @@ export class ScreenshotCombiner {
       });
       const clipboardItem = new ClipboardItem({ 'image/png': blob });
       await navigator.clipboard.write([clipboardItem]);
-      console.log('✅ Combined screenshot copied to clipboard');
+      logger.info('Combined screenshot copied to clipboard', {
+        component: 'screenshot-combiner',
+        operation: 'copy-clipboard'
+      });
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      logger.error('Failed to copy to clipboard', error instanceof Error ? error : undefined, {
+        component: 'screenshot-combiner',
+        operation: 'copy-clipboard'
+      });
       throw new Error(`Clipboard copy failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

@@ -59,7 +59,7 @@ export function useRecorder(options: RecorderOptions) {
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const animationFrameRef = useRef<number>();
-  const intervalRef = useRef<number>();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>();
   const isRecordingRef = useRef<boolean>(false);
 
   // Voice activity detection with device validation

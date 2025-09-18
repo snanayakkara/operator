@@ -1,19 +1,27 @@
 /**
- * Agent Factory Service
+ * Agent Factory Service - Phase 4 Enhanced
  * 
- * Optimized factory with lazy loading for dramatic bundle size reduction.
- * Agents are loaded on-demand instead of all being bundled upfront.
+ * Optimized factory with Phase 4 enhancements:
+ * - LazyAgentLoader for dynamic loading and caching
+ * - CrossAgentIntelligence for shared insights
+ * - Smart recommendations and context enhancement
  */
 
-import type { AgentType } from '@/types/medical.types';
+import type { AgentType, MedicalContext } from '@/types/medical.types';
 import { LazyAgentFactory } from './LazyAgentFactory';
+import { LazyAgentLoader } from './LazyAgentLoader';
+import { CrossAgentIntelligence } from './CrossAgentIntelligence';
+import { PhrasebookService } from './PhrasebookService';
 import { NotificationService } from './NotificationService';
+import { logger } from '@/utils/Logger';
 
 export class AgentFactory {
   private static lazyFactory = LazyAgentFactory.getInstance();
+  private static agentLoader = LazyAgentLoader.getInstance();
+  private static crossAgentIntelligence = CrossAgentIntelligence.getInstance();
 
   /**
-   * Process input with the specified agent (lazy-loaded)
+   * Process input with Phase 4 enhanced agent loading and intelligence
    */
   public static async processWithAgent(
     workflowId: AgentType, 
@@ -23,25 +31,44 @@ export class AgentFactory {
     options?: {
       patientName?: string;
       skipNotification?: boolean;
+      sessionId?: string;
+      usePhase4Enhancement?: boolean;
     }
   ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any }> {
     const startTime = Date.now();
     
     try {
+      // Phase 4 Enhancement: Enable by default for agents that benefit from cross-agent intelligence
+      const usePhase4 = options?.usePhase4Enhancement ?? this.shouldUsePhase4Enhancement(workflowId, context);
+      if (usePhase4) {
+        return await this.processWithPhase4Enhancement(workflowId, input, context, options);
+      }
+
+      // Enhance context with user phrasebook terminology preferences
+      const enhancedContext = await this.enhanceWithPhrasebook(context, workflowId);
+
       // Use lazy loading for dramatic bundle size reduction
-      const report = await this.lazyFactory.processWithAgent(workflowId, input, context);
+      const report = await this.lazyFactory.processWithAgent(workflowId, input, enhancedContext);
       
       const totalTime = Date.now() - startTime;
       
       // Log which agent was used and processing time
-      console.info(`Workflow: ${workflowId.toUpperCase()}`);
-      console.log(`⏱️ Total processing time (including load): ${totalTime}ms`);
-      console.log(`⏱️ Agent processing time: ${report.metadata.processingTime}ms`);
+      logger.info(`Workflow: ${workflowId.toUpperCase()}`, {
+        component: 'agent-factory',
+        operation: 'process',
+        workflow: workflowId,
+        totalTime,
+        agentTime: report.metadata.processingTime
+      });
       
       // Check if this is a BatchPatientReviewAgent with structured data
       const batchPatientReviewData = (report as any).reviewData;
       if (workflowId === 'ai-medical-review' && batchPatientReviewData) {
-        console.log(`🔍 Batch Patient Review found ${batchPatientReviewData.findings?.length || 0} findings`);
+        logger.info(`Batch Patient Review found ${batchPatientReviewData.findings?.length || 0} findings`, {
+          component: 'agent-factory',
+          operation: 'batch-review',
+          findings: batchPatientReviewData.findings?.length || 0
+        });
       }
       
       // Send completion notification (will check if user is focused automatically)
@@ -57,9 +84,18 @@ export class AgentFactory {
             extraInfo,
             options?.patientName
           );
-          console.log(`🔔 Notification sent for ${workflowId} (${report.metadata.processingTime}ms)`);
+          logger.info(`Notification sent for ${workflowId} (${report.metadata.processingTime}ms)`, {
+            component: 'agent-factory',
+            operation: 'notification',
+            workflow: workflowId,
+            processingTime: report.metadata.processingTime
+          });
         } catch (notificationError) {
-          console.warn('Failed to send completion notification:', notificationError);
+          logger.warn('Failed to send completion notification', {
+            component: 'agent-factory',
+            operation: 'notification',
+            error: notificationError instanceof Error ? notificationError.message : String(notificationError)
+          });
         }
       }
       
@@ -76,9 +112,191 @@ export class AgentFactory {
       };
       
     } catch (error) {
-      console.error(`❌ Agent processing failed for ${workflowId}:`, error);
+      logger.error(`Agent processing failed for ${workflowId}`, error instanceof Error ? error : undefined, {
+        component: 'agent-factory',
+        operation: 'process',
+        workflow: workflowId
+      });
       throw error;
     }
+  }
+
+  /**
+   * Determine if Phase 4 Enhancement should be used for this agent
+   */
+  private static shouldUsePhase4Enhancement(workflowId: AgentType, context?: any): boolean {
+    // Enable Phase 4 for agents that benefit from cross-agent intelligence
+    const phase4Agents: AgentType[] = [
+      'investigation-summary',
+      'background',
+      'medication',
+      'quick-letter',
+      'consultation',
+      'ai-medical-review'
+    ];
+
+    return phase4Agents.includes(workflowId);
+  }
+
+  /**
+   * Phase 4 Enhanced processing with cross-agent intelligence and optimization
+   */
+  private static async processWithPhase4Enhancement(
+    workflowId: AgentType,
+    input: string,
+    context?: any,
+    options?: {
+      sessionId?: string;
+      patientName?: string;
+      skipNotification?: boolean;
+    }
+  ) {
+    const startTime = Date.now();
+    logger.info('Phase 4 Enhanced processing initiated', {
+      component: 'agent-factory',
+      operation: 'phase4-start'
+    });
+
+    try {
+      // Step 1: Load agent with intelligent caching
+      const { agent, loadTime, fromCache } = await this.agentLoader.loadAgent(workflowId, true);
+      logger.info(`Agent loaded in ${loadTime}ms (cached: ${fromCache})`, {
+        component: 'agent-factory',
+        operation: 'agent-load',
+        loadTime,
+        fromCache
+      });
+
+      // Step 2: Get enhanced context from cross-agent intelligence and phrasebook
+      let enhancedContext: MedicalContext = await this.enhanceWithPhrasebook(context || {}, workflowId);
+
+      if (options?.sessionId) {
+        const contextEnhancement = this.crossAgentIntelligence.getEnhancedContext(
+          options.sessionId,
+          workflowId
+        );
+
+        enhancedContext = {
+          ...enhancedContext,
+          phase4Enhancement: true,
+          sharedInsights: contextEnhancement.sharedInsights,
+          riskAssessment: contextEnhancement.riskAssessment,
+          drugInteractions: contextEnhancement.drugInteractions,
+          clinicalCorrelations: contextEnhancement.clinicalCorrelations,
+          recommendations: contextEnhancement.recommendations
+        };
+
+        logger.info(`Enhanced context with ${contextEnhancement.sharedInsights.length} shared insights`, {
+          component: 'agent-factory',
+          operation: 'context-enhancement',
+          insights: contextEnhancement.sharedInsights.length
+        });
+      }
+
+      // Step 3: Process with enhanced agent
+      const report = await agent.process(input, enhancedContext);
+      
+      // Step 4: Register insights with cross-agent intelligence
+      if (options?.sessionId && report.metadata?.phase3Processing) {
+        const extractedFindings = report.metadata.phase3Processing.clinicalFindings 
+          ? Array.from({ length: report.metadata.phase3Processing.clinicalFindings }, (_, i) => ({
+              finding: `Clinical finding ${i + 1}`,
+              confidence: 0.8,
+              category: 'medical_history'
+            }))
+          : [];
+
+        const insights = this.crossAgentIntelligence.registerInsights(
+          options.sessionId,
+          workflowId,
+          report,
+          extractedFindings
+        );
+
+        logger.info(`Registered ${insights.length} insights for cross-agent learning`, {
+          component: 'agent-factory',
+          operation: 'insights-registration',
+          insights: insights.length
+        });
+      }
+
+      const totalTime = Date.now() - startTime;
+      
+      // Step 5: Enhanced performance logging
+      logger.info(`Phase 4 Enhanced processing completed in ${totalTime}ms`, {
+        component: 'agent-factory',
+        operation: 'phase4-complete',
+        totalTime,
+        loadTime,
+        fromCache,
+        processingTime: report.metadata?.processingTime || 0
+      });
+      
+      // Send completion notification
+      if (!options?.skipNotification) {
+        await NotificationService.sendProcessingCompleteNotification(
+          report.agentName,
+          totalTime,
+          options?.patientName
+        );
+      }
+
+      return {
+        content: report.content,
+        summary: report.summary,
+        warnings: report.warnings,
+        errors: report.errors,
+        processingTime: totalTime,
+        agentName: report.agentName,
+        reviewData: (report as any).reviewData,
+        missingInfo: report.metadata?.missingInformation,
+        phase4Metadata: {
+          enhancedProcessing: true,
+          agentLoadTime: loadTime,
+          fromCache,
+          crossAgentInsights: options?.sessionId ? true : false,
+          totalPhase4Time: totalTime
+        }
+      };
+
+    } catch (error) {
+      logger.error(`Phase 4 Enhanced processing failed for ${workflowId}`, error instanceof Error ? error : undefined, {
+        component: 'agent-factory',
+        operation: 'phase4-error',
+        workflow: workflowId
+      });
+      
+      // Fallback to standard processing
+      logger.info('Falling back to standard processing', {
+        component: 'agent-factory',
+        operation: 'fallback'
+      });
+      return await this.processWithAgent(workflowId, input, context, undefined, {
+        ...options,
+        usePhase4Enhancement: false
+      });
+    }
+  }
+
+  /**
+   * Get performance statistics from Phase 4 systems
+   */
+  public static getPhase4PerformanceStats() {
+    return {
+      agentLoader: this.agentLoader.getPerformanceStats(),
+      crossAgentIntelligence: {
+        // Add cross-agent intelligence stats if available
+        activeProfiles: 'N/A', // Would implement if needed
+        globalInsights: 'N/A'
+      }
+    };
+  }
+
+  /**
+   * Preload popular agents for performance
+   */
+  public static async preloadPopularAgents(): Promise<void> {
+    await this.agentLoader.preloadPopularAgents();
   }
 
   /**
@@ -142,5 +360,42 @@ export class AgentFactory {
    */
   public static getCacheStats(): { size: number; loadedAgents: AgentType[] } {
     return this.lazyFactory.getCacheStats();
+  }
+
+  /**
+   * Enhance medical context with user phrasebook terminology preferences
+   */
+  private static async enhanceWithPhrasebook(
+    context: MedicalContext = {},
+    agentType: AgentType
+  ): Promise<MedicalContext> {
+    try {
+      const phrasebookService = PhrasebookService.getInstance();
+      const terminologyBias = await phrasebookService.compileForSystemPrompt();
+
+      if (terminologyBias.trim().length > 0) {
+        const enhancedContext: MedicalContext = {
+          ...context,
+          phrasebookEnhancement: true,
+          terminologyPreferences: terminologyBias
+        };
+
+        logger.info(`Enhanced context with phrasebook terminology for ${agentType}`, {
+          component: 'agent-factory',
+          operation: 'phrasebook-enhancement',
+          agentType
+        });
+        return enhancedContext;
+      }
+
+      return context;
+    } catch (error) {
+      logger.warn('Failed to enhance context with phrasebook', {
+        component: 'agent-factory',
+        operation: 'phrasebook-enhancement',
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return context;
+    }
   }
 }

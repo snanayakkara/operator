@@ -8,15 +8,18 @@
  * - Memoized for performance
  */
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, Suspense } from 'react';
 import { 
   CheckIcon, 
   SquareIcon, 
   AlertCircleIcon 
 } from '../icons/OptimizedIcons';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
-import { Download } from 'lucide-react';
-import type { AgentType } from '@/types/medical.types';
+import { Download, Brain } from 'lucide-react';
+import type { AgentType, ReportMetadata } from '@/types/medical.types';
+
+// Lazy load the AI Reasoning Modal for better performance
+const AIReasoningModal = React.lazy(() => import('../../components/AIReasoningModal'));
 
 interface ActionButtonsProps {
   results: string;
@@ -24,6 +27,9 @@ interface ActionButtonsProps {
   onCopy: (text: string) => void;
   onInsertToEMR: (text: string) => void;
   className?: string;
+  // AI Reasoning viewer props
+  reportMetadata?: ReportMetadata;
+  agentName?: string;
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = memo(({
@@ -31,10 +37,17 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   agentType,
   onCopy,
   onInsertToEMR,
-  className = ''
+  className = '',
+  reportMetadata,
+  agentName
 }) => {
   const [copiedRecently, setCopiedRecently] = useState(false);
   const [insertedRecently, setInsertedRecently] = useState(false);
+  const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false);
+
+  // Check if reasoning artifacts are available
+  const hasReasoningArtifacts = reportMetadata?.reasoningArtifacts?.hasReasoningContent || 
+                                 (reportMetadata?.rawAIOutput && reportMetadata.rawAIOutput.trim().length > 0);
 
   const handleCopy = async () => {
     try {
@@ -48,7 +61,10 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
 
   const handleInsertToEMR = async () => {
     try {
-      await onInsertToEMR(results);
+      // Pass the agent type context for field-specific insertion
+      if (typeof onInsertToEMR === 'function') {
+        await (onInsertToEMR as any)(results, undefined, agentType);
+      }
       setInsertedRecently(true);
       setTimeout(() => setInsertedRecently(false), 2000);
     } catch (error) {
@@ -70,7 +86,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
 
   return (
     <div className={`p-4 border-t border-emerald-200/50 ${className}`}>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${hasReasoningArtifacts ? 'grid-cols-4' : 'grid-cols-3'}`}>
         {/* Copy Button */}
         <button
           onClick={handleCopy}
@@ -121,6 +137,18 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
           <Download className="w-4 h-4 text-gray-700" />
           <span className="text-xs text-gray-700">Download</span>
         </button>
+
+        {/* AI Reasoning Viewer Button - Only show if reasoning artifacts are available */}
+        {hasReasoningArtifacts && (
+          <button
+            onClick={() => setIsReasoningModalOpen(true)}
+            className="bg-white border-2 border-gray-300 p-3 rounded-lg flex flex-col items-center space-y-1 hover:border-gray-400 hover:shadow-sm transition-all duration-200 ease-out btn-micro-press"
+            title="View AI Reasoning Process"
+          >
+            <Brain className="w-4 h-4 text-gray-700" />
+            <span className="text-xs text-gray-700 font-medium">Reasoning</span>
+          </button>
+        )}
       </div>
 
       {/* Quality Indicator */}
@@ -140,8 +168,27 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
       <div className="mt-3 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100">
         <p className="text-emerald-700 text-xs">
           💡 <strong>Full Letter:</strong> Complete medical correspondence ready for EMR insertion or sharing.
+          {hasReasoningArtifacts && (
+            <>
+              <br />
+              🧠 <strong>AI Reasoning:</strong> View how the AI processed your dictation for transparency.
+            </>
+          )}
         </p>
       </div>
+
+      {/* AI Reasoning Modal */}
+      {hasReasoningArtifacts && (
+        <Suspense fallback={null}>
+          <AIReasoningModal
+            isOpen={isReasoningModalOpen}
+            onClose={() => setIsReasoningModalOpen(false)}
+            reasoningArtifacts={reportMetadata?.reasoningArtifacts}
+            rawAIOutput={reportMetadata?.rawAIOutput}
+            agentName={agentName}
+          />
+        </Suspense>
+      )}
     </div>
   );
 });

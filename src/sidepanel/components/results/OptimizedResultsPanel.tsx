@@ -9,8 +9,19 @@
  */
 
 import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
 import { EyeOff, Eye, Download, Users } from 'lucide-react';
+import { 
+  staggerContainer, 
+  cardVariants, 
+  listItemVariants,
+  textVariants,
+  statusVariants,
+  withReducedMotion,
+  STAGGER_CONFIGS,
+  ANIMATION_DURATIONS
+} from '@/utils/animations';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { ProcessingTimeDisplay } from '../ProcessingTimeDisplay';
 import { MetricsService } from '@/services/MetricsService';
@@ -24,6 +35,7 @@ import {
 } from './index';
 import type { AgentType, FailedAudioRecording } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
+import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/medical.types';
 
 interface OptimizedResultsPanelProps {
   results: string;
@@ -40,6 +52,11 @@ interface OptimizedResultsPanelProps {
   onTranscriptionCopy?: (text: string) => void;
   onTranscriptionInsert?: (text: string) => void;
   onTranscriptionEdit?: (text: string) => void;
+  transcriptionSaveStatus?: {
+    status: 'idle' | 'saving' | 'saved' | 'error';
+    message: string;
+    timestamp?: Date;
+  };
   currentAgent?: AgentType | null;
   onAgentReprocess?: (agentType: AgentType) => void;
   // Missing info interactive completion
@@ -62,6 +79,18 @@ interface OptimizedResultsPanelProps {
   patientVersion?: string | null;
   isGeneratingPatientVersion?: boolean;
   onGeneratePatientVersion?: () => void;
+  // Streaming display
+  streaming?: boolean;
+  streamBuffer?: string;
+  ttftMs?: number | null;
+  onStopStreaming?: () => void;
+  // Transcription approval
+  approvalState?: TranscriptionApprovalState;
+  onTranscriptionApprove?: (status: TranscriptionApprovalStatus) => void;
+  // Streaming support
+  isStreaming?: boolean;
+  streamingTokens?: string;
+  onCancelStreaming?: () => void;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -78,6 +107,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   onTranscriptionCopy,
   onTranscriptionInsert,
   onTranscriptionEdit,
+  transcriptionSaveStatus,
   currentAgent,
   onAgentReprocess,
   missingInfo,
@@ -99,8 +129,30 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   patientVersion = null,
   isGeneratingPatientVersion = false,
   onGeneratePatientVersion
+  ,
+  // Streaming props
+  streaming = false,
+  streamBuffer = '',
+  ttftMs = null,
+  onStopStreaming,
+  // Transcription approval props
+  approvalState,
+  onTranscriptionApprove,
+  // New streaming props
+  isStreaming = false,
+  streamingTokens = '',
+  onCancelStreaming
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  // Local state for streaming transcription editing
+  const [streamingTranscriptionEdit, setStreamingTranscriptionEdit] = useState(originalTranscription || '');
+  
+  // Sync streaming transcription state when original changes
+  useEffect(() => {
+    if (originalTranscription) {
+      setStreamingTranscriptionEdit(originalTranscription);
+    }
+  }, [originalTranscription]);
 
   // Store metrics when processing completes
   useEffect(() => {
@@ -131,6 +183,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
+    if (!results || results.trim().length === 0) {
+      return { wordCount: 0, readingTime: 0 };
+    }
     const wordCount = results.split(/\s+/).filter(word => word.length > 0).length;
     const readingTime = Math.ceil(wordCount / 200);
     return { wordCount, readingTime };
@@ -235,32 +290,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Check if this is an AI Review result
   const isAIReview = agentType === 'ai-medical-review' && reviewData;
   
-  // Debug AI Review detection
-  console.log('🔍 RESULTS PANEL: AI Review detection:', {
-    agentType,
-    isAIReview,
-    hasReviewData: !!reviewData,
-    reviewDataType: typeof reviewData,
-    reviewDataKeys: reviewData ? Object.keys(reviewData) : null,
-    findingsArray: reviewData?.findings,
-    findingsLength: reviewData?.findings?.length || 0
-  });
-  
   // Check if this is a Quick Letter with dual cards
   // Always use dual cards for QuickLetter, even with empty/short summary
   const isQuickLetterDualCards = agentType === 'quick-letter' && results;
-  
-  // Debug the display logic decision
-  console.log('🖼️ DISPLAY LOGIC: OptimizedResultsPanel display decision', {
-    agentType,
-    isQuickLetterDualCards,
-    hasResultsSummary: !!resultsSummary,
-    resultsSummaryLength: resultsSummary?.length || 0,
-    resultsSummaryPreview: resultsSummary?.substring(0, 100) + '...',
-    resultsLength: results?.length || 0,
-    resultsPreview: results?.substring(0, 100) + '...',
-    willUseDualCards: isQuickLetterDualCards
-  });
   
   // Determine readiness of final results for auto-collapse behavior
   const quickLetterReady = agentType === 'quick-letter' && !!results && !!resultsSummary;
@@ -272,20 +304,36 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Display logic calculations (debug logging removed for performance)
 
   const renderHeader = () => (
-    <div className="p-4 border-b border-emerald-200/50">
+    <motion.div 
+      className="p-4 border-b border-emerald-200/50"
+      initial="hidden"
+      animate="visible"
+      variants={withReducedMotion(cardVariants)}
+    >
       {/* Selected Session Indicator */}
       {selectedSessionId && selectedPatientName && (
-        <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center space-x-2">
+        <motion.div 
+          className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: ANIMATION_DURATIONS.quick }}
+        >
+          <motion.div 
+            className="flex items-center space-x-2"
+            variants={withReducedMotion(textVariants)}
+          >
             <Eye className="w-3 h-3 text-blue-600" />
             <span className="text-blue-800 text-xs font-medium">
               Viewing session for: {selectedPatientName}
             </span>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
       
-      <div className="flex items-center justify-between">
+      <motion.div 
+        className="flex items-center justify-between"
+        variants={withReducedMotion(listItemVariants)}
+      >
         <div className="flex items-center space-x-2">
           {isAIReview ? (
             <>
@@ -325,10 +373,14 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             <Eye className="w-4 h-4 text-emerald-600" />
           )}
         </button>
-      </div>
+      </motion.div>
       
       {/* Stats */}
-      <div className="flex items-center space-x-4 mt-2 text-xs">
+      <motion.div 
+        className="flex items-center space-x-4 mt-2 text-xs"
+        variants={withReducedMotion(textVariants)}
+        transition={{ delay: 0.1 }}
+      >
         {isAIReview ? (
           <div className="text-blue-600 flex items-center space-x-2">
             <span>{reviewData.findings.length} clinical findings</span>
@@ -362,63 +414,234 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             onDismissWarnings={onDismissWarnings} 
           />
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 
   return (
-    <div className="letter-card rounded-2xl overflow-hidden shadow-lg border">
+    <motion.div 
+      className="letter-card rounded-2xl overflow-hidden shadow-lg border"
+      initial="hidden"
+      animate="visible"
+      variants={withReducedMotion(cardVariants)}
+    >
       {renderHeader()}
       
-      {/* Original Transcription Section */}
-      {originalTranscription && (
-        <TranscriptionSection
+      {/* Original Transcription Section - Hide during streaming, show when complete */}
+      <AnimatePresence>
+        {originalTranscription && !streaming && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: ANIMATION_DURATIONS.normal }}
+          >
+            <TranscriptionSection
           originalTranscription={originalTranscription}
           onTranscriptionCopy={onTranscriptionCopy}
           onTranscriptionInsert={onTranscriptionInsert}
+          onTranscriptionEdit={onTranscriptionEdit}
+          transcriptionSaveStatus={transcriptionSaveStatus}
           onAgentReprocess={onAgentReprocess}
           currentAgent={currentAgent}
           isProcessing={isProcessing}
           audioBlob={audioBlob}
           defaultExpanded={!resultsReady}
-          collapseWhen={resultsReady}
-        />
-      )}
+              collapseWhen={resultsReady}
+              approvalState={approvalState}
+              onTranscriptionApprove={onTranscriptionApprove}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Content */}
-      {isExpanded && (
-        <div className="p-4">
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div 
+            className="p-4"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: ANIMATION_DURATIONS.normal }}
+          >
+          {/* Live streaming output with transcription context */}
+          <AnimatePresence>
+            {streaming && (
+              <motion.div 
+                className="space-y-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: ANIMATION_DURATIONS.quick }}
+              >
+              {/* Show original transcription during streaming for context */}
+              {originalTranscription && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50">
+                  <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-100">
+                    <div className="flex items-center space-x-2">
+                      <FileTextIcon className="w-4 h-4 text-gray-600" />
+                      <span className="font-medium text-sm text-gray-900">Original Transcription</span>
+                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                        Editable
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {streamingTranscriptionEdit.split(' ').length} words
+                        {streamingTranscriptionEdit !== originalTranscription && (
+                          <span className="text-blue-600 ml-1">(edited)</span>
+                        )}
+                      </span>
+                      {transcriptionSaveStatus && transcriptionSaveStatus.status !== 'idle' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          transcriptionSaveStatus.status === 'saving' 
+                            ? 'bg-yellow-100 text-yellow-700' 
+                            : transcriptionSaveStatus.status === 'saved'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {transcriptionSaveStatus.message}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {onTranscriptionCopy && (
+                        <button
+                          onClick={() => onTranscriptionCopy?.(originalTranscription)}
+                          className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-200 transition-colors"
+                        >
+                          Copy
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-3 max-h-32 overflow-y-auto">
+                    <div className="relative">
+                      <textarea
+                        value={streamingTranscriptionEdit}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          setStreamingTranscriptionEdit(newValue);
+                          onTranscriptionEdit?.(newValue);
+                        }}
+                        className="w-full h-24 p-2 pb-6 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed"
+                        placeholder="Edit transcription - your corrections train Whisper to be more accurate for medical dictation..."
+                        title="Your edits are automatically saved as training data to improve future transcription accuracy"
+                      />
+                      <div className="absolute bottom-1 right-2 text-xs text-gray-400">
+                        🧠 Training AI with your corrections
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Live streaming output */}
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50">
+                <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-100">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-emerald-600 text-sm">● Live Output</span>
+                    {ttftMs != null && (
+                      <span className="text-xs text-emerald-700">TTFT: {ttftMs} ms</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={onStopStreaming}
+                    className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 bg-red-50 hover:bg-red-100"
+                  >
+                    Stop
+                  </button>
+                </div>
+                <div className="p-3 max-h-64 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-900">{streamBuffer}</pre>
+                </div>
+              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {/* Missing Information Panel for interactive completion */}
-          {missingInfo && (
-            missingInfo.missing_diagnostic?.length > 0 || 
-            missingInfo.missing_intervention?.length > 0 ||
-            missingInfo.missing_purpose?.length > 0 ||
-            missingInfo.missing_clinical?.length > 0 ||
-            missingInfo.missing_recommendations?.length > 0
-          ) && (
-            <div className="mb-4">
+          <AnimatePresence>
+            {missingInfo && (
+              missingInfo.missing_diagnostic?.length > 0 || 
+              missingInfo.missing_intervention?.length > 0 ||
+              missingInfo.missing_purpose?.length > 0 ||
+              missingInfo.missing_clinical?.length > 0 ||
+              missingInfo.missing_recommendations?.length > 0
+            ) && (
+              <motion.div 
+                className="mb-4"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: ANIMATION_DURATIONS.quick }}
+              >
               <MissingInfoPanel
                 missingInfo={missingInfo}
                 onSubmit={(answers) => onReprocessWithAnswers && onReprocessWithAnswers(answers)}
-                onDismiss={onDismissMissingInfo}
-              />
-            </div>
-          )}
+                  onDismiss={onDismissMissingInfo}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {isAIReview ? (
+          {/* Streaming Display - show when actively streaming */}
+          {isStreaming && streamingTokens ? (
+            <motion.div
+              className="letter-card rounded-lg border border-blue-200 bg-blue-50"
+              variants={withReducedMotion(cardVariants)}
+              initial="hidden"
+              animate="visible"
+            >
+              <div className="p-3 border-b border-blue-200 bg-blue-100 flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                  <h4 className="text-blue-800 font-semibold text-sm">Generating Response...</h4>
+                </div>
+                {onCancelStreaming && (
+                  <button
+                    onClick={onCancelStreaming}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+                    aria-label="Cancel streaming"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+              <div className="p-4">
+                <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap font-mono">
+                  {streamingTokens}
+                  <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
+                </div>
+                <div className="mt-3 text-xs text-blue-600">
+                  Real-time generation in progress...
+                </div>
+              </div>
+            </motion.div>
+          ) : isAIReview ? (
             <>
               {console.log('🖼️ RESULTS PANEL: Rendering AIReviewCards with data:', reviewData)}
               <AIReviewCards reviewData={reviewData} />
             </>
-          ) : agentType === 'quick-letter' && results ? (
-            // Quick Letter dual cards display
+          ) : agentType === 'quick-letter' && results && !streaming ? (
+            // Quick Letter dual cards display - only show when not streaming and results are ready
             (() => {
               console.log('✅ DISPLAY: Using QuickLetter dual-card display');
               return null; // This will be replaced by the actual content
             })(),
-            <div className="space-y-4">
+            <motion.div 
+              className="space-y-4"
+              variants={withReducedMotion(staggerContainer)}
+              initial="hidden"
+              animate="visible"
+              transition={{
+                staggerChildren: STAGGER_CONFIGS.normal,
+                delayChildren: 0.1
+              }}
+            >
               {/* Summary Card */}
-              <div className="letter-card rounded-lg border border-emerald-200 bg-emerald-50">
+              <motion.div 
+                className="letter-card rounded-lg border border-emerald-200 bg-emerald-50"
+                variants={withReducedMotion(cardVariants)}
+              >
                 <div className="p-3 border-b border-emerald-200 bg-emerald-100">
                   <h4 className="text-emerald-800 font-semibold text-sm">Summary</h4>
                 </div>
@@ -485,10 +708,13 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     </button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Letter Card */}
-              <div className="letter-card rounded-lg border border-blue-200 bg-blue-50">
+              <motion.div 
+                className="letter-card rounded-lg border border-blue-200 bg-blue-50"
+                variants={withReducedMotion(cardVariants)}
+              >
                 <div className="p-3 border-b border-blue-200 bg-blue-100">
                   <h4 className="text-blue-800 font-semibold text-sm">Letter</h4>
                 </div>
@@ -567,11 +793,19 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     </button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Patient Version Card */}
-              {patientVersion && (
-                <div className="letter-card rounded-lg border border-purple-200 bg-purple-50">
+              <AnimatePresence>
+                {patientVersion && (
+                  <motion.div 
+                    className="letter-card rounded-lg border border-purple-200 bg-purple-50"
+                    variants={withReducedMotion(cardVariants)}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: 0.2 }}
+                  >
                   <div className="p-3 border-b border-purple-200 bg-purple-100">
                     <h4 className="text-purple-800 font-semibold text-sm">Patient-Friendly Version</h4>
                   </div>
@@ -633,58 +867,68 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                         <span className="text-xs text-gray-700">Download</span>
                       </button>
                     </div>
-                  </div>
-                </div>
-              )}
-            </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary
-            (() => {
-              console.log('⚠️ DISPLAY: Falling back to ReportDisplay component', {
-                reason: agentType === 'quick-letter' ? 'QuickLetter missing summary' : 'Not QuickLetter agent',
-                agentType,
-                hasResultsSummary: !!resultsSummary,
-                resultsSummaryLength: resultsSummary?.length || 0
-              });
-              return null;
-            })(),
             <ReportDisplay 
               results={results} 
               agentType={agentType} 
             />
           )}
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Actions - Only for regular reports, not AI Review or Quick Letter dual cards */}
-      {!isAIReview && !isQuickLetterDualCards && (
-        <ActionButtons
-          results={results}
-          agentType={agentType}
-          onCopy={onCopy}
-          onInsertToEMR={onInsertToEMR}
-        />
-      )}
+      <AnimatePresence>
+        {!isAIReview && !isQuickLetterDualCards && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <ActionButtons
+              results={results}
+              agentType={agentType}
+              onCopy={onCopy}
+              onInsertToEMR={onInsertToEMR}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Processing Time Display - at bottom for metrics visibility */}
-      {(totalProcessingTime || processingStatus !== 'idle') && (
-        <div className="px-4 pb-4">
-          <ProcessingTimeDisplay
-            appState={{
-              processingStatus: processingStatus as any,
-              totalProcessingTime,
-              transcriptionTime,
-              agentProcessingTime,
-              currentAgent: agentType,
-              currentAgentName,
-              processingStartTime: null // We don't need live timing here since it's completed
-            } as any}
-            isRecording={false}
-            recordingTime={0}
-            transcriptionLength={originalTranscription ? originalTranscription.length : 0}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {(totalProcessingTime || processingStatus !== 'idle') && (
+          <motion.div 
+            className="px-4 pb-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ delay: 0.4 }}
+          >
+            <ProcessingTimeDisplay
+              appState={{
+                processingStatus: processingStatus as any,
+                totalProcessingTime,
+                transcriptionTime,
+                agentProcessingTime,
+                currentAgent: agentType,
+                currentAgentName,
+                processingStartTime: null // We don't need live timing here since it's completed
+              } as any}
+              isRecording={false}
+              recordingTime={0}
+              transcriptionLength={originalTranscription ? originalTranscription.length : 0}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Troubleshooting Section */}
       <TroubleshootingSection
@@ -693,7 +937,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
         onClearFailedRecordings={onClearFailedRecordings}
       />
 
-    </div>
+    </motion.div>
   );
 });
 

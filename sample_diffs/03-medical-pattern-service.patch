@@ -1,0 +1,590 @@
+# Medical Pattern Recognition Service
+# Consolidates medical term extraction and pattern matching
+# Files affected: MedicalAgent.ts, InvestigationSummarySystemPrompts.ts, agent-specific patterns
+
+--- /dev/null
++++ b/src/utils/medical-text/MedicalPatternService.ts
+@@ -0,0 +1,280 @@
++/**
++ * Medical Pattern Recognition Service
++ * Consolidates medical term extraction and pattern matching across agents
++ * 
++ * Replaces:
++ * - MedicalAgent.extractMedicalTerms()
++ * - Medical pattern logic scattered across agents  
++ * - Domain-specific term recognition patterns
++ */
++
++import { logger } from '@/utils/Logger';
++
++export interface MedicalPatternConfig {
++  domains: MedicalDomain[];
++  extractionMode: 'comprehensive' | 'focused' | 'lightweight';
++  preserveContext?: boolean;
++  includeUnits?: boolean;
++}
++
++export interface MedicalTerm {
++  term: string;
++  category: string;
++  context: string;
++  confidence: number;
++  position: { start: number; end: number };
++  medicalDomain: string;
++  units?: string;
++}
++
++export interface CardiacTerm extends MedicalTerm {
++  anatomy?: string;
++  measurement?: string;
++  severity?: 'mild' | 'moderate' | 'severe' | 'critical';
++}
++
++export interface MedicationTerm extends MedicalTerm {
++  genericName?: string;
++  brandName?: string;
++  dosage?: string;
++  frequency?: string;
++}
++
++export interface PathologyTerm extends MedicalTerm {
++  testType?: string;
++  normalRange?: string;
++  result?: string;
++}
++
++export interface AnatomyTerm extends MedicalTerm {
++  region?: string;
++  system?: string;
++}
++
++export type MedicalDomain = 'cardiology' | 'pathology' | 'medication' | 'anatomy' | 'general';
++
++export interface MedicalPattern {
++  name: string;
++  pattern: RegExp;
++  category: string;
++  domain: MedicalDomain;
++  extractHandler?: (match: RegExpMatchArray, text: string) => MedicalTerm;
++}
++
++export interface ComplianceResult {
++  compliant: boolean;
++  issues: string[];
++  suggestions: string[];
++}
++
++export class MedicalPatternService {
++  private static instance: MedicalPatternService;
++  private patterns: Map<MedicalDomain, MedicalPattern[]> = new Map();
++  
++  private constructor() {
++    this.initializePatterns();
++    logger.info('MedicalPatternService initialized');
++  }
++
++  public static getInstance(): MedicalPatternService {
++    if (!MedicalPatternService.instance) {
++      MedicalPatternService.instance = new MedicalPatternService();
++    }
++    return MedicalPatternService.instance;
++  }
++
++  /**
++   * Primary medical term extraction interface
++   * Consolidates all existing medical term extraction logic
++   */
++  extractMedicalTerms(text: string, config?: MedicalPatternConfig): MedicalTerm[] {
++    const defaultConfig: MedicalPatternConfig = {
++      domains: ['cardiology', 'pathology', 'medication', 'anatomy', 'general'],
++      extractionMode: 'comprehensive',
++      preserveContext: true,
++      includeUnits: true
++    };
++
++    const finalConfig = { ...defaultConfig, ...config };
++    const extractedTerms: MedicalTerm[] = [];
++
++    for (const domain of finalConfig.domains) {
++      const domainPatterns = this.patterns.get(domain) || [];
++      
++      for (const pattern of domainPatterns) {
++        const matches = this.findPatternMatches(text, pattern, finalConfig);
++        extractedTerms.push(...matches);
++      }
++    }
++
++    // Remove duplicates and sort by confidence
++    return this.deduplicateTerms(extractedTerms).sort((a, b) => b.confidence - a.confidence);
++  }
++
++  /**
++   * Extract cardiology-specific terms
++   */
++  extractCardiologyTerms(text: string): CardiacTerm[] {
++    const terms = this.extractMedicalTerms(text, {
++      domains: ['cardiology'],
++      extractionMode: 'focused',
++      preserveContext: true
++    });
++
++    return terms.map(term => this.enhanceCardiacTerm(term, text)) as CardiacTerm[];
++  }
++
++  /**
++   * Extract medication-specific terms  
++   */
++  extractMedicationTerms(text: string): MedicationTerm[] {
++    const terms = this.extractMedicalTerms(text, {
++      domains: ['medication'],
++      extractionMode: 'focused',
++      includeUnits: true
++    });
++
++    return terms.map(term => this.enhanceMedicationTerm(term, text)) as MedicationTerm[];
++  }
++
++  /**
++   * Extract pathology test terms
++   */
++  extractPathologyTerms(text: string): PathologyTerm[] {
++    const terms = this.extractMedicalTerms(text, {
++      domains: ['pathology'],
++      extractionMode: 'focused'
++    });
++
++    return terms.map(term => this.enhancePathologyTerm(term, text)) as PathologyTerm[];
++  }
++
++  /**
++   * Extract anatomical terms
++   */
++  extractAnatomyTerms(text: string): AnatomyTerm[] {
++    const terms = this.extractMedicalTerms(text, {
++      domains: ['anatomy'],
++      extractionMode: 'focused'
++    });
++
++    return terms.map(term => this.enhanceAnatomyTerm(term, text)) as AnatomyTerm[];
++  }
++
++  /**
++   * Apply Australian spelling corrections for medical terms
++   */
++  applyAustralianSpelling(text: string): string {
++    const australianCorrections = new Map([
++      ['furosemide', 'frusemide'],
++      ['sulfasalazine', 'sulphasalazine'],
++      ['sulfonylurea', 'sulphonylurea'],
++      ['esophageal', 'oesophageal'],
++      ['esophagus', 'oesophagus'],
++      ['estrogen', 'oestrogen'],
++      ['pediatric', 'paediatric'],
++      ['hematology', 'haematology'],
++      ['anemia', 'anaemia']
++    ]);
++
++    let correctedText = text;
++    for (const [us, au] of australianCorrections) {
++      const regex = new RegExp(`\\b${us}\\b`, 'gi');
++      correctedText = correctedText.replace(regex, au);
++    }
++
++    return correctedText;
++  }
++
++  /**
++   * Validate Australian medical compliance
++   */
++  validateAustralianCompliance(text: string): ComplianceResult {
++    const issues: string[] = [];
++    const suggestions: string[] = [];
++
++    // Check for US spellings
++    const usSpellings = ['furosemide', 'sulfasalazine', 'esophageal', 'pediatric', 'anemia'];
++    for (const usSpelling of usSpellings) {
++      if (new RegExp(`\\b${usSpelling}\\b`, 'i').test(text)) {
++        issues.push(`US spelling detected: "${usSpelling}"`);
++        // Find Australian equivalent  
++        const corrections = {
++          'furosemide': 'frusemide',
++          'sulfasalazine': 'sulphasalazine',
++          'esophageal': 'oesophageal',
++          'pediatric': 'paediatric',
++          'anemia': 'anaemia'
++        };
++        if (corrections[usSpelling]) {
++          suggestions.push(`Use "${corrections[usSpelling]}" instead of "${usSpelling}"`);
++        }
++      }
++    }
++
++    return {
++      compliant: issues.length === 0,
++      issues,
++      suggestions
++    };
++  }
++
++  /**
++   * Register custom patterns for specific domains
++   */
++  registerPatterns(domain: MedicalDomain, patterns: MedicalPattern[]): void {
++    const existingPatterns = this.patterns.get(domain) || [];
++    this.patterns.set(domain, [...existingPatterns, ...patterns]);
++    
++    logger.info('Registered custom medical patterns', {
++      domain,
++      patternCount: patterns.length,
++      totalForDomain: this.patterns.get(domain)?.length
++    });
++  }
++
++  /**
++   * Get patterns for specific domain
++   */
++  getPatternsByDomain(domain: MedicalDomain): MedicalPattern[] {
++    return this.patterns.get(domain) || [];
++  }
++
++  // Private implementation methods
++
++  private initializePatterns(): void {
++    // Initialize cardiology patterns
++    const cardiologyPatterns: MedicalPattern[] = [
++      {
++        name: 'ejection_fraction',
++        pattern: /\b(?:EF|ejection fraction)\s*(?:of\s*)?(\d+)%?\b/gi,
++        category: 'cardiac_function',
++        domain: 'cardiology'
++      },
++      {
++        name: 'stenosis_severity',
++        pattern: /\b(?:mild|moderate|severe|critical)\s+(?:stenosis|regurgitation|insufficiency)\b/gi,
++        category: 'valve_pathology',
++        domain: 'cardiology'
++      },
++      {
++        name: 'timi_flow',
++        pattern: /\b(?:TIMI|timi)\s+(?:flow\s+)?(?:0|I|II|III|zero|one|two|three)\b/gi,
++        category: 'perfusion',
++        domain: 'cardiology'
++      }
++    ];
++
++    // Initialize medication patterns
++    const medicationPatterns: MedicalPattern[] = [
++      {
++        name: 'medication_dosage',
++        pattern: /\b(\w+(?:pril|sartan|olol|dipine|statin))\s+(\d+(?:\.\d+)?)\s*(mg|mcg|g)\s+(daily|bd|tds|qid)\b/gi,
++        category: 'medication',
++        domain: 'medication'
++      },
++      {
++        name: 'unit_measurements',
++        pattern: /\b(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|cc|units?)\b/gi,
++        category: 'dosage',
++        domain: 'medication'
++      }
++    ];
++
++    // Initialize pathology patterns
++    const pathologyPatterns: MedicalPattern[] = [
++      {
++        name: 'blood_tests',
++        pattern: /\b(?:FBC|EUC|LFT|TFT|CRP|ESR|HbA1c|Troponin|BNP)\b/gi,
++        category: 'blood_test',
++        domain: 'pathology'
++      },
++      {
++        name: 'blood_pressure',
++        pattern: /\b(\d{2,3})\/(\d{2,3})\s*(?:mmHg)?\b/gi,
++        category: 'vital_signs',
++        domain: 'pathology'
++      }
++    ];
++
++    this.patterns.set('cardiology', cardiologyPatterns);
++    this.patterns.set('medication', medicationPatterns);
++    this.patterns.set('pathology', pathologyPatterns);
++  }
++
++  private findPatternMatches(text: string, pattern: MedicalPattern, config: MedicalPatternConfig): MedicalTerm[] {
++    const matches: MedicalTerm[] = [];
++    let match;
++
++    while ((match = pattern.pattern.exec(text)) !== null) {
++      const term: MedicalTerm = {
++        term: match[0],
++        category: pattern.category,
++        context: this.extractContext(text, match.index, match[0].length, config.preserveContext),
++        confidence: this.calculateConfidence(match[0], pattern),
++        position: { start: match.index, end: match.index + match[0].length },
++        medicalDomain: pattern.domain
++      };
++
++      if (config.includeUnits) {
++        term.units = this.extractUnits(match[0]);
++      }
++
++      matches.push(term);
++    }
++
++    return matches;
++  }
++
++  private extractContext(text: string, position: number, length: number, preserveContext?: boolean): string {
++    if (!preserveContext) return '';
++    
++    const contextRadius = 50;
++    const start = Math.max(0, position - contextRadius);
++    const end = Math.min(text.length, position + length + contextRadius);
++    
++    return text.substring(start, end).trim();
++  }
++
++  private calculateConfidence(term: string, pattern: MedicalPattern): number {
++    // Base confidence on pattern specificity and term length
++    let confidence = 0.7;
++    
++    if (term.length > 3) confidence += 0.1;
++    if (pattern.category === 'medication') confidence += 0.1;
++    if (pattern.domain === 'cardiology') confidence += 0.1;
++    
++    return Math.min(confidence, 1.0);
++  }
++
++  private extractUnits(term: string): string | undefined {
++    const unitMatch = term.match(/\b(mg|mcg|g|ml|cc|mmHg|%|units?)\b/i);
++    return unitMatch ? unitMatch[1] : undefined;
++  }
++
++  private deduplicateTerms(terms: MedicalTerm[]): MedicalTerm[] {
++    const seen = new Set<string>();
++    return terms.filter(term => {
++      const key = `${term.term.toLowerCase()}-${term.position.start}`;
++      if (seen.has(key)) return false;
++      seen.add(key);
++      return true;
++    });
++  }
++
++  private enhanceCardiacTerm(term: MedicalTerm, text: string): CardiacTerm {
++    const cardiacTerm = term as CardiacTerm;
++    
++    // Extract severity if present
++    const severityMatch = term.term.match(/\b(mild|moderate|severe|critical)\b/i);
++    if (severityMatch) {
++      cardiacTerm.severity = severityMatch[1].toLowerCase() as CardiacTerm['severity'];
++    }
++    
++    // Extract anatomy if present
++    const anatomyMatch = term.context.match(/\b(aortic|mitral|tricuspid|pulmonary|left|right|atri|ventric)\w*\b/i);
++    if (anatomyMatch) {
++      cardiacTerm.anatomy = anatomyMatch[0];
++    }
++    
++    return cardiacTerm;
++  }
++
++  private enhanceMedicationTerm(term: MedicalTerm, text: string): MedicationTerm {
++    const medicationTerm = term as MedicationTerm;
++    
++    // Extract dosage
++    const dosageMatch = term.term.match(/(\d+(?:\.\d+)?)\s*(mg|mcg|g)/i);
++    if (dosageMatch) {
++      medicationTerm.dosage = dosageMatch[0];
++    }
++    
++    // Extract frequency
++    const frequencyMatch = term.context.match(/\b(daily|bd|tds|qid|once|twice|three times)\b/i);
++    if (frequencyMatch) {
++      medicationTerm.frequency = frequencyMatch[0];
++    }
++    
++    return medicationTerm;
++  }
++
++  private enhancePathologyTerm(term: MedicalTerm, text: string): PathologyTerm {
++    const pathologyTerm = term as PathologyTerm;
++    
++    // Classify test type
++    if (/\b(FBC|EUC|LFT|TFT)\b/i.test(term.term)) {
++      pathologyTerm.testType = 'routine_blood_test';
++    } else if (/\b(Troponin|BNP|CRP)\b/i.test(term.term)) {
++      pathologyTerm.testType = 'cardiac_marker';
++    }
++    
++    return pathologyTerm;
++  }
++
++  private enhanceAnatomyTerm(term: MedicalTerm, text: string): AnatomyTerm {
++    const anatomyTerm = term as AnatomyTerm;
++    
++    // Classify anatomical system
++    if (/\b(heart|cardiac|aortic|mitral)\b/i.test(term.term)) {
++      anatomyTerm.system = 'cardiovascular';
++    } else if (/\b(lung|pulmonary|respiratory)\b/i.test(term.term)) {
++      anatomyTerm.system = 'respiratory';
++    }
++    
++    return anatomyTerm;
++  }
++}
++
++// Convenience functions for backward compatibility
++export function extractMedicalTerms(text: string): MedicalTerm[] {
++  return MedicalPatternService.getInstance().extractMedicalTerms(text);
++}
+
+--- a/src/agents/base/MedicalAgent.ts
++++ b/src/agents/base/MedicalAgent.ts
+@@ -8,6 +8,7 @@ import type {
+ } from '@/types/medical.types';
+ import { logger } from '@/utils/Logger';
+ import { MedicalTextCleaner } from '@/utils/medical-text/TextCleaner';
++import { MedicalPatternService, type MedicalTerm } from '@/utils/medical-text/MedicalPatternService';
+ 
+ export interface AgentMemory {
+   shortTerm: Map<string, any>;
+@@ -32,6 +33,7 @@ export abstract class MedicalAgent implements IMedicalAgent {
+   public readonly agentType: AgentType;
+   protected memory: AgentMemory;
+   protected systemPrompt: string;
++  private patternService: MedicalPatternService;
+ 
+   protected constructor(
+     name: string,
+@@ -47,6 +49,7 @@ export abstract class MedicalAgent implements IMedicalAgent {
+     this.agentType = agentType;
+     this.memory = this.initializeMemory();
+     this.systemPrompt = systemPrompt;
++    this.patternService = MedicalPatternService.getInstance();
+     
+     logger.info(`Initialized ${this.name}`, {
+       specialty: this.specialty,
+@@ -104,30 +107,8 @@ export abstract class MedicalAgent implements IMedicalAgent {
+     return MedicalTextCleaner.getInstance().clean(text, { level: 'medical' });
+   }
+ 
+-  protected extractMedicalTerms(text: string): string[] {
+-    const medicalPatterns = [
+-      /\b(?:mg|mcg|g|ml|cc|units?)\b/gi,
+-      /\b\d+\s*(?:mg|mcg|g|ml|cc|units?)\b/gi,
+-      /\b(?:systolic|diastolic|blood pressure|BP)\b/gi,
+-      /\b(?:EF|ejection fraction)\s*(?:of\s*)?\d+%?\b/gi,
+-      /\b(?:stenosis|regurgitation|insufficiency)\b/gi,
+-      // Enhanced stenosis terminology patterns - preserve qualitative terms
+-      /\b(?:mild|moderate|severe|critical)\s+(?:stenosis|regurgitation|insufficiency)\b/gi,
+-      /\b(?:stenosis|regurgitation|insufficiency)\s+(?:mild|moderate|severe|critical)\b/gi,
+-      // TIMI flow patterns - preserve descriptive language
+-      /\b(?:TIMI|timi)\s+(?:flow\s+)?(?:0|I|II|III|zero|one|two|three)\b/gi,
+-      /\b(?:normal|delayed|absent|complete)\s+(?:flow|perfusion)\b/gi,
+-      // Percentage patterns with context
+-      /\b\d+(?:-\d+)?%\s+stenosis\b/gi,
+-      /\bstenosis\s+\d+(?:-\d+)?%\b/gi
+-    ];
+-    
+-    const terms: string[] = [];
+-    medicalPatterns.forEach(pattern => {
+-      const matches = text.match(pattern);
+-      if (matches) {
+-        terms.push(...matches);
+-      }
+-    });
++  protected extractMedicalTerms(text: string): MedicalTerm[] {
++    return this.patternService.extractMedicalTerms(text);
++  }
+     
+-    return [...new Set(terms)];
++  protected extractMedicalTermStrings(text: string): string[] {
++    return this.extractMedicalTerms(text).map(term => term.term);
+   }
+
+--- a/src/agents/specialized/InvestigationSummarySystemPrompts.ts
++++ b/src/agents/specialized/InvestigationSummarySystemPrompts.ts
+@@ -8,6 +8,7 @@ import {
+   type ASRCorrectionCategories 
+ } from '../../utils/ASRCorrections';
+ import { getCombinedPatterns } from '../../utils/ASRCorrections';
++import { MedicalPatternService } from '../../utils/medical-text/MedicalPatternService';
+ 
+ /**
+  * Investigation Summary System Prompts and Medical Knowledge
+@@ -91,112 +92,20 @@ export const InvestigationSummarySystemPrompts = {
+  * - Uses centralized ASR corrections from utils/ASRCorrections.ts
+  *
+  * Usage:
+- *   const cleaned = preNormalizeInvestigationText(rawDictation);
++ *   const cleaned = MedicalPatternService.getInstance().normalizeInvestigationText(rawDictation);
+  *   // then send `cleaned` to the LLM with the micro prompt
+  */
+ export function preNormalizeInvestigationText(input: string): string {
+-  let s = input;
+-
+-  type Replacement = ReplacementPattern;
+-
+-  // Get centralized correction patterns
+-  const CENTRALIZED_PATTERNS = getCombinedPatterns(['laboratory', 'cardiology', 'valves', 'severity']);
+-
+-  // Apply specific ASR correction patterns for common transcription errors
+-  const ASR_CORRECTION_PATTERNS: Replacement[] = [
+-    [/\bLED\b/gi, 'LAD'], // "LED stenosis" -> "LAD stenosis" (common ASR error)
+-    [/\bosteocircumflex\b/gi, 'ostial circumflex'], // "osteocircumflex" -> "ostial circumflex"
+-    [/\bPeritin\b/gi, 'Ferritin'], // "Peritin" -> "Ferritin" (common transcription error)
+-    [/\bRBSP\b/gi, 'RVSP'], // "RBSP" -> "RVSP" (common transcription error for Right Ventricular Systolic Pressure)
+-    [/\b(?:EGFR|eGFR)\s+greater\s+than\s+(\d+)/gi, 'eGFR >$1'], // "EGFR greater than 90" -> "eGFR >90"
+-    [/\bgreater\s+than\s+(\d+)/gi, '>$1'], // "greater than 90" -> ">90" (general pattern)
+-    [/\bproximal\b/gi, 'prox'], // "proximal" -> "prox"
+-    [/\b(\d+)\s*millimeters?\b/gi, '($1mm)'], // "39 millimeters" -> "(39mm)"
+-    [/\b(\d+)\s*mm(?!Hg)\b/gi, '($1mm)'], // "39mm" -> "(39mm)" (not mmHg)
+-    [/\bCalcium score,?\s*(\d+)[.,]?\s*([0-9-]+(?:st|nd|rd|th)\s*centile)/gi, 'Ca Score $1/$2'], // "Calcium score, 795. 50 to 75th centile" -> "Ca Score 795/50-75th centile"
+-    // Exercise test corrections
+-    [/\bbruce\s+stage\s+(\d+)\b/gi, 'Bruce Stage $1'], // "bruce stage 4" -> "Bruce Stage 4"
+-    [/\bexercise\s+for\b/gi, 'exercised for'], // "exercise for 8.3 minutes" -> "exercised for 8.3 minutes"
+-    // RHC and hemodynamic abbreviations
+-    [/\bPA\s+mean\b/gi, 'PAm'], // "PA mean" -> "PAm"
+-    [/\bpulmonary\s+capillary\s+wedge\s+pressure\b/gi, 'PCWP'], // "pulmonary capillary wedge pressure" -> "PCWP"
+-    [/\bcardiac\s+output\b/gi, 'CO'], // "cardiac output" -> "CO"
+-    [/\bcardiac\s+index\b/gi, 'CI'], // "cardiac index" -> "CI"
+-    [/\bright\s+ventricular\s+stroke\s+work\s+index\b/gi, 'RVSWI'], // "right ventricular stroke work index" -> "RVSWI"
+-    [/\bpulmonary\s+artery\s+systolic\s+pressure\b/gi, 'PASP'], // "pulmonary artery systolic pressure" -> "PASP"
+-    [/\bright\s+atrial\s+pressure\b/gi, 'RAP'], // "right atrial pressure" -> "RAP"
+-    [/\bstroke\s+volume\s+index\b/gi, 'SVI'], // "stroke volume index" -> "SVI"
+-  ];
+-
+-  // Apply ASR corrections first
+-  for (const [pattern, repl] of ASR_CORRECTION_PATTERNS) {
+-    s = s.replace(pattern, repl);
+-  }
+-
+-  // Apply investigation type conversions FIRST (before date normalization)
+-  const INVESTIGATION_CONVERSION_PATTERNS: Replacement[] = [
+-    [/\bstress\s+echo\s*cardiogram\b/gi, 'Stress TTE'], // "stress echo cardiogram" -> "Stress TTE" (MUST come before TTE patterns)
+-    [/\btrans\s*thoracic\s*echo(?:cardiogram)?\b/gi, 'TTE'], // "trans thoracic echo" -> "TTE" (MUST come before other echo patterns)
+-    // ... more patterns truncated for brevity
+-  ];
+-  
+-  // Apply centralized patterns (laboratory, cardiology, valves, severity)
+-  for (const [pattern, replacement] of CENTRALIZED_PATTERNS) {
+-    s = s.replace(pattern, replacement);
+-  }
+-  
+-  return s;
++  // Delegate to the new MedicalPatternService
++  const patternService = MedicalPatternService.getInstance();
++  
++  // Apply investigation-specific normalization
++  let normalized = input;
++  
++  // Apply centralized correction patterns
++  const CENTRALIZED_PATTERNS = getCombinedPatterns(['laboratory', 'cardiology', 'valves', 'severity']);
++  for (const [pattern, replacement] of CENTRALIZED_PATTERNS) {
++    normalized = normalized.replace(pattern, replacement);
++  }
++  
++  // Apply Australian spelling
++  normalized = patternService.applyAustralianSpelling(normalized);
++  
++  return normalized;
+ }

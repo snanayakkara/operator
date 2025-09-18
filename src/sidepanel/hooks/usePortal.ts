@@ -21,8 +21,16 @@ export const usePortal = (id: string = 'portal-root') => {
 
     // Cleanup function to remove empty portal containers
     return () => {
-      if (portalContainer && portalContainer.children.length === 0) {
-        document.body.removeChild(portalContainer);
+      // Check if portal container still exists and is empty before removing
+      if (portalContainer &&
+          portalContainer.parentNode === document.body &&
+          portalContainer.children.length === 0) {
+        try {
+          document.body.removeChild(portalContainer);
+        } catch (error) {
+          // Silently handle case where node was already removed
+          console.debug('Portal container already removed:', id);
+        }
       }
     };
   }, [id]);

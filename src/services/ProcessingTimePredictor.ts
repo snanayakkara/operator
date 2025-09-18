@@ -8,6 +8,7 @@
 
 import type { AgentType, PatientSession } from '@/types/medical.types';
 import { PerformanceMonitoringService } from './PerformanceMonitoringService';
+import { logger } from '@/utils/Logger';
 
 export interface ProcessingTimeEstimate {
   estimatedDurationMs: number;
@@ -511,7 +512,13 @@ export class ProcessingTimePredictor {
     // Save to storage periodically
     this.saveHistoricalData();
 
-    console.log(`📊 Recorded: ${agentType} processed ${transcriptionLength} chars in ${actualProcessingTimeMs}ms`);
+    logger.info(`Recorded processing time for ${agentType}`, {
+      component: 'processing-predictor',
+      operation: 'record-time',
+      agentType,
+      transcriptionLength,
+      processingTime: actualProcessingTimeMs
+    });
   }
 
   /**
@@ -524,7 +531,12 @@ export class ProcessingTimePredictor {
     const wasWithinRange = actualTimeMs >= prediction.range.min && actualTimeMs <= prediction.range.max;
     const accuracy = 1 - Math.abs(prediction.estimatedDurationMs - actualTimeMs) / prediction.estimatedDurationMs;
     
-    console.log(`🎯 Prediction accuracy: ${Math.round(accuracy * 100)}%, within range: ${wasWithinRange}`);
+    logger.info(`Prediction accuracy: ${Math.round(accuracy * 100)}%, within range: ${wasWithinRange}`, {
+      component: 'processing-predictor',
+      operation: 'accuracy-check',
+      accuracy: Math.round(accuracy * 100),
+      withinRange: wasWithinRange
+    });
     
     return { accuracy: Math.max(0, accuracy), wasWithinRange };
   }
@@ -587,10 +599,18 @@ export class ProcessingTimePredictor {
       const result = await chrome.storage.local.get('processingTimeHistory');
       if (result.processingTimeHistory) {
         this.historicalData = result.processingTimeHistory.slice(-this.maxHistorySize);
-        console.log(`📚 Loaded ${this.historicalData.length} historical processing time data points`);
+        logger.info(`Loaded ${this.historicalData.length} historical processing time data points`, {
+          component: 'processing-predictor',
+          operation: 'load-data',
+          dataPoints: this.historicalData.length
+        });
       }
     } catch (error) {
-      console.warn('Failed to load historical processing time data:', error);
+      logger.warn('Failed to load historical processing time data', {
+        component: 'processing-predictor',
+        operation: 'load-data',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -603,7 +623,11 @@ export class ProcessingTimePredictor {
         processingTimeHistory: this.historicalData
       });
     } catch (error) {
-      console.warn('Failed to save historical processing time data:', error);
+      logger.warn('Failed to save historical processing time data', {
+        component: 'processing-predictor',
+        operation: 'save-data',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 
@@ -613,7 +637,10 @@ export class ProcessingTimePredictor {
   clearHistoricalData(): void {
     this.historicalData = [];
     chrome.storage.local.remove('processingTimeHistory');
-    console.log('🧹 Cleared historical processing time data');
+    logger.info('Cleared historical processing time data', {
+      component: 'processing-predictor',
+      operation: 'clear-data'
+    });
   }
 
   /**

@@ -6,6 +6,7 @@
  */
 
 import type { AgentType, MedicalAgent, MedicalContext, MedicalReport } from '@/types/medical.types';
+import { logger } from '@/utils/Logger';
 
 // Type definitions for lazy-loaded agents
 type AgentConstructor = new () => MedicalAgent;
@@ -30,11 +31,19 @@ export class LazyAgentFactory {
   async loadAgent(agentType: AgentType): Promise<MedicalAgent> {
     // Return cached agent if available
     if (agentCache.has(agentType)) {
-      console.log(`♻️ Using cached ${agentType} agent`);
+      logger.debug(`Using cached ${agentType} agent`, {
+        component: 'lazy-agent-factory',
+        operation: 'cache-hit',
+        agentType
+      });
       return agentCache.get(agentType)!;
     }
 
-    console.log(`🔄 Lazy loading ${agentType} agent...`);
+    logger.info(`Lazy loading ${agentType} agent`, {
+      component: 'lazy-agent-factory',
+      operation: 'load-start',
+      agentType
+    });
     
     try {
       let AgentClass: AgentConstructor;
@@ -51,8 +60,8 @@ export class LazyAgentFactory {
           break;
           
         case 'quick-letter':
-          const quickLetterModule = await import('@/agents/specialized/QuickLetterAgent');
-          AgentClass = quickLetterModule.QuickLetterAgent;
+          const quickLetterModule = await import('@/agents/specialized/QuickLetterAgent.Phase3');
+          AgentClass = quickLetterModule.QuickLetterAgentPhase3;
           break;
           
         case 'consultation':
@@ -61,18 +70,18 @@ export class LazyAgentFactory {
           break;
           
         case 'investigation-summary':
-          const investigationModule = await import('@/agents/specialized/InvestigationSummaryAgent');
-          AgentClass = investigationModule.InvestigationSummaryAgent;
+          const investigationModule = await import('@/agents/specialized/InvestigationSummaryAgent.Phase3');
+          AgentClass = investigationModule.InvestigationSummaryAgentPhase3;
           break;
           
         case 'background':
-          const backgroundModule = await import('@/agents/specialized/BackgroundAgent');
-          AgentClass = backgroundModule.BackgroundAgent;
+          const backgroundModule = await import('@/agents/specialized/BackgroundAgent.Phase3');
+          AgentClass = backgroundModule.BackgroundAgentPhase3;
           break;
           
         case 'medication':
-          const medicationModule = await import('@/agents/specialized/MedicationAgent');
-          AgentClass = medicationModule.MedicationAgent;
+          const medicationModule = await import('@/agents/specialized/MedicationAgent.Phase3');
+          AgentClass = medicationModule.MedicationAgentPhase3;
           break;
           
         case 'bloods':
@@ -112,11 +121,19 @@ export class LazyAgentFactory {
       const agent = new AgentClass();
       agentCache.set(agentType, agent);
       
-      console.log(`✅ Successfully loaded ${agentType} agent`);
+      logger.info(`Successfully loaded ${agentType} agent`, {
+        component: 'lazy-agent-factory',
+        operation: 'load-success',
+        agentType
+      });
       return agent;
       
     } catch (error) {
-      console.error(`❌ Failed to load ${agentType} agent:`, error);
+      logger.error(`Failed to load ${agentType} agent`, error instanceof Error ? error : undefined, {
+        component: 'lazy-agent-factory',
+        operation: 'load-error',
+        agentType
+      });
       throw new Error(`Failed to load agent: ${agentType}`);
     }
   }
@@ -135,16 +152,30 @@ export class LazyAgentFactory {
       const agent = await this.loadAgent(agentType);
       const loadTime = Date.now() - startTime;
       
-      console.log(`⚡ Agent loaded in ${loadTime}ms, processing...`);
+      logger.info(`Agent loaded in ${loadTime}ms, processing...`, {
+        component: 'lazy-agent-factory',
+        operation: 'process-start',
+        agentType,
+        loadTime
+      });
       
       const result = await agent.process(input, context);
       const totalTime = Date.now() - startTime;
       
-      console.log(`✅ ${agentType} processing completed in ${totalTime}ms`);
+      logger.info(`${agentType} processing completed in ${totalTime}ms`, {
+        component: 'lazy-agent-factory',
+        operation: 'process-complete',
+        agentType,
+        totalTime
+      });
       return result;
       
     } catch (error) {
-      console.error(`❌ Agent processing failed for ${agentType}:`, error);
+      logger.error(`Agent processing failed for ${agentType}`, error instanceof Error ? error : undefined, {
+        component: 'lazy-agent-factory',
+        operation: 'process-error',
+        agentType
+      });
       throw error;
     }
   }
@@ -163,16 +194,28 @@ export class LazyAgentFactory {
       'consultation'        // Common for general assessments
     ];
     
-    console.log('🔄 Preloading common agents for performance optimization...');
+    logger.info('Preloading common agents for performance optimization', {
+      component: 'lazy-agent-factory',
+      operation: 'preload-start'
+    });
     const startTime = Date.now();
     
     // Load agents sequentially to avoid overwhelming the system
     for (const agentType of commonAgents) {
       try {
         await this.loadAgent(agentType);
-        console.log(`✅ Preloaded ${agentType} agent`);
+        logger.info(`Preloaded ${agentType} agent`, {
+          component: 'lazy-agent-factory',
+          operation: 'preload-success',
+          agentType
+        });
       } catch (error) {
-        console.warn(`⚠️ Failed to preload ${agentType}:`, error);
+        logger.warn(`Failed to preload ${agentType}`, {
+          component: 'lazy-agent-factory',
+          operation: 'preload-error',
+          agentType,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
     }
     

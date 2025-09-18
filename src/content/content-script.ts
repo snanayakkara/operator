@@ -71,7 +71,7 @@ class ContentScriptHandler {
         baseUrl: 'https://my.xestro.com',
         fields: {
           investigationSummary: {
-            selector: 'textarea[data-field="investigation-summary"], #investigation-summary, .investigation-summary textarea',
+            selector: 'textarea[data-field="investigation-summary"], #investigation-summary, .investigation-summary textarea, #AddNoteArea',
             type: 'textarea',
             label: 'Investigation Summary',
             waitFor: '.XestroBoxTitle:contains("Investigation Summary")'
@@ -607,11 +607,27 @@ class ContentScriptHandler {
     let targetElement: HTMLElement | null = null;
 
     if (fieldType && this.emrSystem?.fields[fieldType]) {
-      targetElement = await this.findElement(this.emrSystem.fields[fieldType].selector);
+      // Special handling for investigation-summary to ensure AddNoteArea is available
+      if (fieldType === 'investigationSummary' || fieldType === 'investigation-summary') {
+        console.log('📝 Special handling for Investigation Summary insertion - waiting for AddNoteArea');
+
+        // First try to find AddNoteArea specifically (it appears after dialog opens)
+        targetElement = await this.findElement('#AddNoteArea', 3000); // Wait up to 3 seconds
+
+        if (!targetElement) {
+          console.log('⚠️ AddNoteArea not found, falling back to Investigation Summary textarea');
+          // Fallback to other investigation summary selectors
+          targetElement = await this.findElement(this.emrSystem.fields[fieldType].selector);
+        } else {
+          console.log('✅ Found AddNoteArea for Investigation Summary insertion');
+        }
+      } else {
+        targetElement = await this.findElement(this.emrSystem.fields[fieldType].selector);
+      }
     } else {
       // Find the currently focused element or active note area
       targetElement = document.activeElement as HTMLElement;
-      
+
       if (!this.isTextInputElement(targetElement)) {
         targetElement = await this.findActiveNoteArea();
       }
@@ -625,18 +641,46 @@ class ContentScriptHandler {
   }
 
   private async openFieldByType(fieldType: string) {
-    if (!this.emrSystem?.fields[fieldType]) {
-      throw new Error(`Unknown field type: ${fieldType}`);
+    console.log(`📝 Opening EMR field by type: ${fieldType}`);
+
+    // Use the same field opening logic as the specific field actions
+    // This ensures Insert button behavior matches the "Type" option behavior
+    switch (fieldType) {
+      case 'investigationSummary':
+      case 'investigation-summary':
+        console.log('📝 Using openInvestigationSummary() for field opening');
+        await this.openInvestigationSummary();
+        break;
+
+      case 'background':
+        console.log('📝 Using openBackground() for field opening');
+        await this.openBackground();
+        break;
+
+      case 'medications':
+        console.log('📝 Using openMedications() for field opening');
+        await this.openMedications();
+        break;
+
+      default:
+        // Fallback to the old behavior for unmapped field types
+        console.log(`📝 Using fallback field opening for: ${fieldType}`);
+        if (!this.emrSystem?.fields[fieldType]) {
+          throw new Error(`Unknown field type: ${fieldType}`);
+        }
+
+        const field = this.emrSystem.fields[fieldType];
+        const element = await this.findElement(field.selector, 5000);
+
+        if (element) {
+          this.focusElement(element);
+        } else {
+          throw new Error(`Field ${fieldType} not found`);
+        }
+        break;
     }
-    
-    const field = this.emrSystem.fields[fieldType];
-    const element = await this.findElement(field.selector, 5000);
-    
-    if (element) {
-      this.focusElement(element);
-    } else {
-      throw new Error(`Field ${fieldType} not found`);
-    }
+
+    console.log(`✅ Field ${fieldType} opened successfully`);
   }
 
   private async insertTextIntoElement(element: HTMLElement, text: string) {
@@ -967,7 +1011,7 @@ class ContentScriptHandler {
     console.log('⏳ No textarea found immediately, waiting for dynamic content...');
     
     return new Promise<HTMLTextAreaElement | null>((resolve) => {
-      let timeoutId: number;
+      let timeoutId: ReturnType<typeof setTimeout>;
       let observer: MutationObserver;
       
       const cleanup = () => {

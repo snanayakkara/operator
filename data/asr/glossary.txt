@@ -1,0 +1,2 @@
+# Medical terms for Whisper prompt seeding
+# One term per line, automatically maintained by optimization system

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Edit3, Check, X, Eye, EyeOff, Copy, Send, RefreshCw, ChevronDown } from 'lucide-react';
+import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import type { AgentType } from '@/types/medical.types';
 
 interface TranscriptionDisplayProps {
@@ -51,8 +52,29 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
     setIsEditing(true);
   };
 
-  const handleSaveEdit = () => {
-    onEdit(editValue.trim());
+  const handleSaveEdit = async () => {
+    const newTranscription = editValue.trim();
+    
+    // Log ASR correction if transcription was changed and we have the agent context
+    if (newTranscription !== transcription && currentAgent) {
+      try {
+        const asrLog = ASRCorrectionsLog.getInstance();
+        await asrLog.addCorrection({
+          rawText: transcription,
+          correctedText: newTranscription,
+          agentType: currentAgent
+        });
+        console.log('ASR correction logged:', {
+          agent: currentAgent,
+          rawLength: transcription.length,
+          correctedLength: newTranscription.length
+        });
+      } catch (error) {
+        console.warn('Failed to log ASR correction:', error);
+      }
+    }
+    
+    onEdit(newTranscription);
     setIsEditing(false);
   };
 
@@ -153,7 +175,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
           {transcription && onCopy && (
             <button
               onClick={handleCopy}
-              className="glass-button p-2 rounded-lg hover:bg-white/20 transition-colors"
+              className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg p-2"
               title="Copy transcription to clipboard"
             >
               {copiedRecently ? (
@@ -167,7 +189,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
           {transcription && onInsertToEMR && (
             <button
               onClick={handleInsertToEMR}
-              className="glass-button p-2 rounded-lg hover:bg-white/20 transition-colors"
+              className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg p-2"
               title="Insert transcription to EMR"
             >
               {insertedRecently ? (
@@ -184,7 +206,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
               <button
                 onClick={() => setShowReprocessDropdown(!showReprocessDropdown)}
                 disabled={isProcessing}
-                className={`glass-button p-2 rounded-lg hover:bg-white/20 transition-colors flex items-center space-x-1 ${
+                className={`bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg p-2 flex items-center space-x-1 ${
                   isProcessing ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
                 title="Reprocess with different agent"
@@ -221,7 +243,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
           {isEditable && !isEditing && (
             <button
               onClick={handleStartEdit}
-              className="glass-button p-2 rounded-lg hover:bg-white/20 transition-colors"
+              className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg p-2"
               title="Edit transcription"
             >
               <Edit3 className="w-4 h-4 text-blue-600" />
@@ -229,7 +251,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
           )}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="glass-button p-2 rounded-lg hover:bg-white/20 transition-colors"
+            className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg p-2"
             title={isExpanded ? 'Collapse transcription' : 'Expand transcription'}
           >
             {isExpanded ? (
@@ -251,7 +273,7 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
               adjustTextareaHeight();
             }}
             onKeyDown={handleKeyDown}
-            className="w-full glass-input p-3 rounded-lg resize-none overflow-hidden text-sm leading-relaxed"
+            className="w-full bg-white border border-gray-300 text-gray-900 placeholder-gray-500 rounded-lg focus:border-gray-400 focus:ring-1 focus:ring-gray-400 transition-all duration-200 ease-out p-3 resize-none overflow-hidden text-sm leading-relaxed"
             placeholder="Edit your transcription..."
             rows={3}
           />

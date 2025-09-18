@@ -24,19 +24,20 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
   onRemove 
 }) => {
   const getToastStyles = () => {
-    const baseStyles = "glass border rounded-lg p-3 shadow-lg backdrop-blur-sm";
+    // Standardized monochrome design with semantic color accents
+    const baseStyles = "bg-white border rounded-lg p-3 shadow-lg backdrop-blur-sm";
     
     switch (toast.type) {
       case 'success':
-        return `${baseStyles} bg-emerald-50/90 border-emerald-200`;
+        return `${baseStyles} border-emerald-200 bg-emerald-50/95`;
       case 'error':
-        return `${baseStyles} bg-red-50/90 border-red-200`;
+        return `${baseStyles} border-red-200 bg-red-50/95`;
       case 'warning':
-        return `${baseStyles} bg-amber-50/90 border-amber-200`;
+        return `${baseStyles} border-amber-200 bg-amber-50/95`;
       case 'info':
-        return `${baseStyles} bg-blue-50/90 border-blue-200`;
+        return `${baseStyles} border-blue-200 bg-blue-50/95`;
       default:
-        return `${baseStyles} bg-gray-50/90 border-gray-200`;
+        return `${baseStyles} border-gray-200 bg-gray-50/95`;
     }
   };
 
@@ -46,11 +47,11 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
         <ToastIcon type={toast.type} />
         
         <div className="flex-1 min-w-0">
-          <p className="text-gray-900 font-medium text-sm">
+          <p className="text-gray-900 font-semibold text-sm leading-tight">
             {toast.title}
           </p>
           {toast.message && (
-            <p className="text-gray-600 text-xs mt-1 leading-relaxed">
+            <p className="text-gray-700 text-xs mt-1.5 leading-relaxed">
               {toast.message}
             </p>
           )}
@@ -58,10 +59,11 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
         
         <button
           onClick={() => onRemove(toast.id)}
-          className="glass-button p-1 rounded hover:bg-white/20 transition-colors"
-          title="Dismiss"
+          className="flex-shrink-0 bg-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 ease-out rounded-md p-1"
+          title="Dismiss notification"
+          aria-label="Dismiss notification"
         >
-          <X className="w-3 h-3 text-gray-500" />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
@@ -87,13 +89,26 @@ export const ToastContainer: React.FC = () => {
   }
 
   return (
-    <div className="fixed top-4 right-4 z-[99999] space-y-2 w-80 max-w-full" aria-live="polite" role="status">
+    <div 
+      className="fixed top-4 right-4 z-[99999] space-y-2 w-80 max-w-[calc(100vw-2rem)] pointer-events-none" 
+      aria-live="polite" 
+      role="status"
+      style={{
+        // Ensure toasts don't interfere with Chrome extension UI
+        maxWidth: 'min(20rem, calc(100vw - 2rem))',
+        // Position relative to viewport for consistency across different extension contexts
+        position: 'fixed',
+        top: '1rem',
+        right: '1rem'
+      }}
+    >
       {toasts.map(toast => (
-        <ToastItem
-          key={toast.id}
-          toast={toast}
-          onRemove={handleRemove}
-        />
+        <div key={toast.id} className="pointer-events-auto">
+          <ToastItem
+            toast={toast}
+            onRemove={handleRemove}
+          />
+        </div>
       ))}
     </div>
   );

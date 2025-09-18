@@ -16,7 +16,10 @@ import argparse
 import json
 import os
 import yaml
-from datetime import datetime
+import hashlib
+import tempfile
+import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 import dspy
@@ -24,6 +27,7 @@ from dspy.teleprompt import BootstrapFewShot, MIPROv2, BootstrapFewShotWithOptun
 
 from .dspy_config import get_config, configure_lm, is_dspy_enabled
 from .predictors import get_predictor, PREDICTOR_CLASSES
+from .utils import atomic_write_json, atomic_write_text
 from .evaluate import run_evaluation, RUBRIC_SCORERS, print_evaluation_summary
 
 
@@ -51,17 +55,16 @@ class PromptVersionManager:
         
         # Save version file
         version_file = agent_dir / f"v{iteration:03d}_{timestamp[:10]}.json"
-        with open(version_file, 'w') as f:
-            json.dump(version_data, f, indent=2)
+        atomic_write_json(version_file, version_data)
         
         # Update current prompt file  
         current_file = agent_dir / "current.md"
-        with open(current_file, 'w') as f:
-            f.write(f"# {agent_type.title()} Agent Prompt\n")
-            f.write(f"Version: {iteration}\n")
-            f.write(f"Generated: {timestamp}\n")
-            f.write(f"Score: {metrics.get('avg_score', 0):.1f}%\n\n")
-            f.write(prompt)
+        current_content = f"# {agent_type.title()} Agent Prompt\n"
+        current_content += f"Version: {iteration}\n"
+        current_content += f"Generated: {timestamp}\n"
+        current_content += f"Score: {metrics.get('avg_score', 0):.1f}%\n\n"
+        current_content += prompt
+        atomic_write_text(current_file, current_content)
         
         print(f"💾 Saved prompt version {iteration} for {agent_type}")
         return version_file
@@ -193,8 +196,7 @@ Please provide feedback on the following aspects:
 *Instructions: Fill out scores (0-10), check applicable boxes, and provide specific comments. Save this file when complete.*
 """
         
-        with open(feedback_file, 'w') as f:
-            f.write(template)
+        atomic_write_text(feedback_file, template)
         
         return feedback_file
     
@@ -721,6 +723,127 @@ class GEPAOptimizer:
             'total_examples': len(results),
             'score_range': [min(scores), max(scores)] if scores else [0, 0]
         }
+
+    def _calculate_enhanced_metrics(self, metrics_before: Dict[str, Any], metrics_after: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate enhanced metrics with deltas and significance analysis.
+        
+        Args:
+            metrics_before: Baseline metrics
+            metrics_after: Optimized metrics
+            
+        Returns:
+            Dict containing enhanced metrics with deltas
+        """
+        def calculate_delta(before: float, after: float) -> Dict[str, Any]:
+            delta = after - before
+            percent_change = (delta / before * 100) if before > 0 else 0
+            is_improvement = delta > 0
+            
+            # Determine significance
+            abs_percent = abs(percent_change)
+            if abs_percent >= 10:
+                significance = 'major'
+            elif abs_percent >= 5:
+                significance = 'moderate'
+            elif abs_percent >= 1:
+                significance = 'minor'
+            else:
+                significance = 'negligible'
+                
+            return {
+                'before': before,
+                'after': after,
+                'delta': delta,
+                'percent_change': percent_change,
+                'is_improvement': is_improvement,
+                'significance': significance
+            }
+        
+        # Calculate deltas for each metric
+        accuracy_delta = calculate_delta(
+            metrics_before.get('avg_accuracy', 0),
+            metrics_after.get('avg_accuracy', 0)
+        )
+        
+        completeness_delta = calculate_delta(
+            metrics_before.get('avg_completeness', 0),
+            metrics_after.get('avg_completeness', 0)
+        )
+        
+        clinical_delta = calculate_delta(
+            metrics_before.get('avg_clinical', 0),
+            metrics_after.get('avg_clinical', 0)
+        )
+        
+        overall_delta = calculate_delta(
+            metrics_before.get('avg_score', 0),
+            metrics_after.get('avg_score', 0)
+        )
+        
+        # Calculate summary statistics
+        deltas = [accuracy_delta, completeness_delta, clinical_delta, overall_delta]
+        improved_metrics = sum(1 for d in deltas if d['is_improvement'])
+        unchanged_metrics = sum(1 for d in deltas if d['significance'] == 'negligible')
+        degraded_metrics = sum(1 for d in deltas if not d['is_improvement'] and d['significance'] != 'negligible')
+        
+        # Determine confidence level
+        if improved_metrics >= 3 and degraded_metrics == 0:
+            confidence_level = 'high'
+        elif improved_metrics >= 2 and overall_delta['delta'] > 0:
+            confidence_level = 'medium'
+        else:
+            confidence_level = 'low'
+        
+        return {
+            'accuracy': accuracy_delta,
+            'completeness': completeness_delta,
+            'clinical_appropriateness': clinical_delta,
+            'overall_score': overall_delta,
+            'summary': {
+                'total_improvement': overall_delta['delta'],
+                'improved_metrics': improved_metrics,
+                'unchanged_metrics': unchanged_metrics,
+                'degraded_metrics': degraded_metrics,
+                'confidence_level': confidence_level
+            }
+        }
+
+    def _format_metrics_summary(self, enhanced_metrics: Dict[str, Any]) -> str:
+        """
+        Format enhanced metrics for logging output.
+        
+        Args:
+            enhanced_metrics: Enhanced metrics from _calculate_enhanced_metrics
+            
+        Returns:
+            Formatted summary string
+        """
+        summary = enhanced_metrics['summary']
+        overall = enhanced_metrics['overall_score']
+        
+        # Create improvement indicator
+        if overall['is_improvement']:
+            indicator = '🟢 ↑'
+        elif overall['delta'] < 0:
+            indicator = '🔴 ↓'
+        else:
+            indicator = '⚪ →'
+        
+        # Format individual metrics
+        metrics_details = []
+        for metric_name in ['accuracy', 'completeness', 'clinical_appropriateness']:
+            metric = enhanced_metrics[metric_name]
+            if metric['significance'] != 'negligible':
+                sign = '+' if metric['delta'] >= 0 else ''
+                metrics_details.append(
+                    f"{metric_name.replace('_', ' ').title()}: {sign}{metric['delta']:.1f} ({sign}{metric['percent_change']:.1f}%)"
+                )
+        
+        details = ', '.join(metrics_details) if metrics_details else 'No significant changes in individual metrics'
+        
+        return (f"{indicator} Overall: {overall['delta']:+.1f} ({overall['percent_change']:+.1f}%) "
+                f"[{summary['confidence_level'].title()} confidence] | {details}")
     
     def _get_current_prompt(self) -> str:
         """Get current system prompt for the agent."""
@@ -936,6 +1059,750 @@ class GEPAOptimizer:
                 continue
         
         return results
+    
+    def _generate_candidate_id(self, original_prompt: str, optimized_prompt: str, agent_type: str) -> str:
+        """Generate stable candidate ID based on prompt content."""
+        content = f"{agent_type}:{original_prompt}:{optimized_prompt}"
+        return hashlib.md5(content.encode()).hexdigest()[:16]
+    
+    def _save_candidate(self, candidate_data: Dict[str, Any]) -> str:
+        """Save candidate to persistent storage and return candidate ID."""
+        try:
+            # Generate stable candidate ID
+            candidate_id = self._generate_candidate_id(
+                candidate_data['original_prompt'],
+                candidate_data['optimized_prompt'],
+                candidate_data['agent_type']
+            )
+            
+            # Create candidates directory
+            candidates_dir = Path('data/gepa/candidates')
+            candidates_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save candidate with timestamp
+            candidate_data['candidate_id'] = candidate_id
+            candidate_data['created_at'] = datetime.now().isoformat()
+            candidate_data['expires_at'] = (datetime.now().timestamp() + 86400 * 7)  # 7 days from now
+            
+            candidate_file = candidates_dir / f"{candidate_id}.json"
+            atomic_write_json(candidate_file, candidate_data)
+            
+            print(f"   💾 Candidate saved: {candidate_id}")
+            return candidate_id
+            
+        except Exception as e:
+            print(f"   ⚠️  Failed to save candidate: {str(e)}")
+            return candidate_data.get('candidate_id', f"temp-{int(datetime.now().timestamp())}")
+    
+    def _load_candidate(self, candidate_id: str) -> Optional[Dict[str, Any]]:
+        """Load candidate from persistent storage."""
+        try:
+            candidate_file = Path(f'data/gepa/candidates/{candidate_id}.json')
+            
+            if not candidate_file.exists():
+                print(f"   ❌ Candidate not found: {candidate_id}")
+                return None
+            
+            with open(candidate_file, 'r') as f:
+                candidate_data = json.load(f)
+            
+            # Check if candidate has expired
+            expires_at = candidate_data.get('expires_at', 0)
+            if datetime.now().timestamp() > expires_at:
+                print(f"   ⏰ Candidate expired: {candidate_id}")
+                candidate_file.unlink(missing_ok=True)  # Clean up expired candidate
+                return None
+            
+            print(f"   ✅ Candidate loaded: {candidate_id}")
+            return candidate_data
+            
+        except Exception as e:
+            print(f"   ⚠️  Failed to load candidate: {str(e)}")
+            return None
+    
+    def _cleanup_expired_candidates(self):
+        """Clean up expired candidate files."""
+        try:
+            candidates_dir = Path('data/gepa/candidates')
+            if not candidates_dir.exists():
+                return
+            
+            current_time = datetime.now().timestamp()
+            cleaned = 0
+            
+            for candidate_file in candidates_dir.glob('*.json'):
+                try:
+                    with open(candidate_file, 'r') as f:
+                        candidate_data = json.load(f)
+                    
+                    expires_at = candidate_data.get('expires_at', 0)
+                    if current_time > expires_at:
+                        candidate_file.unlink()
+                        cleaned += 1
+                        
+                except Exception:
+                    # If we can't read the file, consider it corrupted and remove it
+                    candidate_file.unlink(missing_ok=True)
+                    cleaned += 1
+            
+            if cleaned > 0:
+                print(f"   🗑️  Cleaned up {cleaned} expired candidates")
+                
+        except Exception as e:
+            print(f"   ⚠️  Candidate cleanup failed: {str(e)}")
+    
+    def run_optimization_preview(self, iterations: int = None, with_human: bool = False) -> Dict[str, Any]:
+        """
+        Run GEPA optimization in preview mode without saving results.
+        Returns optimization candidates for review before applying.
+        
+        Args:
+            iterations: Number of optimization iterations (overrides config)
+            with_human: Include human feedback in optimization
+            
+        Returns:
+            Dict containing optimization preview data with before/after prompts and metrics
+        """
+        try:
+            print(f"🔍 Running GEPA optimization preview for {self.agent_type}")
+            
+            # Use provided iterations or config default
+            if iterations is not None:
+                self.max_iterations = iterations
+            
+            # Check if agent is valid
+            if self.agent_type not in PREDICTOR_CLASSES:
+                return {
+                    'error': f"Unknown agent type: {self.agent_type}",
+                    'agent_type': self.agent_type
+                }
+            
+            # Configure LM
+            configure_lm(self.agent_type)
+            
+            # Get baseline performance and current prompt
+            print("   📊 Establishing baseline performance...")
+            baseline_results = self._evaluate_current_prompt()
+            if not baseline_results:
+                return {
+                    'error': 'Failed to establish baseline performance',
+                    'agent_type': self.agent_type
+                }
+            
+            baseline_metrics = self._calculate_metrics(baseline_results)
+            current_prompt = self._get_current_prompt()
+            
+            print(f"   Baseline score: {baseline_metrics['avg_score']:.1f}%")
+            
+            # Collect human feedback if requested
+            human_feedback = []
+            if with_human:
+                print("   👥 Collecting human feedback...")
+                human_feedback = self._collect_human_feedback(baseline_results)
+            
+            # Run a single optimization iteration to generate candidate
+            print("   🔧 Generating optimization candidate...")
+            candidate_prompt = self._generate_improved_prompt(
+                baseline_results, human_feedback, 1
+            )
+            
+            if not candidate_prompt or candidate_prompt == current_prompt:
+                return {
+                    'error': 'No optimization candidate generated',
+                    'agent_type': self.agent_type,
+                    'original_prompt': current_prompt,
+                    'baseline_metrics': baseline_metrics
+                }
+            
+            # Test candidate prompt
+            print("   🧪 Testing candidate prompt...")
+            candidate_results = self._test_prompt(candidate_prompt)
+            if not candidate_results:
+                return {
+                    'error': 'Failed to test candidate prompt',
+                    'agent_type': self.agent_type,
+                    'original_prompt': current_prompt,
+                    'candidate_prompt': candidate_prompt,
+                    'baseline_metrics': baseline_metrics
+                }
+            
+            candidate_metrics = self._calculate_metrics(candidate_results)
+            improvement = candidate_metrics['avg_score'] - baseline_metrics['avg_score']
+            
+            print(f"   Candidate score: {candidate_metrics['avg_score']:.1f}%")
+            print(f"   Potential improvement: {improvement:.1f}%")
+            
+            # Create candidate data
+            candidate_data = {
+                'agent_type': self.agent_type,
+                'original_prompt': current_prompt,
+                'optimized_prompt': candidate_prompt,
+                'baseline_metrics': baseline_metrics,
+                'candidate_metrics': candidate_metrics,
+                'improvement': improvement,
+                'human_feedback_used': len(human_feedback) > 0,
+                'preview_mode': True,
+                'final_accuracy': candidate_metrics.get('avg_accuracy', 0),
+                'final_completeness': candidate_metrics.get('avg_completeness', 0),
+                'final_clinical': candidate_metrics.get('avg_clinical', 0),
+                'final_score': candidate_metrics['avg_score'],
+                'baseline_results': baseline_results,  # Store for potential apply
+                'candidate_results': candidate_results  # Store for potential apply
+            }
+            
+            # Save candidate for potential application
+            candidate_id = self._save_candidate(candidate_data)
+            candidate_data['candidate_id'] = candidate_id
+            
+            # Clean up expired candidates
+            self._cleanup_expired_candidates()
+            
+            # Return preview data
+            return candidate_data
+            
+        except Exception as e:
+            print(f"❌ GEPA preview failed for {self.agent_type}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'error': f'GEPA preview failed: {str(e)}',
+                'agent_type': self.agent_type
+            }
+    
+    def apply_candidate(self, candidate_id: str) -> Dict[str, Any]:
+        """
+        Apply a specific optimization candidate identified by candidate_id.
+        
+        Args:
+            candidate_id: Unique identifier for the optimization candidate
+            
+        Returns:
+            Dict containing application results with metrics and saved paths
+        """
+        try:
+            print(f"📝 Applying GEPA candidate {candidate_id} for {self.agent_type}")
+            
+            # Load the persisted candidate from disk
+            print("   💾 Loading candidate from disk...")
+            candidate_data = self._load_candidate(candidate_id)
+            if not candidate_data:
+                return {
+                    'error': f'Candidate {candidate_id} not found or expired',
+                    'candidate_id': candidate_id
+                }
+            
+            # Extract candidate details
+            candidate_prompt = candidate_data['optimized_prompt']
+            metrics_before = candidate_data['metrics_before']
+            metrics_after = candidate_data['metrics_after']
+            improvement = candidate_data['improvement']
+            
+            print(f"   📊 Loaded candidate with {improvement:.3f} improvement")
+            
+            if not candidate_prompt:
+                return {
+                    'error': 'Invalid candidate prompt in stored data',
+                    'candidate_id': candidate_id
+                }
+            
+            # Save the optimized prompt version
+            print("   💾 Saving optimized prompt...")
+            saved_path = self.prompt_manager.save_prompt_version(
+                self.agent_type, candidate_prompt, metrics_after, 1,
+                {
+                    'improvement': improvement,
+                    'previous_score': metrics_before['avg_score'],
+                    'applied_via_api': True,
+                    'candidate_id': candidate_id
+                }
+            )
+            
+            # Calculate enhanced metrics for better logging
+            enhanced_metrics = self._calculate_enhanced_metrics(metrics_before, metrics_after)
+            metrics_summary = self._format_metrics_summary(enhanced_metrics)
+            
+            print(f"   ✅ Applied candidate: {metrics_summary}")
+            
+            return {
+                'candidate_id': candidate_id,
+                'metrics_before': {
+                    'accuracy': metrics_before.get('avg_accuracy', 0),
+                    'completeness': metrics_before.get('avg_completeness', 0),
+                    'clinical_appropriateness': metrics_before.get('avg_clinical', 0),
+                    'overall_score': metrics_before.get('avg_score', 0)
+                },
+                'metrics_after': {
+                    'accuracy': metrics_after.get('avg_accuracy', 0),
+                    'completeness': metrics_after.get('avg_completeness', 0),
+                    'clinical_appropriateness': metrics_after.get('avg_clinical', 0),
+                    'overall_score': metrics_after.get('avg_score', 0)
+                },
+                'improvement': improvement,
+                'enhanced_metrics': enhanced_metrics,
+                'saved_path': saved_path
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to apply candidate {candidate_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'error': f'Failed to apply candidate: {str(e)}',
+                'candidate_id': candidate_id
+            }
+
+    def rollback_to_version(self, version: int) -> Dict[str, Any]:
+        """
+        Rollback to a specific prompt version.
+        
+        Args:
+            version: Version number to rollback to
+            
+        Returns:
+            Dict containing rollback results
+        """
+        try:
+            print(f"🔄 Rolling back {self.agent_type} to version {version}")
+            
+            # Load the target version
+            target_version = self.prompt_manager.load_prompt_version(self.agent_type, version)
+            if not target_version:
+                return {
+                    'error': f'Version {version} not found for {self.agent_type}',
+                    'agent_type': self.agent_type
+                }
+            
+            target_prompt = target_version['prompt']
+            target_metrics = target_version.get('metrics', {})
+            
+            # Get current metrics for comparison
+            current_results = self._evaluate_current_prompt()
+            current_metrics = self._calculate_metrics(current_results) if current_results else {}
+            
+            # Save the rollback as a new version (to maintain history)
+            rollback_version = len(self.prompt_manager.get_available_versions(self.agent_type)) + 1
+            rollback_path = self.prompt_manager.save_prompt_version(
+                self.agent_type, target_prompt, target_metrics, rollback_version,
+                {
+                    'rollback_from_version': rollback_version - 1,
+                    'rollback_to_version': version,
+                    'rollback_timestamp': datetime.now().isoformat(),
+                    'rollback_reason': f'Manual rollback to version {version}'
+                }
+            )
+            
+            print(f"✅ Rollback completed to version {version}")
+            
+            return {
+                'agent_type': self.agent_type,
+                'rollback_from_version': rollback_version - 1,
+                'rollback_to_version': version,
+                'target_prompt': target_prompt,
+                'target_metrics': {
+                    'accuracy': target_metrics.get('avg_accuracy', 0),
+                    'completeness': target_metrics.get('avg_completeness', 0),
+                    'clinical_appropriateness': target_metrics.get('avg_clinical', 0),
+                    'overall_score': target_metrics.get('avg_score', 0)
+                },
+                'current_metrics': {
+                    'accuracy': current_metrics.get('avg_accuracy', 0),
+                    'completeness': current_metrics.get('avg_completeness', 0),
+                    'clinical_appropriateness': current_metrics.get('avg_clinical', 0),
+                    'overall_score': current_metrics.get('avg_score', 0)
+                },
+                'rollback_version': rollback_version,
+                'rollback_path': rollback_path
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to rollback {self.agent_type} to version {version}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'error': f'Rollback failed: {str(e)}',
+                'agent_type': self.agent_type
+            }
+
+    def list_version_history(self) -> List[Dict[str, Any]]:
+        """
+        Get version history for rollback selection.
+        
+        Returns:
+            List of version information
+        """
+        try:
+            versions = self.prompt_manager.get_available_versions(self.agent_type)
+            history = []
+            
+            for version_info in versions:
+                version_data = self.prompt_manager.load_prompt_version(
+                    self.agent_type, version_info['iteration']
+                )
+                
+                if version_data:
+                    history.append({
+                        'version': version_info['iteration'],
+                        'timestamp': version_data['timestamp'],
+                        'score': version_data.get('metrics', {}).get('avg_score', 0),
+                        'improvement': version_data.get('metadata', {}).get('improvement', 0),
+                        'is_rollback': 'rollback_to_version' in version_data.get('metadata', {}),
+                        'rollback_info': {
+                            'from_version': version_data.get('metadata', {}).get('rollback_from_version'),
+                            'to_version': version_data.get('metadata', {}).get('rollback_to_version'),
+                            'reason': version_data.get('metadata', {}).get('rollback_reason')
+                        } if 'rollback_to_version' in version_data.get('metadata', {}) else None
+                    })
+            
+            # Sort by version descending (newest first)
+            history.sort(key=lambda x: x['version'], reverse=True)
+            
+            return history
+            
+        except Exception as e:
+            print(f"❌ Failed to get version history for {self.agent_type}: {str(e)}")
+            return []
+
+    def create_backup_snapshot(self, reason: str = "Manual backup") -> Dict[str, Any]:
+        """
+        Create a backup snapshot of the current state.
+        
+        Args:
+            reason: Reason for creating the backup
+            
+        Returns:
+            Dict containing backup information
+        """
+        try:
+            print(f"📸 Creating backup snapshot for {self.agent_type}")
+            
+            # Get current state
+            current_prompt = self._get_current_prompt()
+            current_results = self._evaluate_current_prompt()
+            current_metrics = self._calculate_metrics(current_results) if current_results else {}
+            
+            # Save as a backup version
+            backup_version = len(self.prompt_manager.get_available_versions(self.agent_type)) + 1
+            backup_path = self.prompt_manager.save_prompt_version(
+                self.agent_type, current_prompt, current_metrics, backup_version,
+                {
+                    'backup_snapshot': True,
+                    'backup_reason': reason,
+                    'backup_timestamp': datetime.now().isoformat(),
+                    'is_manual_backup': True
+                }
+            )
+            
+            print(f"✅ Backup snapshot created as version {backup_version}")
+            
+            return {
+                'agent_type': self.agent_type,
+                'backup_version': backup_version,
+                'backup_path': backup_path,
+                'backup_reason': reason,
+                'metrics': {
+                    'accuracy': current_metrics.get('avg_accuracy', 0),
+                    'completeness': current_metrics.get('avg_completeness', 0),
+                    'clinical_appropriateness': current_metrics.get('avg_clinical', 0),
+                    'overall_score': current_metrics.get('avg_score', 0)
+                }
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to create backup for {self.agent_type}: {str(e)}")
+            return {
+                'error': f'Backup failed: {str(e)}',
+                'agent_type': self.agent_type
+            }
+
+    def cleanup_expired_data(self, max_age_days: int = 30, keep_recent_backups: int = 5) -> Dict[str, Any]:
+        """
+        Privacy housekeeping: Clean up expired candidates, jobs, and old backups.
+        
+        Args:
+            max_age_days: Maximum age in days for temporary files
+            keep_recent_backups: Number of recent backups to keep per agent
+        
+        Returns:
+            Dict with cleanup statistics
+        """
+        print(f"🧹 Starting privacy housekeeping and storage cleanup")
+        
+        stats = {
+            'candidates_cleaned': 0,
+            'candidates_kept': 0,
+            'jobs_cleaned': 0,
+            'jobs_kept': 0,
+            'backups_cleaned': 0,
+            'backups_kept': 0,
+            'temp_files_cleaned': 0,
+            'asr_corrections_cleaned': 0,
+            'asr_corrections_kept': 0,
+            'total_space_freed': 0,
+            'errors': []
+        }
+        
+        cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        
+        try:
+            # Clean up expired GEPA candidates
+            candidates_dir = Path('data/gepa/candidates')
+            if candidates_dir.exists():
+                stats.update(self._cleanup_candidates(candidates_dir, cutoff_date))
+            
+            # Clean up expired jobs
+            jobs_dir = Path('data/jobs')  
+            if jobs_dir.exists():
+                stats.update(self._cleanup_jobs(jobs_dir, cutoff_date))
+            
+            # Clean up old backup versions (keep recent ones)
+            prompts_dir = Path('llm/prompts')
+            if prompts_dir.exists():
+                backup_stats = self._cleanup_backups(prompts_dir, keep_recent_backups)
+                stats['backups_cleaned'] += backup_stats['cleaned']
+                stats['backups_kept'] += backup_stats['kept']
+            
+            # Clean up temporary files
+            temp_stats = self._cleanup_temp_files()
+            stats['temp_files_cleaned'] = temp_stats['cleaned']
+            
+            # Clean up ASR corrections data
+            asr_stats = self._cleanup_asr_data(cutoff_date)
+            stats['asr_corrections_cleaned'] = asr_stats['cleaned']
+            stats['asr_corrections_kept'] = asr_stats['kept']
+            
+            print(f"✅ Privacy cleanup completed:")
+            print(f"   • Candidates: {stats['candidates_cleaned']} cleaned, {stats['candidates_kept']} kept")
+            print(f"   • Jobs: {stats['jobs_cleaned']} cleaned, {stats['jobs_kept']} kept")
+            print(f"   • Backups: {stats['backups_cleaned']} cleaned, {stats['backups_kept']} kept")
+            print(f"   • ASR corrections: {stats['asr_corrections_cleaned']} cleaned, {stats['asr_corrections_kept']} kept")
+            print(f"   • Temp files: {stats['temp_files_cleaned']} cleaned")
+            
+            if stats['errors']:
+                print(f"⚠️  {len(stats['errors'])} errors occurred during cleanup")
+            
+        except Exception as e:
+            error_msg = f"Privacy cleanup failed: {str(e)}"
+            stats['errors'].append(error_msg)
+            print(f"❌ {error_msg}")
+        
+        return stats
+
+    def _cleanup_candidates(self, candidates_dir: Path, cutoff_date: datetime) -> Dict[str, int]:
+        """Clean up expired GEPA candidates."""
+        stats = {'candidates_cleaned': 0, 'candidates_kept': 0}
+        
+        try:
+            for candidate_file in candidates_dir.glob('*.json'):
+                try:
+                    # Check file modification time
+                    file_mtime = datetime.fromtimestamp(candidate_file.stat().st_mtime)
+                    
+                    if file_mtime < cutoff_date:
+                        # Check if candidate is referenced in any recent optimization
+                        candidate_data = json.loads(candidate_file.read_text())
+                        
+                        # Keep candidates that are part of recent optimizations
+                        if self._is_candidate_referenced(candidate_data, cutoff_date):
+                            stats['candidates_kept'] += 1
+                        else:
+                            candidate_file.unlink()  # Delete expired candidate
+                            stats['candidates_cleaned'] += 1
+                            print(f"🗑️  Cleaned expired candidate: {candidate_file.name}")
+                    else:
+                        stats['candidates_kept'] += 1
+                        
+                except Exception as e:
+                    print(f"⚠️  Failed to process candidate {candidate_file.name}: {e}")
+                    
+        except Exception as e:
+            print(f"❌ Failed to cleanup candidates directory: {e}")
+            
+        return stats
+
+    def _cleanup_jobs(self, jobs_dir: Path, cutoff_date: datetime) -> Dict[str, int]:
+        """Clean up expired job files."""
+        stats = {'jobs_cleaned': 0, 'jobs_kept': 0}
+        
+        try:
+            for job_file in jobs_dir.glob('*.json'):
+                try:
+                    job_data = json.loads(job_file.read_text())
+                    
+                    # Parse job completion date
+                    if 'completed_at' in job_data and job_data['completed_at']:
+                        completed_date = datetime.fromisoformat(job_data['completed_at'].replace('Z', '+00:00'))
+                        completed_date = completed_date.replace(tzinfo=None)  # Remove timezone for comparison
+                        
+                        if completed_date < cutoff_date:
+                            job_file.unlink()
+                            stats['jobs_cleaned'] += 1
+                            print(f"🗑️  Cleaned expired job: {job_file.name}")
+                        else:
+                            stats['jobs_kept'] += 1
+                    else:
+                        # Keep running or incomplete jobs
+                        stats['jobs_kept'] += 1
+                        
+                except Exception as e:
+                    print(f"⚠️  Failed to process job {job_file.name}: {e}")
+                    stats['jobs_kept'] += 1  # Keep on error
+                    
+        except Exception as e:
+            print(f"❌ Failed to cleanup jobs directory: {e}")
+            
+        return stats
+
+    def _cleanup_backups(self, prompts_dir: Path, keep_recent: int) -> Dict[str, int]:
+        """Clean up old backup versions, keeping recent ones."""
+        stats = {'cleaned': 0, 'kept': 0}
+        
+        try:
+            # Group backup files by agent type
+            agent_backups = {}
+            
+            for agent_dir in prompts_dir.iterdir():
+                if agent_dir.is_dir():
+                    backup_files = []
+                    
+                    # Find backup files (v*.json with backup metadata)
+                    for version_file in agent_dir.glob('v*.json'):
+                        try:
+                            version_data = json.loads(version_file.read_text())
+                            if version_data.get('metadata', {}).get('backup_snapshot', False):
+                                backup_files.append((version_file, version_data))
+                        except Exception:
+                            continue
+                    
+                    # Sort by creation time (newest first)
+                    backup_files.sort(key=lambda x: x[1].get('metadata', {}).get('backup_timestamp', ''), reverse=True)
+                    
+                    # Keep recent backups, remove old ones
+                    for i, (backup_file, backup_data) in enumerate(backup_files):
+                        if i >= keep_recent:
+                            try:
+                                backup_file.unlink()
+                                stats['cleaned'] += 1
+                                print(f"🗑️  Cleaned old backup: {backup_file.name}")
+                            except Exception as e:
+                                print(f"⚠️  Failed to remove backup {backup_file.name}: {e}")
+                        else:
+                            stats['kept'] += 1
+                            
+        except Exception as e:
+            print(f"❌ Failed to cleanup backups: {e}")
+            
+        return stats
+
+    def _cleanup_temp_files(self) -> Dict[str, int]:
+        """Clean up temporary files (.tmp, .bak, etc.)."""
+        stats = {'cleaned': 0}
+        
+        temp_patterns = ['**/*.tmp', '**/*.bak', '**/*~', '**/.DS_Store']
+        search_dirs = [Path('data'), Path('llm'), Path('.')]
+        
+        try:
+            for search_dir in search_dirs:
+                if not search_dir.exists():
+                    continue
+                    
+                for pattern in temp_patterns:
+                    try:
+                        for temp_file in search_dir.glob(pattern):
+                            if temp_file.is_file():
+                                temp_file.unlink()
+                                stats['cleaned'] += 1
+                                print(f"🗑️  Cleaned temp file: {temp_file}")
+                    except Exception as e:
+                        print(f"⚠️  Failed to clean pattern {pattern}: {e}")
+                        
+        except Exception as e:
+            print(f"❌ Failed to cleanup temp files: {e}")
+            
+        return stats
+
+    def _is_candidate_referenced(self, candidate_data: Dict[str, Any], cutoff_date: datetime) -> bool:
+        """Check if a candidate is referenced in recent optimization history."""
+        try:
+            history_file = Path('data/gepa/optimization_history.json')
+            if not history_file.exists():
+                return False
+                
+            history_data = json.loads(history_file.read_text())
+            candidate_id = candidate_data.get('id', '')
+            
+            # Look for recent references to this candidate
+            for entry in history_data.get('entries', []):
+                entry_date = datetime.fromisoformat(entry.get('timestamp', ''))
+                if entry_date > cutoff_date:
+                    # Check if this candidate was used in recent optimization
+                    if candidate_id in str(entry):
+                        return True
+                        
+        except Exception:
+            pass
+            
+        return False
+
+    def _cleanup_asr_data(self, cutoff_date: datetime) -> Dict[str, int]:
+        """Clean up ASR corrections data."""
+        stats = {'cleaned': 0, 'kept': 0}
+        
+        try:
+            asr_data_dir = Path('data/asr')
+            if not asr_data_dir.exists():
+                return stats
+                
+            # Clean up uploaded corrections entries
+            corrections_file = asr_data_dir / 'uploaded_corrections.json'
+            if corrections_file.exists():
+                try:
+                    corrections_data = json.loads(corrections_file.read_text())
+                    original_count = len(corrections_data)
+                    
+                    # Filter out old corrections
+                    filtered_corrections = []
+                    for correction in corrections_data:
+                        if 'timestamp' in correction:
+                            correction_time = datetime.fromtimestamp(correction['timestamp'] / 1000)  # Convert from ms
+                            if correction_time > cutoff_date:
+                                filtered_corrections.append(correction)
+                                stats['kept'] += 1
+                            else:
+                                stats['cleaned'] += 1
+                        else:
+                            # Keep corrections without timestamp (they're probably important)
+                            filtered_corrections.append(correction)
+                            stats['kept'] += 1
+                    
+                    # Write back filtered data
+                    if len(filtered_corrections) != original_count:
+                        atomic_write_json(corrections_file, filtered_corrections)
+                        print(f"🗑️  Cleaned {original_count - len(filtered_corrections)} ASR corrections from uploaded_corrections.json")
+                        
+                except Exception as e:
+                    print(f"⚠️  Failed to cleanup ASR corrections: {e}")
+                    
+            # Clean up other ASR data files if they exist
+            for file_pattern in ['*.json', '*.log', '*.tmp']:
+                for file_path in asr_data_dir.glob(file_pattern):
+                    if file_path.name == 'uploaded_corrections.json':
+                        continue  # Already handled above
+                        
+                    try:
+                        file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                        if file_mtime < cutoff_date:
+                            file_path.unlink()
+                            stats['cleaned'] += 1
+                            print(f"🗑️  Cleaned expired ASR file: {file_path.name}")
+                        else:
+                            stats['kept'] += 1
+                    except Exception as e:
+                        print(f"⚠️  Failed to process ASR file {file_path.name}: {e}")
+                        
+        except Exception as e:
+            print(f"❌ Failed to cleanup ASR data: {e}")
+            
+        return stats
 
 
 def main():

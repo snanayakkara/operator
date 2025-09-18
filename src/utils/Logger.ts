@@ -25,7 +25,13 @@ class Logger {
 
   private constructor() {
     // Detect environment - use chrome extension environment detection
-    this.isDevelopment = chrome?.runtime?.getManifest()?.name?.includes('dev') ?? true;
+    // In test environment, chrome is undefined, so default to development mode
+    try {
+      this.isDevelopment = (typeof chrome !== 'undefined' && chrome?.runtime?.getManifest()?.name?.includes('dev')) ?? true;
+    } catch (error) {
+      // Test environment or other context where chrome is not available
+      this.isDevelopment = true;
+    }
     this.logLevel = this.isDevelopment ? LogLevel.DEBUG : LogLevel.WARN;
   }
 

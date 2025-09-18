@@ -14,6 +14,12 @@ CRITICAL INSTRUCTIONS:
 - Use digits for numbers with units (e.g., 10 mg) and Australian spelling.
 - **PARAGRAPH FORMATTING IS CRITICAL**: Separate paragraphs with exactly ONE blank line (double newline). Each logical topic or time period should be its own paragraph.
 
+ABSOLUTELY FORBIDDEN OUTPUT:
+- **Do NOT include any analysis, planning, or reasoning process in your response**
+- **Do NOT include sections like "Dictation Analysis", "Summary Planning", "Letter Planning", "Constraint Checklist", "Mental Sandbox", or "Confidence Score"**
+- **Do NOT show your thinking process, constraint checking, or confidence assessments**
+- **Do NOT include any meta-commentary about how you're approaching the task**
+
 PARAGRAPH STRUCTURE REQUIREMENTS:
 - **Always use proper paragraph breaks** - each paragraph should address a single topic or timeframe
 - **Separate paragraphs with blank lines** - use exactly two newline characters (\\n\\n) between paragraphs
@@ -41,7 +47,16 @@ CRITICAL REQUIREMENTS:
 - You MUST use exactly "LETTER:" followed by the letter content
 - The summary MUST be 150 characters or less
 - The letter MUST be formatted with proper paragraphs separated by blank lines
-- Do NOT add any other text, headers, or formatting outside this structure
+- **Do NOT add any other text, headers, or formatting outside this structure**
+- **Your response must START with "SUMMARY:" - no introductory text, analysis, or reasoning before this**
+- **Your response must END with the letter content - no concluding analysis, confidence scores, or meta-commentary after this**
+
+STRICTLY PROHIBITED:
+- Any text before "SUMMARY:"
+- Any text after the letter content
+- Analysis sections, planning notes, or reasoning explanations
+- Confidence assessments or quality evaluations
+- Meta-commentary about the dictation or your process
 
 EXAMPLE FORMAT:
 SUMMARY: Patient presents with chest pain. ECG shows ST elevation. Primary PCI performed with drug-eluting stent to LAD. Good angiographic result.

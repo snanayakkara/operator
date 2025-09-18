@@ -1,12 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import { AgentFactory } from '@/services/AgentFactory';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, streamChatCompletion } from '@/services/LMStudioService';
+import { SystemToasts } from '@/utils/toastHelpers';
 import type { AgentType } from '@/types/medical.types';
 
 // Custom hook for AI processing with caching and optimistic updates
 export function useAIProcessing() {
   const queryClient = useQueryClient();
   const lmStudioService = LMStudioService.getInstance();
+  const [streaming, setStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Transcription mutation with caching
   const transcriptionMutation = useMutation({
@@ -51,14 +55,115 @@ export function useAIProcessing() {
     return queryClient.getQueryData([contentKey]);
   };
 
+  // Agent processing with streaming support
+  const streamingProcessingMutation = useMutation({
+    mutationFn: async ({
+      agentType,
+      transcription,
+      context,
+      onToken,
+      signal,
+      enableStreaming = true
+    }: {
+      agentType: AgentType;
+      transcription: string;
+      context?: any;
+      onToken?: (delta: string) => void;
+      signal?: AbortSignal;
+      enableStreaming?: boolean;
+    }) => {
+      if (enableStreaming && onToken) {
+        // For streaming, we need to create messages and use the direct LMStudio service
+        // This is a simplified approach for initial streaming support
+        const systemMessage = { role: 'system' as const, content: 'You are a medical AI assistant. Provide clear, accurate medical information.' };
+        const userMessage = { role: 'user' as const, content: transcription };
+        const messages = [systemMessage, userMessage];
+
+        return await lmStudioService.generateStream(messages, onToken, signal);
+      } else {
+        // Fallback to regular processing
+        return await AgentFactory.processWithAgent(agentType, transcription, context, signal);
+      }
+    },
+    mutationKey: ['streamingAgentProcessing']
+  });
+
   return {
     transcriptionMutation,
     processingMutation,
+    streamingProcessingMutation,
     getCachedResult,
+
     // Utility functions
     isTranscribing: transcriptionMutation.isPending,
-    isProcessing: processingMutation.isPending,
+    isProcessing: processingMutation.isPending || streamingProcessingMutation.isPending,
     transcriptionError: transcriptionMutation.error,
-    processingError: processingMutation.error,
+    processingError: processingMutation.error || streamingProcessingMutation.error,
+    streaming,
+
+    // Enhanced streaming methods
+    async generateWithStreaming(
+      agentType: AgentType,
+      transcription: string,
+      onToken: (delta: string) => void,
+      context?: any,
+      signal?: AbortSignal
+    ): Promise<string> {
+      const controller = new AbortController();
+      const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+
+      abortRef.current = controller;
+      setStreaming(true);
+
+      try {
+        const result = await streamingProcessingMutation.mutateAsync({
+          agentType,
+          transcription,
+          context,
+          onToken,
+          signal: combinedSignal,
+          enableStreaming: true
+        });
+
+        setStreaming(false);
+        abortRef.current = null;
+
+        // Ensure we return a string for streaming
+        return typeof result === 'string' ? result : result.content;
+
+      } catch (error) {
+        setStreaming(false);
+        abortRef.current = null;
+
+        if (error instanceof Error && error.message.includes('cancelled')) {
+          throw new Error('Streaming cancelled by user');
+        }
+
+        SystemToasts.streamingFailed();
+        throw error;
+      }
+    },
+
+    async processWithAgent(
+      agentType: AgentType,
+      transcription: string,
+      context?: any,
+      signal?: AbortSignal
+    ) {
+      return await processingMutation.mutateAsync({
+        agentType,
+        transcription,
+        context,
+        signal
+      });
+    },
+
+    stopStreaming() {
+      if (abortRef.current) {
+        abortRef.current.abort();
+        setStreaming(false);
+        abortRef.current = null;
+      }
+    }
   };
 }

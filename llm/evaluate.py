@@ -22,6 +22,7 @@ from datetime import datetime
 
 from .dspy_config import get_config, configure_lm, is_dspy_enabled
 from .predictors import get_predictor, process_with_dspy
+from .utils import atomic_write_json
 
 
 class MedicalRubricScorer:
@@ -416,13 +417,12 @@ def main():
         
         # Save detailed results if requested
         if args.output:
-            with open(args.output, 'w') as f:
-                json.dump({
-                    'task': args.task,
-                    'timestamp': datetime.now().isoformat(),
-                    'total_examples': len(results),
-                    'results': results
-                }, f, indent=2)
+            atomic_write_json(Path(args.output), {
+                'task': args.task,
+                'timestamp': datetime.now().isoformat(),
+                'total_examples': len(results),
+                'results': results
+            })
             print(f"📁 Detailed results saved to: {args.output}")
     else:
         print(f"❌ No evaluation results generated for {args.task}")

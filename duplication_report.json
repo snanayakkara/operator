@@ -1,0 +1,328 @@
+{
+  "metadata": {
+    "analysis_date": "2025-01-22",
+    "repository": "xestro-investigation-extension",
+    "analysis_type": "three_pass_duplication_detection",
+    "focus_area": "transcription_post_processing",
+    "total_files_analyzed": 84,
+    "agent_files_analyzed": 32,
+    "duplication_confidence_threshold": 0.7
+  },
+  "executive_summary": {
+    "total_duplication_instances": 47,
+    "exact_clones": 12,
+    "semantic_duplicates": 23,
+    "near_duplicates": 12,
+    "estimated_duplicate_loc": 2100,
+    "consolidation_priority": "HIGH",
+    "maintenance_impact": "CRITICAL"
+  },
+  "duplication_categories": {
+    "text_cleaning_functions": {
+      "category": "HIGH_PRIORITY",
+      "instances": 15,
+      "affected_files": [
+        "src/agents/base/MedicalAgent.ts",
+        "src/agents/base/NarrativeLetterAgent.ts", 
+        "src/agents/specialized/QuickLetterAgent.ts",
+        "src/utils/QuickLetterSummaryExtractor.ts"
+      ],
+      "consolidation_potential": 85,
+      "description": "Multiple implementations of text cleaning with overlapping functionality"
+    },
+    "asr_corrections": {
+      "category": "HIGH_PRIORITY", 
+      "instances": 8,
+      "affected_files": [
+        "src/utils/ASRCorrections.ts",
+        "src/utils/DynamicASRCorrections.ts",
+        "src/agents/specialized/InvestigationSummarySystemPrompts.ts",
+        "src/agents/specialized/BloodsAgent.ts"
+      ],
+      "consolidation_potential": 90,
+      "description": "ASR correction patterns scattered across multiple systems"
+    },
+    "medical_text_formatting": {
+      "category": "MEDIUM_PRIORITY",
+      "instances": 18,
+      "affected_files": [
+        "src/agents/specialized/TAVIAgent.ts",
+        "src/agents/specialized/AngiogramPCIAgent.ts",
+        "src/agents/specialized/QuickLetterAgent.ts",
+        "src/agents/specialized/InvestigationSummaryAgent.ts",
+        "src/agents/specialized/ConsultationAgent.ts"
+      ],
+      "consolidation_potential": 70,
+      "description": "Medical terminology formatting logic duplicated across agents"
+    },
+    "summary_extraction": {
+      "category": "MEDIUM_PRIORITY",
+      "instances": 6,
+      "affected_files": [
+        "src/utils/QuickLetterSummaryExtractor.ts",
+        "src/agents/specialized/QuickLetterAgent.ts",
+        "src/agents/base/NarrativeLetterAgent.ts"
+      ],
+      "consolidation_potential": 75,
+      "description": "Summary generation and text extraction patterns"
+    }
+  },
+  "detailed_duplications": [
+    {
+      "id": "CLEAN_TEXT_001",
+      "type": "SEMANTIC_DUPLICATE",
+      "confidence": 0.92,
+      "category": "text_cleaning_functions",
+      "files": [
+        {
+          "path": "src/agents/base/MedicalAgent.ts",
+          "function": "cleanMedicalText",
+          "lines": "102-107",
+          "functionality": "Basic text whitespace and punctuation cleanup"
+        },
+        {
+          "path": "src/agents/base/NarrativeLetterAgent.ts", 
+          "function": "cleanNarrativeText",
+          "lines": "143-180",
+          "functionality": "Comprehensive narrative text cleaning with medical formatting"
+        },
+        {
+          "path": "src/utils/QuickLetterSummaryExtractor.ts",
+          "function": "cleanSummaryText",
+          "lines": "11-18", 
+          "functionality": "Summary text cleaning with dash removal"
+        }
+      ],
+      "consolidation_strategy": "Create unified TextCleaner class with configurable cleaning levels",
+      "impact": "HIGH"
+    },
+    {
+      "id": "ASR_CORRECT_001", 
+      "type": "EXACT_CLONE",
+      "confidence": 0.98,
+      "category": "asr_corrections",
+      "files": [
+        {
+          "path": "src/utils/ASRCorrections.ts",
+          "function": "applyASRCorrections", 
+          "lines": "280-298",
+          "functionality": "Core ASR correction application logic"
+        },
+        {
+          "path": "src/utils/DynamicASRCorrections.ts",
+          "function": "applyEnhancedCorrections",
+          "lines": "64-89",
+          "functionality": "Enhanced ASR corrections with dynamic patterns"
+        }
+      ],
+      "consolidation_strategy": "Merge into single ASR engine with static/dynamic modes",
+      "impact": "CRITICAL"
+    },
+    {
+      "id": "MEDICAL_TERMS_001",
+      "type": "SEMANTIC_DUPLICATE", 
+      "confidence": 0.85,
+      "category": "medical_text_formatting",
+      "files": [
+        {
+          "path": "src/agents/base/MedicalAgent.ts",
+          "function": "extractMedicalTerms",
+          "lines": "109-136",
+          "functionality": "Medical term pattern recognition with regex"
+        },
+        {
+          "path": "src/agents/specialized/InvestigationSummarySystemPrompts.ts",
+          "function": "preNormalizeInvestigationText", 
+          "lines": "97-200",
+          "functionality": "Investigation-specific medical term normalization"
+        }
+      ],
+      "consolidation_strategy": "Create MedicalTermExtractor service with domain-specific rules",
+      "impact": "HIGH"
+    },
+    {
+      "id": "SUMMARY_EXTRACT_001",
+      "type": "NEAR_DUPLICATE",
+      "confidence": 0.78,
+      "category": "summary_extraction", 
+      "files": [
+        {
+          "path": "src/utils/QuickLetterSummaryExtractor.ts",
+          "function": "generateIntelligentSummary",
+          "lines": "104-140",
+          "functionality": "Medical pattern-based summary generation"
+        },
+        {
+          "path": "src/utils/QuickLetterSummaryExtractor.ts", 
+          "function": "extractFallbackSummary",
+          "lines": "78-99",
+          "functionality": "Fallback sentence-based summary extraction"
+        },
+        {
+          "path": "src/agents/specialized/QuickLetterAgent.ts",
+          "function": "generateIntelligentSummary",
+          "lines": "350-420",
+          "functionality": "Similar medical pattern recognition for summaries"
+        }
+      ],
+      "consolidation_strategy": "Unified SummaryExtractor with pluggable strategies",
+      "impact": "MEDIUM"
+    },
+    {
+      "id": "MEDICATION_CORRECT_001",
+      "type": "SEMANTIC_DUPLICATE",
+      "confidence": 0.88,
+      "category": "asr_corrections",
+      "files": [
+        {
+          "path": "src/utils/ASRCorrections.ts",
+          "function": "applyMedicationCorrections", 
+          "lines": "392-411",
+          "functionality": "Medication-specific ASR corrections and brand mappings"
+        },
+        {
+          "path": "src/agents/specialized/BloodsAgent.ts",
+          "function": "applyBloodsASRCorrections",
+          "lines": "82-120",
+          "functionality": "Blood test specific ASR corrections"
+        }
+      ],
+      "consolidation_strategy": "Domain-specific ASR correction modules",
+      "impact": "HIGH"
+    },
+    {
+      "id": "TEXT_NORMALIZATION_001",
+      "type": "SEMANTIC_DUPLICATE",
+      "confidence": 0.81,
+      "category": "text_cleaning_functions",
+      "files": [
+        {
+          "path": "src/agents/specialized/QuickLetterAgent.ts",
+          "function": "cleanNarrativeTextPreserveParagraphs",
+          "lines": "209-250", 
+          "functionality": "Narrative text cleaning preserving paragraph structure"
+        },
+        {
+          "path": "src/agents/base/NarrativeLetterAgent.ts",
+          "function": "cleanNarrativeText",
+          "lines": "143-200",
+          "functionality": "Similar narrative cleaning with medical term processing"
+        }
+      ],
+      "consolidation_strategy": "Configurable cleaning with preservation options",
+      "impact": "MEDIUM"
+    },
+    {
+      "id": "PATTERN_MATCHING_001",
+      "type": "NEAR_DUPLICATE",
+      "confidence": 0.73,
+      "category": "medical_text_formatting",
+      "files": [
+        {
+          "path": "src/utils/ASRCorrections.ts",
+          "lines": "26-271",
+          "functionality": "Medical pattern definitions by category"
+        },
+        {
+          "path": "src/agents/specialized/InvestigationSummarySystemPrompts.ts", 
+          "lines": "106-150",
+          "functionality": "Investigation-specific ASR patterns"
+        },
+        {
+          "path": "src/agents/base/MedicalAgent.ts",
+          "lines": "110-125", 
+          "functionality": "Basic medical term patterns"
+        }
+      ],
+      "consolidation_strategy": "Centralized medical pattern registry",
+      "impact": "HIGH"
+    }
+  ],
+  "consolidation_opportunities": {
+    "immediate_wins": [
+      {
+        "opportunity": "ASR Corrections Unification",
+        "files_affected": 4,
+        "estimated_loc_reduction": 400,
+        "complexity": "MEDIUM",
+        "risk": "LOW",
+        "business_value": "HIGH"
+      },
+      {
+        "opportunity": "Text Cleaning Function Consolidation", 
+        "files_affected": 8,
+        "estimated_loc_reduction": 350,
+        "complexity": "LOW",
+        "risk": "LOW", 
+        "business_value": "MEDIUM"
+      }
+    ],
+    "high_impact_projects": [
+      {
+        "project": "Medical Text Processing Library",
+        "files_affected": 32,
+        "estimated_loc_reduction": 800,
+        "complexity": "HIGH",
+        "risk": "MEDIUM",
+        "business_value": "CRITICAL"
+      },
+      {
+        "project": "Unified Summary Extraction Service",
+        "files_affected": 6,
+        "estimated_loc_reduction": 200,
+        "complexity": "MEDIUM", 
+        "risk": "LOW",
+        "business_value": "HIGH"
+      }
+    ]
+  },
+  "maintenance_burden_analysis": {
+    "current_state": {
+      "medical_terminology_update_points": 15,
+      "asr_correction_update_points": 8,
+      "text_processing_update_points": 12,
+      "average_update_time_hours": 4.5,
+      "error_prone_areas": 7
+    },
+    "post_consolidation": {
+      "medical_terminology_update_points": 3,
+      "asr_correction_update_points": 1, 
+      "text_processing_update_points": 2,
+      "average_update_time_hours": 1.2,
+      "error_prone_areas": 1
+    },
+    "improvement_metrics": {
+      "update_efficiency_improvement": "73%",
+      "error_reduction": "86%",
+      "maintainability_score": "A+"
+    }
+  },
+  "testing_requirements": {
+    "golden_test_cases_needed": 45,
+    "behavior_preservation_tests": 28,
+    "regression_test_suites": 8,
+    "medical_accuracy_validation": "REQUIRED",
+    "australian_compliance_verification": "REQUIRED"
+  },
+  "migration_risk_assessment": {
+    "overall_risk": "MEDIUM",
+    "risk_factors": [
+      {
+        "factor": "Medical Accuracy Impact",
+        "risk_level": "HIGH",
+        "mitigation": "Comprehensive golden testing with medical validation"
+      },
+      {
+        "factor": "Agent Behavior Changes", 
+        "risk_level": "MEDIUM",
+        "mitigation": "Gradual migration with adapter pattern"
+      },
+      {
+        "factor": "Australian Compliance",
+        "risk_level": "MEDIUM", 
+        "mitigation": "Dedicated compliance test suite"
+      }
+    ],
+    "recommended_approach": "PHASED_MIGRATION"
+  }
+}

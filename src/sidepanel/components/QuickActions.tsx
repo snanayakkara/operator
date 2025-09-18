@@ -1,4 +1,5 @@
 import React, { useState, memo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileText, 
   User, 
@@ -26,6 +27,14 @@ import { SmallTrophySpin, MediumTrophySpin } from './TrophySpinLoader';
 import { ExpandableActionButton, ExpandableActionConfig } from './ExpandableActionButton';
 import { APPOINTMENT_PRESETS, AppointmentPreset } from '../../config/appointmentPresets';
 import type { AgentType } from '../../types/medical.types';
+import { 
+  staggerContainer,
+  listItemVariants,
+  buttonVariants,
+  withReducedMotion,
+  STAGGER_CONFIGS,
+  ANIMATION_DURATIONS
+} from '@/utils/animations';
 
 interface InvestigationOption {
   id: 'dictate' | 'type';
@@ -73,7 +82,7 @@ const EXPANDABLE_ACTION_CONFIGS: Record<string, ExpandableActionConfig> = {
   },
   'social-history': {
     icon: UserCheck,
-    label: 'Social History',
+    label: 'Social',
     actionId: 'social-history',
     workflowId: 'background', // Use background workflow for social history
     color: 'indigo'
@@ -154,7 +163,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: 'profile-photo',
-    label: 'Profile Photo',
+    label: 'Photo',
     icon: Camera,
     description: 'Capture screenshot for patient profile',
     category: 'emr'
@@ -658,8 +667,8 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 onClick={() => handleInvestigationOptionSelect(option)}
                 disabled={processingAction === 'investigation-summary'}
                 className={`
-                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover shadow-none
-                  ${processingAction === 'investigation-summary' ? 'opacity-50 cursor-not-allowed' : ''}
+                  bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded-lg p-4 text-left
+                  ${processingAction === 'investigation-summary' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 <div className="flex items-start space-x-3">
@@ -725,8 +734,8 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                 onClick={() => handlePresetSelect(preset)}
                 disabled={processingAction === 'appointment-wrap-up'}
                 className={`
-                  glass-button p-4 rounded-lg text-left transition-all hover:bg-gray-50 border-2 border-transparent hover:border-blue-200 btn-micro-press btn-micro-hover shadow-none
-                  ${processingAction === 'appointment-wrap-up' ? 'opacity-50 cursor-not-allowed' : ''}
+                  bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded-lg p-4 text-left
+                  ${processingAction === 'appointment-wrap-up' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 <div className="flex items-start space-x-3">
@@ -768,66 +777,100 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
   // Footer layout - 2x3 grid of actions
   if (isFooter) {
     return (
-      <div className="bg-white">
+      <motion.div 
+        className="bg-white"
+        variants={withReducedMotion(staggerContainer)}
+        initial="hidden"
+        animate="visible"
+      >
         {/* Header */}
-        <div className="flex items-center space-x-2 mb-3">
+        <motion.div 
+          className="flex items-center space-x-2 mb-3"
+          variants={withReducedMotion(listItemVariants)}
+        >
           <CheckSquare className="w-3 h-3 text-blue-600" />
           <h3 className="text-gray-900 font-medium text-xs">Quick Actions</h3>
-        </div>
+        </motion.div>
 
-        {/* 4-column grid of actions for better space utilization */}
-        <div className="grid grid-cols-4 gap-2">
-          {filteredActions.map((action) => (
-            EXPANDABLE_ACTION_CONFIGS[action.id] ? (
-              <ExpandableActionButton
-                key={action.id}
-                config={EXPANDABLE_ACTION_CONFIGS[action.id]}
-                onStartWorkflow={onStartWorkflow}
-                onQuickAction={onQuickAction}
-                processingAction={processingAction}
-                isFooter={true}
-              />
-            ) : (
-              <button
-                key={action.id}
-                onClick={() => {
-                  console.log('🔧 Button clicked:', action.id, 'at', new Date().toISOString());
-                  handleAction(action.id);
-                }}
-                disabled={processingAction === action.id}
-                className={`
-                  relative p-2 rounded-2xl transition-all duration-150 text-left micro-press micro-lift min-h-10 flex items-center
-                  hover:bg-surface-primary hover:border hover:border-line-primary hover:shadow-sm
-                  ${action.category === 'analysis' 
-                    ? 'hover:border-accent-violet/30' 
-                    : ''
-                  }
-                  ${processingAction === action.id ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-              >
-                <div className="flex items-center space-x-1.5">
-                  <action.icon className={`w-3 h-3 flex-shrink-0 ${
-                    action.category === 'analysis' ? 'text-accent-violet' : 'text-accent-emerald'
-                  }`} />
-                  <div className="text-ink-primary text-[10px] font-medium leading-tight min-w-0 flex-1">
-                    {action.label}
+        {/* 4-column grid of actions with stagger animation */}
+        <motion.div 
+          className="grid grid-cols-4 gap-2"
+          variants={withReducedMotion(staggerContainer)}
+          transition={{
+            staggerChildren: STAGGER_CONFIGS.tight,
+            delayChildren: 0.1
+          }}
+        >
+          {filteredActions.map((action, index) => (
+            <motion.div
+              key={action.id}
+              variants={withReducedMotion(listItemVariants)}
+              custom={index}
+            >
+              {EXPANDABLE_ACTION_CONFIGS[action.id] ? (
+                <ExpandableActionButton
+                  config={EXPANDABLE_ACTION_CONFIGS[action.id]}
+                  onStartWorkflow={onStartWorkflow}
+                  onQuickAction={onQuickAction}
+                  processingAction={processingAction}
+                  isFooter={true}
+                />
+              ) : (
+                <motion.button
+                  onClick={() => {
+                    console.log('🔧 Button clicked:', action.id, 'at', new Date().toISOString());
+                    handleAction(action.id);
+                  }}
+                  disabled={processingAction === action.id}
+                  className={`
+                    relative p-2 rounded-2xl transition-all duration-150 text-left min-h-10 flex items-center
+                    hover:bg-surface-primary hover:border hover:border-line-primary hover:shadow-sm
+                    ${action.category === 'analysis' 
+                      ? 'hover:border-accent-violet/30' 
+                      : ''
+                    }
+                    ${processingAction === action.id ? 'opacity-50 cursor-not-allowed' : ''}
+                  `}
+                  variants={withReducedMotion(buttonVariants)}
+                  whileHover={processingAction !== action.id ? "hover" : undefined}
+                  whileTap={processingAction !== action.id ? "tap" : undefined}
+                >
+                  <div className="flex items-center space-x-1.5">
+                    <action.icon className={`w-3 h-3 flex-shrink-0 ${
+                      action.category === 'analysis' ? 'text-accent-violet' : 'text-accent-emerald'
+                    }`} />
+                    <div className="text-ink-primary text-[10px] font-medium leading-tight min-w-0 flex-1">
+                      {action.label}
+                    </div>
                   </div>
-                </div>
-                
-                {processingAction === action.id && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
-                    <SmallTrophySpin />
-                  </div>
-                )}
-              </button>
-            )
+                  
+                  <AnimatePresence>
+                    {processingAction === action.id && (
+                      <motion.div 
+                        className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                      >
+                        <SmallTrophySpin />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
+              )}
+            </motion.div>
           ))}
           
           {/* Split AI Buttons in the last cell */}
-          <div className="relative rounded-2xl min-h-10 flex transition-all duration-150 hover:bg-surface-primary hover:border hover:border-accent-violet/30">
+          <motion.div 
+            className="relative rounded-2xl min-h-10 flex transition-all duration-150 hover:bg-surface-primary hover:border hover:border-accent-violet/30"
+            variants={withReducedMotion(listItemVariants)}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          >
             <div className="flex h-full">
               {AI_ACTIONS.map((aiAction, aiIndex) => (
-                <button
+                <motion.button
                   key={aiAction.id}
                   onClick={() => {
                     console.log('🔧 AI Button clicked:', aiAction.id, 'at', new Date().toISOString());
@@ -835,11 +878,13 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                   }}
                   disabled={processingAction === aiAction.id}
                   className={`
-                    flex-1 relative p-1 transition-all text-left micro-press micro-lift
+                    flex-1 relative p-1 transition-all text-left
                     ${aiIndex === 0 ? 'rounded-l-2xl border-r border-line-primary' : 'rounded-r-2xl'}
                     hover:bg-surface-tertiary
                     ${processingAction === aiAction.id ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
+                  whileHover={processingAction !== aiAction.id ? { scale: 1.05 } : undefined}
+                  whileTap={processingAction !== aiAction.id ? { scale: 0.95 } : undefined}
                 >
                   <div className="flex items-center justify-center flex-col space-y-0.5">
                     <aiAction.icon className="w-3 h-3 flex-shrink-0 text-accent-violet" />
@@ -848,17 +893,24 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
                     </div>
                   </div>
                   
-                  {processingAction === aiAction.id && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-surface-tertiary rounded-lg">
-                      <SmallTrophySpin />
-                    </div>
-                  )}
-                </button>
+                  <AnimatePresence>
+                    {processingAction === aiAction.id && (
+                      <motion.div 
+                        className="absolute inset-0 flex items-center justify-center bg-surface-tertiary rounded-lg"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                      >
+                        <SmallTrophySpin />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               ))}
             </div>
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
     );
   }
 

@@ -17,8 +17,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Settings, Zap, Moon, AlertCircle, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
-import { ASROptimizationSection } from '@/components/settings/ASROptimizationSection';
-import { GEPAOptimizationSection } from '@/components/settings/GEPAOptimizationSection';
+import { ASROptimizationSection } from '../../components/settings/ASROptimizationSection';
+import { GEPAOptimizationSection } from '../../components/settings/GEPAOptimizationSection';
 import { OvernightOptimizationCard } from '@/components/settings/OvernightOptimizationCard';
 import { MorningReviewCard } from '@/components/settings/MorningReviewCard';
 import { logger } from '@/utils/Logger';

@@ -192,13 +192,24 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   // Audio event handlers
   const handleTimeUpdate = () => {
     if (audioRef.current && !isSeeking && !isUserInteracting) {
-      setCurrentTime(audioRef.current.currentTime);
+      const audioCurrentTime = audioRef.current.currentTime;
+      // Validate current time before setting
+      if (isFinite(audioCurrentTime) && audioCurrentTime >= 0) {
+        setCurrentTime(audioCurrentTime);
+      }
     }
   };
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
-      setDuration(audioRef.current.duration);
+      const audioDuration = audioRef.current.duration;
+      // Validate duration before setting
+      if (isFinite(audioDuration) && audioDuration > 0) {
+        setDuration(audioDuration);
+      } else {
+        console.warn('Invalid audio duration detected:', audioDuration);
+        setDuration(0);
+      }
     }
   };
 
@@ -208,27 +219,25 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   };
 
   const handleSeeked = useCallback(() => {
-    console.log('✅ Audio seeked event fired');
     if (seekTimeoutRef.current) {
       window.clearTimeout(seekTimeoutRef.current);
       seekTimeoutRef.current = undefined;
     }
     setIsSeeking(false);
     // Sync current time with actual audio time after seeking
-    if (audioRef.current) {
+    if (audioRef.current && isFinite(audioRef.current.currentTime)) {
       setCurrentTime(audioRef.current.currentTime);
     }
   }, []);
 
   const handleSeekError = useCallback(() => {
-    console.error('❌ Audio seek error occurred');
     if (seekTimeoutRef.current) {
       window.clearTimeout(seekTimeoutRef.current);
       seekTimeoutRef.current = undefined;
     }
     setIsSeeking(false);
     // Reset to current audio time on error
-    if (audioRef.current) {
+    if (audioRef.current && isFinite(audioRef.current.currentTime)) {
       setCurrentTime(audioRef.current.currentTime);
     }
   }, []);
@@ -274,48 +283,85 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   }, [isPlaying, isSeeking, isUserInteracting, startProgressAnimation, stopProgressAnimation]);
 
   const seekTo = useCallback((percentage: number) => {
-    if (!audioRef.current || !duration) return;
-    
-    // Don't start new seek if one is already in progress
-    if (isSeeking) {
-      console.log('⏭️ Seek already in progress, ignoring new seek request');
+    // Validate inputs with detailed logging
+    if (!audioRef.current || !duration || !isFinite(duration) || duration <= 0) {
+      console.log('❌ seekTo validation failed:', {
+        hasAudioRef: !!audioRef.current,
+        duration,
+        isFiniteDuration: isFinite(duration || 0),
+        durationValid: (duration || 0) > 0
+      });
       return;
     }
     
+    if (!isFinite(percentage) || percentage < 0 || percentage > 100) {
+      console.error('❌ Invalid percentage in seekTo:', {
+        percentage,
+        isFinite: isFinite(percentage),
+        inRange: percentage >= 0 && percentage <= 100
+      });
+      return;
+    }
+    
+    // Don't start new seek if one is already in progress
+    if (isSeeking) return;
+    
     setIsSeeking(true);
     
-    const newTime = Math.max(0, Math.min(duration, (percentage / 100) * duration));
+    const rawNewTime = (percentage / 100) * duration;
+    const newTime = Math.max(0, Math.min(duration, rawNewTime));
+    
+    // Final validation of calculated time
+    if (!isFinite(newTime)) {
+      console.error('❌ Calculated newTime is non-finite:', {
+        percentage,
+        duration,
+        rawNewTime,
+        newTime
+      });
+      setIsSeeking(false);
+      return;
+    }
+    
+    console.log('🎯 Seeking to:', { 
+      percentage: percentage.toFixed(2), 
+      newTime: newTime.toFixed(2),
+      duration: duration.toFixed(2)
+    });
     
     // Clear any existing seek timeout
     if (seekTimeoutRef.current) {
       window.clearTimeout(seekTimeoutRef.current);
+      seekTimeoutRef.current = undefined;
     }
-    
-    console.log('🎯 Seeking to:', { percentage: percentage.toFixed(2), newTime: newTime.toFixed(2) });
     
     // Update current time immediately for visual feedback
     setCurrentTime(newTime);
     
     try {
-      // Set audio element time
-      audioRef.current.currentTime = newTime;
-      
-      // Set a fallback timeout in case the seeked event doesn't fire
-      // The seeked event handler will clear this timeout when it fires
-      seekTimeoutRef.current = window.setTimeout(() => {
-        console.log('⚠️ Seek timeout fallback triggered - seeked event may not have fired');
+      // Set audio element time with final validation
+      if (isFinite(newTime) && newTime >= 0 && newTime <= duration) {
+        audioRef.current.currentTime = newTime;
+        
+        // Simplified timeout fallback
+        seekTimeoutRef.current = window.setTimeout(() => {
+          setIsSeeking(false);
+          // Sync current time with actual audio time
+          if (audioRef.current && isFinite(audioRef.current.currentTime)) {
+            setCurrentTime(audioRef.current.currentTime);
+          }
+        }, 200);
+      } else {
+        console.error('❌ Final validation failed for currentTime:', { newTime, duration });
         setIsSeeking(false);
-        // Sync current time with actual audio time
-        if (audioRef.current) {
-          setCurrentTime(audioRef.current.currentTime);
-        }
-      }, 300); // Longer fallback timeout for safety
+      }
       
     } catch (error) {
       console.error('❌ Seek failed:', error);
       setIsSeeking(false);
       if (seekTimeoutRef.current) {
         window.clearTimeout(seekTimeoutRef.current);
+        seekTimeoutRef.current = undefined;
       }
     }
   }, [duration, isSeeking]);
@@ -325,10 +371,11 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
     event.stopPropagation();
     
     const canvas = canvasRef.current;
-    if (!canvas || !duration) {
+    if (!canvas || !duration || !isFinite(duration) || duration <= 0) {
       console.log('❌ Cannot seek: canvas or duration not available', { 
         canvas: !!canvas, 
-        duration 
+        duration,
+        isFiniteDuration: isFinite(duration || 0)
       });
       return;
     }
@@ -340,9 +387,20 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
 
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    const rawPercentage = (x / rect.width) * 100;
+    const percentage = Math.max(0, Math.min(100, rawPercentage));
     
-    console.log('🎯 Waveform clicked:', { x, width: rect.width, percentage: percentage.toFixed(2) });
+    // Validate percentage before proceeding
+    if (!isFinite(percentage)) {
+      console.error('❌ Invalid percentage calculated:', { x, width: rect.width, rawPercentage, percentage });
+      return;
+    }
+    
+    console.log('🎯 Waveform clicked:', { 
+      x: x.toFixed(2), 
+      width: rect.width.toFixed(2), 
+      percentage: percentage.toFixed(2) 
+    });
     
     try {
       seekTo(percentage);
@@ -373,6 +431,11 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   };
 
   const formatTime = (time: number): string => {
+    // Handle invalid time values
+    if (!isFinite(time) || isNaN(time) || time < 0) {
+      return '0:00';
+    }
+    
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -487,11 +550,12 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
           onClick={handleWaveformClick}
           onMouseMove={(e) => {
             const canvas = canvasRef.current;
-            if (canvas && duration && !isSeeking) {
+            if (canvas && duration && isFinite(duration) && duration > 0 && !isSeeking) {
               const rect = canvas.getBoundingClientRect();
               const x = e.clientX - rect.left;
-              const percentage = (x / rect.width) * 100;
-              canvas.title = `Click to seek to ${formatTime((percentage / 100) * duration)}`;
+              const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+              const seekTime = (percentage / 100) * duration;
+              canvas.title = `Click to seek to ${formatTime(seekTime)}`;
             } else if (canvas && isSeeking) {
               canvas.title = 'Seeking...';
             }
@@ -513,7 +577,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
             min="0"
             max="100"
             step="0.1"
-            value={duration ? (currentTime / duration) * 100 : 0}
+            value={duration && isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0}
             onMouseDown={() => {
               setIsUserInteracting(true);
               stopProgressAnimation();
@@ -537,14 +601,16 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
             onInput={(e) => {
               if (isUserInteracting) {
                 const percentage = parseFloat((e.target as HTMLInputElement).value);
-                seekTo(percentage);
+                if (isFinite(percentage)) {
+                  seekTo(percentage);
+                }
               }
             }}
             onChange={() => {
               // Prevent onChange feedback loops - all seeking handled by onInput
             }}
             className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            disabled={!duration}
+            disabled={!duration || !isFinite(duration) || duration <= 0}
           />
           <div className="text-xs text-gray-400 text-center">
             Alternative: Use slider above to seek

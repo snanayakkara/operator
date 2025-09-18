@@ -16,7 +16,7 @@ import type {
  * Formats raw transcription into structured format: "↪ Condition\n- details"
  */
 export class BackgroundAgent extends MedicalAgent {
-  private lmStudioService: LMStudioService;
+  protected lmStudioService: LMStudioService;
 
   constructor() {
     super(

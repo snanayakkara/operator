@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
   Calendar,
@@ -12,6 +13,17 @@ import {
   Loader2
 } from 'lucide-react';
 import type { PatientAppointment } from '@/types/medical.types';
+import {
+  modalVariants,
+  backdropVariants,
+  staggerContainer,
+  listItemVariants,
+  buttonVariants,
+  textVariants,
+  withReducedMotion,
+  STAGGER_CONFIGS,
+  ANIMATION_DURATIONS
+} from '@/utils/animations';
 
 interface PatientSelectionModalProps {
   isOpen: boolean;
@@ -135,10 +147,30 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
   const estimatedTime = Math.ceil(selectedCount * 2.5); // ~2.5 minutes per patient
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden mx-4">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+    <AnimatePresence>
+      <motion.div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        variants={withReducedMotion(backdropVariants)}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        onClick={onClose}
+      >
+        <motion.div 
+          className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden mx-4"
+          variants={withReducedMotion(modalVariants)}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <motion.div 
+            className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50"
+            variants={withReducedMotion(textVariants)}
+            initial="hidden"
+            animate="visible"
+          >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Users className="w-6 h-6 text-purple-600" />
@@ -171,10 +203,15 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
               </div>
             </div>
           )}
-        </div>
+          </motion.div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
+          {/* Content */}
+          <motion.div 
+            className="flex-1 overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
           {isExtracting ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center">
@@ -299,7 +336,7 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
               </div>
             </>
           )}
-        </div>
+          </motion.div>
 
         {/* Footer */}
         {calendarData && calendarData.patients.length > 0 && !isExtracting && !extractError && (
@@ -343,7 +380,8 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 };

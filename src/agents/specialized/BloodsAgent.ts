@@ -7,7 +7,7 @@
 import { MedicalAgent } from '../base/MedicalAgent';
 import { BLOODS_SYSTEM_PROMPTS, BLOODS_MEDICAL_PATTERNS } from './BloodsSystemPrompts';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { applyASRCorrections } from '@/utils/ASRCorrections';
+import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine';
 import type { 
   MedicalReport, 
   ReportSection, 
@@ -17,6 +17,7 @@ import type {
 
 export class BloodsAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private asrEngine: ASRCorrectionEngine;
 
   constructor() {
     super(
@@ -28,6 +29,7 @@ export class BloodsAgent extends MedicalAgent {
     );
     
     this.lmStudioService = LMStudioService.getInstance();
+    this.asrEngine = ASRCorrectionEngine.getInstance();
   }
 
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
@@ -35,9 +37,9 @@ export class BloodsAgent extends MedicalAgent {
     console.log('🩸 BloodsAgent: Processing blood test order:', input.substring(0, 100));
 
     try {
-      // Apply ASR corrections for common pathology terms
-      const correctedInput = this.applyBloodsASRCorrections(input);
-      console.log('🔄 Applied bloods ASR corrections:', correctedInput);
+      // Apply ASR corrections for pathology terms using consolidated engine
+      const correctedInput = await this.asrEngine.applyPathologyCorrections(input);
+      console.log('🔄 Applied consolidated pathology ASR corrections:', correctedInput);
 
       // Build messages for AI processing
       const messages = this.buildMessages(correctedInput, context);
@@ -247,22 +249,4 @@ export class BloodsAgent extends MedicalAgent {
     return BLOODS_MEDICAL_PATTERNS.expansionRules[abbrev as keyof typeof BLOODS_MEDICAL_PATTERNS.expansionRules] || abbrev;
   }
 
-  /**
-   * Apply ASR corrections specific to pathology/blood test terminology
-   * Uses centralized ASR corrections from utils/ASRCorrections.ts
-   */
-  private applyBloodsASRCorrections(input: string): string {
-    // Use centralized ASR corrections with pathology and laboratory categories
-    const corrected = applyASRCorrections(input, ['pathology', 'laboratory']);
-
-    // Log corrections made
-    if (corrected !== input) {
-      console.log('🔧 Blood test ASR corrections applied:', {
-        original: input,
-        corrected: corrected
-      });
-    }
-
-    return corrected;
-  }
 }

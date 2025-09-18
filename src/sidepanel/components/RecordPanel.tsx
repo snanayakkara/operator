@@ -72,100 +72,248 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Handle hover with delay for button
+  // Handle hover with delay for button - improved timeout management
   const handleMouseEnter = () => {
-    if (disabled) return;
-    
-    console.log('🖱️ Mouse entered record button');
+    if (disabled) {
+      console.log('🚫 Mouse enter ignored - button disabled');
+      return;
+    }
+
+    console.log('🖱️ Mouse entered record button', {
+      isExpanded,
+      hasTimeout: !!hoverTimeoutRef.current,
+      isHoveringRefCurrent: isHoveringRef.current,
+      whisperServerRunning,
+      disabled,
+      isRecording,
+      activeWorkflow
+    });
+
     isHoveringRef.current = true;
     setIsHovering(true);
-    
-    // Clear any pending collapse timeouts
+
+    // ALWAYS clear any pending timeouts to prevent accumulation
     if (hoverTimeoutRef.current) {
+      console.log('🧹 Clearing existing hover timeout');
       window.clearTimeout(hoverTimeoutRef.current);
       hoverTimeoutRef.current = null;
     }
-    
-    // Show card with delay
+
+    // Show card with delay only if not already expanded
     if (!isExpanded) {
+      console.log('⏰ Setting expand timeout');
       hoverTimeoutRef.current = window.setTimeout(() => {
         if (isHoveringRef.current) {
           console.log('🎯 Expanding card after hover delay');
           setIsExpanded(true);
+        } else {
+          console.log('🚫 Not expanding - mouse already left');
         }
+        hoverTimeoutRef.current = null; // Clear the reference
       }, 50);
     }
   };
 
   const handleMouseLeave = () => {
-    console.log('🖱️ Mouse left record button');
+    console.log('🖱️ Mouse left record button', {
+      isExpanded,
+      isHoveringRefCurrent: isHoveringRef.current
+    });
+
     isHoveringRef.current = false;
     setIsHovering(false);
-    
-    // Clear the expand timeout if mouse leaves before it triggers
+
+    // ALWAYS clear existing timeout first to prevent accumulation
     if (hoverTimeoutRef.current) {
+      console.log('🧹 Clearing existing timeout on mouse leave');
       window.clearTimeout(hoverTimeoutRef.current);
       hoverTimeoutRef.current = null;
     }
-    
+
     // Delay collapse to allow mouse movement to card
+    console.log('⏰ Setting collapse timeout');
     hoverTimeoutRef.current = window.setTimeout(() => {
       if (!isHoveringRef.current) {
         console.log('🔽 Collapsing card - mouse completely away');
         setIsExpanded(false);
+      } else {
+        console.log('🚫 Not collapsing - mouse returned');
       }
+      hoverTimeoutRef.current = null; // Clear the reference
     }, 150);
   };
 
-  // Handle mouse enter on the card
+  // Handle mouse enter on the card - improved consistency
   const handleCardMouseEnter = () => {
-    console.log('🖱️ Mouse entered card');
+    console.log('🖱️ Mouse entered card', {
+      isExpanded,
+      hasTimeout: !!hoverTimeoutRef.current
+    });
+
     isHoveringRef.current = true;
     setIsHovering(true);
-    
+
     // Clear any pending collapse timeouts
     if (hoverTimeoutRef.current) {
+      console.log('🧹 Clearing timeout on card enter');
       window.clearTimeout(hoverTimeoutRef.current);
       hoverTimeoutRef.current = null;
     }
   };
 
-  // Handle mouse leave from the card
+  // Handle mouse leave from the card - improved consistency
   const handleCardMouseLeave = () => {
-    console.log('🖱️ Mouse left card');
+    console.log('🖱️ Mouse left card', {
+      isExpanded,
+      isHoveringRefCurrent: isHoveringRef.current
+    });
+
     isHoveringRef.current = false;
     setIsHovering(false);
-    
+
+    // Clear any existing timeout first
+    if (hoverTimeoutRef.current) {
+      console.log('🧹 Clearing timeout on card leave');
+      window.clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+
     // Delay collapse to prevent flickering when moving between card and button
+    console.log('⏰ Setting collapse timeout from card');
     hoverTimeoutRef.current = window.setTimeout(() => {
       if (!isHoveringRef.current) {
         console.log('🔽 Collapsing card - mouse left card area');
         setIsExpanded(false);
+      } else {
+        console.log('🚫 Not collapsing - mouse returned to hover area');
       }
+      hoverTimeoutRef.current = null; // Clear the reference
     }, 150);
   };
 
 
-  // Auto-collapse when recording stops
+  // Enhanced cleanup when recording stops with better state reset
   useEffect(() => {
     if (!isRecording && activeWorkflow) {
-      window.setTimeout(() => {
+      console.log('🔄 Recording stopped - resetting dropdown state after delay', {
+        activeWorkflow,
+        isExpanded,
+        isHovering,
+        hasTimeout: !!hoverTimeoutRef.current
+      });
+
+      const resetTimeout = window.setTimeout(() => {
+        console.log('🔧 Performing full dropdown state reset', {
+          wasExpanded: isExpanded,
+          wasHovering: isHovering
+        });
+
+        // Force clear all hover-related state
         setIsExpanded(false);
         setIsHovering(false);
         isHoveringRef.current = false;
+
+        // Clear any pending hover timeouts to prevent stale state
+        if (hoverTimeoutRef.current) {
+          console.log('🧹 Clearing hover timeout during recording stop reset');
+          window.clearTimeout(hoverTimeoutRef.current);
+          hoverTimeoutRef.current = null;
+        }
+
+        console.log('✅ Dropdown state reset complete - ready for next recording');
       }, 1000);
+
+      // Return cleanup function to prevent memory leaks
+      return () => {
+        console.log('🧹 Cleaning up recording stop timeout');
+        window.clearTimeout(resetTimeout);
+      };
     }
   }, [isRecording, activeWorkflow]);
 
-  // Cleanup timeout on unmount
+  // Enhanced cleanup on unmount with debug logging
   useEffect(() => {
     return () => {
+      console.log('🧹 RecordPanel unmounting - cleaning up timeouts and refs');
       if (hoverTimeoutRef.current) {
         window.clearTimeout(hoverTimeoutRef.current);
         hoverTimeoutRef.current = null;
       }
+      // Reset all refs to prevent memory leaks
+      isHoveringRef.current = false;
     };
   }, []);
+
+  // Enhanced state monitoring and auto-recovery for hover functionality
+  useEffect(() => {
+    console.log('🔧 RecordPanel state check:', {
+      isExpanded,
+      isHovering,
+      isHoveringRefCurrent: isHoveringRef.current,
+      disabled,
+      whisperServerRunning,
+      isRecording,
+      activeWorkflow,
+      hasTimeout: !!hoverTimeoutRef.current,
+      timestamp: Date.now()
+    });
+
+    // Detect and fix stale states that could break hover functionality
+    const hasStaleExpandedState = isExpanded && !isHoveringRef.current && !isRecording;
+    const isButtonAccessible = !disabled && whisperServerRunning;
+
+    if (hasStaleExpandedState) {
+      console.warn('🚨 DETECTED STALE EXPANDED STATE - auto-fixing to restore hover functionality', {
+        isExpanded,
+        isHoveringRefCurrent: isHoveringRef.current,
+        isRecording,
+        isButtonAccessible
+      });
+
+      setIsExpanded(false);
+      setIsHovering(false);
+      isHoveringRef.current = false;
+
+      if (hoverTimeoutRef.current) {
+        console.log('🧹 Clearing stale timeout during auto-fix');
+        window.clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
+
+      console.log('✅ Stale state auto-fix complete - hover should work now');
+    }
+
+    // Log button accessibility for debugging
+    if (!isButtonAccessible) {
+      console.log('⚠️ Button not accessible:', {
+        disabled,
+        whisperServerRunning,
+        reason: disabled ? 'disabled=true' : 'whisper server not running'
+      });
+    }
+  }, [disabled, whisperServerRunning, isRecording, isExpanded, activeWorkflow]);
+
+  // Monitor hover events to detect if they're working
+  useEffect(() => {
+    let hoverTestTimeout: number;
+
+    // After component mounts or props change, test hover functionality after a delay
+    hoverTestTimeout = window.setTimeout(() => {
+      if (!isRecording && !disabled && whisperServerRunning) {
+        console.log('🔍 HOVER FUNCTIONALITY CHECK - button should be responsive', {
+          componentReady: true,
+          buttonAccessible: !disabled && whisperServerRunning,
+          isExpanded,
+          isHovering,
+          currentState: 'ready-for-hover'
+        });
+      }
+    }, 2000); // Wait 2 seconds for any state settling
+
+    return () => {
+      window.clearTimeout(hoverTestTimeout);
+    };
+  }, [isRecording, disabled, whisperServerRunning, activeWorkflow]);
 
   const getRecordButtonClasses = () => {
     const baseClasses = "relative flex items-center justify-center transition-all duration-300 cursor-pointer w-11 h-11 rounded-full border-2";
@@ -185,7 +333,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     const baseClasses = "relative w-full h-12 rounded-lg border-2 flex items-center justify-start font-medium transition-all duration-200 overflow-hidden hover:shadow-md";
     
     if (disabled || !whisperServerRunning) {
-      return `${baseClasses} glass-button border-gray-300 opacity-50 cursor-not-allowed`;
+      return `${baseClasses} bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 border-gray-300 opacity-50 cursor-not-allowed`;
     }
     
     if (isActive && isRecording) {
@@ -337,7 +485,31 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
         data-dropdown-trigger
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onClick={() => !disabled && setIsExpanded((prev) => !prev)}
+        onClick={(e) => {
+          console.log('🖱️ Record button clicked', {
+            disabled,
+            isExpanded,
+            whisperServerRunning,
+            currentTarget: e.currentTarget,
+            timestamp: Date.now()
+          });
+
+          if (!disabled && whisperServerRunning) {
+            // Force clear any stale timeouts before toggling
+            if (hoverTimeoutRef.current) {
+              window.clearTimeout(hoverTimeoutRef.current);
+              hoverTimeoutRef.current = null;
+            }
+
+            setIsExpanded((prev) => {
+              const newState = !prev;
+              console.log('🎯 Toggling dropdown expansion:', prev, '->', newState);
+              return newState;
+            });
+          } else {
+            console.log('⚠️ Click ignored - button disabled or whisper server not running');
+          }
+        }}
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="dialog"
         aria-expanded={isExpanded}

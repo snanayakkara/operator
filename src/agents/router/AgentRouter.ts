@@ -2,7 +2,7 @@ import type { AgentType, MedicalContext } from '@/types/medical.types';
 import { MedicalAgent } from '../base/MedicalAgent';
 import { TAVIAgent } from '../specialized/TAVIAgent';
 import { AngiogramPCIAgent } from '../specialized/AngiogramPCIAgent';
-import { QuickLetterAgent } from '../specialized/QuickLetterAgent';
+import { QuickLetterAgentPhase3 } from '../specialized/QuickLetterAgent.Phase3';
 import { ConsultationAgent } from '../specialized/ConsultationAgent';
 import { BloodsAgent } from '../specialized/BloodsAgent';
 import { ImagingAgent } from '../specialized/ImagingAgent';
@@ -38,7 +38,7 @@ export class AgentRouter {
           agent = new AngiogramPCIAgent();
           break;
         case 'quick-letter':
-          agent = new QuickLetterAgent();
+          agent = new QuickLetterAgentPhase3();
           break;
         case 'consultation':
           agent = new ConsultationAgent();

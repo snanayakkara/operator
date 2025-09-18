@@ -1,6 +1,7 @@
 import { NarrativeLetterAgent } from '../base/NarrativeLetterAgent';
 import { QUICK_LETTER_SYSTEM_PROMPTS } from './QuickLetterSystemPrompts';
 import { QUICK_LETTER_PATIENT_VERSION_SYSTEM_PROMPTS } from './QuickLetterPatientVersionSystemPrompts';
+import { QUICK_LETTER_EXEMPLARS, EXEMPLAR_REGISTRY, type ExemplarContent } from './QuickLetterExemplars';
 import type { MedicalContext, MedicalReport } from '@/types/medical.types';
 
 /**
@@ -94,18 +95,34 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
     // Store basic extracted data for potential context enhancement
     const extractedData = this.extractBasicLetterData(input);
-    
-    // Build contextualized system prompt
+
+    // Select relevant exemplars for few-shot learning enhancement
+    console.log('📖 Selecting exemplars for Quick Letter generation...');
+    const selectedExemplars = await this.selectRelevantExemplars(input, 2);
+
+    // Build contextualized system prompt with exemplars
     let contextualPrompt = this.systemPrompt;
     if (extractedData.letterType !== 'general') {
       contextualPrompt += `\n\nDetected context: This appears to be ${extractedData.letterType} correspondence. Focus on the relevant clinical content while maintaining continuous narrative prose format.`;
     }
 
+    // Enhance prompt with exemplars for improved accuracy
+    if (selectedExemplars.length > 0) {
+      contextualPrompt = this.enhancePromptWithExemplars(contextualPrompt, selectedExemplars);
+      console.log(`📖 Enhanced prompt with ${selectedExemplars.length} exemplars`);
+    }
+
     const startTime = Date.now();
     
-    console.log('📝 QuickLetter: Starting main letter generation');
-    console.log('🔧 System prompt preview:', contextualPrompt.substring(0, 200) + '...');
-    console.log('📥 Input preview:', input.substring(0, 100) + '...');
+    // Enhanced debugging for processing type detection
+    const isReprocessing = context && context.isReprocessing;
+    const processingType = isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
+    
+    console.log(`📝 QuickLetter [${processingType}]: Starting main letter generation`);
+    console.log(`🔧 [${processingType}] System prompt preview:`, contextualPrompt.substring(0, 200) + '...');
+    console.log(`📥 [${processingType}] Input preview:`, input.substring(0, 100) + '...');
+    console.log(`🎯 [${processingType}] Letter type detected:`, extractedData.letterType);
+    console.log(`⚙️ [${processingType}] Context provided:`, context ? 'Yes' : 'No');
     
     // Get raw model output directly so we can parse SUMMARY/LETTER
     const rawOutput = await this.lmStudioService.processWithAgent(
@@ -120,13 +137,33 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
     // Parse into summary + letter, then clean letter
     const { summary, letterContent } = this.parseStructuredResponse(rawOutput);
-    console.log('✅ Parsed summary:', summary.substring(0, 150) + '...');
-    console.log('✅ Parsed letter content length:', letterContent.length);
-    console.log('✅ Parsed letter preview:', letterContent.substring(0, 200) + '...');
+    console.log(`✅ [${processingType}] Parsed summary:`, summary.substring(0, 150) + '...');
+    console.log(`✅ [${processingType}] Parsed letter content length:`, letterContent.length);
+    console.log(`✅ [${processingType}] Parsed letter preview:`, letterContent.substring(0, 200) + '...');
+    
+    // Validate for reasoning leakage and log for monitoring
+    const leakageDetection = this.detectReasoningLeakage(rawOutput, letterContent);
+    if (leakageDetection.hasLeakage) {
+      console.warn('🚨 Reasoning leakage detected in Quick Letter output:', leakageDetection.indicators);
+      console.warn('📊 Leakage severity:', leakageDetection.severity, 'out of 10');
+      if (leakageDetection.severity >= 7) {
+        console.warn('⚠️ High severity leakage - consider reviewing system prompts');
+      }
+    }
+
+    // Always capture reasoning artifacts for transparency
+    const reasoningArtifacts = this.parseReasoningArtifacts(rawOutput);
+    console.log('🧠 Captured reasoning artifacts:', reasoningArtifacts.hasReasoningContent ? 'Yes' : 'None detected');
+    
     const cleanedLetter = this.cleanNarrativeTextPreserveParagraphs(letterContent);
 
     // Apply fallback paragraph detection if needed
+    console.log(`🔧 [${processingType}] Applying paragraph formatting to cleaned letter (length: ${cleanedLetter.length})`);
     const finalLetter = this.applyFallbackParagraphFormatting(cleanedLetter);
+    
+    const paragraphsBefore = (cleanedLetter.match(/\n\n/g) || []).length;
+    const paragraphsAfter = (finalLetter.match(/\n\n/g) || []).length;
+    console.log(`📝 [${processingType}] Paragraph formatting result: ${paragraphsBefore} → ${paragraphsAfter} paragraphs`);
 
     // Confidence and warnings
     const hasHallucination = this.detectHallucination(input, finalLetter);
@@ -136,9 +173,15 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     const confidence = this.calculateNarrativeConfidence(input, finalLetter);
 
     // Detect missing information (separate analysis call)
-    console.log('🔍 QuickLetter: Starting missing information analysis (separate from main letter)');
+    console.log(`🔍 QuickLetter [${processingType}]: Starting missing information analysis (separate from main letter)`);
     const missingInfo = await this.detectMissingInformation(input, extractedData.letterType);
-    console.log('📊 Missing info analysis complete:', missingInfo ? JSON.stringify(missingInfo).substring(0, 200) + '...' : 'null');
+    console.log(`📊 [${processingType}] Missing info analysis complete:`, missingInfo ? JSON.stringify(missingInfo).substring(0, 200) + '...' : 'null');
+    if (missingInfo) {
+      const totalMissing = (missingInfo.missing_purpose?.length || 0) + 
+                          (missingInfo.missing_clinical?.length || 0) + 
+                          (missingInfo.missing_recommendations?.length || 0);
+      console.log(`📋 [${processingType}] Missing information summary: ${totalMissing} items total`);
+    }
 
     // Validate minimum content
     const validation = this.validateAndFormatContent(finalLetter, input, confidence);
@@ -162,6 +205,10 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     if (missingInfo) {
       report.metadata.missingInformation = missingInfo;
     }
+
+    // Always store reasoning artifacts for transparency
+    report.metadata.rawAIOutput = rawOutput;
+    report.metadata.reasoningArtifacts = reasoningArtifacts;
 
     return { ...report, content: validation.content, summary };
   }
@@ -296,26 +343,313 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
   }
 
   /**
+   * Preprocess response output to remove reasoning artifacts and analysis sections
+   * This method identifies and strips common patterns of AI reasoning that shouldn't appear in final output
+   */
+  private preprocessResponseOutput(outputText: string): string {
+    let cleaned = outputText;
+
+    // Track what artifacts were found for logging
+    const artifactsFound: string[] = [];
+    
+    // 1. Remove large blocks of reasoning that appear before SUMMARY:
+    const reasoningBlockPatterns = [
+      // Full rewritten content markers
+      /\[Full rewritten letter content\]\s*\n*/g,
+      
+      // Analysis sections with headers
+      /\*\*Dictation Analysis:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      /\*\*Summary Planning:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      /\*\*Letter Planning:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      /\*\*Constraint Checklist.*?:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      /\*\*Mental Sandbox:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      /\*\*Confidence Score:\*\*[\s\S]*?(?=\*\*|SUMMARY:|$)/g,
+      
+      // Without asterisk formatting
+      /Dictation Analysis:[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      /Summary Planning:[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      /Letter Planning:[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      /Constraint Checklist[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      /Mental Sandbox:[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      /Confidence Score:[\s\S]*?(?=\n[A-Z]|SUMMARY:|$)/g,
+      
+      // Numbered analysis steps
+      /^\d+\.\s+.*?(?=\n\d+\.|SUMMARY:|$)/gm,
+      
+      // Bullet point analysis
+      /^[-•]\s+.*?(?=\n[-•]|SUMMARY:|$)/gm,
+    ];
+
+    reasoningBlockPatterns.forEach((pattern, index) => {
+      const matches = cleaned.match(pattern);
+      if (matches) {
+        artifactsFound.push(`reasoning_pattern_${index + 1}`);
+        cleaned = cleaned.replace(pattern, '');
+      }
+    });
+
+    // 2. Remove confidence and assessment statements that may appear anywhere
+    const assessmentPatterns = [
+      /Confidence Score:\s*\d+\/\d+.*?\n/g,
+      /I am confident I can meet all requirements\./g,
+      /Okay, proceeding with generation based on these plans\./g,
+      /<unused\d+>/g, // Remove any unused token markers
+      /\bconfidence\s*:\s*\d+/gi,
+      /\bscore\s*:\s*\d+\/\d+/gi,
+    ];
+
+    assessmentPatterns.forEach((pattern, index) => {
+      if (pattern.test(cleaned)) {
+        artifactsFound.push(`assessment_${index + 1}`);
+        cleaned = cleaned.replace(pattern, '');
+      }
+    });
+
+    // 3. Remove meta-commentary about the process
+    const metaCommentaryPatterns = [
+      /Initial thought:.*?\./g,
+      /How to phrase.*?\./g,
+      /Should I mention.*?\./g,
+      /I must stick.*?\./g,
+      /This is.*?(?=\.|$)/g,
+    ];
+
+    metaCommentaryPatterns.forEach((pattern, index) => {
+      if (pattern.test(cleaned)) {
+        artifactsFound.push(`meta_commentary_${index + 1}`);
+        cleaned = cleaned.replace(pattern, '');
+      }
+    });
+
+    // 4. Clean up any remaining artifacts from the beginning
+    cleaned = cleaned.replace(/^[\s\n]*/, ''); // Remove leading whitespace
+    
+    // 5. Ensure we don't accidentally remove content between SUMMARY: and LETTER:
+    // This is a safety check - only clean before SUMMARY: or after final content
+    if (cleaned.includes('SUMMARY:') && cleaned.includes('LETTER:')) {
+      const summaryStart = cleaned.indexOf('SUMMARY:');
+      const beforeSummary = cleaned.substring(0, summaryStart);
+      const fromSummary = cleaned.substring(summaryStart);
+      
+      // Only clean the part before SUMMARY:, preserve everything after
+      const cleanedBefore = beforeSummary.replace(/[\s\S]*?(?=SUMMARY:|$)/, '');
+      cleaned = cleanedBefore + fromSummary;
+    }
+
+    // 6. Final cleanup - remove excessive whitespace but preserve paragraph structure
+    cleaned = cleaned
+      .replace(/\n{4,}/g, '\n\n') // Max two newlines for paragraph breaks
+      .replace(/^\s+|\s+$/g, '') // Trim start and end
+      .trim();
+
+    // Log what was cleaned if anything was found
+    if (artifactsFound.length > 0) {
+      console.log(`🧹 Preprocessing removed artifacts: ${artifactsFound.join(', ')}`);
+      console.log(`📏 Length reduction: ${outputText.length} → ${cleaned.length} characters`);
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Detect reasoning leakage in the AI output for monitoring and debugging
+   * This helps identify when reasoning artifacts slip through preprocessing
+   */
+  private detectReasoningLeakage(rawOutput: string, finalContent: string): {
+    hasLeakage: boolean;
+    indicators: string[];
+    severity: number; // 1-10 scale
+  } {
+    const indicators: string[] = [];
+    let severity = 0;
+
+    // Check for reasoning patterns in raw output (high severity if they made it to final content)
+    const reasoningPatterns = [
+      { pattern: /Dictation Analysis:/i, name: 'dictation_analysis', severity: 8 },
+      { pattern: /Summary Planning:/i, name: 'summary_planning', severity: 7 },
+      { pattern: /Letter Planning:/i, name: 'letter_planning', severity: 7 },
+      { pattern: /Constraint Checklist/i, name: 'constraint_checklist', severity: 9 },
+      { pattern: /Mental Sandbox:/i, name: 'mental_sandbox', severity: 9 },
+      { pattern: /Confidence Score:/i, name: 'confidence_score', severity: 6 },
+      { pattern: /I am confident I can meet/i, name: 'confidence_statement', severity: 6 },
+      { pattern: /proceeding with generation/i, name: 'generation_commentary', severity: 8 },
+      { pattern: /\*\*[^*]*Analysis[^*]*:\*\*/i, name: 'analysis_headers', severity: 7 },
+      { pattern: /Initial thought:/i, name: 'initial_thought', severity: 8 },
+      { pattern: /How to phrase/i, name: 'phrasing_thoughts', severity: 5 },
+      { pattern: /<unused\d+>/i, name: 'unused_tokens', severity: 3 }
+    ];
+
+    reasoningPatterns.forEach(({ pattern, name, severity: patternSeverity }) => {
+      if (pattern.test(rawOutput)) {
+        indicators.push(name);
+        
+        // Higher severity if the reasoning made it to final content
+        if (pattern.test(finalContent)) {
+          severity = Math.max(severity, patternSeverity + 2); // Extra penalty for leaking through
+        } else {
+          severity = Math.max(severity, Math.floor(patternSeverity / 2)); // Lower penalty if caught by preprocessing
+        }
+      }
+    });
+
+    // Check for structural issues that indicate reasoning artifacts
+    const structuralIssues = [
+      {
+        check: () => rawOutput.includes('SUMMARY:') && !rawOutput.startsWith('SUMMARY:'),
+        name: 'content_before_summary',
+        severity: 6
+      },
+      {
+        check: () => {
+          const letterEnd = rawOutput.lastIndexOf('LETTER:');
+          if (letterEnd === -1) return false;
+          const afterLetter = rawOutput.substring(letterEnd).toLowerCase();
+          return afterLetter.includes('confidence') || afterLetter.includes('checklist');
+        },
+        name: 'content_after_letter',
+        severity: 7
+      },
+      {
+        check: () => {
+          // Check for numbered lists that look like analysis steps
+          const numberedSteps = rawOutput.match(/^\d+\.\s+/gm);
+          return numberedSteps && numberedSteps.length > 3;
+        },
+        name: 'numbered_analysis_steps',
+        severity: 5
+      }
+    ];
+
+    structuralIssues.forEach(({ check, name, severity: issueSeverity }) => {
+      if (check()) {
+        indicators.push(name);
+        severity = Math.max(severity, issueSeverity);
+      }
+    });
+
+    return {
+      hasLeakage: indicators.length > 0,
+      indicators,
+      severity
+    };
+  }
+
+  /**
+   * Parse reasoning artifacts from raw AI output for transparency viewing
+   * Extracts different types of reasoning sections that users might want to see
+   */
+  private parseReasoningArtifacts(rawOutput: string): {
+    dictationAnalysis?: string;
+    summaryPlanning?: string;
+    letterPlanning?: string;
+    constraintChecklist?: string;
+    mentalSandbox?: string;
+    confidenceScore?: string;
+    otherArtifacts?: string[];
+    hasReasoningContent: boolean;
+  } {
+    const artifacts: any = {
+      hasReasoningContent: false,
+      otherArtifacts: []
+    };
+
+    // Extract Dictation Analysis section
+    const dictationAnalysisMatch = rawOutput.match(/\*\*Dictation Analysis:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (dictationAnalysisMatch) {
+      artifacts.dictationAnalysis = dictationAnalysisMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Extract Summary Planning section  
+    const summaryPlanningMatch = rawOutput.match(/\*\*Summary Planning:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (summaryPlanningMatch) {
+      artifacts.summaryPlanning = summaryPlanningMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Extract Letter Planning section
+    const letterPlanningMatch = rawOutput.match(/\*\*Letter Planning:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (letterPlanningMatch) {
+      artifacts.letterPlanning = letterPlanningMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Extract Constraint Checklist section
+    const constraintChecklistMatch = rawOutput.match(/\*\*Constraint Checklist.*?:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (constraintChecklistMatch) {
+      artifacts.constraintChecklist = constraintChecklistMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Extract Mental Sandbox section
+    const mentalSandboxMatch = rawOutput.match(/\*\*Mental Sandbox:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (mentalSandboxMatch) {
+      artifacts.mentalSandbox = mentalSandboxMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Extract Confidence Score section
+    const confidenceScoreMatch = rawOutput.match(/\*\*Confidence Score:\*\*([\s\S]*?)(?=\*\*|SUMMARY:|$)/);
+    if (confidenceScoreMatch) {
+      artifacts.confidenceScore = confidenceScoreMatch[1].trim();
+      artifacts.hasReasoningContent = true;
+    }
+
+    // Look for other reasoning patterns without asterisks
+    const additionalPatterns = [
+      /Dictation Analysis:([\s\S]*?)(?=\n[A-Z]|SUMMARY:|$)/,
+      /Summary Planning:([\s\S]*?)(?=\n[A-Z]|SUMMARY:|$)/,
+      /Letter Planning:([\s\S]*?)(?=\n[A-Z]|SUMMARY:|$)/,
+      /Mental Sandbox:([\s\S]*?)(?=\n[A-Z]|SUMMARY:|$)/,
+      /Confidence Score:([\s\S]*?)(?=\n[A-Z]|SUMMARY:|$)/
+    ];
+
+    additionalPatterns.forEach(pattern => {
+      const match = rawOutput.match(pattern);
+      if (match && !artifacts.dictationAnalysis && !artifacts.summaryPlanning && !artifacts.letterPlanning) {
+        artifacts.otherArtifacts.push(match[1].trim());
+        artifacts.hasReasoningContent = true;
+      }
+    });
+
+    // Look for any content before SUMMARY: that might be reasoning
+    if (!artifacts.hasReasoningContent && rawOutput.includes('SUMMARY:')) {
+      const beforeSummary = rawOutput.substring(0, rawOutput.indexOf('SUMMARY:')).trim();
+      if (beforeSummary.length > 50) { // Only if substantial content exists
+        artifacts.otherArtifacts.push(beforeSummary);
+        artifacts.hasReasoningContent = true;
+      }
+    }
+
+    return artifacts;
+  }
+
+  /**
    * Parse structured response with SUMMARY: and LETTER: sections
    */
   private parseStructuredResponse(outputText: string): { summary: string; letterContent: string } {
     try {
       console.log('🔧 Parsing structured response for SUMMARY: and LETTER: markers');
       
-      // Robust parsing that does not depend on a '---' divider
-      // 1) Prefer explicit markers if present (even if formatting was cleaned)
-      const summaryIdx = outputText.indexOf('SUMMARY:');
-      const letterIdx = outputText.indexOf('LETTER:');
+      // Step 1: Preprocess to remove reasoning artifacts before parsing
+      const cleanedOutput = this.preprocessResponseOutput(outputText);
+      console.log('🧹 Preprocessed output length:', cleanedOutput.length);
+      console.log('🧹 Removed reasoning artifacts, original length:', outputText.length);
+      
+      // Step 2: Robust parsing that does not depend on a '---' divider
+      // Prefer explicit markers if present (even if formatting was cleaned)
+      const summaryIdx = cleanedOutput.indexOf('SUMMARY:');
+      const letterIdx = cleanedOutput.indexOf('LETTER:');
 
       console.log('🔍 Found SUMMARY: at index:', summaryIdx);
       console.log('🔍 Found LETTER: at index:', letterIdx);
 
       if (summaryIdx !== -1 && letterIdx !== -1 && summaryIdx < letterIdx) {
         console.log('✅ Found both SUMMARY: and LETTER: markers in correct order');
-        const summaryRaw = outputText
+        const summaryRaw = cleanedOutput
           .substring(summaryIdx + 'SUMMARY:'.length, letterIdx)
           .trim();
-        const letterContent = outputText
+        const letterContent = cleanedOutput
           .substring(letterIdx + 'LETTER:'.length)
           .trim();
 
@@ -330,8 +664,8 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
       // 2) Legacy pattern with explicit '---' divider (if it survived cleaning)
       console.log('🔍 Checking for legacy --- divider pattern');
-      const legacySummaryMatch = outputText.match(/SUMMARY:\s*(.+?)(?=---)/s);
-      const legacyLetterMatch = outputText.match(/LETTER:\s*(.*)/s);
+      const legacySummaryMatch = cleanedOutput.match(/SUMMARY:\s*(.+?)(?=---)/s);
+      const legacyLetterMatch = cleanedOutput.match(/LETTER:\s*(.*)/s);
       if (legacySummaryMatch && legacyLetterMatch) {
         console.log('✅ Found legacy pattern with --- divider');
         const summary = this.cleanSummaryText(legacySummaryMatch[1].trim());
@@ -339,28 +673,30 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
         return { summary, letterContent };
       }
 
-      // 3) Fallback: treat entire output as letter content and synthesize a summary
+      // 3) Fallback: treat cleaned output as letter content and synthesize a summary
       console.log('⚠️ No SUMMARY:/LETTER: markers found, using fallback parsing');
-      console.log('📄 Raw output for fallback:', outputText.substring(0, 200) + '...');
-      const intelligentSummary = this.generateIntelligentSummary(outputText);
+      console.log('📄 Cleaned output for fallback:', cleanedOutput.substring(0, 200) + '...');
+      const intelligentSummary = this.generateIntelligentSummary(cleanedOutput);
       const fallbackSummary = intelligentSummary.length > 150
         ? intelligentSummary.substring(0, 147) + '...'
         : intelligentSummary;
 
       console.log('🔄 Generated fallback summary:', fallbackSummary);
-      console.log('📝 Using entire output as letter content (length:', outputText.length, ')');
+      console.log('📝 Using cleaned output as letter content (length:', cleanedOutput.length, ')');
 
       return {
         summary: fallbackSummary,
-        letterContent: outputText
+        letterContent: cleanedOutput
       };
     } catch (error) {
       console.warn('❌ Error parsing structured response:', error);
-      const fallbackSummary = outputText.length > 150
-        ? outputText.substring(0, 147) + '...'
-        : outputText;
-      console.log('🚨 Using emergency fallback parsing');
-      return { summary: fallbackSummary, letterContent: outputText };
+      // Try to clean the output even in error case
+      const cleanedOutput = this.preprocessResponseOutput(outputText);
+      const fallbackSummary = cleanedOutput.length > 150
+        ? cleanedOutput.substring(0, 147) + '...'
+        : cleanedOutput;
+      console.log('🚨 Using emergency fallback parsing with preprocessing');
+      return { summary: fallbackSummary, letterContent: cleanedOutput };
     }
   }
 
@@ -374,11 +710,18 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     const totalSentences = (text.match(/[.!?]\s+/g) || []).length;
     const textLength = text.length;
 
-    // Heuristic: If we have reasonable paragraph breaks relative to content, don't modify
+    // More conservative heuristic: Only skip paragraph formatting if we have very good structure
+    // Allow formatting if paragraphs are too dense (> 6 sentences per paragraph) or too few paragraphs for length
     if (currentParagraphs > 0 && textLength > 200) {
       const paragraphDensity = totalSentences / (currentParagraphs + 1);
-      if (paragraphDensity < 8) { // Reasonable paragraph length (< 8 sentences per paragraph)
+      const minExpectedParagraphs = Math.floor(textLength / 400); // Expect at least 1 paragraph per 400 chars
+      
+      // Only skip if we have reasonable density AND sufficient paragraph count
+      if (paragraphDensity <= 6 && currentParagraphs >= minExpectedParagraphs) {
+        console.log(`📝 QuickLetter: Paragraph structure already good (${currentParagraphs} paragraphs, density: ${paragraphDensity.toFixed(1)} sentences/paragraph)`);
         return text;
+      } else {
+        console.log(`📝 QuickLetter: Will improve paragraph structure (${currentParagraphs} paragraphs, density: ${paragraphDensity.toFixed(1)}, expected: ${minExpectedParagraphs})`);
       }
     }
 
@@ -1035,5 +1378,147 @@ If you have any questions about this information, please don't hesitate to call 
     fallback += 'Please contact our office if you have any questions about your care.';
     
     return fallback;
+  }
+
+  /**
+   * Load exemplar registry with actual content from bundled exemplars
+   */
+  private loadExemplarRegistry(): Promise<{
+    exemplars: ExemplarContent[];
+    tags: Record<string, string>;
+  } | null> {
+    try {
+      console.log(`📖 Loaded bundled exemplar registry with ${QUICK_LETTER_EXEMPLARS.length} exemplars`);
+      return Promise.resolve({
+        exemplars: QUICK_LETTER_EXEMPLARS,
+        tags: EXEMPLAR_REGISTRY.tags
+      });
+    } catch (error) {
+      console.warn('Failed to load bundled exemplar registry:', error);
+      return Promise.resolve(null);
+    }
+  }
+
+  /**
+   * Select relevant exemplars based on input content analysis
+   */
+  private async selectRelevantExemplars(input: string, maxExemplars: number = 2): Promise<ExemplarContent[]> {
+    try {
+      const registry = await this.loadExemplarRegistry();
+      if (!registry) {
+        console.log('📖 No exemplar registry available, proceeding without exemplars');
+        return [];
+      }
+
+      const inputLower = input.toLowerCase();
+      const scoredExemplars: Array<{ exemplar: ExemplarContent; score: number; matches: string[] }> = [];
+
+      // Score each exemplar based on content relevance
+      for (const exemplar of registry.exemplars) {
+        let score = 0;
+        const matches: string[] = [];
+
+        // Check tag relevance (highest weight)
+        for (const tag of exemplar.tags) {
+          if (inputLower.includes(tag.toLowerCase()) ||
+              inputLower.includes(tag.replace('-', ' ')) ||
+              inputLower.includes(tag.replace('-', ''))) {
+            score += 10;
+            matches.push(`tag:${tag}`);
+          }
+        }
+
+        // Check diagnosis context keywords
+        const contextWords = exemplar.dx.toLowerCase().split(' ');
+        for (const word of contextWords) {
+          if (word.length > 3 && inputLower.includes(word)) {
+            score += 3;
+            matches.push(`context:${word}`);
+          }
+        }
+
+        // Check for specific medical terms
+        const medicalTerms = [
+          'referral', 'follow-up', 'angiogram', 'heart failure', 'tavi',
+          'palpitations', 'syncope', 'procedure', 'medication', 'assessment'
+        ];
+        for (const term of medicalTerms) {
+          if (inputLower.includes(term) && exemplar.tags.some(tag => tag.includes(term) || exemplar.dx.toLowerCase().includes(term))) {
+            score += 5;
+            matches.push(`medical:${term}`);
+          }
+        }
+
+        // Check audience appropriateness
+        if (inputLower.includes('gp') || inputLower.includes('general practitioner')) {
+          if (exemplar.audience === 'GP') {
+            score += 3;
+            matches.push('audience:GP');
+          }
+        }
+
+        // Check tone indicators
+        if (inputLower.includes('urgent') && exemplar.tone === 'urgent') {
+          score += 4;
+          matches.push('tone:urgent');
+        }
+        if ((inputLower.includes('reassur') || inputLower.includes('normal')) && exemplar.tone === 'reassuring') {
+          score += 4;
+          matches.push('tone:reassuring');
+        }
+
+        if (score > 0) {
+          scoredExemplars.push({ exemplar, score, matches });
+        }
+      }
+
+      // Sort by score and take top matches
+      scoredExemplars.sort((a, b) => b.score - a.score);
+      const selectedExemplars = scoredExemplars.slice(0, maxExemplars);
+
+      console.log(`📖 Selected ${selectedExemplars.length} exemplars for Quick Letter generation:`);
+      selectedExemplars.forEach(({ exemplar, score, matches }) => {
+        console.log(`   - ${exemplar.file} (score: ${score}, matches: ${matches.join(', ')})`);
+      });
+
+      return selectedExemplars.map(({ exemplar }) => exemplar);
+
+    } catch (error) {
+      console.warn('Failed to select exemplars:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Enhance system prompt with selected exemplars for few-shot learning
+   */
+  private enhancePromptWithExemplars(basePrompt: string, exemplars: ExemplarContent[]): string {
+    if (exemplars.length === 0) {
+      return basePrompt;
+    }
+
+    let enhancedPrompt = basePrompt;
+
+    // Add exemplar section to the system prompt
+    enhancedPrompt += '\n\n## EXEMPLARS FOR REFERENCE\n\n';
+    enhancedPrompt += 'Here are relevant examples to guide your response style and structure:\n\n';
+
+    exemplars.forEach((exemplar, index) => {
+      enhancedPrompt += `### Example ${index + 1}: ${exemplar.summary}\n`;
+      enhancedPrompt += `**Context**: ${exemplar.dx}\n`;
+      enhancedPrompt += `**Audience**: ${exemplar.audience}\n`;
+      enhancedPrompt += `**Tone**: ${exemplar.tone}\n`;
+      enhancedPrompt += `**Tags**: ${exemplar.tags.join(', ')}\n\n`;
+
+      // Include input transcript and target output for few-shot learning
+      enhancedPrompt += `**Input Transcript**:\n${exemplar.inputTranscript}\n\n`;
+      enhancedPrompt += `**Target Output**:\n${exemplar.targetOutput}\n\n`;
+      enhancedPrompt += `---\n\n`;
+    });
+
+    enhancedPrompt += '---\n\n';
+    enhancedPrompt += 'Use these exemplars as style and structure guides, but ensure your response is specific to the input dictation provided.\n\n';
+
+    return enhancedPrompt;
   }
 }

@@ -73,7 +73,7 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
           <button
             disabled={isProcessing}
             className={`
-              glass-button relative p-1.5 rounded-lg transition-all hover:bg-gray-50 text-left w-full h-full
+              bg-transparent hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg text-left w-full h-full p-1.5
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
           >
@@ -103,8 +103,8 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
               onClick={handleDictate}
               disabled={isProcessing}
               className={`
-                glass-button relative flex items-center justify-center p-1 rounded-lg 
-                transition-all hover:bg-${config.color}-50 text-left
+                bg-transparent hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg 
+                relative flex items-center justify-center p-1 text-left
                 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
               `}
             >
@@ -119,8 +119,8 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
               onClick={handleType}
               disabled={isProcessing}
               className={`
-                glass-button relative flex items-center justify-center p-1 rounded-lg 
-                transition-all hover:bg-${config.color}-50 text-left
+                bg-transparent hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg 
+                relative flex items-center justify-center p-1 text-left
                 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
               `}
             >
@@ -150,7 +150,7 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
         <button
           disabled={isProcessing}
           className={`
-            glass-button relative flex items-center p-3 rounded-lg transition-all 
+            bg-transparent hover:bg-gray-50 relative flex items-center p-3 rounded-lg transition-all 
             hover:bg-gray-50 text-left w-full
             ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
           `}
@@ -184,7 +184,7 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
             onClick={handleDictate}
             disabled={isProcessing}
             className={`
-              glass-button relative flex items-center p-3 rounded-lg transition-all 
+              bg-transparent hover:bg-gray-50 relative flex items-center p-3 rounded-lg transition-all 
               hover:bg-${config.color}-50 text-left w-full
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
@@ -205,7 +205,7 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
             onClick={handleType}
             disabled={isProcessing}
             className={`
-              glass-button relative flex items-center p-3 rounded-lg transition-all 
+              bg-transparent hover:bg-gray-50 relative flex items-center p-3 rounded-lg transition-all 
               hover:bg-${config.color}-50 text-left w-full
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}

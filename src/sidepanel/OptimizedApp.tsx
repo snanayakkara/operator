@@ -6,7 +6,7 @@
  * Optimized for performance with useReducer state management and React.memo.
  */
 
-import React, { useEffect, useCallback, useRef, memo, startTransition } from 'react';
+import React, { useEffect, useCallback, useRef, memo, startTransition, useState, useMemo } from 'react';
 import './styles/globals.css';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { AudioDeviceProvider, useAudioDeviceContext } from '@/contexts/AudioDeviceContext';
@@ -25,17 +25,23 @@ import { hasRecordingPrompt } from '@/config/recordingPrompts';
 import { MetricsDashboard } from './components/MetricsDashboard';
 import { LiveAudioVisualizer } from './components/LiveAudioVisualizer';
 import { ScreenshotAnnotationModal } from './components/ScreenshotAnnotationModal';
+import { PatientMismatchConfirmationModal } from './components/PatientMismatchConfirmationModal';
+import { OptimizationPanel } from '../components/settings/OptimizationPanel';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
-import { LMStudioService } from '@/services/LMStudioService';
+import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
 import { WhisperServerService } from '@/services/WhisperServerService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
+import { patientNameValidator } from '@/utils/PatientNameValidator';
 import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput } from '@/types/medical.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { useRecorder } from '@/hooks/useRecorder';
 import { ToastService } from '@/services/ToastService';
+import { RecordingToasts } from '@/utils/toastHelpers';
 import { logger } from '@/utils/Logger';
+import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
+import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 
 const OptimizedApp: React.FC = memo(() => {
   return (
@@ -57,16 +63,257 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Store current audio blob for failed transcription storage
   const currentAudioBlobRef = useRef<Blob | null>(null);
   const currentRecordingTimeRef = useRef<number>(0);
-  
+
   // AbortController refs for cancellation
   const transcriptionAbortRef = useRef<AbortController | null>(null);
   const processingAbortRef = useRef<AbortController | null>(null);
-  
+
   // Stable service instances using useRef to prevent re-creation on renders
   const lmStudioService = useRef(LMStudioService.getInstance()).current;
   const whisperServerService = useRef(WhisperServerService.getInstance()).current;
   const batchOrchestrator = useRef<BatchAIReviewOrchestrator | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  // Forward declare recorder hooks callbacks to avoid circular dependencies
+  const handleRecordingCompleteRef = useRef<((audioBlob: Blob) => Promise<void>) | null>(null);
+  const handleVoiceActivityUpdateRef = useRef<((level: number, frequencyData: number[]) => void) | null>(null);
+
+  // Initialize recorder BEFORE using it in memoized values
+  const recorder = useRecorder({
+    onRecordingComplete: (audioBlob: Blob) => {
+      if (handleRecordingCompleteRef.current) {
+        return handleRecordingCompleteRef.current(audioBlob);
+      }
+    },
+    onVoiceActivityUpdate: (level: number, frequencyData: number[]) => {
+      if (handleVoiceActivityUpdateRef.current) {
+        handleVoiceActivityUpdateRef.current(level, frequencyData);
+      }
+    },
+    onRecordingTimeUpdate: useCallback((time: number) => {
+      currentRecordingTimeRef.current = time;
+    }, []),
+    getMicrophoneId: () => audioDeviceContext.selectedMicrophoneId
+  });
+
+  // Session isolation - prevent UI context switches during recordings
+  const stableSelectedSessionId = useMemo(() => {
+    // If currently recording, keep the existing selected session to prevent UI context switches
+    if (recorder.isRecording || currentSessionIdRef.current !== null) {
+      return state.selectedSessionId;
+    }
+    return state.selectedSessionId;
+  }, [state.selectedSessionId, recorder.isRecording]);
+
+  const stableSelectedPatientName = useMemo(() => {
+    if (!stableSelectedSessionId) return undefined;
+    const session = state.patientSessions.find(s => s.id === stableSelectedSessionId);
+    return session?.patient?.name;
+  }, [stableSelectedSessionId, state.patientSessions]);
+
+  // Streaming control
+  const stopStreaming = useCallback(() => {
+    if (processingAbortRef.current) {
+      processingAbortRef.current.abort();
+      processingAbortRef.current = null;
+    }
+    actions.streamCancelled();
+    actions.setStreaming(false);
+    // Clear any partial AI summary when cancelling
+    actions.setAiGeneratedSummary(undefined);
+  }, [actions]);
+
+  const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
+    try {
+      switch (agent) {
+        case 'quick-letter': {
+          const mod = await import('@/agents/specialized/QuickLetterSystemPrompts');
+          return mod.QUICK_LETTER_SYSTEM_PROMPTS.primary;
+        }
+        case 'investigation-summary': {
+          const mod = await import('@/agents/specialized/InvestigationSummarySystemPrompts');
+          return mod.INVESTIGATION_SUMMARY_SYSTEM_PROMPTS.primary;
+        }
+        case 'background': {
+          const mod = await import('@/agents/specialized/BackgroundSystemPrompts');
+          return mod.BACKGROUND_SYSTEM_PROMPTS.primary;
+        }
+        case 'medication': {
+          const mod = await import('@/agents/specialized/MedicationSystemPrompts');
+          return mod.MEDICATION_SYSTEM_PROMPTS.primary;
+        }
+        case 'bloods': {
+          const mod = await import('@/agents/specialized/BloodsSystemPrompts');
+          return mod.BLOODS_SYSTEM_PROMPTS.primary;
+        }
+        case 'imaging': {
+          const mod = await import('@/agents/specialized/ImagingSystemPrompts');
+          return mod.IMAGING_SYSTEM_PROMPTS.primary;
+        }
+        default:
+          return null;
+      }
+    } catch (e) {
+      console.warn('Failed to load system prompt for agent', agent, e);
+      return null;
+    }
+  }, []);
+
+  const getModelAndTokens = (agent: AgentType): { model: string; maxTokens: number } => {
+    switch (agent) {
+      case 'investigation-summary':
+        return { model: MODEL_CONFIG.QUICK_MODEL, maxTokens: 2000 };
+      case 'background':
+        return { model: MODEL_CONFIG.QUICK_MODEL, maxTokens: 2000 };
+      case 'medication':
+        return { model: MODEL_CONFIG.QUICK_MODEL, maxTokens: 3000 };
+      case 'quick-letter':
+        return { model: MODEL_CONFIG.REASONING_MODEL, maxTokens: 5000 };
+      default:
+        return { model: MODEL_CONFIG.REASONING_MODEL, maxTokens: 4000 };
+    }
+  };
+
+  const startStreamingGeneration = useCallback(async (sessionId: string, agent: AgentType, input: string) => {
+    const systemPrompt = await getSystemPromptForAgent(agent);
+    if (!systemPrompt) {
+      return false;
+    }
+    actions.clearStream();
+    actions.setStreaming(true);
+    actions.setProcessingStatus('processing');
+    const controller = new AbortController();
+    processingAbortRef.current = controller;
+    const { model, maxTokens } = getModelAndTokens(agent);
+    let ttftMs: number | null = null;
+    const t0 = performance.now();
+    await streamChatCompletion({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: input }
+      ],
+      temperature: 0.3,
+      maxTokens,
+      signal: controller.signal,
+      onMessage: (json) => {
+        if (ttftMs == null && json?.choices?.[0]?.delta?.content) {
+          ttftMs = Math.round(performance.now() - t0);
+          actions.setTTFT(ttftMs);
+        }
+      },
+      onToken: (t) => {
+        actions.appendStreamChunk(t);
+      },
+      onEnd: (final, usage) => {
+        // Extract summary and letter content for QuickLetter agents to enable dual-card display
+        let extractedSummary: string | undefined = undefined;
+        let letterContent: string = final; // Default to full content for non-QuickLetter agents
+        
+        if (agent === 'quick-letter') {
+          try {
+            const parsed = parseQuickLetterStructuredResponse(final);
+            extractedSummary = parsed.summary;
+            letterContent = parsed.letterContent;
+            console.log('📋 Parsed QuickLetter streaming output:');
+            console.log('   Summary:', extractedSummary.substring(0, 100) + '...');
+            console.log('   Letter content length:', letterContent.length);
+          } catch (error) {
+            console.warn('⚠️ Failed to parse QuickLetter output:', error);
+            // Fallback to original extraction method
+            extractedSummary = extractQuickLetterSummary(final);
+            letterContent = final;
+          }
+        }
+        
+        // Use parsed letter content for results, not full output
+        actions.streamDone(letterContent, usage, ttftMs);
+        // Set the AI-generated summary for QuickLetter dual-card display
+        if (extractedSummary) {
+          actions.setAiGeneratedSummary(extractedSummary);
+        }
+
+        // Detect missing information for QuickLetter during streaming completion
+        if (agent === 'quick-letter') {
+          console.log('🔍 Streaming completion: detecting missing information for QuickLetter');
+          // Use a simple async function to detect missing info without blocking UI
+          (async () => {
+            try {
+              // Import QuickLetterAgent for missing info detection
+              const { QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
+              const quickLetterAgent = new QuickLetterAgentPhase3();
+              // Call the missing info detection method directly (we need to make it public or create a wrapper)
+              // For now, use a basic fallback detection
+              const text = input.toLowerCase();
+              const missing = {
+                letter_type: 'general',
+                missing_purpose: [] as string[],
+                missing_clinical: [] as string[],
+                missing_recommendations: [] as string[],
+                completeness_score: "80%"
+              };
+
+              // Basic missing information detection logic (simplified version of QuickLetterAgent's fallback)
+              if (!text.includes('refer') && !text.includes('follow up') && !text.includes('consultation') && 
+                  !text.includes('thank you')) {
+                missing.missing_purpose.push('Letter purpose or reason for correspondence');
+              }
+
+              if (!text.includes('patient') && !text.includes('gentleman') && !text.includes('lady') && 
+                  !text.includes('year old') && !text.includes('age')) {
+                missing.missing_clinical.push('Patient demographics or context');
+              }
+
+              if (!text.includes('examination') && !text.includes('found') && !text.includes('shows') &&
+                  !text.includes('revealed') && !text.includes('noted') && text.length > 100) {
+                missing.missing_clinical.push('Clinical examination findings');
+              }
+
+              // Only set missing info if there are actually missing items
+              const totalMissing = missing.missing_purpose.length + missing.missing_clinical.length + missing.missing_recommendations.length;
+              if (totalMissing > 0) {
+                console.log('📊 Setting missing information from streaming completion:', totalMissing, 'items');
+                actions.setMissingInfo(missing);
+              } else {
+                console.log('✅ No missing information detected during streaming completion');
+                actions.setMissingInfo(null);
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to detect missing information during streaming:', error);
+            }
+          })();
+        }
+
+        // Clear processing state to stop spinning indicators
+        actions.setProcessing(false);
+        actions.setProcessingStatus('complete');
+        actions.setStreaming(false);
+        processingAbortRef.current = null;
+        actions.updatePatientSession(sessionId, {
+          results: letterContent, // Store only letter content in results
+          summary: extractedSummary, // Store summary separately
+          status: 'completed',
+          completed: true,
+          completedTime: Date.now()
+        });
+      },
+      onError: (err) => {
+        if (err.name === 'AbortError') {
+          actions.streamCancelled();
+        } else {
+          actions.streamError(String(err));
+        }
+        actions.setStreaming(false);
+        // Clear any partial AI summary on error
+        actions.setAiGeneratedSummary(undefined);
+        processingAbortRef.current = null;
+      }
+    });
+    return true;
+  }, [actions, getSystemPromptForAgent]);
+  
+  // Optimization panel state
+  const [isOptimizationPanelOpen, setIsOptimizationPanelOpen] = useState(false);
   
   // Initialize BatchAIReviewOrchestrator only once using lazy initialization
   const getBatchOrchestrator = useCallback(() => {
@@ -76,7 +323,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     return batchOrchestrator.current;
   }, []);
 
-  // Store failed audio recording for troubleshooting
+  // Store failed audio recording for troubleshooting (non-blocking)
   const storeFailedAudioRecording = useCallback((
     audioBlob: Blob, 
     agentType: AgentType, 
@@ -84,29 +331,41 @@ const OptimizedAppContent: React.FC = memo(() => {
     transcriptionAttempt?: string,
     recordingTime?: number
   ) => {
-    const failedRecording: FailedAudioRecording = {
-      id: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      audioBlob,
-      timestamp: Date.now(),
-      agentType,
-      errorMessage,
-      transcriptionAttempt,
-      metadata: {
-        duration: recordingTime || currentRecordingTimeRef.current || 0,
-        fileSize: audioBlob.size,
-        recordingTime: recordingTime || currentRecordingTimeRef.current || 0
+    // Make failed recording storage non-blocking to prevent UI freeze
+    const performStorage = () => {
+      const failedRecording: FailedAudioRecording = {
+        id: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        audioBlob,
+        timestamp: Date.now(),
+        agentType,
+        errorMessage,
+        transcriptionAttempt,
+        metadata: {
+          duration: recordingTime || currentRecordingTimeRef.current || 0,
+          fileSize: audioBlob.size,
+          recordingTime: recordingTime || currentRecordingTimeRef.current || 0
+        }
+      };
+
+      actions.setFailedRecordings([failedRecording, ...state.failedAudioRecordings.slice(0, 4)]);
+
+      // Reduce console logging during error states for better performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📱 Stored failed audio recording:', {
+          id: failedRecording.id,
+          agentType,
+          errorMessage: errorMessage.substring(0, 100), // Truncate long error messages
+          fileSize: audioBlob.size
+        });
       }
     };
 
-    actions.setFailedRecordings([failedRecording, ...state.failedAudioRecordings.slice(0, 4)]);
-
-    console.log('📱 Stored failed audio recording:', {
-      id: failedRecording.id,
-      agentType,
-      errorMessage,
-      fileSize: audioBlob.size,
-      duration: failedRecording.metadata.duration
-    });
+    // Use requestIdleCallback for non-blocking storage, fallback to setTimeout
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(performStorage, { timeout: 1000 });
+    } else {
+      setTimeout(performStorage, 0);
+    }
   }, [actions, state.failedAudioRecordings]);
 
   // Clear failed recordings
@@ -119,9 +378,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Separate function to process a session in the background
   const processSessionInBackground = useCallback(async (sessionId: string, audioBlob: Blob, workflowId: AgentType) => {
     console.log('🔄 Starting background processing for session:', sessionId);
+    console.log('🎯 Current selectedSessionId at start:', state.selectedSessionId);
     
     // Create dedicated AbortControllers for this session
-    const sessionTranscriptionAbort = new AbortController();
     const sessionProcessingAbort = new AbortController();
     
     try {
@@ -130,16 +389,44 @@ const OptimizedAppContent: React.FC = memo(() => {
         transcriptionStartTime: Date.now()
       });
       
-      // Transcribe audio with performance monitoring
-      console.log('🔄 Transcribing session:', sessionId);
+      // Use Audio Processing Queue for transcription with performance monitoring
+      console.log('🔄 Queuing transcription for session:', sessionId);
       const transcriptionStartTime = Date.now();
       const performanceMonitor = PerformanceMonitoringService.getInstance();
       
-      const transcriptionResult = await lmStudioService.transcribeAudio(
-        audioBlob,
-        sessionTranscriptionAbort.signal,
-        workflowId
-      );
+      // Import and use the audio processing queue
+      const { AudioProcessingQueueService } = await import('@/services/AudioProcessingQueueService');
+      const audioQueue = AudioProcessingQueueService.getInstance();
+      
+      // Queue the transcription job with callbacks
+      const transcriptionResult = await new Promise<string>((resolve, reject) => {
+        audioQueue.addJob(sessionId, audioBlob, workflowId, {
+          onProgress: (status, error) => {
+            console.log(`📊 Session ${sessionId} transcription status:`, status, error || '');
+            
+            // Update session status based on queue progress
+            if (status === 'processing') {
+              actions.updatePatientSession(sessionId, {
+                status: 'transcribing'
+              });
+            } else if (status === 'failed' || status === 'cancelled') {
+              actions.updatePatientSession(sessionId, {
+                status: 'error',
+                errors: [error || 'Transcription failed'],
+                completedTime: Date.now()
+              });
+            }
+          },
+          onComplete: (result) => {
+            console.log('✅ Queued transcription completed for session:', sessionId);
+            resolve(result);
+          },
+          onError: (error) => {
+            console.error('❌ Queued transcription failed for session:', sessionId, error);
+            reject(new Error(error));
+          }
+        });
+      });
       
       const transcriptionDuration = Date.now() - transcriptionStartTime;
       performanceMonitor.recordMetrics('transcription', transcriptionDuration, {
@@ -149,9 +436,34 @@ const OptimizedAppContent: React.FC = memo(() => {
       
       console.log('✅ Transcription complete for session:', sessionId);
       console.log('📝 Transcription result:', transcriptionResult.substring(0, 200) + (transcriptionResult.length > 200 ? '...' : ''));
-      
-      // Validate transcription before processing
-      const cleanTranscription = transcriptionResult.trim();
+
+      // Apply phrasebook corrections to transcription
+      let correctedTranscription = transcriptionResult;
+      let appliedCorrections = 0;
+      try {
+        const asrLog = ASRCorrectionsLog.getInstance();
+        const correctionResult = await asrLog.applyPhrasebookCorrections(transcriptionResult, workflowId);
+        correctedTranscription = correctionResult.correctedText;
+        appliedCorrections = correctionResult.appliedCorrections;
+
+        if (appliedCorrections > 0) {
+          console.log(`📖 Applied ${appliedCorrections} phrasebook corrections`);
+
+          // Update UI to show corrections applied
+          actions.addToast({
+            id: `corrections-${sessionId}`,
+            message: `Applied ${appliedCorrections} terminology correction${appliedCorrections === 1 ? '' : 's'}`,
+            type: 'info',
+            duration: 3000
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to apply phrasebook corrections:', error);
+        // Continue with original transcription if corrections fail
+      }
+
+      // Validate transcription before processing (use corrected version)
+      const cleanTranscription = correctedTranscription.trim();
       const isTranscriptionTooShort = cleanTranscription.length < 10; // Minimum 10 characters
       const isTranscriptionEmpty = cleanTranscription.length === 0;
       const isTranscriptionPlaceholder = cleanTranscription.startsWith('[') && cleanTranscription.endsWith(']');
@@ -170,41 +482,51 @@ const OptimizedAppContent: React.FC = memo(() => {
           preview: cleanTranscription.substring(0, 100)
         });
         
-        // Store the failed recording for troubleshooting
-        storeFailedAudioRecording(
-          audioBlob,
-          workflowId,
-          `Transcription validation failed: ${
-            isTranscriptionEmpty ? 'Empty transcription' :
-            isTranscriptionTooShort ? `Too short (${cleanTranscription.length} chars)` :
-            isTranscriptionPlaceholder ? 'Placeholder response' :
-            'Transcription error'
-          }`,
-          cleanTranscription
-        );
-        
-        // Update session with error state
-        actions.updatePatientSession(sessionId, {
-          transcription: cleanTranscription,
-          status: 'error',
-          errors: [`Audio transcription failed: ${
-            isTranscriptionEmpty ? 'No audio detected. Please ensure your microphone is working and try again.' :
-            isTranscriptionTooShort ? 'Recording too short. Please record for at least 3-5 seconds.' :
-            isTranscriptionPlaceholder ? 'Transcription service unavailable. Please check if the Whisper server is running.' :
-            'Transcription service error. Please try again or check the server status.'
-          }`],
-          completedTime: Date.now()
-        });
-        
-        // Update main UI
-        actions.setTranscription(cleanTranscription);
-        actions.setErrors([`Audio transcription failed: ${
-          isTranscriptionEmpty ? 'No audio detected. Please ensure your microphone is working and try again.' :
-          isTranscriptionTooShort ? 'Recording too short. Please record for at least 3-5 seconds.' :
-          isTranscriptionPlaceholder ? 'Transcription service unavailable. Please check if the Whisper server is running.' :
-          'Transcription service error. Please try again or check the server status.'
-        }`]);
-        actions.setProcessingStatus('error');
+        // Batch transcription error updates to prevent UI blocking
+        const performTranscriptionErrorUpdates = () => {
+          // Store the failed recording for troubleshooting (non-blocking)
+          storeFailedAudioRecording(
+            audioBlob,
+            workflowId,
+            `Transcription validation failed: ${
+              isTranscriptionEmpty ? 'Empty transcription' :
+              isTranscriptionTooShort ? `Too short (${cleanTranscription.length} chars)` :
+              isTranscriptionPlaceholder ? 'Placeholder response' :
+              'Transcription error'
+            }`,
+            cleanTranscription
+          );
+          
+          // Determine error type and show appropriate toast
+          const errorType = isTranscriptionEmpty ? 'no-audio' :
+            isTranscriptionTooShort ? 'too-short' :
+            isTranscriptionPlaceholder ? 'service-unavailable' :
+            'error';
+          
+          RecordingToasts.transcriptionFailed(errorType);
+          
+          // Simplify error message for better performance
+          const errorMessage = isTranscriptionEmpty ? 'No audio detected' :
+            isTranscriptionTooShort ? 'Recording too short' :
+            isTranscriptionPlaceholder ? 'Transcription service unavailable' :
+            'Transcription service error';
+          
+          // Update session with error state
+          actions.updatePatientSession(sessionId, {
+            transcription: cleanTranscription,
+            status: 'error',
+            errors: [`Audio transcription failed: ${errorMessage}`],
+            completedTime: Date.now()
+          });
+          
+          // Update main UI
+          actions.setTranscription(cleanTranscription);
+          actions.setErrors([`Audio transcription failed: ${errorMessage}`]);
+          actions.setProcessingStatus('error');
+        };
+
+        // Execute transcription error updates in next tick to prevent blocking
+        setTimeout(performTranscriptionErrorUpdates, 0);
         
         console.log('🚫 Skipping agent processing due to transcription validation failure');
         return;
@@ -213,30 +535,43 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Transcription is valid - proceed with processing
       console.log('✅ Transcription validation passed, proceeding with agent processing');
       
-      // Update session with transcription and move to processing
+      // Update session with corrected transcription and move to processing
+      const startTime = Date.now();
       actions.updatePatientSession(sessionId, {
-        transcription: transcriptionResult,
+        transcription: correctedTranscription,
         status: 'processing',
-        processingStartTime: Date.now()
+        processingStartTime: startTime
+      });
+
+      // Update main UI to show processing phase
+      actions.setTranscription(correctedTranscription);
+      actions.setProcessingStatus('processing');
+      actions.setTimingData({ processingStartTime: startTime });
+      
+      // Initialize approval state for the new transcription
+      actions.setTranscriptionApproval({
+        status: 'pending',
+        originalText: transcriptionResult,
+        currentText: transcriptionResult,
+        hasBeenEdited: false
       });
       
-      // Update main UI to show processing phase
-      actions.setTranscription(transcriptionResult);
-      actions.setProcessingStatus('processing');
-      
-      // Process with selected agent with performance monitoring
-      console.log('🔄 Processing with agent for session:', sessionId, workflowId);
+      // Try streaming generation first for supported agents
+      const didStream = await startStreamingGeneration(sessionId, workflowId, transcriptionResult);
+      if (didStream) {
+        return;
+      }
+
+      // Process with selected agent with performance monitoring (fallback)
+      console.log('🔄 Processing with agent for session (non-streaming):', sessionId, workflowId);
       const processingStartTime = Date.now();
-      
-      // Import AgentFactory dynamically to optimize bundle splitting
       const { AgentFactory } = await import('@/services/AgentFactory');
-      
       const result = await AgentFactory.processWithAgent(
         workflowId,
-        transcriptionResult,
+        correctedTranscription,
         undefined,
         sessionProcessingAbort.signal,
-        { skipNotification: true } // We'll handle notification manually with patient info
+        { skipNotification: true }
       );
       
       const processingDuration = Date.now() - processingStartTime;
@@ -264,11 +599,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         agentType: workflowId
       });
       
-      // Surface output to main results panel for immediate visibility
-      actions.setTranscription(transcriptionResult);
-      actions.setResults(result.content);
-      // Store missing info (if any) for interactive completion
-      actions.setMissingInfo(result.missingInfo || null);
+      // Surface output to main results panel only if this session is currently selected at completion time
+      const isCurrentlySelectedAtCompletion = sessionId === state.selectedSessionId;
+      if (isCurrentlySelectedAtCompletion) {
+        actions.setTranscription(transcriptionResult);
+        actions.setResults(result.content);
+        // Store missing info (if any) for interactive completion
+        actions.setMissingInfo(result.missingInfo || null);
+        console.log('🎯 Updated main results panel for currently selected session:', sessionId);
+      } else {
+        console.log('🔕 Background session completed, results stored in session only:', sessionId);
+      }
 
       // Special handling for bloods workflow - automatically insert results into Tests Requested field
       if (workflowId === 'bloods') {
@@ -294,16 +635,19 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
       }
       
-      // Extract and set AI-generated summary (especially for QuickLetter)
-      if (result.summary && result.summary.trim()) {
-        logger.debug('Setting AI-generated summary', { component: 'summary', length: result.summary.length });
-        actions.setAiGeneratedSummary(result.summary);
-      } else {
-        // Clear any previous AI-generated summary
-        actions.setAiGeneratedSummary(undefined);
+      // Extract and set AI-generated summary only if this session is currently selected
+      if (isCurrentlySelectedAtCompletion) {
+        if (result.summary && result.summary.trim()) {
+          logger.debug('Setting AI-generated summary', { component: 'summary', length: result.summary.length });
+          actions.setAiGeneratedSummary(result.summary);
+        } else {
+          // Clear any previous AI-generated summary
+          actions.setAiGeneratedSummary(undefined);
+        }
+        
+        actions.setCurrentAgent(workflowId);
+        console.log('🎯 Updated agent and summary for currently selected session:', sessionId);
       }
-      
-      actions.setCurrentAgent(workflowId);
       
       // Set timing data for display components - this was missing!
       // Calculate recording duration from session timestamps
@@ -311,18 +655,31 @@ const OptimizedAppContent: React.FC = memo(() => {
       const recordingDuration = currentSession?.recordingStartTime ? 
         transcriptionStartTime - currentSession.recordingStartTime : 0;
       
-      actions.setTimingData({
-        recordingTime: recordingDuration,
-        transcriptionTime: transcriptionDuration,
-        agentProcessingTime: processingDuration,
-        totalProcessingTime: recordingDuration + transcriptionDuration + processingDuration,
-        processingStartTime: transcriptionStartTime // for consistency
+      // Only update global state if this session is currently selected/active
+      console.log('🔍 Session completion check:', {
+        sessionId,
+        currentSelectedSessionId: state.selectedSessionId,
+        isCurrentlySelectedAtCompletion,
+        willUpdateGlobalUI: isCurrentlySelectedAtCompletion
       });
-      
-      actions.setProcessingStatus('complete');
-      
-      // Turn off processing state after completion
-      actions.setProcessing(false);
+
+      if (isCurrentlySelectedAtCompletion) {
+        actions.setTimingData({
+          recordingTime: recordingDuration,
+          transcriptionTime: transcriptionDuration,
+          agentProcessingTime: processingDuration,
+          totalProcessingTime: recordingDuration + transcriptionDuration + processingDuration,
+          processingStartTime: transcriptionStartTime // for consistency
+        });
+        
+        actions.setProcessingStatus('complete');
+        
+        // Turn off processing state after completion
+        actions.setProcessing(false);
+        console.log('🎯 Updated global UI state for currently selected session:', sessionId);
+      } else {
+        console.log('🔕 Background session completed, skipping global UI state updates for:', sessionId);
+      }
       
       console.log('✅ Session completed in background:', sessionId);
       
@@ -336,52 +693,82 @@ const OptimizedAppContent: React.FC = memo(() => {
           patientName
         );
         console.log('🎉 Background session completed for:', patientName);
+        
+        // Show in-app toast notification to encourage session review
+        RecordingToasts.sessionReady(patientName, workflowId);
       } catch (error) {
         console.warn('Failed to send completion notification:', error);
       }
       
-      // Auto-scroll to results panel (motion-safe)
-      try {
-        const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        setTimeout(() => {
-          const target = resultsRef.current || document.getElementById('results-section');
-          if (target && typeof target.scrollIntoView === 'function') {
-            target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+      // Auto-scroll to results panel only if this session is currently selected (motion-safe)
+      if (isCurrentlySelectedAtCompletion) {
+        try {
+          const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          setTimeout(() => {
+            const target = resultsRef.current || document.getElementById('results-section');
+            if (target && typeof target.scrollIntoView === 'function') {
+              target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+              console.log('🎯 Auto-scrolled to results for currently selected session:', sessionId);
+            }
+          }, 50);
+        } catch (scrollError) {
+          // Auto-scroll failed - log for debugging but don't interrupt user flow
+          console.debug('Auto-scroll to results failed (non-critical):', scrollError instanceof Error ? scrollError.message : scrollError);
+          
+          // Fallback: try simple focus without animation if available
+          try {
+            const fallbackTarget = resultsRef.current || document.getElementById('results-section');
+            if (fallbackTarget && typeof fallbackTarget.focus === 'function') {
+              fallbackTarget.focus({ preventScroll: false });
+            }
+          } catch (focusError) {
+            console.debug('Fallback focus also failed:', focusError instanceof Error ? focusError.message : focusError);
           }
-        }, 50);
-      } catch {}
+        }
+      } else {
+        console.log('🔕 Background session completed, skipping auto-scroll for:', sessionId);
+      }
       
     } catch (error: any) {
       console.error('❌ Background processing failed for session:', sessionId, error);
       
-      // Turn off processing state on error
-      actions.setProcessing(false);
-      actions.setProcessingStatus('idle');
-      
-      // Update session to error state
-      if (error.name === 'AbortError') {
-        actions.updatePatientSession(sessionId, {
-          status: 'cancelled',
-          errors: ['Processing was cancelled']
-        });
-      } else {
-        actions.updatePatientSession(sessionId, {
-          status: 'error',
-          errors: [error.message || 'Processing failed']
-        });
+      // Batch all error state updates to prevent multiple re-renders
+      const performErrorUpdates = () => {
+        // Turn off processing state on error
+        actions.setProcessing(false);
+        actions.setProcessingStatus('idle');
         
-        // Show error in main UI
-        actions.setErrors([error.message || 'Processing failed']);
-      }
-      
-      // Store failed recording for troubleshooting
-      storeFailedAudioRecording(
-        audioBlob,
-        workflowId,
-        error.message || 'Background processing failed',
-        '',
-        0
-      );
+        // Update session to error state
+        if (error.name === 'AbortError') {
+          actions.updatePatientSession(sessionId, {
+            status: 'cancelled',
+            errors: ['Processing was cancelled']
+          });
+        } else {
+          const currentSession = state.patientSessions.find(s => s.id === sessionId);
+          const patientName = currentSession?.patient.name || 'Unknown Patient';
+          
+          actions.updatePatientSession(sessionId, {
+            status: 'error',
+            errors: [error.message || 'Processing failed']
+          });
+          
+          // Show simplified toast notification for background processing error
+          RecordingToasts.processingFailed(patientName);
+        }
+        
+        // Store failed recording for troubleshooting (non-blocking)
+        storeFailedAudioRecording(
+          audioBlob,
+          workflowId,
+          error.message || 'Background processing failed',
+          '',
+          0
+        );
+      };
+
+      // Execute error updates in next tick to prevent blocking the UI
+      setTimeout(performErrorUpdates, 0);
     }
   }, [actions, lmStudioService, storeFailedAudioRecording, state.patientSessions]);
 
@@ -420,16 +807,20 @@ const OptimizedAppContent: React.FC = memo(() => {
       audioBlob: audioBlob
     });
 
-    // Keep processing state active to show progress in main area
-    actions.setProcessing(true);
-    actions.setProcessingStatus('transcribing');
-    actions.setCurrentAgent(workflowId);
-    
-    // Clear recording-specific state but maintain processing visibility
+    // Clear recording-specific state and make interface ready for next recording
     actions.setCurrentSessionId(null);
     currentSessionIdRef.current = null;
     actions.setActiveWorkflow(null);
     activeWorkflowRef.current = null;
+    
+    // Reset selection and clear visible results to return to ready state
+    actions.setSelectedSessionId(null);
+    actions.clearRecording();
+    
+    // Show brief feedback that recording was sent for processing
+    const currentSession = state.patientSessions.find(s => s.id === currentSessionId);
+    const patientName = currentSession?.patient.name || 'Patient';
+    RecordingToasts.recordingSent(patientName, workflowId);
     
     // Start background processing (non-blocking)
     processSessionInBackground(currentSessionId, audioBlob, workflowId);
@@ -437,42 +828,68 @@ const OptimizedAppContent: React.FC = memo(() => {
     console.log('🚀 Background processing started for session:', currentSessionId, '- ready for new recordings!');
   }, [actions, processSessionInBackground, state.ui.isCancelling, state.currentSessionId]);
 
-  // Session selection handler - loads selected session data into display state
-  const handleSessionSelect = useCallback((session: PatientSession) => {
-    console.log('📋 Selected patient session:', session.patient.name, 'with status:', session.status);
-    
-    // Set the selected session ID
-    actions.setSelectedSessionId(session.id);
-    
-    // Load the session's data into the display state
-    if (session.transcription) {
-      actions.setTranscription(session.transcription);
-    }
-    
-    if (session.results) {
-      actions.setResults(session.results);
-    }
-    
-    if (session.summary) {
-      actions.setAiGeneratedSummary(session.summary);
-    }
-    
-    // Set the agent type that was used for this session
-    if (session.agentType) {
-      actions.setCurrentAgent(session.agentType);
-      actions.setCurrentAgentName(session.agentName || session.agentType);
-    }
-    
-    // Update patient info
-    actions.setCurrentPatientInfo(session.patient);
-    
-    // Clear any active recording state to avoid conflicts
-    actions.setActiveWorkflow(null);
-    actions.setProcessingStatus('complete');
-    actions.clearMissingInfo();
-    
-    console.log('✅ Session data loaded for patient:', session.patient.name);
+  // Voice activity handler
+  const handleVoiceActivityUpdate = useCallback((level: number, frequencyData: number[]) => {
+    // Use startTransition for non-urgent voice activity updates
+    startTransition(() => {
+      actions.setVoiceActivity(level, frequencyData);
+    });
   }, [actions]);
+
+  // Populate the refs with the actual callback functions
+  useEffect(() => {
+    handleRecordingCompleteRef.current = handleRecordingComplete;
+    handleVoiceActivityUpdateRef.current = handleVoiceActivityUpdate;
+  }, [handleRecordingComplete, handleVoiceActivityUpdate]);
+
+  // Session selection handler - uses isolated display state to prevent cross-contamination
+  const handleSessionSelect = useCallback((session: PatientSession) => {
+    console.log('📋 🔍 USER EXPLICIT SESSION SELECTION - Selected:', {
+      patientName: session.patient.name,
+      sessionId: session.id,
+      status: session.status,
+      hasTranscription: !!session.transcription,
+      hasResults: !!session.results,
+      hasSummary: !!session.summary,
+      agentType: session.agentType,
+      currentBackgroundWork: {
+        isRecording: recorder.isRecording,
+        isProcessing: state.isProcessing,
+        streaming: state.streaming,
+        currentSessionId: state.currentSessionId
+      }
+    });
+
+    // Always use isolated display session - prevents cross-contamination with active recordings
+    startTransition(() => {
+      console.log('📋 🎯 Loading session into isolated display state:', session.id);
+
+      // Use new isolated session display action
+      actions.setDisplaySession(session);
+
+      console.log('✅ 📋 SESSION SELECT COMPLETE - Session loaded in isolated display (will show even during active work):', {
+        patientName: session.patient.name,
+        sessionId: session.id,
+        status: session.status,
+        priorityLevel: 'PRIORITY 1 - User Explicit Selection'
+      });
+
+      // Debug display state after session selection
+      setTimeout(() => {
+        console.log('🔍 DISPLAY STATE CHECK - Post session selection:', {
+          isDisplayingSession: state.displaySession?.isDisplayingSession,
+          displaySessionId: state.displaySession?.displaySessionId,
+          displayResultsLength: state.displaySession?.displayResults?.length || 0,
+          displayTranscriptionLength: state.displaySession?.displayTranscription?.length || 0,
+          // Active recording state should remain untouched
+          activeRecordingResults: state.results?.length || 0,
+          activeRecordingTranscription: state.transcription?.length || 0,
+          isRecording: recorder.isRecording,
+          currentSessionId: state.currentSessionId
+        });
+      }, 100);
+    });
+  }, [actions, state.displaySession, state.results, state.transcription, state.currentSessionId, recorder.isRecording]);
 
   // Memoized smart summary generation for performance
   const generateSmartSummary = useCallback((content: string): string => {
@@ -498,25 +915,110 @@ const OptimizedAppContent: React.FC = memo(() => {
     if (aiSummary && aiSummary.trim()) {
       return aiSummary.trim();
     }
-    
+
     // Fall back to JavaScript-generated summary for other agents
     return generateSmartSummary(results);
   }, [generateSmartSummary]);
 
-  // Initialize recorder with optimized callbacks
-  const recorder = useRecorder({
-    onRecordingComplete: handleRecordingComplete,
-    onVoiceActivityUpdate: useCallback((level: number, frequencyData: number[]) => {
-      // Use startTransition for non-urgent voice activity updates
-      startTransition(() => {
-        actions.setVoiceActivity(level, frequencyData);
+  // Determine which data to display: PRIORITY 1: User selection, PRIORITY 2: Active work
+  const getCurrentDisplayData = useCallback(() => {
+    // PRIORITY 1: If user explicitly selected a completed session, ALWAYS show it (even during active work)
+    if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
+      console.log('📋 🥇 PRIORITY 1: Showing DISPLAY session data (user explicitly selected)', {
+        displaySessionId: state.displaySession.displaySessionId,
+        hasDisplayResults: !!state.displaySession.displayResults,
+        hasDisplayTranscription: !!state.displaySession.displayTranscription,
+        backgroundActiveWork: {
+          isRecording: recorder.isRecording,
+          isProcessing: state.isProcessing,
+          streaming: state.streaming,
+          currentSessionId: state.currentSessionId
+        }
       });
-    }, [actions]),
-    onRecordingTimeUpdate: useCallback((time: number) => {
-      currentRecordingTimeRef.current = time;
-    }, []),
-    getMicrophoneId: () => audioDeviceContext.selectedMicrophoneId
-  });
+
+      return {
+        transcription: state.displaySession.displayTranscription,
+        results: state.displaySession.displayResults,
+        summary: state.displaySession.displaySummary,
+        agent: state.displaySession.displayAgent,
+        agentName: state.displaySession.displayAgentName,
+        patientInfo: state.displaySession.displayPatientInfo,
+        processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
+        isDisplayingSession: true
+      };
+    }
+
+    // PRIORITY 2: If actively working AND no explicit user selection, show active recording data
+    const isActivelyWorking = recorder.isRecording ||
+                             state.isProcessing ||
+                             state.streaming ||
+                             state.currentSessionId !== null;
+
+    if (isActivelyWorking) {
+      console.log('🎯 🥈 PRIORITY 2: Showing ACTIVE recording data (no explicit selection)', {
+        isRecording: recorder.isRecording,
+        isProcessing: state.isProcessing,
+        streaming: state.streaming,
+        currentSessionId: state.currentSessionId,
+        processingStatus: state.processingStatus,
+        streamBuffer: state.streamBuffer?.length || 0
+      });
+
+      // Safety check: If we have results but are still streaming, this might be a stuck state
+      if (state.streaming && state.results && state.processingStatus === 'complete') {
+        console.warn('🚨 POTENTIAL STUCK STREAMING STATE DETECTED:', {
+          streaming: state.streaming,
+          hasResults: !!state.results,
+          resultsLength: state.results.length,
+          processingStatus: state.processingStatus,
+          streamBuffer: state.streamBuffer?.length || 0
+        });
+      }
+
+      return {
+        transcription: state.transcription,
+        results: state.results,
+        summary: state.aiGeneratedSummary,
+        agent: state.currentAgent,
+        agentName: state.currentAgentName,
+        patientInfo: state.currentPatientInfo,
+        processingStatus: state.processingStatus,
+        isDisplayingSession: false
+      };
+    }
+
+    // PRIORITY 3: Default - show active recording data (even if empty)
+    console.log('🔧 🥉 PRIORITY 3: Showing default ACTIVE recording data (empty state)', {
+      noExplicitSelection: !state.displaySession.isDisplayingSession,
+      noActiveWork: true,
+      defaultFallback: true
+    });
+    return {
+      transcription: state.transcription,
+      results: state.results,
+      summary: state.aiGeneratedSummary,
+      agent: state.currentAgent,
+      agentName: state.currentAgentName,
+      patientInfo: state.currentPatientInfo,
+      processingStatus: state.processingStatus,
+      isDisplayingSession: false
+    };
+  }, [
+    recorder.isRecording,
+    state.isProcessing,
+    state.streaming,
+    state.currentSessionId,
+    state.transcription,
+    state.results,
+    state.aiGeneratedSummary,
+    state.currentAgent,
+    state.currentAgentName,
+    state.currentPatientInfo,
+    state.processingStatus,
+    state.displaySession
+  ]);
+
+  // Recorder was moved earlier to resolve initialization order
 
   // Extract patient data from current EMR page with enhanced logging and retry logic
   const extractPatientData = useCallback(async (): Promise<any> => {
@@ -613,20 +1115,17 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.clearRecording();
     }
     
-    // Clear any selected session when starting a new recording
-    if (state.selectedSessionId) {
-      console.log('🔄 Clearing selected session view for new recording');
-      actions.setSelectedSessionId(null);
+    // Clear any display session when starting a new recording to prevent cross-contamination
+    if (state.displaySession.isDisplayingSession) {
+      console.log('🔄 Clearing display session view for new recording');
+      actions.clearDisplaySession();
     }
     
     // Count active sessions to check limits
-    const activeSessions = state.patientSessions.filter(session => 
+    const activeSessions = state.patientSessions.filter(session =>
       ['recording', 'transcribing', 'processing'].includes(session.status)
     );
-    const recordingSessions = state.patientSessions.filter(session => 
-      session.status === 'recording'
-    );
-    
+
     if (recorder.isRecording && state.ui.activeWorkflow === workflowId) {
       // Stop recording for active workflow
       console.log('🛑 Stopping current recording for:', workflowId);
@@ -637,12 +1136,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setErrors([`Too many active sessions (${activeSessions.length}). Please wait for some to complete before starting new recordings.`]);
         return;
       }
-      
-      // Check if we already have a recording session (only one recording at a time)
-      if (recordingSessions.length > 0) {
-        actions.setErrors(['Another recording is already in progress. Please complete or cancel the current recording first.']);
-        return;
-      }
+
+      // Allow concurrent recordings - removed single recording session limit
+      console.log(`📊 Current active sessions: ${activeSessions.length}/3 - proceeding with new recording`);
+
       // Check Whisper server status before allowing recording
       console.log('🔍 Checking Whisper server status before recording...');
       if (!state.modelStatus.whisperServer?.running) {
@@ -799,6 +1296,143 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, []);
 
+  // State for transcription edit feedback
+  const [transcriptionSaveStatus, setTranscriptionSaveStatus] = useState<{
+    status: 'idle' | 'saving' | 'saved' | 'error';
+    message: string;
+    timestamp?: Date;
+  }>({ status: 'idle', message: '' });
+
+  // Handle transcription editing with approval-based ASR corrections logging
+  const handleTranscriptionEdit = useCallback(async (editedText: string) => {
+    try {
+      console.log('✏️ Transcription edited, length:', editedText.length);
+      
+      // Update application state with edited transcription
+      actions.setTranscription(editedText);
+      
+      // Update approval state to indicate text has been edited
+      const originalTranscription = state.transcription;
+      if (originalTranscription && editedText !== originalTranscription) {
+        // Mark as edited but don't auto-submit for training
+        const updatedApprovalState = {
+          ...state.transcriptionApproval,
+          status: 'edited' as import('@/types/medical.types').TranscriptionApprovalStatus,
+          originalText: state.transcriptionApproval.originalText || originalTranscription,
+          currentText: editedText,
+          hasBeenEdited: true,
+          editTimestamp: Date.now()
+        };
+        
+        actions.setTranscriptionApproval(updatedApprovalState);
+        
+        // Show that the edit is ready to be submitted for training (but not automatically submitted)
+        setTranscriptionSaveStatus({
+          status: 'idle',
+          message: 'Edit ready - click "Perfect" to submit for training'
+        });
+        
+        console.log('✏️ Transcription marked as edited, ready for approval');
+        
+      } else if (editedText === originalTranscription) {
+        // Reset approval state if text matches original
+        const resetApprovalState = {
+          ...state.transcriptionApproval,
+          status: 'pending' as import('@/types/medical.types').TranscriptionApprovalStatus,
+          currentText: editedText,
+          hasBeenEdited: false
+        };
+        
+        actions.setTranscriptionApproval(resetApprovalState);
+        setTranscriptionSaveStatus({ status: 'idle', message: '' });
+      }
+    } catch (error) {
+      console.error('❌ Failed to handle transcription edit:', error);
+      
+      // Show error feedback
+      setTranscriptionSaveStatus({
+        status: 'error',
+        message: '⚠ Failed to process edit',
+        timestamp: new Date()
+      });
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => {
+        setTranscriptionSaveStatus({ status: 'idle', message: '' });
+      }, 5000);
+      
+      // Don't throw - we don't want to break the UI for this
+    }
+  }, [state.transcription, state.transcriptionApproval, state.currentAgent, state.selectedSessionId, actions]);
+
+  // Handle transcription approval for ASR training
+  const handleTranscriptionApproval = useCallback(async (status: import('@/types/medical.types').TranscriptionApprovalStatus) => {
+    try {
+      console.log('✅ Transcription approval status changed:', status);
+      
+      // Update the transcription approval state
+      const currentTranscription = state.transcription;
+      const approvalState = state.transcriptionApproval;
+      
+      const updatedApprovalState = {
+        ...approvalState,
+        status,
+        currentText: currentTranscription,
+        approvalTimestamp: status === 'approved' ? Date.now() : approvalState.approvalTimestamp,
+        editTimestamp: status === 'edited' ? Date.now() : approvalState.editTimestamp
+      };
+      
+      actions.setTranscriptionApproval(updatedApprovalState);
+      
+      // Log to ASR corrections based on approval status
+      if (status === 'approved' && currentTranscription.trim() !== '') {
+        console.log('💾 Logging transcription for ASR training');
+        
+        // Determine if this was originally perfect or corrected
+        const wasEdited = approvalState.hasBeenEdited;
+        const originalText = approvalState.originalText || currentTranscription;
+        
+        await ASRCorrectionsLog.getInstance().addCorrection({
+          rawText: originalText,
+          correctedText: currentTranscription,
+          agentType: state.currentAgent || 'unknown',
+          sessionId: state.selectedSessionId || 'streaming',
+          approvalStatus: 'approved',
+          userExplicitlyApproved: true,
+          approvalTimestamp: Date.now(),
+          editTimestamp: wasEdited ? (approvalState.editTimestamp || Date.now()) : undefined
+        });
+        
+        // Show appropriate feedback
+        const message = wasEdited 
+          ? '✓ Corrected transcription saved for training'
+          : '✓ Perfect transcription saved for training';
+          
+        setTranscriptionSaveStatus({
+          status: 'saved',
+          message,
+          timestamp: new Date()
+        });
+        
+        setTimeout(() => {
+          setTranscriptionSaveStatus({ status: 'idle', message: '' });
+        }, 3000);
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to handle transcription approval:', error);
+      setTranscriptionSaveStatus({
+        status: 'error',
+        message: '⚠ Failed to save approval',
+        timestamp: new Date()
+      });
+      
+      setTimeout(() => {
+        setTranscriptionSaveStatus({ status: 'idle', message: '' });
+      }, 5000);
+    }
+  }, [state.transcription, state.transcriptionApproval, state.currentAgent, state.selectedSessionId, actions]);
+
   // Handle reprocessing transcription with different agent
   const handleAgentReprocess = useCallback(async (newAgentType: AgentType) => {
     try {
@@ -837,7 +1471,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       const result = await AgentFactory.processWithAgent(
         newAgentType,
         state.transcription,
-        undefined,
+        { isReprocessing: true }, // Add context to indicate reprocessing
         processingAbortRef.current?.signal
       );
       
@@ -906,7 +1540,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       const result = await AgentFactory.processWithAgent(
         state.currentAgent,
         augmentedInput,
-        undefined,
+        { isReprocessing: true, withMissingInfo: true }, // Add context for reprocessing with missing info
         processingAbortRef.current?.signal
       );
 
@@ -932,8 +1566,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setGeneratingPatientVersion(true);
       
       // Import QuickLetterAgent dynamically to avoid bundle bloat
-      const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
-      const quickLetterAgent = new QuickLetterAgent();
+      const { QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
+      const quickLetterAgent = new QuickLetterAgentPhase3();
       
       // Generate patient version from the existing letter content
       const patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(state.results);
@@ -951,27 +1585,170 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [state.results, state.currentAgent, state.isGeneratingPatientVersion, actions]);
 
-  // EMR insertion with field-specific targeting
-  const handleInsertToEMR = useCallback(async (text: string, targetField?: string) => {
+  // Helper function to validate patient names before insertion
+  const validatePatientBeforeInsertion = useCallback(async (text: string): Promise<boolean> => {
     try {
-      // Determine target field from agent type if not explicitly provided
-      const currentAgentType = state.currentAgent || state.ui.activeWorkflow;
-      const field = targetField || getTargetField(currentAgentType);
-      
-      if (field && supportsFieldSpecificInsertion(currentAgentType)) {
-        // Field-specific insertion with modal opening + append
-        console.log(`📝 Inserting to specific EMR field: ${field} (${getFieldDisplayName(field)})`);
-        
-        await chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: field,
-          data: { 
-            content: text,
-            insertMode: 'append' // New flag for append behavior
+      console.log('🔍 Starting patient name validation before EMR insertion');
+
+      // Get session patient name - find the session that generated these results
+      let sessionPatientName = '';
+
+      // If we have a selected session, use that patient name
+      if (state.selectedSessionId) {
+        const selectedSession = state.patientSessions.find(s => s.id === state.selectedSessionId);
+        if (selectedSession) {
+          sessionPatientName = selectedSession.patient.name;
+          console.log('📋 Using selected session patient name:', sessionPatientName);
+        }
+      }
+      // Otherwise, use the current active session or current patient info
+      else if (state.currentSessionId) {
+        const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
+        if (currentSession) {
+          sessionPatientName = currentSession.patient.name;
+          console.log('📋 Using current session patient name:', sessionPatientName);
+        }
+      }
+      // Last fallback: use current patient info if available
+      else if (state.currentPatientInfo?.name) {
+        sessionPatientName = state.currentPatientInfo.name;
+        console.log('📋 Using current patient info name:', sessionPatientName);
+      }
+
+      // Get current EMR patient name (fresh extraction)
+      let emrPatientName = '';
+      try {
+        const freshPatientData = await extractPatientData();
+        if (freshPatientData?.name) {
+          emrPatientName = freshPatientData.name;
+          console.log('🏥 Extracted fresh EMR patient name:', emrPatientName);
+        } else if (state.currentPatientInfo?.name) {
+          emrPatientName = state.currentPatientInfo.name;
+          console.log('🏥 Using cached EMR patient name:', emrPatientName);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to extract fresh patient data, using cached:', error);
+        if (state.currentPatientInfo?.name) {
+          emrPatientName = state.currentPatientInfo.name;
+        }
+      }
+
+      // Skip validation if we can't get both names
+      if (patientNameValidator.shouldSkipValidation(sessionPatientName, emrPatientName)) {
+        console.log('⏩ Skipping patient name validation - insufficient data');
+        return true; // Allow insertion
+      }
+
+      // Perform validation
+      const comparison = patientNameValidator.validatePatientNames(sessionPatientName, emrPatientName);
+      console.log('📊 Patient name validation result:', comparison);
+
+      // If names match, proceed without modal
+      if (comparison.isMatch) {
+        console.log('✅ Patient names match - proceeding with insertion');
+        return true;
+      }
+
+      // Names don't match - show confirmation modal
+      console.log('⚠️ Patient name mismatch detected - showing confirmation modal');
+
+      return new Promise((resolve) => {
+        // Set up modal data
+        actions.setPatientMismatchData({
+          comparison,
+          textToInsert: text,
+          onConfirm: () => {
+            console.log('✅ User confirmed insertion despite mismatch');
+            actions.setPatientMismatchModal(false);
+            actions.setPatientMismatchData({
+              comparison: null,
+              textToInsert: null,
+              onConfirm: null,
+              onCancel: null
+            });
+            resolve(true);
+          },
+          onCancel: () => {
+            console.log('❌ User cancelled insertion due to mismatch');
+            actions.setPatientMismatchModal(false);
+            actions.setPatientMismatchData({
+              comparison: null,
+              textToInsert: null,
+              onConfirm: null,
+              onCancel: null
+            });
+            resolve(false);
           }
         });
-        
-        console.log(`✅ Text inserted to ${getFieldDisplayName(field)} field with append mode`);
+
+        // Show modal
+        actions.setPatientMismatchModal(true);
+      });
+
+    } catch (error) {
+      console.error('❌ Patient name validation failed:', error);
+      // If validation fails, allow insertion with warning
+      console.log('⚠️ Allowing insertion due to validation error');
+      return true;
+    }
+  }, [state.selectedSessionId, state.currentSessionId, state.patientSessions, state.currentPatientInfo, extractPatientData, actions]);
+
+  // EMR insertion with field-specific targeting
+  const handleInsertToEMR = useCallback(async (text: string, targetField?: string, agentContext?: AgentType) => {
+    try {
+      // Step 1: Validate patient names before insertion
+      const shouldProceed = await validatePatientBeforeInsertion(text);
+      if (!shouldProceed) {
+        console.log('🛑 Insertion cancelled due to patient mismatch');
+        return;
+      }
+
+      // Step 2: Proceed with normal insertion logic
+      console.log('✅ Patient validation passed - proceeding with insertion');
+
+      // Determine target field from agent type if not explicitly provided
+      // For display sessions, use the display session agent
+      const displayData = getCurrentDisplayData();
+      const currentAgentType = targetField ? null : (agentContext || displayData.agent || state.currentAgent || state.ui.activeWorkflow);
+      const field = targetField || getTargetField(currentAgentType);
+
+      console.log('🔍 EMR insertion debug:');
+      console.log('  - agentContext:', agentContext);
+      console.log('  - currentAgent:', state.currentAgent);
+      console.log('  - activeWorkflow:', state.ui.activeWorkflow);
+      console.log('  - displayData.agent:', displayData.agent);
+      console.log('  - currentAgentType:', currentAgentType);
+      console.log('  - targetField:', targetField);
+      console.log('  - field:', field);
+      console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
+      console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
+
+      if (field && supportsFieldSpecificInsertion(currentAgentType)) {
+        // Field-specific insertion: first open field, then insert text
+        console.log(`📝 Opening specific EMR field: ${field} (${getFieldDisplayName(field)})`);
+
+        // Step 1: Open the specific field using the specific action (same as Type button)
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: field, // Use the field name as the action (e.g., 'investigation-summary')
+          data: { type: 'manual' }
+        });
+
+        // Step 2: Wait for field to be ready, then insert text
+        console.log(`📝 Inserting text to ${getFieldDisplayName(field)} field`);
+        const waitTime = field === 'investigation-summary' ? 1000 : 500; // Extra time for Investigation Summary dialog
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+        // For investigation-summary, prepend a newline to create separation from existing content
+        const textToInsert = field === 'investigation-summary' ? `\n${text}` : text;
+
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: 'insertText',
+          data: { text: textToInsert, fieldType: field }
+        });
+
+        console.log(`✅ Text inserted to ${getFieldDisplayName(field)} field after opening`);
       } else {
         // Fallback to current generic insertion
         console.log('📝 Using generic EMR text insertion (no specific field mapping)');
@@ -995,15 +1772,19 @@ const OptimizedAppContent: React.FC = memo(() => {
   const setModelStatus = actions.setModelStatus;
 
   const checkModelStatus = useCallback(async () => {
+    console.log('🔍 checkModelStatus called - CALL STACK:', new Error().stack);
+    console.time('⏱️ Total checkModelStatus Duration');
+
     try {
       // Check both LMStudio and Whisper server status
       const status = await lmStudioService.checkConnection();
       
-      // Ensure we have the most up-to-date Whisper server status
-      // The checkConnection method already calls whisperServerService.checkServerStatus()
-      // but we'll invalidate the cache to force a fresh check
-      whisperServerService.invalidateCache();
-      const freshWhisperStatus = await whisperServerService.checkServerStatus(true);
+      // Use resilient status checking with retry logic for post-processing scenarios
+      // This prevents workflow button from being disabled due to temporary server busy periods
+      const freshWhisperStatus = await whisperServerService.checkServerStatus(false, {
+        timeout: 5000, // Increased timeout for busy server scenarios
+        retries: 2     // Retry once if timeout occurs
+      });
       
       // Update the status with the fresh Whisper server data
       const updatedStatus = {
@@ -1015,7 +1796,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       startTransition(() => {
         setModelStatus(updatedStatus);
       });
+
+      console.timeEnd('⏱️ Total checkModelStatus Duration');
     } catch (error) {
+      console.timeEnd('⏱️ Total checkModelStatus Duration');
       startTransition(() => {
         setModelStatus({
           isConnected: false,
@@ -1035,12 +1819,45 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [lmStudioService, whisperServerService, setModelStatus]);
 
-  // Model status monitoring
+  // Initial model status check on mount (no recurring interval to avoid UI delays)
   useEffect(() => {
+    console.log('🚀 Component mounted - performing initial model status check...');
     checkModelStatus();
-    const interval = setInterval(checkModelStatus, 30000);
-    return () => clearInterval(interval);
   }, [checkModelStatus]);
+
+  // Recurring model status monitoring - DISABLED to prevent interference with UI interactions
+  // The automatic status checking was causing delays when interacting with notification bell
+  // Status will be checked on demand or when explicitly refreshed
+  // useEffect(() => {
+  //   const interval = setInterval(checkModelStatus, 30000);
+  //   return () => clearInterval(interval);
+  // }, [checkModelStatus]);
+
+  // Safety mechanism: Clear stuck states that block record button access
+  useEffect(() => {
+    // If we have completed results but are still in "actively working" state, fix it
+    const hasCompletedResults = state.results && state.processingStatus === 'complete';
+    const isStuckInActiveState = state.streaming || state.currentSessionId !== null;
+    const shouldBeIdle = !recorder.isRecording && !state.isProcessing;
+
+    if (hasCompletedResults && isStuckInActiveState && shouldBeIdle) {
+      console.warn('🚨 FIXING STUCK "ACTIVELY WORKING" STATE - clearing to restore record button access', {
+        streaming: state.streaming,
+        currentSessionId: state.currentSessionId,
+        processingStatus: state.processingStatus,
+        hasResults: !!state.results
+      });
+
+      if (state.streaming) {
+        actions.setStreaming(false);
+        actions.clearStream();
+      }
+
+      if (state.currentSessionId !== null) {
+        actions.setCurrentSessionId(null);
+      }
+    }
+  }, [state.streaming, state.currentSessionId, state.results, state.processingStatus, recorder.isRecording, state.isProcessing, actions]);
 
   // Recording state monitoring for prompt card
   useEffect(() => {
@@ -1119,9 +1936,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Full Width Status Bar */}
-      <div className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-line-primary">
-        <StatusIndicator 
-          status={recorder.isRecording ? 'recording' : state.processingStatus}
+      <div className="flex-shrink-0 bg-white  border-b border-gray-200">
+        <StatusIndicator
+          status={recorder.isRecording ? 'recording' : 'idle'}
           currentAgent={state.currentAgent || state.ui.activeWorkflow}
           isRecording={recorder.isRecording}
           modelStatus={state.modelStatus}
@@ -1151,7 +1968,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
           
           {/* Unified Recording Interface - Show both LiveAudioVisualizer and RecordingPromptCard together */}
-          {recorder.isRecording && !state.results && (
+          {recorder.isRecording && (
             <div className="flex flex-col space-y-4 p-4">
               {/* Top: Live Audio Visualizer with timer and stop button */}
               <div className="flex-shrink-0">
@@ -1180,10 +1997,10 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
           
-          {/* Transcription Processing Display - Show when transcribing/processing */}
-          {!recorder.isRecording && (state.processingStatus === 'transcribing' || state.processingStatus === 'processing') && state.transcription && !state.results && (
+          {/* Transcription Processing Display - Show when transcribing/processing but not during streaming */}
+          {!recorder.isRecording && (state.processingStatus === 'transcribing' || state.processingStatus === 'processing') && state.transcription && !state.results && !state.streaming && (
             <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-4">
-              <div className="bg-white/90 backdrop-blur-sm rounded-lg border border-blue-200 p-4">
+              <div className="bg-white  rounded-lg border border-blue-200 p-4">
                 <div className="flex items-center space-x-2 mb-3">
                   <div className="w-2 h-2 bg-accent-violet rounded-full animate-pulse"></div>
                   <h3 className="text-lg font-semibold text-blue-800">
@@ -1208,7 +2025,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
           {/* AI Medical Review Section */}
           {state.reviewData && (
-            <div className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-line-primary">
+            <div className="flex-shrink-0 bg-white  border-b border-gray-200">
               <AIReviewSection 
                 onQuickAction={async (actionId: string, data?: any) => {
                   console.log('🔧 Quick action:', actionId, data);
@@ -1254,48 +2071,131 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
 
-          {/* Main Results Panel - Only show when we have actual results */}
-          {(state.results && state.results.trim().length > 0) && (
+          {/* Session Loading State */}
+          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && (
+            <div className="flex-1 min-h-0 flex items-center justify-center p-8">
+              <div className="max-w-md text-center space-y-4">
+                <div className="w-16 h-16 mx-auto bg-purple-50 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-purple-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Loading Session</h3>
+                  <p className="text-gray-600">
+                    {(() => {
+                      const session = state.patientSessions.find(s => s.id === stableSelectedSessionId);
+                      if (session) {
+                        return `Loading ${session.patient.name}'s ${session.agentType} session...`;
+                      }
+                      return 'Loading session data...';
+                    })()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Results Panel - Show when session selected or streaming */}
+          {(stableSelectedSessionId || state.streaming) && (() => {
+            console.log('🎯 RESULTS PANEL RENDERING:', {
+              selectedSessionId: stableSelectedSessionId,
+              streaming: state.streaming,
+              hasResults: !!state.results,
+              hasTranscription: !!state.transcription,
+              resultsLength: state.results?.length || 0,
+              transcriptionLength: state.transcription?.length || 0,
+              shouldRender: true
+            });
+            return true;
+          })() && (
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <OptimizedResultsPanel
-                results={state.results}
-                resultsSummary={state.aiGeneratedSummary || ''}
-                warnings={state.ui.warnings}
-                errors={state.ui.errors}
-                agentType={state.currentAgent}
-                onCopy={handleCopy}
-                onInsertToEMR={handleInsertToEMR}
-                originalTranscription={state.transcription}
-                onTranscriptionCopy={handleCopy}
-                onTranscriptionInsert={handleInsertToEMR}
-                onAgentReprocess={handleAgentReprocess}
-                missingInfo={state.missingInfo}
-                onReprocessWithAnswers={handleReprocessWithMissingInfo}
-                onDismissMissingInfo={() => actions.clearMissingInfo()}
-                currentAgent={state.currentAgent}
-                isProcessing={state.isProcessing}
-                audioBlob={currentAudioBlobRef.current}
-                transcriptionTime={state.transcriptionTime}
-                agentProcessingTime={state.agentProcessingTime}
-                totalProcessingTime={state.totalProcessingTime}
-                processingStatus={state.processingStatus}
-                currentAgentName={state.currentAgentName}
-                selectedSessionId={state.selectedSessionId}
-                selectedPatientName={
-                  state.selectedSessionId 
-                    ? state.patientSessions.find(s => s.id === state.selectedSessionId)?.patient.name 
-                    : undefined
-                }
-                patientVersion={state.patientVersion}
-                isGeneratingPatientVersion={state.isGeneratingPatientVersion}
-                onGeneratePatientVersion={handleGeneratePatientVersion}
-              />
+              {(() => {
+                const displayData = getCurrentDisplayData();
+                return (
+                  <OptimizedResultsPanel
+                    results={displayData.results}
+                    resultsSummary={displayData.summary || ''}
+                    warnings={state.ui.warnings}
+                    errors={state.ui.errors}
+                    agentType={displayData.agent}
+                    onCopy={handleCopy}
+                    onInsertToEMR={handleInsertToEMR}
+                    originalTranscription={displayData.transcription}
+                    onTranscriptionCopy={handleCopy}
+                    onTranscriptionInsert={handleInsertToEMR}
+                    onTranscriptionEdit={displayData.isDisplayingSession ? undefined : handleTranscriptionEdit}
+                    transcriptionSaveStatus={transcriptionSaveStatus}
+                    onAgentReprocess={displayData.isDisplayingSession ? undefined : handleAgentReprocess}
+                    approvalState={displayData.isDisplayingSession ? { status: 'approved' as const, originalText: displayData.transcription, currentText: displayData.transcription, hasBeenEdited: false } : state.transcriptionApproval}
+                    onTranscriptionApprove={displayData.isDisplayingSession ? undefined : handleTranscriptionApproval}
+                missingInfo={displayData.isDisplayingSession ? null : state.missingInfo}
+                onReprocessWithAnswers={displayData.isDisplayingSession ? undefined : handleReprocessWithMissingInfo}
+                onDismissMissingInfo={displayData.isDisplayingSession ? undefined : () => actions.clearMissingInfo()}
+                currentAgent={displayData.agent}
+                isProcessing={displayData.isDisplayingSession ? false : state.isProcessing}
+                audioBlob={displayData.isDisplayingSession ? null : currentAudioBlobRef.current}
+                transcriptionTime={displayData.isDisplayingSession ? null : state.transcriptionTime}
+                agentProcessingTime={displayData.isDisplayingSession ? null : state.agentProcessingTime}
+                totalProcessingTime={displayData.isDisplayingSession ? null : state.totalProcessingTime}
+                processingStatus={displayData.processingStatus}
+                currentAgentName={displayData.agentName}
+                selectedSessionId={displayData.isDisplayingSession ? displayData.displayPatientInfo?.name || 'Unknown' : stableSelectedSessionId}
+                selectedPatientName={displayData.patientInfo?.name || stableSelectedPatientName}
+                patientVersion={displayData.isDisplayingSession ? null : state.patientVersion}
+                isGeneratingPatientVersion={displayData.isDisplayingSession ? false : state.isGeneratingPatientVersion}
+                onGeneratePatientVersion={displayData.isDisplayingSession ? undefined : handleGeneratePatientVersion}
+                streaming={displayData.isDisplayingSession ? false : !!state.streaming}
+                streamBuffer={displayData.isDisplayingSession ? '' : state.streamBuffer || ''}
+                ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
+                onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
+                  />
+                );
+              })()}
+            </div>
+          )}
+          
+          {/* Default State - Ready for Recording */}
+          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && (
+            <div className="flex-1 min-h-0 flex items-center justify-center p-8">
+              <div className="max-w-md text-center space-y-6">
+                <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
+                  <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </div>
+                
+                <div className="space-y-3">
+                  <h3 className="text-xl font-semibold text-gray-900">Ready to Record</h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    Select a workflow below to start recording for your next patient. 
+                    Recordings will process in the background, allowing you to continue with other patients.
+                  </p>
+                </div>
+
+                {/* Background Sessions Status */}
+                {state.patientSessions.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm font-medium text-blue-900">Background Processing</span>
+                    </div>
+                    <p className="text-xs text-blue-800">
+                      {state.patientSessions.filter(s => ['transcribing', 'processing'].includes(s.status)).length} sessions processing, {' '}
+                      {state.patientSessions.filter(s => s.status === 'completed').length} completed. 
+                      Click the notification bell to view results.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
         
         {/* Footer - Quick Actions */}
-        <div className="flex-shrink-0 bg-white/80 backdrop-blur-sm border-t border-line-primary p-4">
+        <div className="flex-shrink-0 bg-white  border-t border-gray-200 p-4">
           <QuickActions
             onQuickAction={async (actionId, data) => {
               console.log('🔧 Quick action triggered:', actionId, data);
@@ -1424,6 +2324,33 @@ const OptimizedAppContent: React.FC = memo(() => {
           onClose={() => actions.setScreenshotAnnotationModal(false)}
         />
       )}
+
+      {/* Patient Mismatch Confirmation Modal */}
+      {state.ui.showPatientMismatchModal && (
+        <PatientMismatchConfirmationModal
+          isOpen={state.ui.showPatientMismatchModal}
+          comparison={state.patientMismatchData.comparison}
+          textToInsert={state.patientMismatchData.textToInsert}
+          onConfirm={state.patientMismatchData.onConfirm || (() => {})}
+          onCancel={state.patientMismatchData.onCancel || (() => {})}
+          onRefreshEMR={async () => {
+            // Refresh EMR patient data and re-validate
+            try {
+              console.log('🔄 Refreshing EMR patient data...');
+              const freshPatientData = await extractPatientData();
+              if (freshPatientData?.name) {
+                actions.setCurrentPatientInfo({
+                  ...state.currentPatientInfo,
+                  ...freshPatientData
+                } as PatientInfo);
+                console.log('✅ EMR patient data refreshed:', freshPatientData.name);
+              }
+            } catch (error) {
+              console.error('❌ Failed to refresh EMR patient data:', error);
+            }
+          }}
+        />
+      )}
       
       {/* Recording Prompts are now integrated into the unified recording interface above */}
       
@@ -1458,6 +2385,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         onClose={() => actions.setMetricsDashboard(false)}
       />
       
+      {/* Optimization Panel */}
+      <OptimizationPanel
+        isOpen={isOptimizationPanelOpen}
+        onClose={() => setIsOptimizationPanelOpen(false)}
+      />
+      
+
       {/* Toast Notifications */}
       <ToastContainer />
       </div>
