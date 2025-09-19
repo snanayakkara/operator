@@ -153,6 +153,11 @@ type AppAction =
   | { type: 'RESULTS_STREAMING'; payload: boolean }
   | { type: 'RESULTS_CLEAR_STREAM' }
   | { type: 'SET_TRANSCRIPTION_APPROVAL'; payload: TranscriptionApprovalState }
+  // Atomic completion action to prevent race conditions
+  | { type: 'COMPLETE_PROCESSING_ATOMIC'; payload: { sessionId: string; results: string; summary?: string } }
+  // State validation and recovery actions
+  | { type: 'VALIDATE_STATE' }
+  | { type: 'RECOVER_STUCK_STATE' }
   // Display session actions for isolation
   | { type: 'SET_DISPLAY_SESSION'; payload: { session: PatientSession } }
   | { type: 'CLEAR_DISPLAY_SESSION' };
@@ -548,6 +553,62 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_TRANSCRIPTION_APPROVAL':
       return { ...state, transcriptionApproval: action.payload };
 
+    case 'COMPLETE_PROCESSING_ATOMIC':
+      // Atomic completion to prevent UI state inconsistencies
+      console.log('🏁 ATOMIC COMPLETION: Processing complete for session:', action.payload.sessionId);
+      return {
+        ...state,
+        // Clear all processing states atomically
+        isProcessing: false,
+        processingStatus: 'complete',
+        streaming: false,
+        currentSessionId: null, // Clear active session to enable record button
+
+        // Set results
+        results: action.payload.results,
+        aiGeneratedSummary: action.payload.summary,
+
+        // Clear UI processing indicators
+        ui: {
+          ...state.ui,
+          showProcessingPhase: false,
+          showFieldIngestionOverlay: false
+        }
+      };
+
+    case 'VALIDATE_STATE':
+      // Validate state consistency and log warnings
+      const warnings = [];
+      if (state.processingStatus === 'complete' && state.isProcessing) {
+        warnings.push('processingStatus is complete but isProcessing is true');
+      }
+      if (state.processingStatus === 'complete' && state.streaming) {
+        warnings.push('processingStatus is complete but streaming is true');
+      }
+      if (state.currentSessionId && state.processingStatus === 'complete' && !state.isProcessing) {
+        warnings.push('currentSessionId set but processing is complete - may block record button');
+      }
+      if (warnings.length > 0) {
+        console.warn('⚠️ STATE VALIDATION WARNINGS:', warnings);
+      }
+      return state;
+
+    case 'RECOVER_STUCK_STATE':
+      // Recover from stuck processing states
+      console.log('🔄 RECOVERING FROM STUCK STATE');
+      return {
+        ...state,
+        isProcessing: false,
+        processingStatus: 'idle',
+        streaming: false,
+        currentSessionId: null,
+        ui: {
+          ...state.ui,
+          showProcessingPhase: false,
+          showFieldIngestionOverlay: false
+        }
+      };
+
     case 'SET_DISPLAY_SESSION':
       const session = action.payload.session;
       return {
@@ -835,6 +896,20 @@ export function useAppState() {
     // Transcription approval action
     setTranscriptionApproval: useCallback((approval: TranscriptionApprovalState) => {
       dispatch({ type: 'SET_TRANSCRIPTION_APPROVAL', payload: approval });
+    }, []),
+
+    // Atomic completion action to prevent race conditions
+    completeProcessingAtomic: useCallback((sessionId: string, results: string, summary?: string) => {
+      dispatch({ type: 'COMPLETE_PROCESSING_ATOMIC', payload: { sessionId, results, summary } });
+    }, []),
+
+    // State validation and recovery actions
+    validateState: useCallback(() => {
+      dispatch({ type: 'VALIDATE_STATE' });
+    }, []),
+
+    recoverStuckState: useCallback(() => {
+      dispatch({ type: 'RECOVER_STUCK_STATE' });
     }, []),
 
     // Display session actions for isolation

@@ -284,10 +284,13 @@ const OptimizedAppContent: React.FC = memo(() => {
           })();
         }
 
-        // Clear processing state to stop spinning indicators
-        actions.setProcessing(false);
-        actions.setProcessingStatus('complete');
-        actions.setStreaming(false);
+        // Use atomic completion to prevent UI state race conditions
+        console.log('🏁 TAVI Completion: Using atomic completion for streaming results');
+        console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
+
+        actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
+
+        console.log('🏁 TAVI Completion: Atomic completion done for streaming workflow');
         processingAbortRef.current = null;
         actions.updatePatientSession(sessionId, {
           results: letterContent, // Store only letter content in results
@@ -566,12 +569,35 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('🔄 Processing with agent for session (non-streaming):', sessionId, workflowId);
       const processingStartTime = Date.now();
       const { AgentFactory } = await import('@/services/AgentFactory');
+
+      // Special handling for TAVI workup with progress tracking
+      const processOptions: any = {
+        skipNotification: true,
+        sessionId
+      };
+
+      if (workflowId === 'tavi-workup') {
+        processOptions.onProgress = (phase: string, progress: number, details?: string) => {
+          console.log(`🫀 TAVI Progress: ${phase} (${progress}%) - ${details || ''}`);
+
+          // Update session with progress information
+          actions.updatePatientSession(sessionId, {
+            status: 'processing',
+            processingProgress: {
+              phase,
+              progress,
+              details
+            }
+          });
+        };
+      }
+
       const result = await AgentFactory.processWithAgent(
         workflowId,
         correctedTranscription,
         undefined,
         sessionProcessingAbort.signal,
-        { skipNotification: true }
+        processOptions
       );
       
       const processingDuration = Date.now() - processingStartTime;
@@ -672,10 +698,12 @@ const OptimizedAppContent: React.FC = memo(() => {
           processingStartTime: transcriptionStartTime // for consistency
         });
         
-        actions.setProcessingStatus('complete');
-        
-        // Turn off processing state after completion
-        actions.setProcessing(false);
+        console.log('🏁 TAVI Completion: Using atomic completion for background session');
+        console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
+
+        actions.completeProcessingAtomic(sessionId, result.content, result.missingInfo);
+
+        console.log('🏁 TAVI Completion: Atomic completion done for background workflow');
         console.log('🎯 Updated global UI state for currently selected session:', sessionId);
       } else {
         console.log('🔕 Background session completed, skipping global UI state updates for:', sessionId);
@@ -1859,6 +1887,47 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [state.streaming, state.currentSessionId, state.results, state.processingStatus, recorder.isRecording, state.isProcessing, actions]);
 
+  // Enhanced stuck state detection and auto-recovery
+  useEffect(() => {
+    // Only run validation checks periodically to avoid performance impact
+    const validationInterval = setInterval(() => {
+      // Validate state consistency
+      actions.validateState();
+
+      // Detect and recover from specific stuck state patterns
+      const isStuckProcessing = state.processingStatus === 'processing' && state.isProcessing === false;
+      const isStuckComplete = state.processingStatus === 'complete' && (state.streaming || state.currentSessionId);
+      const hasCompletedResultsButActiveState = state.results && state.processingStatus === 'complete' && (state.streaming || state.currentSessionId) && !recorder.isRecording;
+
+      if (isStuckProcessing || isStuckComplete || hasCompletedResultsButActiveState) {
+        console.warn('🚑 STUCK STATE DETECTED - Auto-recovering:', {
+          isStuckProcessing,
+          isStuckComplete,
+          hasCompletedResultsButActiveState,
+          processingStatus: state.processingStatus,
+          isProcessing: state.isProcessing,
+          streaming: state.streaming,
+          currentSessionId: state.currentSessionId,
+          hasResults: !!state.results
+        });
+
+        // Use atomic completion or recovery based on the situation
+        if (state.results && state.processingStatus === 'complete') {
+          // Just clear the stuck active state indicators
+          actions.setStreaming(false);
+          actions.setCurrentSessionId(null);
+          actions.setProcessingPhase(false);
+          actions.setFieldIngestionOverlay(false);
+        } else {
+          // Full recovery for other stuck states
+          actions.recoverStuckState();
+        }
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(validationInterval);
+  }, [state.processingStatus, state.isProcessing, state.streaming, state.currentSessionId, state.results, recorder.isRecording, actions]);
+
   // Recording state monitoring for prompt card
   useEffect(() => {
     if (recorder.isRecording && state.ui.activeWorkflow && hasRecordingPrompt(state.ui.activeWorkflow)) {
@@ -1997,8 +2066,13 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
           
-          {/* Transcription Processing Display - Show when transcribing/processing but not during streaming */}
-          {!recorder.isRecording && (state.processingStatus === 'transcribing' || state.processingStatus === 'processing') && state.transcription && !state.results && !state.streaming && (
+          {/* Transcription Processing Display - Show when actively transcribing/processing (not completed, not viewing sessions) */}
+          {!recorder.isRecording &&
+           (state.processingStatus === 'transcribing' || state.processingStatus === 'processing') &&
+           state.transcription &&
+           !state.streaming &&
+           !state.displaySession.isDisplayingSession &&
+           state.currentSessionId && ( // Only show for active sessions, not when viewing completed ones
             <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-4">
               <div className="bg-white  rounded-lg border border-blue-200 p-4">
                 <div className="flex items-center space-x-2 mb-3">
@@ -2057,13 +2131,15 @@ const OptimizedAppContent: React.FC = memo(() => {
                     const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
                     
                     actions.setResults(result.content);
+                    actions.setProcessingStatus('complete');
+                    actions.setProcessing(false);
                     actions.setPatientEducationConfig(false);
                     console.log('✅ Patient Education generation completed');
                   } catch (error) {
                     console.error('❌ Patient Education generation failed:', error);
                     const errorMessage = error instanceof Error ? error.message : String(error);
                     actions.setErrors([`Patient Education generation failed: ${errorMessage}`]);
-                  } finally {
+                    actions.setProcessingStatus('idle');
                     actions.setProcessing(false);
                   }
                 }}
@@ -2071,8 +2147,8 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
 
-          {/* Session Loading State */}
-          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && (
+          {/* Session Loading State - Show when session selected but no results loaded and not completed */}
+          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && state.processingStatus !== 'complete' && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-4">
                 <div className="w-16 h-16 mx-auto bg-purple-50 rounded-full flex items-center justify-center">
@@ -2096,11 +2172,12 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
 
-          {/* Main Results Panel - Show when session selected or streaming */}
-          {(stableSelectedSessionId || state.streaming) && (() => {
+          {/* Main Results Panel - Show when session selected, streaming, or processing */}
+          {(stableSelectedSessionId || state.streaming || state.isProcessing) && (() => {
             console.log('🎯 RESULTS PANEL RENDERING:', {
               selectedSessionId: stableSelectedSessionId,
               streaming: state.streaming,
+              isProcessing: state.isProcessing,
               hasResults: !!state.results,
               hasTranscription: !!state.transcription,
               resultsLength: state.results?.length || 0,
@@ -2149,6 +2226,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 streamBuffer={displayData.isDisplayingSession ? '' : state.streamBuffer || ''}
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
                 onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
+                processingProgress={displayData.isDisplayingSession ? undefined : displayData.processingProgress}
                   />
                 );
               })()}
@@ -2156,7 +2234,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && (
+          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
@@ -2232,7 +2310,13 @@ const OptimizedAppContent: React.FC = memo(() => {
                 // Handle EMR field actions
                 if (['investigation-summary', 'background', 'medications', 'social-history', 'bloods', 'bloods-insert', 'imaging', 'quick-letter', 'appointment-wrap-up', 'profile-photo', 'create-task'].includes(actionId)) {
                   const messageData: any = {};
-                  
+
+                  // Show field ingestion overlay for data extraction actions
+                  if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId) && data?.type !== 'manual') {
+                    console.log(`🔧 TAVI Ingestion: Showing field ingestion overlay for ${actionId}`);
+                    actions.setFieldIngestionOverlay(true);
+                  }
+
                   // If we have results and it's not a manual type request, include the content
                   if (state.results && state.results.trim().length > 0 && data?.type !== 'manual') {
                     messageData.content = state.results;
@@ -2240,13 +2324,21 @@ const OptimizedAppContent: React.FC = memo(() => {
                   } else {
                     console.log('🔧 Opening EMR field for manual entry:', actionId);
                   }
-                  
+
                   await chrome.runtime.sendMessage({
                     type: 'EXECUTE_ACTION',
                     action: actionId,
                     data: messageData
                   });
-                  
+
+                  // Clear field ingestion overlay after action completes
+                  if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId)) {
+                    console.log(`🔧 TAVI Ingestion: Clearing field ingestion overlay after ${actionId}`);
+                    setTimeout(() => {
+                      actions.setFieldIngestionOverlay(false);
+                    }, 1500); // Give time for the extraction to complete
+                  }
+
                   console.log('✅ Quick action completed:', actionId);
                 } else if (actionId === 'ai-medical-review') {
                   // Handle AI Medical Review processing
@@ -2270,17 +2362,21 @@ const OptimizedAppContent: React.FC = memo(() => {
                       // Update state with results
                       actions.setResults(result.content);
                       actions.setMissingInfo(result.missingInfo || null);
+                      actions.setProcessingStatus('complete');
                       actions.setProcessing(false);
-                      
+
                       console.log('✅ AI Medical Review completed successfully');
                     } catch (error) {
                       console.error('❌ AI Medical Review processing failed:', error);
                       actions.setErrors([`AI Medical Review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+                      actions.setProcessingStatus('idle');
                       actions.setProcessing(false);
                     }
                   } else {
                     console.error('❌ AI Medical Review: No formatted input provided');
                     actions.setErrors(['AI Medical Review failed: No patient data available']);
+                    actions.setProcessingStatus('idle');
+                    actions.setProcessing(false);
                   }
                 } else if (actionId === 'batch-ai-review' && data?.type === 'show-modal') {
                   // Handle batch AI review modal trigger
