@@ -1524,8 +1524,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       });
       
       actions.setCurrentAgentName(result.agentName);
-      actions.setProcessingStatus('complete');
-      actions.setProcessing(false);
+      // Use atomic completion to ensure consistent state management
+      actions.completeProcessingAtomic(state.currentSessionId || 'reprocess-session', result.content);
       
       // Set warnings and errors if any
       if (result.warnings?.length) {
@@ -1572,10 +1572,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         processingAbortRef.current?.signal
       );
 
-      actions.setResults(result.content);
       actions.setMissingInfo(result.missingInfo || null);
-      actions.setProcessingStatus('complete');
-      actions.setProcessing(false);
+      // Use atomic completion to ensure consistent state management
+      actions.completeProcessingAtomic(state.currentSessionId || 'missing-info-session', result.content);
     } catch (error) {
       console.error('Reprocess with missing info failed:', error);
       actions.setProcessing(false);
@@ -2130,10 +2129,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                     console.log('🎓 Processing Patient Education with input:', input);
                     const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
                     
-                    actions.setResults(result.content);
-                    actions.setProcessingStatus('complete');
-                    actions.setProcessing(false);
                     actions.setPatientEducationConfig(false);
+                    // Use atomic completion to ensure consistent state management
+                    actions.completeProcessingAtomic(state.currentSessionId || 'patient-education-session', result.content);
                     console.log('✅ Patient Education generation completed');
                   } catch (error) {
                     console.error('❌ Patient Education generation failed:', error);
@@ -2172,8 +2170,8 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
 
-          {/* Main Results Panel - Show when session selected, streaming, or processing */}
-          {(stableSelectedSessionId || state.streaming || state.isProcessing) && (() => {
+          {/* Main Results Panel - Show when session selected, streaming, processing, or completed with results */}
+          {(stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (() => {
             console.log('🎯 RESULTS PANEL RENDERING:', {
               selectedSessionId: stableSelectedSessionId,
               streaming: state.streaming,
@@ -2360,10 +2358,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                       const result = await AgentFactory.processWithAgent('ai-medical-review', data.formattedInput);
                       
                       // Update state with results
-                      actions.setResults(result.content);
                       actions.setMissingInfo(result.missingInfo || null);
-                      actions.setProcessingStatus('complete');
-                      actions.setProcessing(false);
+                      // Use atomic completion to ensure consistent state management
+                      actions.completeProcessingAtomic(state.currentSessionId || 'ai-review-session', result.content);
 
                       console.log('✅ AI Medical Review completed successfully');
                     } catch (error) {
