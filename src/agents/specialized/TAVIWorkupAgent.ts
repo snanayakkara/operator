@@ -49,10 +49,17 @@ export class TAVIWorkupAgent extends MedicalAgent {
       console.log(`📥 [${processingType}] Input preview:`, input.substring(0, 150) + '...');
       console.log(`⚙️ [${processingType}] Context provided:`, context ? 'Yes' : 'No');
 
-      // Progress callback helper
+      // Progress callback helper with enhanced logging
       const reportProgress = (phase: string, progress: number, details?: string) => {
+        console.log(`📊 [${processingType}] Progress Update: ${phase} - ${progress}% ${details ? `(${details})` : ''}`);
         if (context?.onProgress) {
-          context.onProgress(phase, progress, details);
+          try {
+            context.onProgress(phase, progress, details);
+          } catch (progressError) {
+            console.error(`❌ [${processingType}] Progress callback failed:`, progressError);
+          }
+        } else {
+          console.log(`📊 [${processingType}] No progress callback available`);
         }
       };
 
@@ -78,13 +85,41 @@ export class TAVIWorkupAgent extends MedicalAgent {
       console.log(`📤 [${processingType}] LLM payload prepared (${llmPayload.length} chars)`);
 
       reportProgress('Main LLM Processing', 50, 'Generating structured narrative...');
+      console.log(`🎯 [${processingType}] LLM Processing Phase: Starting generation request`);
+      console.log(`🔧 [${processingType}] LLM Options:`, {
+        streaming: !!options?.streaming,
+        hasOnStreamToken: !!options?.onStreamToken,
+        hasSignal: !!options?.signal,
+        signalAborted: options?.signal?.aborted
+      });
+
+      // Set up timeout for LLM processing (3 minutes for TAVI workup)
+      const LLM_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+      const timeoutController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error(`❌ [${processingType}] LLM processing timeout after ${LLM_TIMEOUT_MS}ms`);
+        timeoutController.abort();
+      }, LLM_TIMEOUT_MS);
+
+      // Combine user signal with timeout signal
+      const combinedSignal = options?.signal || timeoutController.signal;
+
+      // Monitor for early abort
+      if (combinedSignal.aborted) {
+        console.warn(`⚠️ [${processingType}] Request already aborted before LLM processing`);
+        clearTimeout(timeoutId);
+        throw new Error('Request was aborted before LLM processing');
+      }
 
       let rawOutput: string;
 
       if (options?.streaming && options.onStreamToken) {
         // Streaming mode for real-time generation feedback
         console.log(`🌊 [${processingType}] Using streaming generation for TAVI workup`);
+        console.log(`🌊 [${processingType}] Streaming setup complete, starting streamChatCompletion call`);
         let streamedOutput = '';
+        let tokenCount = 0;
+        const streamStartTime = Date.now();
 
         await streamChatCompletion({
           model: 'medgemma-27b-mlx',
@@ -94,39 +129,117 @@ export class TAVIWorkupAgent extends MedicalAgent {
           ],
           temperature: 0.3,
           maxTokens: 6000,
-          signal: options.signal,
+          signal: combinedSignal,
           onToken: (token) => {
             streamedOutput += token;
+            tokenCount++;
             options.onStreamToken!(token);
+
+            // Log progress every 100 tokens for debugging
+            if (tokenCount % 100 === 0 || tokenCount === 1) {
+              const elapsed = Date.now() - streamStartTime;
+              console.log(`🌊 [${processingType}] Stream progress: ${tokenCount} tokens, ${streamedOutput.length} chars, ${elapsed}ms elapsed`);
+            }
+
             // Update progress based on estimated output length
             const estimatedLength = 4000; // Rough estimate for TAVI workup JSON
             const currentProgress = Math.min(90, 50 + (streamedOutput.length / estimatedLength) * 40);
             reportProgress('Main LLM Processing', currentProgress, `Generating... (${streamedOutput.length} chars)`);
           },
           onEnd: (final) => {
+            const streamEndTime = Date.now();
+            const totalStreamTime = streamEndTime - streamStartTime;
+            console.log(`🌊 [${processingType}] Stream completed successfully:`, {
+              finalLength: final.length,
+              totalTokens: tokenCount,
+              streamTime: totalStreamTime,
+              tokensPerSecond: Math.round(tokenCount / (totalStreamTime / 1000))
+            });
+
             streamedOutput = final;
             if (options.onStreamComplete) {
+              console.log(`🌊 [${processingType}] Calling onStreamComplete callback`);
               options.onStreamComplete(final);
             }
             reportProgress('Main LLM Processing', 100, `Streaming complete (${final.length} chars)`);
           },
           onError: (error) => {
-            console.error(`❌ [${processingType}] Streaming failed:`, error);
+            const streamErrorTime = Date.now();
+            const streamErrorElapsed = streamErrorTime - streamStartTime;
+            console.error(`❌ [${processingType}] Streaming failed after ${streamErrorElapsed}ms:`, {
+              error: error.message || error,
+              tokensReceived: tokenCount,
+              partialOutput: streamedOutput.substring(0, 200) + '...'
+            });
             throw error;
           }
         });
 
+        console.log(`🌊 [${processingType}] streamChatCompletion call completed, final output length: ${streamedOutput.length}`);
+        clearTimeout(timeoutId); // Clear timeout on successful completion
         rawOutput = streamedOutput;
       } else {
         // Traditional blocking mode
-        rawOutput = await this.lmStudioService.processWithAgent(
-          this.systemPrompt,
-          llmPayload,
-          this.agentType
-        );
-        reportProgress('Main LLM Processing', 100, `LLM output received (${rawOutput.length} chars)`);
+        console.log(`🔄 [${processingType}] Using traditional blocking mode for LLM processing`);
+        console.log(`🔄 [${processingType}] Starting processWithAgent call`);
+        const blockingStartTime = Date.now();
+
+        try {
+          // For blocking mode, we need to handle timeout differently
+          const blockingPromise = this.lmStudioService.processWithAgent(
+            this.systemPrompt,
+            llmPayload,
+            this.agentType
+          );
+
+          // Race the LLM processing against timeout
+          rawOutput = await Promise.race([
+            blockingPromise,
+            new Promise<never>((_, reject) => {
+              if (combinedSignal.aborted) {
+                reject(new Error('Request was aborted'));
+              }
+              combinedSignal.addEventListener('abort', () => {
+                reject(new Error('LLM processing timed out'));
+              });
+            })
+          ]);
+
+          const blockingEndTime = Date.now();
+          const blockingElapsed = blockingEndTime - blockingStartTime;
+          clearTimeout(timeoutId); // Clear timeout on successful completion
+          console.log(`🔄 [${processingType}] processWithAgent completed successfully:`, {
+            outputLength: rawOutput.length,
+            processingTime: blockingElapsed,
+            charsPerSecond: Math.round(rawOutput.length / (blockingElapsed / 1000))
+          });
+
+          reportProgress('Main LLM Processing', 100, `LLM output received (${rawOutput.length} chars)`);
+        } catch (blockingError) {
+          clearTimeout(timeoutId); // Clear timeout on error
+          const blockingErrorTime = Date.now();
+          const blockingErrorElapsed = blockingErrorTime - blockingStartTime;
+          console.error(`❌ [${processingType}] processWithAgent failed after ${blockingErrorElapsed}ms:`, {
+            error: blockingError instanceof Error ? blockingError.message : String(blockingError),
+            errorType: blockingError instanceof Error ? blockingError.constructor.name : typeof blockingError
+          });
+          throw blockingError;
+        }
       }
       console.log(`📥 [${processingType}] Raw LLM output received (${rawOutput.length} chars)`);
+      console.log(`🎯 [${processingType}] LLM Processing Phase: COMPLETED successfully`);
+
+      // Validate LLM output before parsing
+      if (!rawOutput || rawOutput.trim().length === 0) {
+        console.error(`❌ [${processingType}] LLM returned empty output!`);
+        throw new Error('LLM returned empty output');
+      }
+
+      if (rawOutput.length < 50) {
+        console.warn(`⚠️ [${processingType}] LLM output suspiciously short: "${rawOutput}"`);
+      }
+
+      console.log(`📋 [${processingType}] LLM output preview (first 200 chars): ${rawOutput.substring(0, 200)}...`);
 
       // Phase 4: Multi-Strategy Response Parsing
       reportProgress('Multi-Strategy Response Parsing', 0, 'Attempting JSON parsing');
@@ -795,45 +908,71 @@ ${extraction.alerts.alertMessages.join('; ')}
 Based on this information, analyze what clinical information is missing that would be valuable for comprehensive TAVI workup and procedural planning.`;
 
       console.log('🤖 TAVI Missing Info: Sending request to LLM for missing info analysis');
-      const response = await this.lmStudioService.processWithAgent(
-        missingInfoPrompt,
-        input,
-        this.agentType
-      );
+      console.log(`📋 TAVI Missing Info: Prompt length: ${missingInfoPrompt.length} chars`);
 
-      console.log('📥 TAVI Missing Info: Received response from LLM');
+      const missingInfoTimeout = setTimeout(() => {
+        console.error(`❌ TAVI Missing Info: Detection timeout after 90 seconds`);
+      }, 90000); // 90 seconds for missing info detection
 
       try {
+        const response = await this.lmStudioService.processWithAgent(
+          missingInfoPrompt,
+          input,
+          this.agentType
+        );
+
+        clearTimeout(missingInfoTimeout);
+        console.log(`📥 TAVI Missing Info: Received response (${response.length} chars)`);
+
+        if (!response || response.trim().length === 0) {
+          console.error(`❌ TAVI Missing Info: LLM returned empty response`);
+          throw new Error('Missing info LLM returned empty response');
+        }
         // Parse the JSON response
         const cleanResponse = response.replace(/```json|```/g, '').trim();
         const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
-          const missingInfo = JSON.parse(jsonMatch[0]);
-          console.log('✅ TAVI Missing Info: Successfully parsed JSON response');
-          console.log(`📊 Missing info summary - Clinical: ${missingInfo.missing_clinical_assessment?.length || 0}, Diagnostic: ${missingInfo.missing_diagnostic_studies?.length || 0}, Procedural: ${missingInfo.missing_procedural_planning?.length || 0}`);
+          try {
+            const missingInfo = JSON.parse(jsonMatch[0]);
+            console.log('✅ TAVI Missing Info: Successfully parsed JSON response');
+            console.log(`📊 Missing info summary - Clinical: ${missingInfo.missing_clinical_assessment?.length || 0}, Diagnostic: ${missingInfo.missing_diagnostic_studies?.length || 0}, Procedural: ${missingInfo.missing_procedural_planning?.length || 0}`);
 
-          // Transform to MissingInfoPanel format
-          return {
-            missing_clinical: missingInfo.missing_clinical_assessment || [],
-            missing_diagnostic: missingInfo.missing_diagnostic_studies || [],
-            missing_measurements: missingInfo.missing_procedural_planning || [],
-            missing_structured: extraction.missingFields || [],
-            completeness_score: missingInfo.completeness_score || '50% (Incomplete)',
-            critical_gaps: missingInfo.critical_gaps || []
-          };
+            // Validate the structure
+            if (!missingInfo.missing_clinical_assessment && !missingInfo.missing_diagnostic_studies && !missingInfo.missing_procedural_planning) {
+              console.warn('⚠️ TAVI Missing Info: Parsed JSON has no expected fields, using fallback');
+              throw new Error('Missing info JSON has invalid structure');
+            }
+
+            // Transform to MissingInfoPanel format
+            return {
+              missing_clinical: missingInfo.missing_clinical_assessment || [],
+              missing_diagnostic: missingInfo.missing_diagnostic_studies || [],
+              missing_measurements: missingInfo.missing_procedural_planning || [],
+              missing_structured: extraction.missingFields || [],
+              completeness_score: missingInfo.completeness_score || '50% (Incomplete)',
+              critical_gaps: missingInfo.critical_gaps || []
+            };
+          } catch (jsonParseError) {
+            console.warn('⚠️ TAVI Missing Info: JSON parsing failed:', jsonParseError);
+            return this.fallbackMissingInfoDetection(input, extraction);
+          }
         } else {
           console.warn('⚠️ TAVI Missing Info: No JSON found in response, using fallback');
           return this.fallbackMissingInfoDetection(input, extraction);
         }
-      } catch (parseError) {
-        console.warn('⚠️ TAVI Missing Info: JSON parsing failed, using fallback');
-        console.error('Parse error:', parseError);
+      } catch (responseError) {
+        clearTimeout(missingInfoTimeout);
+        console.warn('⚠️ TAVI Missing Info: Response processing failed, using fallback');
+        console.error('Response processing error:', responseError);
         return this.fallbackMissingInfoDetection(input, extraction);
       }
 
     } catch (error) {
-      console.error('❌ TAVI Missing Info: Error in missing information detection:', error);
+      console.error('❌ TAVI Missing Info: Error in missing information detection:', {
+        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.constructor.name : typeof error
+      });
       return this.fallbackMissingInfoDetection(input, extraction);
     }
   }
