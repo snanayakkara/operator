@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.3.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.3.1-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -650,6 +650,30 @@ npm run test:e2e               # Full E2E test suite
 npm run validate:production    # Production readiness check
 ```
 
+## 📋 Recent Updates
+
+### v3.3.1 (September 2025) - TAVI Workup Enhancement
+**🚀 Major TAVI Workup Agent Improvements:**
+- **Eliminated Dialog Opening** - TAVI workup now reads EMR data directly from DOM using `extractCustomNoteContent()` method
+- **Automatic Patient Demographics** - Name, DOB, age automatically extracted from EMR (no longer required in dictation)
+- **Direct Content Script Communication** - Added `EXTRACT_CUSTOM_NOTE_CONTENT` message handler for efficient extraction
+- **Enhanced LLM Payload** - Added `patient_demographics` field with automatic EMR-extracted patient data
+- **Updated System Prompts** - Clarified that patient demographics are automatically provided from EMR
+- **Performance Improvement** - Faster processing without UI disruption, consistent with efficient agents like AI Review
+
+**Technical Changes:**
+- Content script: Added `EXTRACT_CUSTOM_NOTE_CONTENT` message handler
+- TAVI Agent: Complete refactor of `extractEMRDialogFields()` method using `chrome.tabs.sendMessage()`
+- System Prompts: Updated to indicate automatic patient demographic extraction
+- Payload Structure: Enhanced with separate `patient_demographics` and `emr_fields` sections
+
+**Benefits:**
+- ✅ No more dialog opening during TAVI processing
+- ✅ Automatic patient identification without dictation
+- ✅ Faster EMR data extraction
+- ✅ Consistent behavior with other high-performance agents
+- ✅ Better user experience with reduced UI disruption
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
@@ -665,7 +689,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.3.0 | **Updated**: September 2025 | **Architecture**: Phase 4 Intelligence with Local-First Medical AI
+**Version**: 3.3.1 | **Updated**: September 2025 | **Architecture**: Phase 4 Intelligence with Local-First Medical AI
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

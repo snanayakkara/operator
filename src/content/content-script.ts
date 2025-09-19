@@ -271,6 +271,20 @@ class ContentScriptHandler {
         return;
       }
 
+      // Handle direct custom note content extraction (efficient, no dialog opening)
+      if (type === 'EXTRACT_CUSTOM_NOTE_CONTENT') {
+        console.log('📋 Received EXTRACT_CUSTOM_NOTE_CONTENT request for field:', message.fieldName);
+        try {
+          const content = await this.extractCustomNoteContent(message.fieldName);
+          console.log(`📋 Custom note extraction completed for "${message.fieldName}": ${content.length} chars`);
+          sendResponse({ success: true, data: content });
+        } catch (error) {
+          console.error(`📋 Custom note extraction failed for "${message.fieldName}":`, error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'Custom note extraction failed' });
+        }
+        return;
+      }
+
       if (type !== 'EXECUTE_ACTION') {
         console.log('❌ Unknown message type:', type);
         sendResponse({ error: 'Unknown message type' });
