@@ -701,7 +701,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         console.log('🏁 TAVI Completion: Using atomic completion for background session');
         console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
 
-        actions.completeProcessingAtomic(sessionId, result.content, result.missingInfo);
+        actions.completeProcessingAtomic(sessionId, result.content, result.summary);
+
+        // Set missing info separately for TAVI workups
+        if (result.missingInfo) {
+          actions.setMissingInfo(result.missingInfo);
+        }
 
         console.log('🏁 TAVI Completion: Atomic completion done for background workflow');
         console.log('🎯 Updated global UI state for currently selected session:', sessionId);
