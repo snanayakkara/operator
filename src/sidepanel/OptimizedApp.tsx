@@ -2145,8 +2145,8 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
 
-          {/* Session Loading State - Show when session selected but no results loaded and not completed */}
-          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && state.processingStatus !== 'complete' && (
+          {/* Session Loading State - Show when session selected but no results loaded and not completed, and not already displaying session */}
+          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && state.processingStatus !== 'complete' && !state.displaySession.isDisplayingSession && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-4">
                 <div className="w-16 h-16 mx-auto bg-purple-50 rounded-full flex items-center justify-center">
