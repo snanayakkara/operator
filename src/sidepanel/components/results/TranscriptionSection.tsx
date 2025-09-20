@@ -323,9 +323,18 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
               <textarea
                 value={editedTranscription}
                 onChange={(e) => handleTranscriptionChange(e.target.value)}
-                className="w-full h-32 p-2 pb-6 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed"
-                placeholder="Edit transcription to improve accuracy - corrections will be submitted for training only with your approval..."
-                title="Edit the transcription to improve accuracy. Training data is only submitted when you explicitly approve it."
+                disabled={!onTranscriptionEdit}
+                className={`w-full h-32 p-2 pb-6 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed ${
+                  !onTranscriptionEdit ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+                placeholder={onTranscriptionEdit
+                  ? "Edit transcription to improve accuracy - corrections will be submitted for training only with your approval..."
+                  : "Transcription editing disabled for completed sessions"
+                }
+                title={onTranscriptionEdit
+                  ? "Edit the transcription to improve accuracy. Training data is only submitted when you explicitly approve it."
+                  : "Transcription editing is disabled for completed sessions"
+                }
               />
               <div className="absolute bottom-1 right-2 flex items-center space-x-2 text-xs text-gray-400">
                 <span>🧠 Training AI</span>

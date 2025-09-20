@@ -632,13 +632,8 @@ export class TAVIWorkupAgent extends MedicalAgent {
     } catch (error) {
       console.error('❌ TAVI Deterministic Composer: Error creating fallback:', error);
 
-      // Final fallback
-      return [{
-        title: 'Processing Error',
-        content: 'TAVI workup processing encountered an error. Please try recording again.',
-        type: 'narrative',
-        priority: 'high',
-      }];
+      // Final fallback - return empty sections to use content-only display
+      return [];
     }
   }
 
@@ -1033,14 +1028,9 @@ Based on this information, analyze what clinical information is missing that wou
   private createErrorReport(errorMessage: string, processingTime: number, context?: MedicalContext): TAVIWorkupReport {
     console.log('🔧 TAVI Error Handler: Creating structured error report');
 
-    const fallbackSections = [{
-      title: 'Processing Error',
-      content: 'TAVI workup processing encountered an error. Please review the dictation and try again.',
-      type: 'narrative' as const,
-      priority: 'high' as const
-    }];
-
-    const fallbackText = this.composeStructuredText(fallbackSections);
+    // Use content-only error display (no section headers) for cleaner UI
+    const fallbackText = `TAVI workup processing encountered an error. Please review the dictation and try again.\n\nError details: ${errorMessage}`;
+    const fallbackSections: ReportSection[] = [];
 
     const fallback = this.createReport(
       fallbackText,
