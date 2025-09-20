@@ -556,6 +556,13 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'COMPLETE_PROCESSING_ATOMIC':
       // Atomic completion to prevent UI state inconsistencies
       console.log('🏁 ATOMIC COMPLETION: Processing complete for session:', action.payload.sessionId);
+
+      // Defensive checks to prevent undefined property access
+      const safeResults = action.payload.results || 'Processing completed';
+      const safeSummary = action.payload.summary || action.payload.results || 'Processing completed';
+
+      console.log('🔒 ATOMIC COMPLETION: Safety checks applied - Results length:', safeResults.length, 'Summary length:', safeSummary.length);
+
       return {
         ...state,
         // Clear all processing states atomically
@@ -564,9 +571,9 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         streaming: false,
         currentSessionId: null, // Clear active session to enable record button
 
-        // Set results
-        results: action.payload.results,
-        aiGeneratedSummary: action.payload.summary,
+        // Set results with safety checks
+        results: safeResults,
+        aiGeneratedSummary: safeSummary,
 
         // Clear UI processing indicators
         ui: {

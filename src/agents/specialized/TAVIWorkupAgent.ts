@@ -1054,6 +1054,8 @@ Based on this information, analyze what clinical information is missing that wou
 
     const emptyReport: TAVIWorkupReport = {
       ...fallback,
+      // Add summary property for UI consistency
+      summary: `TAVI workup processing failed: ${errorMessage}`,
       workupData: {
         patient: {},
         clinical: {},
