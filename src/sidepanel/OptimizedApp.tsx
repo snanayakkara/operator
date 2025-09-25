@@ -608,7 +608,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('✅ Agent processing complete for session:', sessionId);
       
       // Complete the session with results
-      actions.updatePatientSession(sessionId, {
+      const sessionUpdate: any = {
         results: result.content,
         summary: result.summary || '', // Store summary for dual card display
         agentName: result.agentName,
@@ -618,7 +618,14 @@ const OptimizedAppContent: React.FC = memo(() => {
         processingTime: result.processingTime,
         warnings: result.warnings,
         errors: result.errors
-      });
+      };
+
+      // Add TAVI structured sections if available
+      if (result.taviStructuredSections) {
+        sessionUpdate.taviStructuredSections = result.taviStructuredSections;
+      }
+
+      actions.updatePatientSession(sessionId, sessionUpdate);
 
       // Record completion metrics
       performanceMonitor.recordMetrics('complete', Date.now() - transcriptionStartTime, {
@@ -632,6 +639,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setResults(result.content);
         // Store missing info (if any) for interactive completion
         actions.setMissingInfo(result.missingInfo || null);
+        // Store TAVI structured sections if available
+        if (result.taviStructuredSections) {
+          actions.setTaviStructuredSections(result.taviStructuredSections);
+        }
         console.log('🎯 Updated main results panel for currently selected session:', sessionId);
       } else {
         console.log('🔕 Background session completed, results stored in session only:', sessionId);
@@ -708,6 +719,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Set missing info separately for TAVI workups
         if (result.missingInfo) {
           actions.setMissingInfo(result.missingInfo);
+        }
+
+        // Set TAVI structured sections if available
+        if (result.taviStructuredSections) {
+          actions.setTaviStructuredSections(result.taviStructuredSections);
         }
 
         console.log('🏁 TAVI Completion: Atomic completion done for background workflow');
@@ -975,6 +991,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         transcription: state.displaySession.displayTranscription,
         results: state.displaySession.displayResults,
         summary: state.displaySession.displaySummary,
+        taviStructuredSections: state.displaySession.displayTaviStructuredSections,
         agent: state.displaySession.displayAgent,
         agentName: state.displaySession.displayAgentName,
         patientInfo: state.displaySession.displayPatientInfo,
@@ -1515,6 +1532,11 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Update results
       actions.setResults(result.content);
       actions.setMissingInfo(result.missingInfo || null);
+
+      // Set TAVI structured sections if available
+      if (result.taviStructuredSections) {
+        actions.setTaviStructuredSections(result.taviStructuredSections);
+      }
       
       // Extract and set AI-generated summary if available
       if (result.summary && result.summary.trim()) {
@@ -1580,6 +1602,12 @@ const OptimizedAppContent: React.FC = memo(() => {
       );
 
       actions.setMissingInfo(result.missingInfo || null);
+
+      // Set TAVI structured sections if available
+      if (result.taviStructuredSections) {
+        actions.setTaviStructuredSections(result.taviStructuredSections);
+      }
+
       // Use atomic completion to ensure consistent state management
       actions.completeProcessingAtomic(state.currentSessionId || 'missing-info-session', result.content);
     } catch (error) {
@@ -1905,7 +1933,12 @@ const OptimizedAppContent: React.FC = memo(() => {
       const isStuckComplete = state.processingStatus === 'complete' && (state.streaming || state.currentSessionId);
       const hasCompletedResultsButActiveState = state.results && state.processingStatus === 'complete' && (state.streaming || state.currentSessionId) && !recorder.isRecording;
 
-      if (isStuckProcessing || isStuckComplete || hasCompletedResultsButActiveState) {
+      // Check for background sessions still processing (don't recover if background work is happening)
+      const hasBackgroundProcessing = Object.values(state.patientSessions).some(session =>
+        session.status === 'processing' || session.status === 'transcribing'
+      );
+
+      if ((isStuckProcessing || isStuckComplete || hasCompletedResultsButActiveState) && !hasBackgroundProcessing) {
         console.warn('🚑 STUCK STATE DETECTED - Auto-recovering:', {
           isStuckProcessing,
           isStuckComplete,
@@ -2202,15 +2235,32 @@ const OptimizedAppContent: React.FC = memo(() => {
                     errors={state.ui.errors}
                     agentType={displayData.agent}
                     onCopy={handleCopy}
-                    onInsertToEMR={handleInsertToEMR}
+                    onInsertToEMR={(text, targetField) => handleInsertToEMR(text, targetField, displayData.agent)}
                     originalTranscription={displayData.transcription}
                     onTranscriptionCopy={handleCopy}
-                    onTranscriptionInsert={handleInsertToEMR}
-                    onTranscriptionEdit={displayData.isDisplayingSession ? undefined : handleTranscriptionEdit}
+                    onTranscriptionInsert={(text, targetField) => handleInsertToEMR(text, targetField, displayData.agent)}
+                    onTranscriptionEdit={handleTranscriptionEdit}
                     transcriptionSaveStatus={transcriptionSaveStatus}
                     onAgentReprocess={displayData.isDisplayingSession ? undefined : handleAgentReprocess}
-                    approvalState={displayData.isDisplayingSession ? { status: 'approved' as const, originalText: displayData.transcription, currentText: displayData.transcription, hasBeenEdited: false } : state.transcriptionApproval}
-                    onTranscriptionApprove={displayData.isDisplayingSession ? undefined : handleTranscriptionApproval}
+                    approvalState={displayData.isDisplayingSession
+                      ? {
+                          status: 'pending' as const,
+                          originalText: displayData.transcription || '',
+                          currentText: displayData.transcription || '',
+                          hasBeenEdited: false
+                        }
+                      : state.transcriptionApproval}
+                    onTranscriptionApprove={displayData.isDisplayingSession
+                      ? (status) => {
+                          console.log(`🧠 TAVI workup transcription approval for completed session:`, {
+                            status,
+                            sessionId: displayData.displayPatientInfo?.name || 'unknown',
+                            transcriptionLength: displayData.transcription?.length || 0
+                          });
+                          // For completed sessions, we can still collect approval data for training
+                          handleTranscriptionApproval(status);
+                        }
+                      : handleTranscriptionApproval}
                 missingInfo={displayData.isDisplayingSession ? null : state.missingInfo}
                 onReprocessWithAnswers={displayData.isDisplayingSession ? undefined : handleReprocessWithMissingInfo}
                 onDismissMissingInfo={displayData.isDisplayingSession ? undefined : () => actions.clearMissingInfo()}
@@ -2232,6 +2282,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
                 onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
                 processingProgress={displayData.isDisplayingSession ? undefined : displayData.processingProgress}
+                taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                   />
                 );
               })()}
@@ -2239,7 +2290,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && (
+          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && !getCurrentDisplayData().isDisplayingSession && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">

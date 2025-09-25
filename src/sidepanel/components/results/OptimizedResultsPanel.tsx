@@ -31,10 +31,12 @@ import {
   AIReviewCards,
   ActionButtons,
   WarningsPanel,
-  TroubleshootingSection
+  TroubleshootingSection,
+  TAVIWorkupDisplay
 } from './index';
 import type { AgentType, FailedAudioRecording } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
+import { Phase3ProcessingIndicator } from '../../../components/Phase3ProcessingIndicator';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/medical.types';
 
 interface OptimizedResultsPanelProps {
@@ -91,6 +93,14 @@ interface OptimizedResultsPanelProps {
   isStreaming?: boolean;
   streamingTokens?: string;
   onCancelStreaming?: () => void;
+  // Progress tracking for long recordings (TAVI workup)
+  processingProgress?: {
+    phase: string;
+    progress: number;
+    details?: string;
+  };
+  // TAVI Workup structured data
+  taviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -141,18 +151,13 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // New streaming props
   isStreaming = false,
   streamingTokens = '',
-  onCancelStreaming
+  onCancelStreaming,
+  // Progress tracking
+  processingProgress,
+  // TAVI structured data
+  taviStructuredSections
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  // Local state for streaming transcription editing
-  const [streamingTranscriptionEdit, setStreamingTranscriptionEdit] = useState(originalTranscription || '');
-  
-  // Sync streaming transcription state when original changes
-  useEffect(() => {
-    if (originalTranscription) {
-      setStreamingTranscriptionEdit(originalTranscription);
-    }
-  }, [originalTranscription]);
 
   // Store metrics when processing completes
   useEffect(() => {
@@ -293,11 +298,29 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Check if this is a Quick Letter with dual cards
   // Always use dual cards for QuickLetter, even with empty/short summary
   const isQuickLetterDualCards = agentType === 'quick-letter' && results;
-  
+
+  // Check if this is a TAVI Workup with structured display
+  const isTAVIWorkup = agentType === 'tavi-workup' && results;
+
+  // Debug TAVI detection
+  if (agentType === 'tavi-workup') {
+    console.log('🔍 TAVI Detection Debug:', {
+      agentType,
+      hasResults: !!results,
+      resultsLength: results?.length,
+      isTAVIWorkup,
+      resultsPreview: results?.substring(0, 100),
+      hasStructuredSections: !!taviStructuredSections,
+      structuredSectionsKeys: taviStructuredSections ? Object.keys(taviStructuredSections) : null,
+      patientContentExists: taviStructuredSections?.patient?.content ? 'Yes' : 'No'
+    });
+  }
+
   // Determine readiness of final results for auto-collapse behavior
   const quickLetterReady = agentType === 'quick-letter' && !!results && !!resultsSummary;
-  const genericReady = agentType !== 'quick-letter' && !!results;
-  const resultsReady = quickLetterReady || genericReady;
+  const taviReady = agentType === 'tavi-workup' && !!results;
+  const genericReady = agentType !== 'quick-letter' && agentType !== 'tavi-workup' && !!results;
+  const resultsReady = quickLetterReady || taviReady || genericReady;
   
   // Transcription display logic optimized for performance
   
@@ -426,10 +449,38 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       variants={withReducedMotion(cardVariants)}
     >
       {renderHeader()}
-      
+
+      {/* TAVI Workup Progress Indicator */}
+      <AnimatePresence>
+        {agentType === 'tavi-workup' && processingProgress && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: ANIMATION_DURATIONS.normal }}
+            className="p-4 border-b border-gray-200"
+          >
+            <Phase3ProcessingIndicator
+              agentType={agentType}
+              isProcessing={true}
+              processingStatus={{
+                agentType,
+                isPhase3: true,
+                currentPhase: processingProgress.phase,
+                overallProgress: processingProgress.progress,
+                phases: [],
+                estimatedTimeRemaining: 0,
+                warnings: [],
+                insights: processingProgress.details ? [processingProgress.details] : []
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Original Transcription Section - Hide during streaming, show when complete */}
       <AnimatePresence>
-        {originalTranscription && !streaming && (
+        {originalTranscription && !streaming && !isTAVIWorkup && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -475,64 +526,23 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: ANIMATION_DURATIONS.quick }}
               >
-              {/* Show original transcription during streaming for context */}
+              {/* Consistent transcription UI during streaming */}
               {originalTranscription && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50">
-                  <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-100">
-                    <div className="flex items-center space-x-2">
-                      <FileTextIcon className="w-4 h-4 text-gray-600" />
-                      <span className="font-medium text-sm text-gray-900">Original Transcription</span>
-                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                        Editable
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {streamingTranscriptionEdit.split(' ').length} words
-                        {streamingTranscriptionEdit !== originalTranscription && (
-                          <span className="text-blue-600 ml-1">(edited)</span>
-                        )}
-                      </span>
-                      {transcriptionSaveStatus && transcriptionSaveStatus.status !== 'idle' && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          transcriptionSaveStatus.status === 'saving' 
-                            ? 'bg-yellow-100 text-yellow-700' 
-                            : transcriptionSaveStatus.status === 'saved'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {transcriptionSaveStatus.message}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {onTranscriptionCopy && (
-                        <button
-                          onClick={() => onTranscriptionCopy?.(originalTranscription)}
-                          className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-200 transition-colors"
-                        >
-                          Copy
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="p-3 max-h-32 overflow-y-auto">
-                    <div className="relative">
-                      <textarea
-                        value={streamingTranscriptionEdit}
-                        onChange={(e) => {
-                          const newValue = e.target.value;
-                          setStreamingTranscriptionEdit(newValue);
-                          onTranscriptionEdit?.(newValue);
-                        }}
-                        className="w-full h-24 p-2 pb-6 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed"
-                        placeholder="Edit transcription - your corrections train Whisper to be more accurate for medical dictation..."
-                        title="Your edits are automatically saved as training data to improve future transcription accuracy"
-                      />
-                      <div className="absolute bottom-1 right-2 text-xs text-gray-400">
-                        🧠 Training AI with your corrections
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <TranscriptionSection
+                  originalTranscription={originalTranscription}
+                  onTranscriptionCopy={onTranscriptionCopy}
+                  onTranscriptionInsert={onTranscriptionInsert}
+                  onTranscriptionEdit={onTranscriptionEdit}
+                  transcriptionSaveStatus={transcriptionSaveStatus}
+                  onAgentReprocess={onAgentReprocess}
+                  currentAgent={currentAgent}
+                  isProcessing={true}
+                  audioBlob={audioBlob}
+                  defaultExpanded={true}
+                  collapseWhen={false}
+                  approvalState={approvalState}
+                  onTranscriptionApprove={onTranscriptionApprove}
+                />
               )}
               
               {/* Live streaming output */}
@@ -565,7 +575,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               missingInfo.missing_intervention?.length > 0 ||
               missingInfo.missing_purpose?.length > 0 ||
               missingInfo.missing_clinical?.length > 0 ||
-              missingInfo.missing_recommendations?.length > 0
+              missingInfo.missing_recommendations?.length > 0 ||
+              missingInfo.missing_structured?.length > 0
             ) && (
               <motion.div 
                 className="mb-4"
@@ -872,20 +883,50 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 )}
               </AnimatePresence>
             </motion.div>
+          ) : isTAVIWorkup ? (
+            // TAVI Workup with transcription section + structured display
+            <div className="space-y-6">
+              {/* Transcription Section for TAVI */}
+              <TranscriptionSection
+                originalTranscription={originalTranscription}
+                onTranscriptionCopy={onTranscriptionCopy}
+                onTranscriptionInsert={onTranscriptionInsert}
+                onTranscriptionEdit={onTranscriptionEdit}
+                transcriptionSaveStatus={transcriptionSaveStatus}
+                onAgentReprocess={onAgentReprocess}
+                currentAgent={currentAgent}
+                isProcessing={isProcessing}
+                audioBlob={audioBlob}
+                defaultExpanded={!resultsReady}
+                collapseWhen={resultsReady}
+                approvalState={approvalState}
+                onTranscriptionApprove={onTranscriptionApprove}
+              />
+
+              {/* TAVI Structured Display */}
+              <TAVIWorkupDisplay
+                structuredSections={taviStructuredSections}
+                results={results} // Fallback for existing sessions without structured sections
+                missingInfo={missingInfo?.missing_structured || []}
+                onCopy={onCopy}
+                onInsertToEMR={onInsertToEMR}
+                onReprocessWithAnswers={onReprocessWithAnswers}
+              />
+            </div>
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary
-            <ReportDisplay 
-              results={results} 
-              agentType={agentType} 
+            <ReportDisplay
+              results={results}
+              agentType={agentType}
             />
           )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Actions - Only for regular reports, not AI Review or Quick Letter dual cards */}
+      {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, or TAVI workup */}
       <AnimatePresence>
-        {!isAIReview && !isQuickLetterDualCards && (
+        {!isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

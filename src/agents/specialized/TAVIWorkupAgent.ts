@@ -1,309 +1,148 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
 import type {
-  ChatMessage,
   MedicalContext,
   ReportSection,
-  TAVIWorkupAlerts,
-  TAVIWorkupData,
   TAVIWorkupReport,
+  TAVIWorkupStructuredSections,
+  ChatMessage
 } from '@/types/medical.types';
-import { LMStudioService, streamChatCompletion } from '@/services/LMStudioService';
-import { TAVIWorkupExtractor } from '@/utils/text-extraction/TAVIWorkupExtractor';
+import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { TAVI_WORKUP_SYSTEM_PROMPTS } from './TAVIWorkupSystemPrompts';
 
 /**
- * Generates structured TAVI workup summaries from a single dictation pass.
- * Handles local transcription output, applies deterministic extraction rules,
- * and asks the on-device LLM to phrase the final clinician-facing narrative.
+ * Streamlined TAVI Workup Agent following standard MedicalAgent pattern.
+ * Processes comprehensive TAVI dictation into structured JSON sections for PDF export.
+ * Uses single LLM call with sophisticated system prompt for medical intelligence.
  */
 export class TAVIWorkupAgent extends MedicalAgent {
-  private lmStudioService: LMStudioService;
+  protected lmStudioService: LMStudioService;
 
   constructor() {
     super(
-      'TAVI Workup Dictation',
+      'TAVI Workup Agent',
       'Interventional Cardiology',
-      'Produces structured TAVI workup summaries with alerts and missing-field detection',
+      'Processes comprehensive TAVI dictation into structured sections for clinical documentation',
       'tavi-workup',
       TAVI_WORKUP_SYSTEM_PROMPTS.generation
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
-  async process(
-    input: string,
-    context?: MedicalContext,
-    options?: {
-      streaming?: boolean;
-      onStreamToken?: (token: string) => void;
-      onStreamComplete?: (final: string) => void;
-      signal?: AbortSignal;
-    }
-  ): Promise<TAVIWorkupReport> {
+  async process(input: string, context?: MedicalContext): Promise<TAVIWorkupReport> {
     const startTime = Date.now();
-    const isReprocessing = context && context.isReprocessing;
-    const processingType = isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
+    const processingType = context?.isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
+    console.log(`🫀 TAVI Workup [${processingType}]: Starting streamlined TAVI workup processing`);
+    console.log(`📥 Input preview:`, input.substring(0, 150) + '...');
+
+    // Input validation for clinical safety
+    const trimmedInput = input.trim();
+    const wordCount = trimmedInput.split(/\s+/).length;
+    const isMinimalInput = wordCount < 10 || trimmedInput.length < 50;
+
+    if (isMinimalInput) {
+      console.warn(`⚠️ TAVI: Minimal input detected (${wordCount} words, ${trimmedInput.length} chars) - proceeding with strict anti-hallucination mode`);
+    }
 
     try {
-      console.log(`🫀 TAVI Workup [${processingType}]: Starting comprehensive TAVI workup processing`);
-      console.log(`📥 [${processingType}] Input preview:`, input.substring(0, 150) + '...');
-      console.log(`⚙️ [${processingType}] Context provided:`, context ? 'Yes' : 'No');
-
-      // Progress callback helper with enhanced logging
+      // Progress callback helper
       const reportProgress = (phase: string, progress: number, details?: string) => {
-        console.log(`📊 [${processingType}] Progress Update: ${phase} - ${progress}% ${details ? `(${details})` : ''}`);
+        console.log(`📊 Progress Update: ${phase} - ${progress}% ${details ? `(${details})` : ''}`);
         if (context?.onProgress) {
           try {
             context.onProgress(phase, progress, details);
           } catch (progressError) {
-            console.error(`❌ [${processingType}] Progress callback failed:`, progressError);
+            console.error(`❌ Progress callback failed:`, progressError);
           }
-        } else {
-          console.log(`📊 [${processingType}] No progress callback available`);
         }
       };
 
-      // Phase 1: Data Extraction
-      reportProgress('Data Extraction', 0, 'Parsing TAVI procedural dictation');
-      console.log(`🔍 [${processingType}] Phase 1: Extracting structured data from dictation`);
-      const extraction = TAVIWorkupExtractor.extract(input);
-      reportProgress('Data Extraction', 100, `Extraction complete - ${extraction.missingFields.length} missing fields, ${extraction.alerts.alertMessages.length} alerts`);
-      console.log(`✅ [${processingType}] Data extraction complete - Missing fields: ${extraction.missingFields.length}, Alerts: ${extraction.alerts.alertMessages.length}`);
+      // Phase 1: EMR Data Extraction
+      reportProgress('Extracting EMR data', 0, 'Reading patient demographics and EMR fields');
+      const emrData = await this.extractEMRData();
+      reportProgress('Extracting EMR data', 100, 'EMR extraction complete');
+      console.log(`✅ EMR data extracted:`, Object.keys(emrData));
 
-      // Phase 2: EMR Integration
-      reportProgress('EMR Integration', 0, 'Extracting EMR dialog fields');
-      console.log(`📋 [${processingType}] Phase 2: Extracting EMR dialog fields`);
-      const emrData = await this.extractEMRDialogFields();
-      reportProgress('EMR Integration', 100, 'EMR integration complete');
-      console.log(`✅ [${processingType}] EMR integration complete`);
+      // Phase 2: LLM Processing
+      reportProgress('Processing dictation with AI', 0, 'Preparing comprehensive TAVI analysis');
+      const llmPayload = this.buildLLMPayload(input, emrData, { isMinimalInput, wordCount });
+      reportProgress('Processing dictation with AI', 25, `Payload prepared (${llmPayload.length} chars)`);
 
-      // Phase 3: Main LLM Processing
-      reportProgress('Main LLM Processing', 0, 'Preparing payload for MedGemma-27b');
-      console.log(`🤖 [${processingType}] Phase 3: Processing with LLM for structured narrative`);
-      const llmPayload = this.buildLLMPayload(input, extraction.data, extraction.alerts, extraction.missingFields, emrData);
-      reportProgress('Main LLM Processing', 25, `Payload prepared (${llmPayload.length} chars)`);
-      console.log(`📤 [${processingType}] LLM payload prepared (${llmPayload.length} chars)`);
+      console.log(`🤖 Sending to MedGemma-27B for TAVI workup processing...`);
+      const response = await this.lmStudioService.processWithAgent(
+        this.systemPrompt,
+        llmPayload,
+        'tavi-workup' // Uses MODEL_CONFIG.REASONING_MODEL (MedGemma-27B)
+      );
 
-      reportProgress('Main LLM Processing', 50, 'Generating structured narrative...');
-      console.log(`🎯 [${processingType}] LLM Processing Phase: Starting generation request`);
-      console.log(`🔧 [${processingType}] LLM Options:`, {
-        streaming: !!options?.streaming,
-        hasOnStreamToken: !!options?.onStreamToken,
-        hasSignal: !!options?.signal,
-        signalAborted: options?.signal?.aborted
-      });
+      reportProgress('Processing dictation with AI', 100, `LLM response received (${response.length} chars)`);
+      console.log(`✅ LLM processing complete`);
 
-      // Set up timeout for LLM processing (3 minutes for TAVI workup)
-      const LLM_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
-      const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.error(`❌ [${processingType}] LLM processing timeout after ${LLM_TIMEOUT_MS}ms`);
-        timeoutController.abort();
-      }, LLM_TIMEOUT_MS);
-
-      // Combine user signal with timeout signal
-      const combinedSignal = options?.signal || timeoutController.signal;
-
-      // Monitor for early abort
-      if (combinedSignal.aborted) {
-        console.warn(`⚠️ [${processingType}] Request already aborted before LLM processing`);
-        clearTimeout(timeoutId);
-        throw new Error('Request was aborted before LLM processing');
-      }
-
-      let rawOutput: string;
-
-      if (options?.streaming && options.onStreamToken) {
-        // Streaming mode for real-time generation feedback
-        console.log(`🌊 [${processingType}] Using streaming generation for TAVI workup`);
-        console.log(`🌊 [${processingType}] Streaming setup complete, starting streamChatCompletion call`);
-        let streamedOutput = '';
-        let tokenCount = 0;
-        const streamStartTime = Date.now();
-
-        await streamChatCompletion({
-          model: 'medgemma-27b-mlx',
-          messages: [
-            { role: 'system', content: this.systemPrompt },
-            { role: 'user', content: llmPayload }
-          ],
-          temperature: 0.3,
-          maxTokens: 6000,
-          signal: combinedSignal,
-          onToken: (token) => {
-            streamedOutput += token;
-            tokenCount++;
-            options.onStreamToken!(token);
-
-            // Log progress every 100 tokens for debugging
-            if (tokenCount % 100 === 0 || tokenCount === 1) {
-              const elapsed = Date.now() - streamStartTime;
-              console.log(`🌊 [${processingType}] Stream progress: ${tokenCount} tokens, ${streamedOutput.length} chars, ${elapsed}ms elapsed`);
-            }
-
-            // Update progress based on estimated output length
-            const estimatedLength = 4000; // Rough estimate for TAVI workup JSON
-            const currentProgress = Math.min(90, 50 + (streamedOutput.length / estimatedLength) * 40);
-            reportProgress('Main LLM Processing', currentProgress, `Generating... (${streamedOutput.length} chars)`);
-          },
-          onEnd: (final) => {
-            const streamEndTime = Date.now();
-            const totalStreamTime = streamEndTime - streamStartTime;
-            console.log(`🌊 [${processingType}] Stream completed successfully:`, {
-              finalLength: final.length,
-              totalTokens: tokenCount,
-              streamTime: totalStreamTime,
-              tokensPerSecond: Math.round(tokenCount / (totalStreamTime / 1000))
-            });
-
-            streamedOutput = final;
-            if (options.onStreamComplete) {
-              console.log(`🌊 [${processingType}] Calling onStreamComplete callback`);
-              options.onStreamComplete(final);
-            }
-            reportProgress('Main LLM Processing', 100, `Streaming complete (${final.length} chars)`);
-          },
-          onError: (error) => {
-            const streamErrorTime = Date.now();
-            const streamErrorElapsed = streamErrorTime - streamStartTime;
-            console.error(`❌ [${processingType}] Streaming failed after ${streamErrorElapsed}ms:`, {
-              error: error.message || error,
-              tokensReceived: tokenCount,
-              partialOutput: streamedOutput.substring(0, 200) + '...'
-            });
-            throw error;
-          }
-        });
-
-        console.log(`🌊 [${processingType}] streamChatCompletion call completed, final output length: ${streamedOutput.length}`);
-        clearTimeout(timeoutId); // Clear timeout on successful completion
-        rawOutput = streamedOutput;
-      } else {
-        // Traditional blocking mode
-        console.log(`🔄 [${processingType}] Using traditional blocking mode for LLM processing`);
-        console.log(`🔄 [${processingType}] Starting processWithAgent call`);
-        const blockingStartTime = Date.now();
-
-        try {
-          // For blocking mode, we need to handle timeout differently
-          const blockingPromise = this.lmStudioService.processWithAgent(
-            this.systemPrompt,
-            llmPayload,
-            this.agentType
-          );
-
-          // Race the LLM processing against timeout
-          rawOutput = await Promise.race([
-            blockingPromise,
-            new Promise<never>((_, reject) => {
-              if (combinedSignal.aborted) {
-                reject(new Error('Request was aborted'));
-              }
-              combinedSignal.addEventListener('abort', () => {
-                reject(new Error('LLM processing timed out'));
-              });
-            })
-          ]);
-
-          const blockingEndTime = Date.now();
-          const blockingElapsed = blockingEndTime - blockingStartTime;
-          clearTimeout(timeoutId); // Clear timeout on successful completion
-          console.log(`🔄 [${processingType}] processWithAgent completed successfully:`, {
-            outputLength: rawOutput.length,
-            processingTime: blockingElapsed,
-            charsPerSecond: Math.round(rawOutput.length / (blockingElapsed / 1000))
-          });
-
-          reportProgress('Main LLM Processing', 100, `LLM output received (${rawOutput.length} chars)`);
-        } catch (blockingError) {
-          clearTimeout(timeoutId); // Clear timeout on error
-          const blockingErrorTime = Date.now();
-          const blockingErrorElapsed = blockingErrorTime - blockingStartTime;
-          console.error(`❌ [${processingType}] processWithAgent failed after ${blockingErrorElapsed}ms:`, {
-            error: blockingError instanceof Error ? blockingError.message : String(blockingError),
-            errorType: blockingError instanceof Error ? blockingError.constructor.name : typeof blockingError
-          });
-          throw blockingError;
-        }
-      }
-      console.log(`📥 [${processingType}] Raw LLM output received (${rawOutput.length} chars)`);
-      console.log(`🎯 [${processingType}] LLM Processing Phase: COMPLETED successfully`);
-
-      // Validate LLM output before parsing
-      if (!rawOutput || rawOutput.trim().length === 0) {
-        console.error(`❌ [${processingType}] LLM returned empty output!`);
-        throw new Error('LLM returned empty output');
-      }
-
-      if (rawOutput.length < 50) {
-        console.warn(`⚠️ [${processingType}] LLM output suspiciously short: "${rawOutput}"`);
-      }
-
-      console.log(`📋 [${processingType}] LLM output preview (first 200 chars): ${rawOutput.substring(0, 200)}...`);
-
-      // Phase 4: Multi-Strategy Response Parsing
-      reportProgress('Multi-Strategy Response Parsing', 0, 'Attempting JSON parsing');
-      console.log(`📖 [${processingType}] Phase 4: Parsing LLM response with multi-strategy approach`);
-      const cleanedOutput = this.cleanMedicalText(rawOutput);
-      reportProgress('Multi-Strategy Response Parsing', 50, 'Applying text pattern recognition');
-      const sections = this.parseResponse(cleanedOutput, context);
-      reportProgress('Multi-Strategy Response Parsing', 100, `Parsing complete - ${sections.length} sections extracted`);
-      console.log(`✅ [${processingType}] Response parsing complete - ${sections.length} sections extracted`);
-
-      // Phase 5: Missing Information Detection
-      reportProgress('Missing Information Detection', 0, 'Analyzing clinical assessment completeness');
-      console.log(`🔍 [${processingType}] Phase 5: Analyzing missing information (separate LLM call)`);
-      const missingInfo = await this.detectMissingInformation(input, extraction);
-      reportProgress('Missing Information Detection', 100, 'Missing info analysis complete');
-      console.log(`📊 [${processingType}] Missing info analysis complete`);
-
-      // Phase 6: Report Composition
-      reportProgress('Report Composition', 0, 'Compiling final TAVI workup report');
-      console.log(`📝 [${processingType}] Phase 6: Composing final TAVI workup report`);
+      // Phase 3: Parse and Format Results
+      reportProgress('Formatting results', 0, 'Parsing structured TAVI workup');
+      const sections = this.parseResponse(response, context);
       const processingTime = Date.now() - startTime;
+      reportProgress('Formatting results', 100, `TAVI workup complete - ${processingTime}ms`);
 
-      // Compose final text output with proper section formatting
-      const structuredText = this.composeStructuredText(sections);
+      console.log(`✅ Parsed ${sections.length} sections from TAVI workup response`);
 
+      // Create structured report
       const baseReport = this.createReport(
-        structuredText,
+        response.trim(),
         sections,
         context,
         processingTime,
-        0.92
+        this.assessConfidence(input, response)
       );
 
-      // Enhanced metadata with comprehensive missing information
-      baseReport.metadata.missingInformation = {
-        ...missingInfo,
-        alerts: extraction.alerts.alertMessages,
-        alertTriggers: extraction.alerts.triggers,
-      };
+      // Extract missing information from the response (similar to QuickLetter pattern)
+      const missingInfo = this.extractMissingInformation(response);
 
-      const reportWithData: TAVIWorkupReport = {
+      // Parse structured sections from JSON response
+      const structuredSections = this.parseStructuredSections(response);
+
+      // Create TAVI-specific report with both legacy and new structure
+      const taviReport: TAVIWorkupReport = {
         ...baseReport,
-        workupData: extraction.data,
-        alerts: extraction.alerts,
-        missingFields: extraction.missingFields,
+        workupData: {
+          patient: {},
+          clinical: {},
+          laboratory: {},
+          ecg: {},
+          echocardiography: {},
+          ctMeasurements: {
+            coronaryHeights: {},
+            sinusOfValsalva: {},
+            coplanarAngles: [],
+            accessVessels: {}
+          },
+          procedurePlan: {
+            valveSelection: {},
+            access: {},
+            strategy: {}
+          }
+        },
+        alerts: {
+          alertMessages: structuredSections?.alerts?.missing || [],
+          triggers: {
+            lowLeftMainHeight: false,
+            lowSinusDiameters: [],
+            smallAccessVessels: []
+          }
+        },
+        missingFields: missingInfo,
+        structuredSections: structuredSections || undefined,
+        metadata: {
+          ...baseReport.metadata,
+          modelUsed: MODEL_CONFIG.REASONING_MODEL
+        }
       };
 
-      // Update agent memory
-      this.addProcedureMemory('tavi-workup', {
-        extractedData: extraction.data,
-        alertsTriggered: extraction.alerts.alertMessages,
-        missingFields: extraction.missingFields,
-        processingType,
-        sectionsGenerated: sections.length,
-        processingTime,
-      });
+      console.log(`🎉 TAVI Workup processing complete - ${processingTime}ms`);
+      return taviReport;
 
-      reportProgress('Report Composition', 100, `TAVI workup complete - ${processingTime}ms`);
-      console.log(`🎉 [${processingType}] TAVI Workup processing complete - ${processingTime}ms`);
-      return reportWithData;
     } catch (error) {
-      console.error(`❌ TAVI Workup [${processingType}] processing failed:`, error);
+      console.error(`❌ TAVI Workup processing failed:`, error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-
       return this.createErrorReport(errorMessage, Date.now() - startTime, context);
     }
   }
@@ -315,374 +154,140 @@ export class TAVIWorkupAgent extends MedicalAgent {
     ];
   }
 
-  protected parseResponse(response: string, context?: MedicalContext): ReportSection[] {
-    console.log('📖 TAVI Parser: Starting multi-strategy response parsing');
-
-    // Strategy 1: JSON Structured Parsing (Primary)
-    console.log('🔍 TAVI Parser: Attempting Strategy 1 - JSON structured parsing');
-    const jsonSections = this.parseJSONStructuredResponse(response);
-    if (jsonSections.length > 0) {
-      console.log(`✅ TAVI Parser: Strategy 1 SUCCESS - JSON parsing extracted ${jsonSections.length} sections`);
-      return jsonSections;
-    }
-
-    // Strategy 2: Text Pattern Parsing (Secondary)
-    console.log('⚠️ TAVI Parser: Strategy 1 failed, attempting Strategy 2 - Text pattern parsing');
-    const textSections = this.parseTextPatterns(response);
-    if (textSections.length > 0) {
-      console.log(`✅ TAVI Parser: Strategy 2 SUCCESS - Text pattern parsing extracted ${textSections.length} sections`);
-      return textSections;
-    }
-
-    // Strategy 3: Legacy Parsing (Compatibility)
-    console.log('⚠️ TAVI Parser: Strategy 2 failed, attempting Strategy 3 - Legacy parsing');
-    const legacySections = this.parseLegacyResponse(response);
-    if (legacySections.length > 0) {
-      console.log(`✅ TAVI Parser: Strategy 3 SUCCESS - Legacy parsing extracted ${legacySections.length} sections`);
-      return legacySections;
-    }
-
-    // Strategy 4: Deterministic Fallback (Final)
-    console.warn('⚠️ TAVI Parser: All parsing strategies failed, using deterministic fallback');
-    const deterministicSections = this.composeDeterministicReport(response, context);
-    console.log(`🔧 TAVI Parser: Deterministic fallback created ${deterministicSections.length} sections`);
-    return deterministicSections;
-  }
-
-  /**
-   * Strategy 2: Parse unstructured text using pattern recognition
-   * Following AIReview pattern for extracting sections from natural text
-   */
-  private parseTextPatterns(response: string): ReportSection[] {
-    const sections: ReportSection[] = [];
-    console.log('🔄 TAVI Text Parser: Attempting text pattern extraction...');
+  protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
+    console.log('📖 TAVI Parser: Starting response parsing');
 
     try {
-      // Clean the response for pattern matching
-      const cleanResponse = this.preprocessResponseForTextParsing(response);
-
-      // Define TAVI-specific section patterns
-      const sectionPatterns = [
-        {
-          key: 'patient',
-          title: 'Patient',
-          patterns: [
-            /(?:^|\n)\s*(?:Patient|Demographics?|Patient Information)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Clinical|Laboratory|ECG|Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi,
-            /(?:^|\n)\s*(?:Demographics?|Patient.*(?:Information|Details))\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Clinical|Laboratory|ECG|Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'clinical',
-          title: 'Clinical Assessment',
-          patterns: [
-            /(?:^|\n)\s*(?:Clinical|Clinical Assessment|Assessment)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Laboratory|ECG|Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi,
-            /(?:^|\n)\s*(?:Risk.*Assessment|Clinical.*Status)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Laboratory|ECG|Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'laboratory',
-          title: 'Laboratory Values',
-          patterns: [
-            /(?:^|\n)\s*(?:Laboratory Values?|Laboratory|Labs?|Blood.*Tests?)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:ECG|Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'ecg',
-          title: 'ECG Assessment',
-          patterns: [
-            /(?:^|\n)\s*(?:ECG Assessment|ECG|Electrocardiogram)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Background|Medications|Social|Investigation|Echocardiography|Enhanced CT|Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'echocardiography',
-          title: 'Echocardiography',
-          patterns: [
-            /(?:^|\n)\s*(?:Echocardiography|Echo|Echocardiogram)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Enhanced CT|Procedure|Alerts|Missing))|$)/gi,
-            /(?:^|\n)\s*(?:Transthoracic.*Echo|TTE|Cardiac.*Ultrasound)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Enhanced CT|Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'enhanced_ct',
-          title: 'Enhanced CT Analysis',
-          patterns: [
-            /(?:^|\n)\s*(?:Enhanced CT Analysis|CT Analysis|CT|Computed Tomography)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Procedure|Alerts|Missing))|$)/gi,
-            /(?:^|\n)\s*(?:Cardiac.*CT|CT.*Aortic|Aortic.*CT)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Procedure|Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'procedure_planning',
-          title: 'Procedure Planning',
-          patterns: [
-            /(?:^|\n)\s*(?:Procedure Planning|Planning|TAVI.*Planning|Valve.*Planning)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Alerts|Missing))|$)/gi,
-            /(?:^|\n)\s*(?:Procedural.*Approach|Surgical.*Plan|Treatment.*Plan)\s*:?\s*([\s\S]*?)(?=(?:\n\s*(?:Alerts|Missing))|$)/gi
-          ]
-        },
-        {
-          key: 'alerts',
-          title: 'Alerts & Anatomical Considerations',
-          patterns: [
-            /(?:^|\n)\s*(?:Alerts.*Anatomical.*Considerations|Alerts|Anatomical.*Considerations|Warnings)\s*:?\s*([\s\S]*?)(?=(?:\n\s*Missing)|$)/gi,
-            /(?:^|\n)\s*(?:Clinical.*Alerts|Risk.*Factors|Contraindications)\s*:?\s*([\s\S]*?)(?=(?:\n\s*Missing)|$)/gi
-          ]
-        }
-      ];
-
-      let sectionsFound = 0;
-
-      // Try to extract each section using patterns
-      sectionPatterns.forEach(({ title, patterns }) => {
-        for (const pattern of patterns) {
-          const match = pattern.exec(cleanResponse);
-          if (match && match[1]) {
-            const content = match[1].trim();
-            if (content.length > 10 && !this.isGenericContent(content)) {
-              sections.push({
-                title,
-                content,
-                type: 'narrative',
-                priority: title === 'Alerts & Anatomical Considerations' ? 'high' : 'medium',
-              });
-              console.log(`✅ TAVI Text Parser: Extracted "${title}" (${content.length} chars)`);
-              sectionsFound++;
-              break; // Move to next section after finding first match
-            }
-          }
-        }
-      });
-
-      console.log(`📊 TAVI Text Parser: Extracted ${sectionsFound} sections via pattern matching`);
-
-      // Validate minimum sections for TAVI workup
-      if (sections.length < 2) {
-        console.warn(`⚠️ TAVI Text Parser: Only ${sections.length} sections found, may not be sufficient`);
+      // Try JSON parsing first (primary strategy)
+      console.log('🔍 TAVI Parser: Attempting JSON parsing');
+      const sections = this.parseJSONResponse(response);
+      if (sections.length > 0) {
+        console.log(`✅ TAVI Parser: JSON parsing successful - ${sections.length} sections`);
+        return sections;
       }
-
-      return sections;
-
-    } catch (error) {
-      console.error('❌ TAVI Text Parser: Error in text pattern parsing:', error);
-      return [];
+    } catch (jsonError) {
+      console.warn('⚠️ TAVI Parser: JSON parsing failed, trying text patterns');
     }
-  }
 
-  /**
-   * Preprocess response for better text pattern matching
-   */
-  private preprocessResponseForTextParsing(response: string): string {
-    // Remove code block markers, extra whitespace, and normalize line endings
-    return response
-      .replace(/```json|```/gi, '')
-      .replace(/\r\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
-  /**
-   * Check if content is too generic/empty to be useful
-   */
-  private isGenericContent(content: string): boolean {
-    const generic = [
-      'not provided', 'no data available', 'not available', 'none', 'n/a',
-      'not specified', 'not mentioned', 'not stated', 'unknown'
-    ];
-    const lowerContent = content.toLowerCase();
-    return generic.some(phrase => lowerContent.includes(phrase)) && content.length < 50;
+    // Fallback to text pattern parsing
+    console.log('🔍 TAVI Parser: Using text pattern parsing');
+    const textSections = this.parseTextPatterns(response);
+    console.log(`✅ TAVI Parser: Text parsing extracted ${textSections.length} sections`);
+    return textSections;
   }
 
   /**
    * Parse JSON structured response from the LLM
    */
-  private parseJSONStructuredResponse(response: string): ReportSection[] {
+  private parseJSONResponse(response: string): ReportSection[] {
     const sections: ReportSection[] = [];
 
-    try {
-      console.log('🔍 TAVI JSON Parser: Attempting to parse structured response...');
+    // Clean the response to extract JSON
+    let jsonContent = response.trim();
+    jsonContent = jsonContent.replace(/```json\s*/, '').replace(/```\s*$/, '');
 
-      // Clean the response to extract JSON
-      let jsonContent = response.trim();
+    // Try to find JSON object in the response
+    const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('No JSON object found in response');
+    }
 
-      // Remove code block markers if present
-      jsonContent = jsonContent.replace(/```json\s*/, '').replace(/```\s*$/, '');
+    const jsonData = JSON.parse(jsonMatch[0]);
+    console.log(`📋 TAVI JSON Parser: Successfully parsed JSON response`);
 
-      // Try to find JSON object in the response
-      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.warn('⚠️ TAVI JSON Parser: No JSON object found in response');
-        return [];
-      }
+    // Define the expected sections and their display titles
+    const sectionMapping = [
+      { key: 'patient', title: 'Patient' },
+      { key: 'clinical', title: 'Clinical' },
+      { key: 'laboratory', title: 'Laboratory Values' },
+      { key: 'ecg', title: 'ECG Assessment' },
+      { key: 'background', title: 'Background' },
+      { key: 'medications', title: 'Medications' },
+      { key: 'social_history', title: 'Social History' },
+      { key: 'investigations', title: 'Other Investigations' },
+      { key: 'echocardiography', title: 'Echocardiography' },
+      { key: 'enhanced_ct', title: 'Enhanced CT Analysis' },
+      { key: 'procedure_planning', title: 'Procedure Planning' },
+      { key: 'alerts', title: 'Alerts & Anatomical Considerations' }
+    ];
 
-      const jsonData = JSON.parse(jsonMatch[0]);
-      console.log(`📋 TAVI JSON Parser: Successfully parsed JSON response`);
-
-      // Define the expected sections and their display titles
-      const sectionMapping = [
-        { key: 'patient', title: 'Patient' },
-        { key: 'clinical', title: 'Clinical' },
-        { key: 'laboratory', title: 'Laboratory Values' },
-        { key: 'ecg', title: 'ECG Assessment' },
-        { key: 'background', title: 'Background' },
-        { key: 'medications', title: 'Medications (Problem List)' },
-        { key: 'social_history', title: 'Social History' },
-        { key: 'investigations', title: 'Investigation Summary' },
-        { key: 'echocardiography', title: 'Echocardiography' },
-        { key: 'enhanced_ct', title: 'Enhanced CT Analysis' },
-        { key: 'procedure_planning', title: 'Procedure Planning' },
-        { key: 'alerts', title: 'Alerts & Anatomical Considerations' }
-      ];
-
-      // Extract sections from JSON
-      sectionMapping.forEach(({ key, title }) => {
-        const sectionData = jsonData[key];
-        if (sectionData && sectionData.content) {
-          const content = sectionData.content.trim();
-          if (content &&
-              content !== 'Not provided' &&
-              content !== 'No data available' &&
-              content.length > 0) {
-            sections.push({
-              title,
-              content,
-              type: 'narrative',
-              priority: title === 'Alerts & Anatomical Considerations' ? 'high' : 'medium',
-            });
-            console.log(`✅ TAVI JSON Parser: Parsed section "${title}" (${content.length} chars)`);
-          } else {
-            console.log(`⏭️ TAVI JSON Parser: Skipped empty section "${title}"`);
-          }
+    // Extract sections from JSON
+    sectionMapping.forEach(({ key, title }) => {
+      const sectionData = jsonData[key];
+      if (sectionData && sectionData.content) {
+        const content = sectionData.content.trim();
+        if (content && content !== 'Not provided' && content !== 'No data available' && content.length > 0) {
+          sections.push({
+            title,
+            content,
+            type: 'narrative',
+            priority: title === 'Alerts & Anatomical Considerations' ? 'high' : 'medium',
+          });
+          console.log(`✅ TAVI JSON Parser: Parsed section "${title}" (${content.length} chars)`);
         }
-      });
-
-      // JSON data successfully parsed for section extraction
-
-      console.log(`📊 TAVI JSON Parser: Successfully parsed ${sections.length} sections from JSON`);
-
-      // Validate minimum expected sections for TAVI workup
-      if (sections.length < 3) {
-        console.warn(`⚠️ TAVI JSON Parser: Only ${sections.length} sections found, expected at least 3.`);
       }
-
-      return sections;
-    } catch (error) {
-      console.error('❌ TAVI JSON Parser: Error parsing JSON response:', error);
-      console.log('📝 TAVI JSON Parser: Raw response for debugging:', response.substring(0, 500));
-      return [];
-    }
-  }
-
-  /**
-   * Legacy text-based parsing for backwards compatibility
-   */
-  private parseLegacyResponse(response: string): ReportSection[] {
-    const sections: ReportSection[] = [];
-    const headingRegex = /^(Patient|Clinical|Background|Medications.*Problem List.*|Social History|Investigation Summary|Echocardiography|CT Measurements|Devices Planned|Alerts & Anatomical Considerations|Missing \/ Not Stated)\n([\s\S]*?)(?=^(?:Patient|Clinical|Background|Medications.*Problem List.*|Social History|Investigation Summary|Echocardiography|CT Measurements|Devices Planned|Alerts & Anatomical Considerations|Missing \/ Not Stated)\n|\s*$)/gmi;
-
-    let match: RegExpExecArray | null;
-    while ((match = headingRegex.exec(response)) !== null) {
-      const title = match[1].trim();
-      const content = match[2].trim();
-      if (!content) continue;
-      sections.push({
-        title,
-        content,
-        type: 'narrative',
-        priority: title === 'Alerts & Anatomical Considerations' ? 'high' : 'medium',
-      });
-    }
+    });
 
     return sections;
   }
 
   /**
-   * Deterministic fallback composer when LLM output is malformed
-   * Uses structured data from extraction to generate proper sections
+   * Text pattern parsing for backwards compatibility
    */
-  private composeDeterministicReport(response: string, _context?: MedicalContext): ReportSection[] {
+  private parseTextPatterns(response: string): ReportSection[] {
     const sections: ReportSection[] = [];
-    console.log('🔧 TAVI Deterministic Composer: Creating structured fallback from extracted data...');
 
-    try {
-      // Add raw response as backup but create proper structured sections
-      if (response && response.trim()) {
-        sections.push({
-          title: 'LLM Output (Raw)',
-          content: response.trim(),
-          type: 'narrative',
-          priority: 'medium',
-        });
+    // Look for common section headers
+    const sectionPatterns = [
+      /\*\*Patient\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Background\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Medications\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Social\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Bloods\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*ECG\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Echo\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*CT\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
+      /\*\*Procedure Plan\*\*\s*([\s\S]*?)(?=\*\*|$)/i
+    ];
+
+    const sectionTitles = [
+      'Patient', 'Background', 'Medications', 'Social History',
+      'Laboratory Values', 'ECG Assessment', 'Echocardiography',
+      'Enhanced CT Analysis', 'Procedure Planning'
+    ];
+
+    sectionPatterns.forEach((pattern, index) => {
+      const match = response.match(pattern);
+      if (match && match[1]) {
+        const content = match[1].trim();
+        if (content.length > 10) {
+          sections.push({
+            title: sectionTitles[index],
+            content,
+            type: 'narrative',
+            priority: 'medium'
+          });
+        }
       }
-
-      // Add guidance section for structured output
-      sections.push({
-        title: 'Processing Note',
-        content: 'The LLM response could not be parsed into the expected XML format. The raw output is shown above. Please check the console for detailed parsing logs, and consider re-running the workup if sections are missing.',
-        type: 'narrative',
-        priority: 'high',
-      });
-
-      // Add troubleshooting section
-      sections.push({
-        title: 'Expected Structure',
-        content: 'TAVI Workup should contain sections: Patient, Clinical, Laboratory Values, ECG Assessment, Background, Medications (Problem List), Social History, Investigation Summary, Echocardiography, Enhanced CT Analysis, Procedure Planning, Alerts & Anatomical Considerations, and Missing / Not Stated.',
-        type: 'narrative',
-        priority: 'medium',
-      });
-
-      console.log(`🔧 TAVI Deterministic Composer: Created ${sections.length} fallback sections`);
-      return sections;
-    } catch (error) {
-      console.error('❌ TAVI Deterministic Composer: Error creating fallback:', error);
-
-      // Final fallback - return empty sections to use content-only display
-      return [];
-    }
-  }
-
-  /**
-   * Compose final structured text output with proper section formatting
-   */
-  private composeStructuredText(sections: ReportSection[]): string {
-    if (sections.length === 0) {
-      return 'No structured content was generated.';
-    }
-
-    const output: string[] = [];
-
-    sections.forEach(section => {
-      // Add section heading with double line break
-      output.push(`${section.title}\n`);
-
-      // Add section content with line break after
-      output.push(`${section.content}\n`);
     });
 
-    return output.join('\n').trim();
+    return sections;
   }
 
   /**
-   * Extract EMR dialog fields and patient demographics efficiently using direct content script communication
-   * Reads .customNote elements directly without opening dialogs - matches efficient agents like AI Review
+   * Extract EMR data using standard pattern (like other agents)
    */
-  private async extractEMRDialogFields(): Promise<{
+  private async extractEMRData(): Promise<{
     background: string;
     investigations: string;
     medications: string;
     socialHistory: string;
-    patientData?: {
-      name?: string;
-      id?: string;
-      dob?: string;
-      age?: string;
-      phone?: string;
-      email?: string;
-      medicare?: string;
-      insurance?: string;
-      address?: string;
-    };
+    patientData?: any;
   }> {
     try {
-      console.log('📋 TAVI: Starting efficient EMR data extraction (no dialog opening)...');
+      console.log('📋 TAVI: Starting standard EMR data extraction...');
 
-      // Get current tab for direct content script communication
+      // Get current tab for content script communication
       const activeTab = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = activeTab[0]?.id;
       if (!tabId) {
@@ -690,351 +295,304 @@ export class TAVIWorkupAgent extends MedicalAgent {
         return { background: '', investigations: '', medications: '', socialHistory: '' };
       }
 
-      // Extract EMR fields using direct content script communication (efficient)
-      const extractionPromises = [
-        {
-          name: 'background',
-          promise: chrome.tabs.sendMessage(tabId, {
-            type: 'EXTRACT_CUSTOM_NOTE_CONTENT',
-            fieldName: 'Background'
-          })
-        },
-        {
-          name: 'investigations',
-          promise: chrome.tabs.sendMessage(tabId, {
-            type: 'EXTRACT_CUSTOM_NOTE_CONTENT',
-            fieldName: 'Investigation Summary'
-          })
-        },
-        {
-          name: 'medications',
-          promise: chrome.tabs.sendMessage(tabId, {
-            type: 'EXTRACT_CUSTOM_NOTE_CONTENT',
-            fieldName: 'Medications (Problem List for Phil)'
-          })
-        },
-        // Try social history extraction (may not always be present)
-        {
-          name: 'socialHistory',
-          promise: chrome.tabs.sendMessage(tabId, {
-            type: 'EXTRACT_CUSTOM_NOTE_CONTENT',
-            fieldName: 'Social History'
-          })
-        }
-      ];
-
-      // Extract patient demographics using existing efficient method
-      const patientDataPromise = chrome.tabs.sendMessage(tabId, {
-        type: 'EXTRACT_PATIENT_DATA'
-      });
-
-      // Wait for all extractions to complete
+      // Extract EMR fields using standard pattern
       const [backgroundResult, investigationResult, medicationResult, socialResult, patientResult] = await Promise.allSettled([
-        ...extractionPromises.map(item => item.promise),
-        patientDataPromise
+        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Background' }),
+        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Investigation Summary' }),
+        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Medications (Problem List for Phil)' }),
+        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_SOCIAL_HISTORY_TABLE' }),
+        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PATIENT_DATA' })
       ]);
 
-      // Extract content from direct content script responses
-      const background = this.extractDirectContentResponse(backgroundResult, 'Background');
-      const investigations = this.extractDirectContentResponse(investigationResult, 'Investigation Summary');
-      const medications = this.extractDirectContentResponse(medicationResult, 'Medications');
-      const socialHistory = this.extractDirectContentResponse(socialResult, 'Social History');
-      const patientData = this.extractPatientDataResponse(patientResult);
+      const background = this.extractContentFromResult(backgroundResult, 'Background');
+      const investigations = this.extractContentFromResult(investigationResult, 'Investigation Summary');
+      const medications = this.extractContentFromResult(medicationResult, 'Medications (Problem List for Phil)');
+      const socialHistory = this.extractContentFromResult(socialResult, 'Social History');
+      const patientData = this.extractContentFromResult(patientResult, 'Patient Data');
 
-      console.log('📋 TAVI: Efficient EMR extraction summary (no dialogs opened):', {
-        background: { length: background.length, hasContent: !!background.trim() },
-        investigations: { length: investigations.length, hasContent: !!investigations.trim() },
-        medications: { length: medications.length, hasContent: !!medications.trim() },
-        socialHistory: { length: socialHistory.length, hasContent: !!socialHistory.trim() },
-        patientData: {
-          hasName: !!patientData?.name,
-          hasId: !!patientData?.id,
-          hasDob: !!patientData?.dob
-        }
-      });
-
+      console.log(`✅ TAVI: EMR extraction complete`);
       return { background, investigations, medications, socialHistory, patientData };
+
     } catch (error) {
-      console.warn('⚠️ TAVI: Efficient EMR extraction failed, continuing without EMR data:', error);
+      console.warn('⚠️ TAVI: EMR extraction failed, continuing without EMR data:', error);
       return { background: '', investigations: '', medications: '', socialHistory: '' };
     }
   }
 
-  /**
-   * Helper function to extract content from direct content script responses (EXTRACT_CUSTOM_NOTE_CONTENT)
-   */
-  private extractDirectContentResponse(result: PromiseSettledResult<any>, fieldName: string): string {
-    if (result.status === 'rejected') {
-      console.log(`📋 TAVI: ${fieldName} direct extraction failed:`, result.reason);
-      return '';
-    }
+  private extractContentFromResult(result: PromiseSettledResult<any>, fieldName: string): any {
+    if (result.status === 'fulfilled' && result.value?.success) {
+      const content = result.value.data || result.value.content || '';
 
-    const response = result.value;
-    if (!response) {
-      console.log(`📋 TAVI: ${fieldName} - No response received from direct extraction`);
-      return '';
-    }
-
-    // Direct content script responses have { success: boolean, data: string } format
-    if (response.success && typeof response.data === 'string') {
-      console.log(`📋 TAVI: ${fieldName} - Extracted ${response.data.length} characters directly`);
-      return response.data;
-    } else {
-      console.log(`📋 TAVI: ${fieldName} - Direct extraction failed:`, response.error || 'Unknown error');
-      return '';
-    }
-  }
-
-  /**
-   * Helper function to extract patient data from EXTRACT_PATIENT_DATA responses
-   */
-  private extractPatientDataResponse(result: PromiseSettledResult<any>): any {
-    if (result.status === 'rejected') {
-      console.log('📋 TAVI: Patient data extraction failed:', result.reason);
-      return null;
-    }
-
-    const response = result.value;
-    if (!response) {
-      console.log('📋 TAVI: Patient data - No response received');
-      return null;
-    }
-
-    // Patient data responses have { success: boolean, data: object } format
-    if (response.success && response.data) {
-      console.log('📋 TAVI: Patient data - Extracted successfully:', {
-        hasName: !!response.data.name,
-        hasId: !!response.data.id,
-        hasDob: !!response.data.dob
-      });
-      return response.data;
-    } else {
-      console.log('📋 TAVI: Patient data extraction failed:', response.error || 'Unknown error');
-      return null;
-    }
-  }
-
-  private buildLLMPayload(
-    transcript: string,
-    data: TAVIWorkupData,
-    alerts: TAVIWorkupAlerts,
-    missingFields: string[],
-    emrData?: {
-      background: string;
-      investigations: string;
-      medications: string;
-      socialHistory: string;
-      patientData?: {
-        name?: string;
-        id?: string;
-        dob?: string;
-        age?: string;
-        phone?: string;
-        email?: string;
-        medicare?: string;
-        insurance?: string;
-        address?: string;
-      };
-    }
-  ): string {
-    const payload = {
-      transcript,
-      structured_data: this.formatDataForLLM(data),
-      alerts: alerts.alertMessages,
-      missing_fields: missingFields,
-      // EMR clinical data
-      emr_fields: emrData ? {
-        background: emrData.background || 'Not available',
-        investigation_summary: emrData.investigations || 'Not available',
-        medications_problem_list: emrData.medications || 'Not available',
-        social_history: emrData.socialHistory || 'Not available'
-      } : {
-        background: 'Not available',
-        investigation_summary: 'Not available',
-        medications_problem_list: 'Not available',
-        social_history: 'Not available'
-      },
-      // Patient demographics (automatically extracted from EMR)
-      patient_demographics: emrData?.patientData ? {
-        name: emrData.patientData.name || 'Not available',
-        id: emrData.patientData.id || 'Not available',
-        date_of_birth: emrData.patientData.dob || 'Not available',
-        age: emrData.patientData.age || 'Not available',
-        phone: emrData.patientData.phone || 'Not available',
-        email: emrData.patientData.email || 'Not available',
-        medicare: emrData.patientData.medicare || 'Not available',
-        insurance: emrData.patientData.insurance || 'Not available',
-        address: emrData.patientData.address || 'Not available'
-      } : {
-        name: 'Not available',
-        id: 'Not available',
-        date_of_birth: 'Not available',
-        age: 'Not available',
-        phone: 'Not available',
-        email: 'Not available',
-        medicare: 'Not available',
-        insurance: 'Not available',
-        address: 'Not available'
+      // Special handling for patient data to parse demographics
+      if (fieldName === 'Patient Data' && content) {
+        const parsedDemographics = this.parsePatientDemographics(content);
+        console.log(`📋 TAVI: ${fieldName} extracted and parsed`, parsedDemographics);
+        return parsedDemographics;
       }
-    };
 
-    return JSON.stringify(payload, null, 2);
+      console.log(`📋 TAVI: ${fieldName} extracted (${content.length} chars)`);
+      return content;
+    } else {
+      console.log(`📋 TAVI: ${fieldName} extraction failed`);
+      return fieldName === 'Patient Data' ? {} : '';
+    }
   }
 
   /**
-   * Detect missing information in TAVI workup dictation using dedicated LLM analysis
-   * Following QuickLetter pattern for comprehensive missing info detection
+   * Parse patient demographics from XestroBoxContent format
    */
-  private async detectMissingInformation(input: string, extraction: any): Promise<any> {
+  private parsePatientDemographics(content: any): any {
+    const demographics: any = { raw: content };
+
     try {
-      console.log('🔍 TAVI Missing Info: Starting dedicated missing information analysis');
+      // Ensure content is a string before parsing
+      const contentStr = typeof content === 'string' ? content : String(content || '');
 
-      const missingInfoPrompt = `${TAVI_WORKUP_SYSTEM_PROMPTS.missingInfoDetection}
+      if (!contentStr) {
+        console.warn('⚠️ TAVI: No content provided for demographics parsing');
+        return demographics;
+      }
 
-TAVI WORKUP DICTATION TO ANALYZE:
-${input}
+      // Extract DOB and age pattern: "05/06/1959 (66)"
+      const dobAgeMatch = contentStr.match(/(\d{2}\/\d{2}\/\d{4})\s*\((\d+)\)/);
+      if (dobAgeMatch) {
+        demographics.dateOfBirth = dobAgeMatch[1];
+        demographics.age = parseInt(dobAgeMatch[2]);
+        console.log(`✅ TAVI: Parsed DOB: ${demographics.dateOfBirth}, Age: ${demographics.age}`);
+      }
 
-EXTRACTED STRUCTURED DATA AVAILABLE:
-${JSON.stringify(extraction.data, null, 2)}
+      // Extract name (first line before any HTML elements)
+      const nameMatch = contentStr.match(/^([^<]+)/);
+      if (nameMatch) {
+        demographics.name = nameMatch[1].trim();
+      }
 
-CURRENT ALERTS IDENTIFIED:
-${extraction.alerts.alertMessages.join('; ')}
+      // Extract ID
+      const idMatch = contentStr.match(/ID:\s*(\d+)/);
+      if (idMatch) {
+        demographics.id = idMatch[1];
+      }
 
-Based on this information, analyze what clinical information is missing that would be valuable for comprehensive TAVI workup and procedural planning.`;
-
-      console.log('🤖 TAVI Missing Info: Sending request to LLM for missing info analysis');
-      console.log(`📋 TAVI Missing Info: Prompt length: ${missingInfoPrompt.length} chars`);
-
-      const missingInfoTimeout = setTimeout(() => {
-        console.error(`❌ TAVI Missing Info: Detection timeout after 90 seconds`);
-      }, 90000); // 90 seconds for missing info detection
-
-      try {
-        const response = await this.lmStudioService.processWithAgent(
-          missingInfoPrompt,
-          input,
-          this.agentType
-        );
-
-        clearTimeout(missingInfoTimeout);
-        console.log(`📥 TAVI Missing Info: Received response (${response.length} chars)`);
-
-        if (!response || response.trim().length === 0) {
-          console.error(`❌ TAVI Missing Info: LLM returned empty response`);
-          throw new Error('Missing info LLM returned empty response');
-        }
-        // Parse the JSON response
-        const cleanResponse = response.replace(/```json|```/g, '').trim();
-        const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-
-        if (jsonMatch) {
-          try {
-            const missingInfo = JSON.parse(jsonMatch[0]);
-            console.log('✅ TAVI Missing Info: Successfully parsed JSON response');
-            console.log(`📊 Missing info summary - Clinical: ${missingInfo.missing_clinical_assessment?.length || 0}, Diagnostic: ${missingInfo.missing_diagnostic_studies?.length || 0}, Procedural: ${missingInfo.missing_procedural_planning?.length || 0}`);
-
-            // Validate the structure
-            if (!missingInfo.missing_clinical_assessment && !missingInfo.missing_diagnostic_studies && !missingInfo.missing_procedural_planning) {
-              console.warn('⚠️ TAVI Missing Info: Parsed JSON has no expected fields, using fallback');
-              throw new Error('Missing info JSON has invalid structure');
-            }
-
-            // Transform to MissingInfoPanel format
-            return {
-              missing_clinical: missingInfo.missing_clinical_assessment || [],
-              missing_diagnostic: missingInfo.missing_diagnostic_studies || [],
-              missing_measurements: missingInfo.missing_procedural_planning || [],
-              missing_structured: extraction.missingFields || [],
-              completeness_score: missingInfo.completeness_score || '50% (Incomplete)',
-              critical_gaps: missingInfo.critical_gaps || []
-            };
-          } catch (jsonParseError) {
-            console.warn('⚠️ TAVI Missing Info: JSON parsing failed:', jsonParseError);
-            return this.fallbackMissingInfoDetection(input, extraction);
-          }
-        } else {
-          console.warn('⚠️ TAVI Missing Info: No JSON found in response, using fallback');
-          return this.fallbackMissingInfoDetection(input, extraction);
-        }
-      } catch (responseError) {
-        clearTimeout(missingInfoTimeout);
-        console.warn('⚠️ TAVI Missing Info: Response processing failed, using fallback');
-        console.error('Response processing error:', responseError);
-        return this.fallbackMissingInfoDetection(input, extraction);
+      // Extract Medicare number
+      const medicareMatch = contentStr.match(/Medicare:\s*([^<]+)/);
+      if (medicareMatch) {
+        demographics.medicare = medicareMatch[1].trim();
       }
 
     } catch (error) {
-      console.error('❌ TAVI Missing Info: Error in missing information detection:', {
-        error: error instanceof Error ? error.message : String(error),
-        errorType: error instanceof Error ? error.constructor.name : typeof error
+      console.warn('⚠️ TAVI: Error parsing patient demographics:', error);
+    }
+
+    return demographics;
+  }
+
+  /**
+   * Format patient data for LLM payload
+   */
+  private formatPatientData(patientData: any): string {
+    if (!patientData || Object.keys(patientData).length === 0) {
+      return 'Not available';
+    }
+
+    const parts = [];
+
+    if (patientData.name) {
+      parts.push(`Name: ${patientData.name}`);
+    }
+
+    if (patientData.dateOfBirth) {
+      parts.push(`DOB: ${patientData.dateOfBirth}`);
+    }
+
+    if (patientData.age) {
+      parts.push(`Age: ${patientData.age} years`);
+    }
+
+    if (patientData.id) {
+      parts.push(`ID: ${patientData.id}`);
+    }
+
+    if (patientData.medicare) {
+      parts.push(`Medicare: ${patientData.medicare}`);
+    }
+
+    return parts.length > 0 ? parts.join(', ') : 'Not available';
+  }
+
+  /**
+   * Build comprehensive LLM payload with dictation and EMR data
+   */
+  private buildLLMPayload(input: string, emrData: any, validation?: { isMinimalInput: boolean; wordCount: number }): string {
+    let payload = `
+DICTATED TAVI WORKUP:
+${input}`;
+
+    // Add validation warning for minimal input
+    if (validation?.isMinimalInput) {
+      payload += `
+
+⚠️ CLINICAL SAFETY WARNING: This dictation is very brief (${validation.wordCount} words). Exercise extreme caution against hallucination. ONLY process explicit information provided. Most sections should be marked as "Not provided" with extensive missing information lists.`;
+    }
+
+    payload += `
+
+EMR DATA CONTEXT:
+Background: ${emrData.background || 'Not available'}
+Investigation Summary: ${emrData.investigations || 'Not available'}
+Medications: ${emrData.medications || 'Not available'}
+Social History: ${emrData.socialHistory || 'Not available'}
+Patient Demographics: ${this.formatPatientData(emrData.patientData)}
+
+Please process this comprehensive TAVI workup dictation and format according to the system prompt instructions.`;
+
+    return payload.trim();
+  }
+
+  /**
+   * Parse structured sections from JSON response for PDF export
+   */
+  private parseStructuredSections(response: string): TAVIWorkupStructuredSections | undefined {
+    try {
+      // Clean the response to extract JSON
+      let jsonContent = response.trim();
+      jsonContent = jsonContent.replace(/```json\s*/, '').replace(/```\s*$/, '');
+
+      // Debug: Log the cleaned content for investigation
+      console.log('🔍 TAVI: Cleaned response content (first 500 chars):', jsonContent.substring(0, 500));
+
+      // Try to find JSON object in the response
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn('⚠️ TAVI: No JSON object found for structured sections');
+        console.warn('🔍 TAVI: Response preview (first 200 chars):', response.substring(0, 200));
+        return undefined;
+      }
+
+      console.log('🔍 TAVI: Found JSON match, attempting to parse...');
+      const jsonData = JSON.parse(jsonMatch[0]);
+      console.log(`📋 TAVI: Successfully parsed structured sections from JSON response`, {
+        keys: Object.keys(jsonData),
+        patientContent: jsonData.patient?.content ? 'Present' : 'Missing',
+        clinicalContent: jsonData.clinical?.content ? 'Present' : 'Missing'
       });
-      return this.fallbackMissingInfoDetection(input, extraction);
+
+      // Convert to TAVIWorkupStructuredSections format
+      const structuredSections: TAVIWorkupStructuredSections = {
+        patient: {
+          content: jsonData.patient?.content || 'Not provided',
+          missing: jsonData.patient?.missing || []
+        },
+        clinical: {
+          content: jsonData.clinical?.content || 'Not provided',
+          missing: jsonData.clinical?.missing || []
+        },
+        laboratory: {
+          content: jsonData.laboratory?.content || 'Not provided',
+          missing: jsonData.laboratory?.missing || []
+        },
+        ecg: {
+          content: jsonData.ecg?.content || 'Not provided',
+          missing: jsonData.ecg?.missing || []
+        },
+        background: {
+          content: jsonData.background?.content || 'Not provided',
+          missing: jsonData.background?.missing || []
+        },
+        medications: {
+          content: jsonData.medications?.content || 'Not provided',
+          missing: jsonData.medications?.missing || []
+        },
+        social_history: {
+          content: jsonData.social_history?.content || 'Not provided',
+          missing: jsonData.social_history?.missing || []
+        },
+        investigations: {
+          content: jsonData.investigations?.content || 'Not provided',
+          missing: jsonData.investigations?.missing || []
+        },
+        echocardiography: {
+          content: jsonData.echocardiography?.content || 'Not provided',
+          missing: jsonData.echocardiography?.missing || []
+        },
+        enhanced_ct: {
+          content: jsonData.enhanced_ct?.content || 'Not provided',
+          missing: jsonData.enhanced_ct?.missing || []
+        },
+        procedure_planning: {
+          content: jsonData.procedure_planning?.content || 'Not provided',
+          missing: jsonData.procedure_planning?.missing || []
+        },
+        alerts: {
+          content: jsonData.alerts?.content || 'None',
+          missing: jsonData.alerts?.missing || [],
+          pre_anaesthetic_review_text: jsonData.alerts?.pre_anaesthetic_review_text,
+          pre_anaesthetic_review_json: jsonData.alerts?.pre_anaesthetic_review_json
+        },
+        missing_summary: {
+          missing_clinical: jsonData.missing_summary?.missing_clinical || [],
+          missing_diagnostic: jsonData.missing_summary?.missing_diagnostic || [],
+          missing_measurements: jsonData.missing_summary?.missing_measurements || [],
+          completeness_score: jsonData.missing_summary?.completeness_score || 'Not assessed'
+        }
+      };
+
+      return structuredSections;
+
+    } catch (error) {
+      console.warn('⚠️ TAVI: Failed to parse structured sections:', error);
+      return undefined;
     }
   }
 
   /**
-   * Fallback missing info detection using keyword analysis for TAVI workup
+   * Extract missing information from the response (QuickLetter pattern)
    */
-  private fallbackMissingInfoDetection(input: string, extraction: any): any {
-    console.log('🔄 TAVI Missing Info: Using fallback keyword-based detection');
+  private extractMissingInformation(response: string): string[] {
+    const missingFields: string[] = [];
 
-    const text = input.toLowerCase();
-    const missing = {
-      missing_clinical: [] as string[],
-      missing_diagnostic: [] as string[],
-      missing_measurements: [] as string[],
-      missing_structured: extraction.missingFields || [],
-      completeness_score: '60% (Fair)',
-      critical_gaps: [] as string[]
-    };
+    // Look for missing information indicators in the response
+    const missingPatterns = [
+      /missing:?\s*([^.]+)/gi,
+      /not\s+provided:?\s*([^.]+)/gi,
+      /incomplete:?\s*([^.]+)/gi,
+      /requires?:?\s*([^.]+)/gi
+    ];
 
-    // Check for common TAVI clinical assessments
-    if (!text.includes('nyha') && !text.includes('functional class')) {
-      missing.missing_clinical.push('NYHA functional class assessment');
-    }
-    if (!text.includes('sts') && !text.includes('score')) {
-      missing.missing_clinical.push('STS PROM risk score');
-    }
-    if (!text.includes('euroscore')) {
-      missing.missing_clinical.push('EuroSCORE II calculation');
-    }
+    missingPatterns.forEach(pattern => {
+      const matches = response.matchAll(pattern);
+      for (const match of matches) {
+        if (match[1]) {
+          missingFields.push(match[1].trim());
+        }
+      }
+    });
 
-    // Check for diagnostic studies
-    if (!text.includes('echo') && !text.includes('echocardiogram')) {
-      missing.missing_diagnostic.push('Recent echocardiographic assessment');
-    }
-    if (!text.includes('ct') && !text.includes('computed tomography')) {
-      missing.missing_diagnostic.push('CT aortic root assessment');
-    }
-    if (!text.includes('creatinine') && !text.includes('kidney function')) {
-      missing.missing_diagnostic.push('Renal function assessment');
-    }
+    return missingFields;
+  }
 
-    // Check for procedural planning
-    if (!text.includes('valve') && !text.includes('prosthesis')) {
-      missing.missing_measurements.push('Valve selection and sizing strategy');
-    }
-    if (!text.includes('access') && !text.includes('femoral')) {
-      missing.missing_measurements.push('Vascular access assessment');
-    }
-
-    console.log(`📊 TAVI Fallback Missing Info: Generated ${missing.missing_clinical.length + missing.missing_diagnostic.length + missing.missing_measurements.length} missing items`);
-    return missing;
+  /**
+   * Assess confidence based on response quality
+   */
+  private assessConfidence(input: string, response: string): number {
+    // Basic confidence assessment
+    if (!response || response.length < 100) return 0.1;
+    if (response.includes('ERROR') || response.includes('error')) return 0.3;
+    if (response.length < input.length * 0.5) return 0.5;
+    return 0.85; // High confidence for complete responses
   }
 
   /**
    * Create error report following the established pattern
    */
   private createErrorReport(errorMessage: string, processingTime: number, context?: MedicalContext): TAVIWorkupReport {
-    console.log('🔧 TAVI Error Handler: Creating structured error report');
+    console.log('🔧 TAVI Error Handler: Creating error report');
 
-    // Use content-only error display (no section headers) for cleaner UI
-    const fallbackText = `TAVI workup processing encountered an error. Please review the dictation and try again.\n\nError details: ${errorMessage}`;
-    const fallbackSections: ReportSection[] = [];
+    // Use content-only error display for cleaner UI
+    const errorContent = `TAVI workup processing encountered an error. Please review the dictation and try again.\n\nError details: ${errorMessage}`;
 
     const fallback = this.createReport(
-      fallbackText,
-      fallbackSections,
+      errorContent,
+      [], // No sections for error reports
       context,
       processingTime,
       0.1,
@@ -1042,9 +600,8 @@ Based on this information, analyze what clinical information is missing that wou
       [`Processing failed: ${errorMessage}`]
     );
 
-    const emptyReport: TAVIWorkupReport = {
+    const errorReport: TAVIWorkupReport = {
       ...fallback,
-      // Add summary property for UI consistency
       summary: `TAVI workup processing failed: ${errorMessage}`,
       workupData: {
         patient: {},
@@ -1056,131 +613,30 @@ Based on this information, analyze what clinical information is missing that wou
           coronaryHeights: {},
           sinusOfValsalva: {},
           coplanarAngles: [],
-          accessVessels: {},
+          accessVessels: {}
         },
         procedurePlan: {
           valveSelection: {},
           access: {},
-          strategy: {},
-        },
+          strategy: {}
+        }
       },
       alerts: {
-        alertMessages: ['Processing error.'],
+        alertMessages: [],
         triggers: {
           lowLeftMainHeight: false,
           lowSinusDiameters: [],
-          smallAccessVessels: [],
-        },
+          smallAccessVessels: []
+        }
       },
       missingFields: [],
+      structuredSections: undefined,
+      metadata: {
+        ...fallback.metadata,
+        modelUsed: MODEL_CONFIG.REASONING_MODEL
+      }
     };
 
-    return emptyReport;
-  }
-
-
-
-  private formatDataForLLM(data: TAVIWorkupData): Record<string, unknown> {
-    const formatValue = (value?: number, unit?: string) => {
-      if (value == null) return null;
-      const valueStr = Number.isInteger(value) ? value.toString() : value.toString();
-      return unit ? `${valueStr} ${unit}` : valueStr;
-    };
-
-    return {
-      patient: {
-        name: data.patient.name ?? null,
-        dob: data.patient.dob ?? null,
-        age_years: data.patient.ageYears ?? null,
-        height_cm: formatValue(data.patient.heightCm, 'cm'),
-        weight_kg: formatValue(data.patient.weightKg, 'kg'),
-        bmi: formatValue(data.patient.bmi),
-        bsa_m2: formatValue(data.patient.bsaMosteller, 'm²'),
-      },
-      clinical: {
-        indication: data.clinical.indication ?? null,
-        nyha_class: data.clinical.nyhaClass ?? null,
-        sts_percent: formatValue(data.clinical.stsPercent, '%'),
-        euro_score_percent: formatValue(data.clinical.euroScorePercent, '%'),
-      },
-      laboratory: {
-        creatinine: formatValue(data.laboratory.creatinine, 'μmol/L'),
-        egfr: formatValue(data.laboratory.egfr, 'mL/min/1.73m²'),
-        hemoglobin: formatValue(data.laboratory.hemoglobin, 'g/L'),
-        albumin: formatValue(data.laboratory.albumin, 'g/L'),
-      },
-      ecg: {
-        heart_rate: formatValue(data.ecg.rate, 'bpm'),
-        rhythm: data.ecg.rhythm ?? null,
-        morphology: data.ecg.morphology ?? null,
-        qrs_width: formatValue(data.ecg.qrsWidthMs, 'ms'),
-        pr_interval: formatValue(data.ecg.prIntervalMs, 'ms'),
-      },
-      echocardiography: {
-        study_date: data.echocardiography.studyDate ?? null,
-        ejection_fraction: formatValue(data.echocardiography.ejectionFractionPercent, '%'),
-        septal_thickness: formatValue(data.echocardiography.septalThicknessMm, 'mm'),
-        mean_pressure_gradient: formatValue(data.echocardiography.meanGradientMmHg, 'mmHg'),
-        aortic_valve_area: formatValue(data.echocardiography.aorticValveAreaCm2, 'cm²'),
-        dimensionless_index: data.echocardiography.dimensionlessIndex ?? null,
-        mitral_regurgitation_grade: data.echocardiography.mitralRegurgitationGrade ?? null,
-        rv_systolic_pressure: formatValue(data.echocardiography.rightVentricularSystolicPressureMmHg, 'mmHg'),
-        comments: data.echocardiography.comments ?? null,
-      },
-      ct_measurements: {
-        annulus_area: formatValue(data.ctMeasurements.annulusAreaMm2, 'mm²'),
-        annulus_perimeter: formatValue(data.ctMeasurements.annulusPerimeterMm, 'mm'),
-        annulus_min_diameter: formatValue(data.ctMeasurements.annulusMinDiameterMm, 'mm'),
-        annulus_max_diameter: formatValue(data.ctMeasurements.annulusMaxDiameterMm, 'mm'),
-        coronary_heights: {
-          left_main: formatValue(data.ctMeasurements.coronaryHeights.leftMainMm, 'mm'),
-          right_coronary: formatValue(data.ctMeasurements.coronaryHeights.rightCoronaryMm, 'mm'),
-        },
-        sinus_of_valsalva: {
-          left: formatValue(data.ctMeasurements.sinusOfValsalva.leftMm, 'mm'),
-          right: formatValue(data.ctMeasurements.sinusOfValsalva.rightMm, 'mm'),
-          non_coronary: formatValue(data.ctMeasurements.sinusOfValsalva.nonCoronaryMm, 'mm'),
-        },
-        coplanar_angles: data.ctMeasurements.coplanarAngles.length > 0 ? data.ctMeasurements.coplanarAngles : null,
-        access_vessels_mm: {
-          right_cia: formatValue(data.ctMeasurements.accessVessels.rightCIAmm, 'mm'),
-          left_cia: formatValue(data.ctMeasurements.accessVessels.leftCIAmm, 'mm'),
-          right_eia: formatValue(data.ctMeasurements.accessVessels.rightEIAmm, 'mm'),
-          left_eia: formatValue(data.ctMeasurements.accessVessels.leftEIAmm, 'mm'),
-          right_cfa: formatValue(data.ctMeasurements.accessVessels.rightCFAmm, 'mm'),
-          left_cfa: formatValue(data.ctMeasurements.accessVessels.leftCFAmm, 'mm'),
-        },
-        // Enhanced LVOT and calcium measurements
-        lvot_area: formatValue(data.ctMeasurements.lvotAreaMm2, 'mm²'),
-        lvot_perimeter: formatValue(data.ctMeasurements.lvotPerimeterMm, 'mm'),
-        stj_diameter: formatValue(data.ctMeasurements.stjDiameterMm, 'mm'),
-        stj_height: formatValue(data.ctMeasurements.stjHeightMm, 'mm'),
-        calcium_score: formatValue(data.ctMeasurements.calciumScore),
-        lvot_calcium_score: formatValue(data.ctMeasurements.lvotCalciumScore),
-        aortic_dimensions: data.ctMeasurements.aorticDimensions ?? null,
-      },
-      procedure_plan: {
-        valve_selection: {
-          type: data.procedurePlan.valveSelection.type ?? null,
-          size: data.procedurePlan.valveSelection.size ?? null,
-          model: data.procedurePlan.valveSelection.model ?? null,
-          reason: data.procedurePlan.valveSelection.reason ?? null,
-        },
-        access: {
-          primary: data.procedurePlan.access.primary ?? null,
-          secondary: data.procedurePlan.access.secondary ?? null,
-          wire: data.procedurePlan.access.wire ?? null,
-        },
-        strategy: {
-          pacing: data.procedurePlan.strategy.pacing ?? null,
-          bav: data.procedurePlan.strategy.bav ?? null,
-          closure: data.procedurePlan.strategy.closure ?? null,
-          protamine: data.procedurePlan.strategy.protamine ?? null,
-        },
-        goals: data.procedurePlan.goals ?? null,
-        case_notes: data.procedurePlan.caseNotes ?? null,
-      },
-      devices_planned: data.devicesPlanned ?? null,
-    };
+    return errorReport;
   }
 }

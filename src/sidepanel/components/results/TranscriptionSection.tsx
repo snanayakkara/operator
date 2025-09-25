@@ -69,7 +69,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   const [transcriptionExpanded, setTranscriptionExpanded] = useState(!!defaultExpanded);
   const [transcriptionCopied, setTranscriptionCopied] = useState(false);
   const [transcriptionInserted, setTranscriptionInserted] = useState(false);
-  const [editedTranscription, setEditedTranscription] = useState(originalTranscription);
+  const [editedTranscription, setEditedTranscription] = useState(originalTranscription || '');
 
   // Component renders optimally when memoized properly
 
@@ -155,7 +155,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             </span>
           )}
           <span className="text-xs text-gray-500">
-            {editedTranscription.split(' ').length} words
+            {(editedTranscription || '').split(' ').filter(w => w.trim()).length} words
             {editedTranscription !== originalTranscription && (
               <span className="text-blue-600 ml-1">(edited)</span>
             )}
@@ -329,17 +329,17 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                 }`}
                 placeholder={onTranscriptionEdit
                   ? "Edit transcription to improve accuracy - corrections will be submitted for training only with your approval..."
-                  : "Transcription editing disabled for completed sessions"
+                  : "Transcription editing not available"
                 }
                 title={onTranscriptionEdit
                   ? "Edit the transcription to improve accuracy. Training data is only submitted when you explicitly approve it."
-                  : "Transcription editing is disabled for completed sessions"
+                  : "Transcription editing not available"
                 }
               />
               <div className="absolute bottom-1 right-2 flex items-center space-x-2 text-xs text-gray-400">
                 <span>🧠 Training AI</span>
                 <span>•</span>
-                <span>{editedTranscription.split(' ').length} words</span>
+                <span>{(editedTranscription || '').split(' ').filter(w => w.trim()).length} words</span>
                 {editedTranscription !== originalTranscription && (
                   <>
                     <span>•</span>
