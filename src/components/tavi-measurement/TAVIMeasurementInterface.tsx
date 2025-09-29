@@ -2,8 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   TAVIMeasurementSession,
   TAVIMeasurementData,
-  ValveTypeOption,
-  TAVIMeasurementConfig
+  ValveTypeOption
 } from '@/types/medical.types';
 import { TAVIGridView } from './TAVIGridView';
 import { TAVIMeasurementView } from './TAVIMeasurementView';
@@ -85,7 +84,7 @@ export const TAVIMeasurementInterface: React.FC<TAVIMeasurementInterfaceProps> =
   }
 
   // Calculate percentage of expected value
-  const calculatePercentage = useCallback((measured: number, expected: number): number => {
+  const _calculatePercentage = useCallback((measured: number, expected: number): number => {
     if (expected === 0) return 0;
     return Math.round((measured / expected) * 100);
   }, []);

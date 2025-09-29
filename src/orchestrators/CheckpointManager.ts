@@ -19,7 +19,7 @@ import type {
 
 import type {
   PatientReviewResult,
-  PatientAppointment,
+  PatientAppointment as _PatientAppointment,
   BatchAIReviewInput
 } from '@/types/medical.types';
 

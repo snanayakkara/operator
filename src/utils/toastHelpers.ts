@@ -216,6 +216,13 @@ export const GeneralToasts = {
       title,
       message,
       TOAST_DURATIONS.warning
+    ),
+
+  info: (title: string, message?: string) =>
+    toastService.info(
+      title,
+      message,
+      TOAST_DURATIONS.info
     )
 };
 

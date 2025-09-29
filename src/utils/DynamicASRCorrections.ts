@@ -22,6 +22,7 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 import { 
   applyASRCorrections, 
   getCombinedPatterns, 
@@ -29,7 +30,7 @@ import {
   type ASRCorrectionCategories 
 } from './ASRCorrections';
 import { OptimizationService } from '@/services/OptimizationService';
-import type { ASRCurrentState } from '@/types/optimization';
+import type { ASRCurrentState as _ASRCurrentState } from '@/types/optimization';
 
 interface DynamicCorrections {
   glossaryTerms: string[];
@@ -88,9 +89,10 @@ export class DynamicASRCorrections {
       return correctedText;
 
     } catch (error) {
+      const err = toError(error);
       logger.warn('Enhanced ASR corrections failed, falling back to static only', {
         component: 'DynamicASRCorrections',
-        error: error.message
+        error: err.message
       });
       
       // Fallback to static corrections only
@@ -109,9 +111,10 @@ export class DynamicASRCorrections {
       return [...merged.staticPatterns, ...merged.dynamicPatterns];
 
     } catch (error) {
+      const err = toError(error);
       logger.warn('Failed to get combined patterns, falling back to static', {
         component: 'DynamicASRCorrections',
-        error: error.message
+        error: err.message
       });
       
       return getCombinedPatterns(categories);
@@ -141,9 +144,10 @@ export class DynamicASRCorrections {
       return terms;
 
     } catch (error) {
+      const err = toError(error);
       logger.warn('Failed to get glossary terms', {
         component: 'DynamicASRCorrections',
-        error: error.message
+        error: err.message
       });
       return [];
     }
@@ -239,9 +243,10 @@ export class DynamicASRCorrections {
       return this.dynamicCorrections;
 
     } catch (error) {
+      const err = toError(error);
       logger.warn('Failed to load dynamic corrections', {
         component: 'DynamicASRCorrections',
-        error: error.message
+        error: err.message
       });
       
       return null;
@@ -292,10 +297,11 @@ export class DynamicASRCorrections {
         const regex = new RegExp(`\\b${this.escapeRegExp(rule.raw)}\\b`, 'gi');
         correctedText = correctedText.replace(regex, rule.fix);
       } catch (error) {
+        const err = toError(error);
         logger.warn('Failed to apply dynamic rule', {
           component: 'DynamicASRCorrections',
           rule,
-          error: error.message
+          error: err.message
         });
       }
     }
@@ -380,10 +386,10 @@ export class DynamicASRCorrections {
   private containsDangerousPattern(text: string): boolean {
     const dangerousPatterns = [
       /(\*\+|\+\*)/,  // Catastrophic backtracking patterns
-      /\(\?\!/,       // Negative lookahead
-      /\(\?\=/,       // Positive lookahead
-      /\(\?\<\!/,     // Negative lookbehind
-      /\(\?\<\=/,     // Positive lookbehind
+      /\(\?!/,       // Negative lookahead
+      /\(\?=/,       // Positive lookahead
+      /\(\?<!/,     // Negative lookbehind
+      /\(\?<=/,     // Positive lookbehind
       /\{\d{3,}\}/,   // Very large repetition counts
       /\*\*+/,        // Multiple wildcards
       /\+\++/,        // Multiple plus operators
@@ -486,9 +492,9 @@ export class DynamicASRCorrections {
         rejected: validation.invalid
       };
     } catch (error) {
-      logger.error('Failed to apply safe ASR corrections', {
-        component: 'DynamicASRCorrections',
-        error: error instanceof Error ? error.message : String(error)
+      const err = toError(error);
+      logger.error('Failed to apply safe ASR corrections', err, {
+        component: 'DynamicASRCorrections'
       });
 
       return {
@@ -504,10 +510,11 @@ export class DynamicASRCorrections {
         const regex = new RegExp(`\\b${this.escapeRegExp(rule.raw)}\\b`, 'gi');
         return [regex, rule.fix] as ReplacementPattern;
       } catch (error) {
+        const err = toError(error);
         logger.warn('Failed to convert rule to pattern', {
           component: 'DynamicASRCorrections',
           rule,
-          error: error.message
+          error: err.message
         });
         // Return a simple string replacement as fallback
         return [new RegExp(rule.raw, 'gi'), rule.fix] as ReplacementPattern;

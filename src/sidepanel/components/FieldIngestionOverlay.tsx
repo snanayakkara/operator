@@ -241,7 +241,7 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
 
         {/* Field Status List */}
         <div className="space-y-3">
-          {fields.map((field, index) => (
+          {fields.map((field, _index) => (
             <div
               key={field.name}
               className={`flex items-center space-x-3 p-3 rounded-lg border motion-safe:transition-all motion-safe:duration-300 motion-reduce:transition-none ${getStatusColor(field.status)}`}

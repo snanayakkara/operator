@@ -112,6 +112,8 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ isOpen, onCl
       'medication': '💊',
       'bloods': '🩸',
       'imaging': '📷',
+      'ohif-viewer': '🩻',
+      'aus-medical-review': '🇦🇺',
       'enhancement': '✨',
       'transcription': '🎤',
       'generation': '🤖'
@@ -287,7 +289,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ isOpen, onCl
                 <div className="bg-white border border-gray-200 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Recordings</h3>
                   <div className="space-y-2">
-                    {recentMetrics.map((metric, index) => (
+                    {recentMetrics.map((metric, _index) => (
                       <div key={metric.sessionId} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
                         <div className="flex items-center space-x-3">
                           <span className="text-sm">{getAgentIcon(metric.agentType)}</span>

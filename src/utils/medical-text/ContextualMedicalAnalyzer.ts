@@ -18,7 +18,8 @@
 import { logger } from '@/utils/Logger';
 import { CacheManager } from '@/utils/CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
-import { PatternCompiler, type PatternCategory } from '@/utils/performance/PatternCompiler';
+import { PatternCompiler, type PatternCategory as _PatternCategory } from '@/utils/performance/PatternCompiler';
+import { toError } from '@/utils/errorHelpers';
 
 export interface ClinicalReasoningPattern {
   type: ReasoningType;
@@ -281,7 +282,7 @@ export class ContextualMedicalAnalyzer {
       const patterns = await this.detectReasoningPatterns(text, components, analysisOptions);
       
       // Analyze clinical context
-      const clinicalContext = await this.analyzeClinicalContext(text, components, analysisOptions.focusArea);
+      const _clinicalContext = await this.analyzeClinicalContext(text, components, analysisOptions.focusArea);
       
       // Build causal relationships
       const causalRelationships = await this.buildCausalRelationships(components, text);
@@ -399,7 +400,7 @@ export class ContextualMedicalAnalyzer {
 
   private async extractClinicalComponents(
     text: string,
-    options: any
+    _options: any
   ): Promise<ClinicalComponent[]> {
     const components: ClinicalComponent[] = [];
 
@@ -672,7 +673,7 @@ export class ContextualMedicalAnalyzer {
     }
 
     // Category-based significance
-    const categorySignificance = {
+    const categorySignificance: Record<ComponentCategory, ClinicalSignificance> = {
       diagnosis: 'high',
       procedure: 'high',
       investigation_result: 'moderate',
@@ -687,7 +688,7 @@ export class ContextualMedicalAnalyzer {
     return categorySignificance[category] || 'informational';
   }
 
-  private async extractWorkflowSteps(text: string, reasoningType: ReasoningType): Promise<WorkflowStep[]> {
+  private async extractWorkflowSteps(text: string, _reasoningType: ReasoningType): Promise<WorkflowStep[]> {
     const steps: WorkflowStep[] = [];
     let sequence = 1;
 
@@ -834,8 +835,14 @@ export class ContextualMedicalAnalyzer {
     try {
       const cached = await this.cacheManager.get(`clinical_${cacheKey}` as any);
       if (cached && typeof cached === 'object' && 'patterns' in cached) {
-        logger.debug(`Clinical analysis cache hit: ${cacheKey}`);
-        return cached as AnalysisResult;
+        // Validate cached result has required AnalysisResult properties
+        const result = cached as any;
+        if (result.overallConfidence !== undefined && result.clinicalCoherence !== undefined &&
+            result.australianCompliance !== undefined && result.recommendations !== undefined &&
+            result.processingTime !== undefined) {
+          logger.debug(`Clinical analysis cache hit: ${cacheKey}`);
+          return result as AnalysisResult;
+        }
       }
     } catch (error) {
       logger.debug(`Clinical analysis cache miss: ${cacheKey}`);
@@ -845,10 +852,11 @@ export class ContextualMedicalAnalyzer {
 
   private async cacheAnalysis(cacheKey: string, result: AnalysisResult): Promise<void> {
     try {
-      await this.cacheManager.set(`clinical_${cacheKey}` as any, result, this.CACHE_TTL);
+      await this.cacheManager.set(`clinical_${cacheKey}` as any, result, undefined, this.CACHE_TTL);
       logger.debug(`Cached clinical analysis: ${cacheKey}`);
     } catch (error) {
-      logger.warn('Failed to cache clinical analysis:', error);
+      const err = toError(error);
+      logger.warn('Failed to cache clinical analysis:', { error: err.message });
     }
   }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mic, Speaker, ChevronDown, Settings, Headphones } from 'lucide-react';
+import { Mic, Speaker, ChevronDown, Settings, Headphones as _Headphones } from 'lucide-react';
 import { useAudioDevices, type AudioDevice } from '@/hooks/useAudioDevices';
 
 interface AudioDeviceSelectorProps {

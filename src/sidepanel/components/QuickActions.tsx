@@ -17,7 +17,7 @@ import {
   Shield,
   UserCheck,
   Users,
-  BarChart3,
+  BarChart3 as _BarChart3,
   Combine,
   GraduationCap,
   TestTube,
@@ -33,7 +33,7 @@ import {
   buttonVariants,
   withReducedMotion,
   STAGGER_CONFIGS,
-  ANIMATION_DURATIONS
+  ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 
 interface InvestigationOption {
@@ -370,7 +370,7 @@ export const QuickActions: React.FC<QuickActionsProps> = memo(({ onQuickAction, 
         // Create a simple alert for user feedback (temporary solution)
         if (typeof window !== 'undefined') {
           // Try to show a more user-friendly error
-          const userMessage = errorMessage.includes('Unknown message type') 
+          const _userMessage = errorMessage.includes('Unknown message type') 
             ? 'Please reload the extension in chrome://extensions and try again'
             : errorMessage.includes('No clinical data')
             ? 'Please navigate to a patient page with clinical data and try again'
@@ -862,53 +862,65 @@ MEDICATIONS: ${emrData.medications || 'Not provided'}`;
           ))}
           
           {/* Split AI Buttons in the last cell */}
-          <motion.div 
-            className="relative rounded-2xl min-h-10 flex transition-all duration-150 hover:bg-surface-primary hover:border hover:border-accent-violet/30"
-            variants={withReducedMotion(listItemVariants)}
-            whileHover={{ scale: 1.02 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          >
-            <div className="flex h-full">
-              {AI_ACTIONS.map((aiAction, aiIndex) => (
-                <motion.button
-                  key={aiAction.id}
-                  onClick={() => {
-                    console.log('🔧 AI Button clicked:', aiAction.id, 'at', new Date().toISOString());
-                    handleAction(aiAction.id);
-                  }}
-                  disabled={processingAction === aiAction.id}
-                  className={`
-                    flex-1 relative p-1 transition-all text-left
-                    ${aiIndex === 0 ? 'rounded-l-2xl border-r border-line-primary' : 'rounded-r-2xl'}
-                    hover:bg-surface-tertiary
-                    ${processingAction === aiAction.id ? 'opacity-50 cursor-not-allowed' : ''}
-                  `}
-                  whileHover={processingAction !== aiAction.id ? { scale: 1.05 } : undefined}
-                  whileTap={processingAction !== aiAction.id ? { scale: 0.95 } : undefined}
-                >
-                  <div className="flex items-center justify-center flex-col space-y-0.5">
-                    <aiAction.icon className="w-3 h-3 flex-shrink-0 text-accent-violet" />
-                    <div className="text-ink-primary text-[9px] font-medium leading-tight text-center">
-                      {aiAction.id === 'ai-medical-review' ? 'AI Review' : 'Batch AI'}
-                    </div>
-                  </div>
-                  
-                  <AnimatePresence>
-                    {processingAction === aiAction.id && (
-                      <motion.div 
-                        className="absolute inset-0 flex items-center justify-center bg-surface-tertiary rounded-lg"
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                      >
-                        <SmallTrophySpin />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              ))}
-            </div>
-          </motion.div>
+          {(() => {
+            // Calculate if AI buttons will be alone in their row
+            const totalButtons = filteredActions.length + 1; // +1 for the AI split cell
+            const isAIButtonsAloneInRow = totalButtons % 4 === 1;
+
+            return (
+              <motion.div
+                className={`relative rounded-2xl min-h-10 flex transition-all duration-150 hover:bg-surface-primary hover:border hover:border-accent-violet/30 ${
+                  isAIButtonsAloneInRow ? 'col-span-4' : ''
+                }`}
+                variants={withReducedMotion(listItemVariants)}
+                whileHover={{ scale: 1.02 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              >
+                <div className={`flex h-full ${isAIButtonsAloneInRow ? 'justify-center space-x-8' : ''}`}>
+                  {AI_ACTIONS.map((aiAction, aiIndex) => (
+                    <motion.button
+                      key={aiAction.id}
+                      onClick={() => {
+                        console.log('🔧 AI Button clicked:', aiAction.id, 'at', new Date().toISOString());
+                        handleAction(aiAction.id);
+                      }}
+                      disabled={processingAction === aiAction.id}
+                      className={`
+                        ${isAIButtonsAloneInRow ? 'px-6 py-2' : 'flex-1 p-1'} relative transition-all text-left
+                        ${!isAIButtonsAloneInRow && aiIndex === 0 ? 'rounded-l-2xl border-r border-line-primary' : ''}
+                        ${!isAIButtonsAloneInRow && aiIndex === 1 ? 'rounded-r-2xl' : ''}
+                        ${isAIButtonsAloneInRow ? 'rounded-2xl' : ''}
+                        hover:bg-surface-tertiary
+                        ${processingAction === aiAction.id ? 'opacity-50 cursor-not-allowed' : ''}
+                      `}
+                      whileHover={processingAction !== aiAction.id ? { scale: 1.05 } : undefined}
+                      whileTap={processingAction !== aiAction.id ? { scale: 0.95 } : undefined}
+                    >
+                      <div className={`flex items-center ${isAIButtonsAloneInRow ? 'flex-row space-x-2' : 'justify-center flex-col space-y-0.5'}`}>
+                        <aiAction.icon className={`${isAIButtonsAloneInRow ? 'w-4 h-4' : 'w-3 h-3'} flex-shrink-0 text-accent-violet`} />
+                        <div className={`text-ink-primary font-medium leading-tight ${isAIButtonsAloneInRow ? 'text-xs' : 'text-[9px] text-center'}`}>
+                          {aiAction.id === 'ai-medical-review' ? 'AI Review' : 'Batch AI'}
+                        </div>
+                      </div>
+
+                      <AnimatePresence>
+                        {processingAction === aiAction.id && (
+                          <motion.div
+                            className="absolute inset-0 flex items-center justify-center bg-surface-tertiary rounded-lg"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                          >
+                            <SmallTrophySpin />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            );
+          })()}
         </motion.div>
       </motion.div>
     );

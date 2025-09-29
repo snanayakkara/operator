@@ -10,7 +10,7 @@ import type {
   CacheEntry,
   CacheConfig,
   CacheStats,
-  ExtractedData,
+  ExtractedData as _ExtractedData,
   DataQualityReport
 } from '@/types/BatchProcessingTypes';
 
@@ -41,7 +41,7 @@ export class CacheManager {
   private config: CacheConfig;
   private stats: CacheStats;
   private invalidationRules: CacheInvalidationRule[] = [];
-  private cleanupInterval?: number;
+  private cleanupInterval?: ReturnType<typeof setInterval>;
   private debugMode = false;
 
   private constructor() {
@@ -62,12 +62,12 @@ export class CacheManager {
    * Store data in cache with automatic hashing and compression
    */
   public async set<T>(
-    key: CacheKey,
+    key: CacheKey | string,
     data: T,
     quality?: DataQualityReport,
     ttl?: number
   ): Promise<void> {
-    const cacheKey = this.generateCacheKey(key);
+    const { cacheKey, patientId, dataType } = this.resolveKey(key);
     const timestamp = Date.now();
     const dataHash = await this.calculateDataHash(data);
     const expiryTime = timestamp + (ttl || this.config.defaultTtlMs);
@@ -76,14 +76,15 @@ export class CacheManager {
 
     const entry: CacheEntry = {
       key: cacheKey,
-      patientId: key.patientId,
+      patientId,
       extractedData: data as any, // Generic for different data types
       timestamp,
       dataHash,
       quality: quality || this.createDefaultQuality(),
       expiryTime,
       accessCount: 0,
-      lastAccessed: timestamp
+      lastAccessed: timestamp,
+      dataType: dataType ?? 'extracted_data'
     };
 
     // Store in memory cache
@@ -106,8 +107,8 @@ export class CacheManager {
   /**
    * Retrieve data from cache with validation
    */
-  public async get<T>(key: CacheKey): Promise<CacheResult<T>> {
-    const cacheKey = this.generateCacheKey(key);
+  public async get<T>(key: CacheKey | string): Promise<CacheResult<T>> {
+    const { cacheKey } = this.resolveKey(key);
     
     this.log(`🔍 Looking for cached data: ${cacheKey}`);
 
@@ -156,7 +157,7 @@ export class CacheManager {
   /**
    * Check if cached data has changed
    */
-  public async hasChanged<T>(key: CacheKey, currentData: T): Promise<boolean> {
+  public async hasChanged<T>(key: CacheKey | string, currentData: T): Promise<boolean> {
     const result = await this.get<T>(key);
     
     if (!result.hit || !result.entry) {
@@ -170,8 +171,8 @@ export class CacheManager {
   /**
    * Invalidate specific cache entry
    */
-  public async invalidate(key: CacheKey): Promise<void> {
-    const cacheKey = this.generateCacheKey(key);
+  public async invalidate(key: CacheKey | string): Promise<void> {
+    const { cacheKey } = this.resolveKey(key);
     
     this.log(`🗑️ Invalidating cache entry: ${cacheKey}`);
     
@@ -341,6 +342,22 @@ export class CacheManager {
   private generateCacheKey(key: CacheKey): string {
     const version = key.version || 'v1';
     return `${key.patientId}_${key.dataType}_${version}`;
+  }
+
+  private resolveKey(key: CacheKey | string): { cacheKey: string; patientId: string; dataType?: CacheKey['dataType'] } {
+    if (typeof key === 'string') {
+      return {
+        cacheKey: key,
+        patientId: 'legacy',
+        dataType: 'extracted_data'
+      };
+    }
+
+    return {
+      cacheKey: this.generateCacheKey(key),
+      patientId: key.patientId,
+      dataType: key.dataType
+    };
   }
 
   private async calculateDataHash(data: any): Promise<string> {

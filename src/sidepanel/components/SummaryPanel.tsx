@@ -38,7 +38,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
     }
   };
 
-  const agentDisplayName = agentType ? agentType.toUpperCase().replace('-', ' ') : 'AI Assistant';
+  const _agentDisplayName = agentType ? agentType.toUpperCase().replace('-', ' ') : 'AI Assistant';
   const characterCount = summary.length;
   
   // Determine if this is a narrative letter agent or structured report agent

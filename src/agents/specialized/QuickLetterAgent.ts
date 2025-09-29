@@ -1,12 +1,19 @@
 import { NarrativeLetterAgent } from '../base/NarrativeLetterAgent';
-import { QUICK_LETTER_SYSTEM_PROMPTS } from './QuickLetterSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { QUICK_LETTER_PATIENT_VERSION_SYSTEM_PROMPTS } from './QuickLetterPatientVersionSystemPrompts';
 import { QUICK_LETTER_EXEMPLARS, EXEMPLAR_REGISTRY, type ExemplarContent } from './QuickLetterExemplars';
+import { MedicalSummaryExtractor, MedicalSummaryConfig, ClinicalFocusArea } from '@/utils/text-extraction/MedicalSummaryExtractor';
+import { preNormalizeMedicalText } from '@/utils/medical-text/Phase2TextNormalizer';
 import type { MedicalContext, MedicalReport } from '@/types/medical.types';
 
 /**
  * Specialized agent for processing Quick Medical Letters and brief correspondence.
  * Generates clean narrative prose for dictated letters, referrals, and brief medical notes.
+ *
+ * Enhanced with Phase 3 capabilities including intelligent summary extraction,
+ * enhanced medical pattern recognition, quality assessment and validation,
+ * and hybrid processing with legacy fallback for safety.
+ *
  * Handles single-speaker dictated content with phrases like "Thank you for seeing..."
  */
 export class QuickLetterAgent extends NarrativeLetterAgent {
@@ -80,19 +87,123 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     ]
   };
 
+  private medicalSummaryExtractor: MedicalSummaryExtractor;
+  private readonly enableEnhanced: boolean = true;
+  private readonly fallbackToLegacy: boolean = false;
+
   constructor() {
     super(
       'Quick Letter Agent',
       'Medical Correspondence',
-      'Generates clean narrative prose for dictated medical letters and brief correspondence',
+      'Generates clean narrative prose for dictated medical letters and brief correspondence with enhanced clinical analysis',
       'quick-letter'
     );
-    
-    // Override the base system prompt with Quick Letter specific prompts
-    this.systemPrompt = QUICK_LETTER_SYSTEM_PROMPTS.primary;
+
+    this.medicalSummaryExtractor = MedicalSummaryExtractor.getInstance();
+
+    // Initialize with default, load actual prompt asynchronously
+    this.initializeSystemPrompt();
+
+    console.log('QuickLetterAgent enhanced initialized', {
+      enableEnhanced: this.enableEnhanced,
+      fallbackEnabled: this.fallbackToLegacy
+    });
   }
 
-  async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+  /**
+   * Initialize system prompt using centralized loader
+   */
+  private async initializeSystemPrompt(): Promise<void> {
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('quick-letter', 'primary');
+      console.log('✅ QuickLetterAgent: System prompt loaded successfully');
+    } catch (error) {
+      console.error('❌ QuickLetterAgent: Failed to load system prompt:', error);
+      // Fallback will be handled by SystemPromptLoader automatically
+    }
+  }
+
+  async process(input: string, _context?: MedicalContext): Promise<MedicalReport> {
+    const startTime = Date.now();
+    const processingType = _context?.isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
+
+    console.log(`📝 QuickLetter [${processingType}]: Starting processing with enhanced capabilities`);
+
+    try {
+      // Enhanced processing attempt
+      if (this.enableEnhanced) {
+        const enhancedResult = await this.processWithEnhancedAnalysis(input, _context, processingType);
+        if (enhancedResult) {
+          const processingTime = Date.now() - startTime;
+          console.log(`✅ QuickLetterAgent completed with enhanced processing in ${processingTime}ms`);
+          return enhancedResult;
+        }
+      }
+
+      // Fallback to legacy processing if needed
+      if (this.fallbackToLegacy) {
+        console.log('📋 QuickLetterAgent falling back to legacy processing');
+        return await this.processWithLegacy(input, _context, processingType);
+      }
+
+      throw new Error('Both enhanced and legacy processing failed');
+
+    } catch (error) {
+      console.error('❌ QuickLetterAgent processing failed completely:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enhanced processing with intelligent clinical analysis
+   */
+  private async processWithEnhancedAnalysis(
+    input: string,
+    _context?: MedicalContext,
+    processingType: string = 'ENHANCED'
+  ): Promise<MedicalReport | null> {
+    try {
+      console.log(`🧠 Starting enhanced QuickLetter processing [${processingType}]`);
+
+      // Step 1: Normalize input using Phase 2 + letter-specific normalization
+      const normalizedInput = await this.enhancedNormalization(input);
+
+      // Step 2: Extract enhanced summary using Phase 3 system
+      const summaryResult = await this.extractEnhancedSummary(normalizedInput, _context);
+
+      // Step 3: Process with enhanced exemplar and context awareness
+      const enhancedReport = await this.processWithEnhancedContext(normalizedInput, summaryResult, _context, processingType);
+
+      // Step 4: Apply Phase 3 quality validation
+      const qualityValidation = this.validateEnhancedQuality(input, enhancedReport, summaryResult);
+
+      if (!qualityValidation.isValid) {
+        console.warn('Enhanced quality validation failed', {
+          issues: qualityValidation.issues,
+          confidence: qualityValidation.confidence
+        });
+        return null; // Trigger fallback
+      }
+
+      console.log('✅ Enhanced QuickLetter processing completed successfully');
+      return enhancedReport;
+
+    } catch (error) {
+      console.error('❌ Enhanced QuickLetter processing failed:', error);
+      return null; // Trigger fallback
+    }
+  }
+
+  /**
+   * Legacy processing method (original implementation)
+   */
+  private async processWithLegacy(
+    input: string,
+    _context?: MedicalContext,
+    processingType: string = 'LEGACY'
+  ): Promise<MedicalReport> {
+    console.log(`📋 QuickLetter [${processingType}]: Using legacy processing`);
+
     // Store basic extracted data for potential context enhancement
     const extractedData = this.extractBasicLetterData(input);
 
@@ -112,17 +223,16 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       console.log(`📖 Enhanced prompt with ${selectedExemplars.length} exemplars`);
     }
 
-    const startTime = Date.now();
-    
+    const legacyStartTime = Date.now();
+
     // Enhanced debugging for processing type detection
-    const isReprocessing = context && context.isReprocessing;
-    const processingType = isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
+    const _isReprocessing = _context && _context.isReprocessing;
     
     console.log(`📝 QuickLetter [${processingType}]: Starting main letter generation`);
     console.log(`🔧 [${processingType}] System prompt preview:`, contextualPrompt.substring(0, 200) + '...');
     console.log(`📥 [${processingType}] Input preview:`, input.substring(0, 100) + '...');
     console.log(`🎯 [${processingType}] Letter type detected:`, extractedData.letterType);
-    console.log(`⚙️ [${processingType}] Context provided:`, context ? 'Yes' : 'No');
+    console.log(`⚙️ [${processingType}] Context provided:`, _context ? 'Yes' : 'No');
     
     // Get raw model output directly so we can parse SUMMARY/LETTER
     const rawOutput = await this.lmStudioService.processWithAgent(
@@ -190,11 +300,11 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       errors.push(validation.errorMessage);
     }
 
-    const processingTime = Date.now() - startTime;
+    const processingTime = Date.now() - legacyStartTime;
     const report = this.createReport(
       validation.content,
       [],
-      context,
+      _context,
       processingTime,
       confidence,
       warnings,
@@ -1164,7 +1274,10 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
   private async detectMissingInformation(input: string, letterType: string): Promise<any> {
     try {
       console.log('🕵️ QuickLetter Missing Info: Using analysis prompt (NOT letter generation)');
-      const missingInfoPrompt = `${QUICK_LETTER_SYSTEM_PROMPTS.missingInfoDetection}
+
+      // Load missing info detection prompt dynamically
+      const missingInfoSystemPrompt = await systemPromptLoader.loadSystemPrompt('quick-letter', 'missingInfoDetection');
+      const missingInfoPrompt = `${missingInfoSystemPrompt}
 
 DICTATION TO ANALYZE:
 ${input}`;
@@ -1378,6 +1491,259 @@ If you have any questions about this information, please don't hesitate to call 
     fallback += 'Please contact our office if you have any questions about your care.';
     
     return fallback;
+  }
+
+  /**
+   * Enhanced normalization combining Phase 2 + letter-specific rules
+   */
+  private async enhancedNormalization(input: string): Promise<string> {
+    try {
+      console.log('📝 Enhanced normalization started');
+
+      // Apply Phase 2 normalization first
+      let normalized = preNormalizeMedicalText(input);
+
+      // Apply letter-specific patterns
+      const letterPatterns = [
+        // Greeting standardization
+        { pattern: /\bthank you for seeing\b/gi, replacement: 'Thank you for seeing' },
+        { pattern: /\bkind regards\b/gi, replacement: 'Kind regards' },
+        { pattern: /\byours sincerely\b/gi, replacement: 'Yours sincerely' },
+
+        // Medical terminology standardization
+        { pattern: /\bpatient\s+is\s+a\b/gi, replacement: 'Patient is a' },
+        { pattern: /\bgentleman\s+is\s+a\b/gi, replacement: 'Gentleman is a' },
+        { pattern: /\blady\s+is\s+a\b/gi, replacement: 'Lady is a' },
+
+        // Professional formatting
+        { pattern: /\bi\s+have\s+arranged\b/gi, replacement: 'I have arranged' },
+        { pattern: /\bi\s+would\s+recommend\b/gi, replacement: 'I would recommend' },
+        { pattern: /\bplease\s+let\s+me\s+know\b/gi, replacement: 'Please let me know' }
+      ];
+
+      // Apply letter-specific patterns
+      letterPatterns.forEach(({ pattern, replacement }) => {
+        normalized = normalized.replace(pattern, replacement);
+      });
+
+      console.log('📝 Enhanced normalization completed');
+      return normalized;
+
+    } catch (error) {
+      console.warn('Enhanced normalization failed, using original input:', error);
+      return input;
+    }
+  }
+
+  /**
+   * Extract enhanced summary using Phase 3 system
+   */
+  private async extractEnhancedSummary(normalizedInput: string, _context?: MedicalContext) {
+    const summaryConfig: MedicalSummaryConfig = {
+      agentType: 'quick-letter',
+      summaryLength: 'brief',
+      focusAreas: this.getLetterFocusAreas(normalizedInput),
+      extractFindings: true,
+      includeMetrics: true,
+      preserveOriginalFormat: true, // Letters need to preserve narrative flow
+      australianCompliance: true
+    };
+
+    const summaryResult = await this.medicalSummaryExtractor.extractSummary(normalizedInput, summaryConfig);
+
+    console.log('🔍 Enhanced summary extraction completed', {
+      findingsCount: summaryResult.findings.length,
+      qualityScore: summaryResult.qualityMetrics.overallQuality
+    });
+
+    return summaryResult;
+  }
+
+  /**
+   * Determine letter-specific focus areas
+   */
+  private getLetterFocusAreas(text: string): ClinicalFocusArea[] {
+    const areas: ClinicalFocusArea[] = ['correspondence', 'outcomes'];
+    const lowerText = text.toLowerCase();
+
+    if (lowerText.includes('medication') || lowerText.includes('prescription') || lowerText.includes('drug')) {
+      areas.push('medications');
+    }
+    if (lowerText.includes('diagnosis') || lowerText.includes('condition') || lowerText.includes('finding')) {
+      areas.push('diagnosis');
+    }
+    if (lowerText.includes('procedure') || lowerText.includes('surgery') || lowerText.includes('operation')) {
+      areas.push('procedures');
+    }
+    if (lowerText.includes('follow up') || lowerText.includes('appointment') || lowerText.includes('review')) {
+      areas.push('follow_up');
+    }
+    if (lowerText.includes('investigation') || lowerText.includes('test') || lowerText.includes('scan')) {
+      areas.push('investigations');
+    }
+
+    return areas;
+  }
+
+  /**
+   * Process with enhanced exemplar and context awareness
+   */
+  private async processWithEnhancedContext(
+    normalizedInput: string,
+    summaryResult: any,
+    _context?: MedicalContext,
+    processingType: string = 'ENHANCED'
+  ): Promise<MedicalReport> {
+    // Store basic extracted data for potential context enhancement
+    const extractedData = this.extractBasicLetterData(normalizedInput);
+
+    // Select relevant exemplars for few-shot learning enhancement
+    console.log('📖 Selecting exemplars for enhanced Quick Letter generation...');
+    const selectedExemplars = await this.selectRelevantExemplars(normalizedInput, 2);
+
+    // Build enhanced contextualized system prompt
+    let enhancedPrompt = this.systemPrompt;
+
+    // Add clinical findings context
+    if (summaryResult.findings.length > 0) {
+      const keyFindings = summaryResult.findings
+        .filter((f: any) => f.confidence >= 75)
+        .slice(0, 3)
+        .map((f: any) => f.finding)
+        .join(', ');
+
+      if (keyFindings) {
+        enhancedPrompt += `\n\nKey clinical findings identified: ${keyFindings}. Ensure these are appropriately integrated into the letter content.`;
+      }
+    }
+
+    // Add letter type context
+    if (extractedData.letterType !== 'general') {
+      enhancedPrompt += `\n\nDetected context: This appears to be ${extractedData.letterType} correspondence. Focus on the relevant clinical content while maintaining continuous narrative prose format.`;
+    }
+
+    // Enhance prompt with exemplars for improved accuracy
+    if (selectedExemplars.length > 0) {
+      enhancedPrompt = this.enhancePromptWithExemplars(enhancedPrompt, selectedExemplars);
+      console.log(`📖 Enhanced prompt with ${selectedExemplars.length} exemplars`);
+    }
+
+    console.log(`📝 QuickLetter [${processingType}]: Starting enhanced letter generation`);
+
+    // Get raw model output
+    const rawOutput = await this.lmStudioService.processWithAgent(
+      enhancedPrompt,
+      normalizedInput,
+      this.agentType
+    );
+
+    console.log('📤 Enhanced raw LMStudio output length:', rawOutput.length);
+
+    // Parse into summary + letter, then clean letter
+    const { summary, letterContent } = this.parseStructuredResponse(rawOutput);
+    console.log(`✅ [${processingType}] Parsed enhanced summary:`, summary.substring(0, 150) + '...');
+    console.log(`✅ [${processingType}] Parsed enhanced letter content length:`, letterContent.length);
+
+    // Clean and format content
+    const cleanedLetter = this.cleanNarrativeTextPreserveParagraphs(letterContent);
+    const finalLetter = this.applyFallbackParagraphFormatting(cleanedLetter);
+
+    // Quality assessment
+    const hasHallucination = this.detectHallucination(normalizedInput, finalLetter);
+    const warnings: string[] = hasHallucination
+      ? ['Output may contain material not present in original dictation. Please review carefully.']
+      : [];
+    const confidence = this.calculateNarrativeConfidence(normalizedInput, finalLetter);
+
+    // Detect missing information
+    console.log(`🔍 QuickLetter [${processingType}]: Starting enhanced missing information analysis`);
+    const missingInfo = await this.detectMissingInformation(normalizedInput, extractedData.letterType);
+
+    // Validate content
+    const validation = this.validateAndFormatContent(finalLetter, normalizedInput, confidence);
+    const errors: string[] = [];
+    if (validation.hasError && validation.errorMessage) {
+      errors.push(validation.errorMessage);
+    }
+
+    // Create enhanced report
+    const report = this.createReport(
+      validation.content,
+      [],
+      _context,
+      0, // Processing time calculated by caller
+      confidence,
+      warnings,
+      errors
+    );
+
+    // Add enhanced metadata
+    report.metadata = {
+      ...report.metadata,
+      enhancedProcessing: {
+        summaryExtraction: summaryResult.extractionStats,
+        qualityMetrics: summaryResult.qualityMetrics,
+        clinicalFindings: summaryResult.findings.length,
+        processingMethod: 'Enhanced_QuickLetter',
+        normalizedInputLength: normalizedInput.length
+      },
+      rawAIOutput: rawOutput,
+      reasoningArtifacts: this.parseReasoningArtifacts(rawOutput)
+    };
+
+    // Add missing information if detected
+    if (missingInfo) {
+      report.metadata.missingInformation = missingInfo;
+    }
+
+    return { ...report, content: validation.content, summary };
+  }
+
+  /**
+   * Validate enhanced quality
+   */
+  private validateEnhancedQuality(
+    originalInput: string,
+    report: MedicalReport,
+    summaryResult: any
+  ): { isValid: boolean; confidence: number; issues: string[]; warnings: string[] } {
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    let confidence = summaryResult.qualityMetrics.overallQuality;
+
+    // Check content length
+    if (report.content.length < 50) {
+      issues.push('Letter content too short');
+      confidence -= 30;
+    }
+
+    // Check for medical terminology preservation
+    const originalTerms = this.extractMentionedMedications(originalInput.toLowerCase());
+    const outputTerms = this.extractMentionedMedications(report.content.toLowerCase());
+
+    if (originalTerms.length > 0) {
+      const preservationRate = outputTerms.filter(term => originalTerms.includes(term)).length / originalTerms.length;
+      if (preservationRate < 0.8) {
+        warnings.push(`Medical terminology preservation: ${(preservationRate * 100).toFixed(1)}%`);
+        confidence -= 10;
+      }
+    }
+
+    // Check quality threshold
+    if (summaryResult.qualityMetrics.clinicalAccuracy < 70) {
+      warnings.push('Low clinical accuracy in source extraction');
+      confidence -= 15;
+    }
+
+    // Check for hallucination
+    if (this.detectHallucination(originalInput, report.content)) {
+      warnings.push('Potential hallucinated content detected');
+      confidence -= 20;
+    }
+
+    const isValid = confidence >= 50 && !issues.some(i => i.includes('too short'));
+
+    return { isValid, confidence: Math.max(0, confidence), issues, warnings };
   }
 
   /**

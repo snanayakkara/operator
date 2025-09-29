@@ -364,7 +364,7 @@ export class TAVIWorkupExtractor {
   }
 
   private static extractDob(transcript: string): string | undefined {
-    const match = transcript.match(/(?:dob|date of birth)[:\s]*([\w\s,/\-]+?)(?:\.|,|;|\n|$)/i);
+    const match = transcript.match(/(?:dob|date of birth)[:\s]*([\w\s,/-]+?)(?:\.|,|;|\n|$)/i);
     if (!match) return undefined;
     const raw = match[1].trim();
     const parsed = this.parseDateString(raw);
@@ -442,7 +442,7 @@ export class TAVIWorkupExtractor {
     const match = transcript.match(regex);
     if (!match) return undefined;
     const trailing = transcript.slice(match.index! + match[0].length).trim();
-    const dateMatch = trailing.match(/([A-Za-z0-9\/-]+(?:\s+[A-Za-z]+\s+\d{4})?)/);
+    const dateMatch = trailing.match(/([A-Za-z0-9/-]+(?:\s+[A-Za-z]+\s+\d{4})?)/);
     if (!dateMatch) return undefined;
     const parsed = this.parseDateString(dateMatch[1]);
     return parsed ?? undefined;
@@ -539,7 +539,7 @@ export class TAVIWorkupExtractor {
       ct.sinusOfValsalva.nonCoronaryMm = Number(value.toFixed(1));
     }
 
-    const sovBlockMatch = lower.match(/sinus of valsalva[^\.\n]*/i);
+    const sovBlockMatch = lower.match(/sinus of valsalva[^.\n]*/i);
     if (sovBlockMatch) {
       const block = sovBlockMatch[0];
       if (ct.sinusOfValsalva.leftMm == null) {
@@ -984,7 +984,8 @@ export class TAVIWorkupExtractor {
 
     const slashMatch = cleaned.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
     if (slashMatch) {
-      let [ , day, month, year ] = slashMatch;
+      const [ , day, month, yearStr ] = slashMatch;
+      let year = yearStr;
       if (year.length === 2) {
         year = parseInt(year, 10) > 50 ? `19${year}` : `20${year}`;
       }

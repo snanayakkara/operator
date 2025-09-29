@@ -13,13 +13,14 @@ import {
   SearchIcon,
   UserIcon,
   PillIcon,
-  ShieldIcon
+  ShieldIcon,
+  MonitorIcon
 } from './icons/OptimizedIcons';
 import { 
   staggerContainer,
   listItemVariants,
   workflowButtonVariants,
-  voiceActivityVariants,
+  voiceActivityVariants as _voiceActivityVariants,
   withReducedMotion,
   STAGGER_CONFIGS,
   ANIMATION_DURATIONS
@@ -47,7 +48,8 @@ const iconMap = {
   Search: SearchIcon,
   User: UserIcon,
   Pill: PillIcon,
-  Shield: ShieldIcon
+  Shield: ShieldIcon,
+  Monitor: MonitorIcon
 } as const;
 
 export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({

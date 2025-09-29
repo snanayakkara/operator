@@ -238,7 +238,7 @@ Real GEPA optimization process:
 ## File Structure
 
 ```
-xestro-investigation-extension/
+operator/
 ├── HTTP Server Layer
 │   ├── dspy-server.py             # Main Flask HTTP server (port 8002)
 │   ├── start-dspy-server.sh       # Server startup script with auto-restart

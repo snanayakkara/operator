@@ -7,7 +7,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 export default [
   js.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx,js}'],
     languageOptions: {
       parser: typescriptParser,
       ecmaVersion: 2020,
@@ -20,6 +20,7 @@ export default [
         navigator: 'readonly',
         fetch: 'readonly',
         MediaRecorder: 'readonly',
+        MediaStream: 'readonly',
         Blob: 'readonly',
         Event: 'readonly',
         FileReader: 'readonly',
@@ -30,6 +31,8 @@ export default [
         clearInterval: 'readonly',
         HTMLTextAreaElement: 'readonly',
         AudioContext: 'readonly',
+        OfflineAudioContext: 'readonly',
+        AudioBuffer: 'readonly',
         AnalyserNode: 'readonly',
         PermissionName: 'readonly',
         requestAnimationFrame: 'readonly',
@@ -40,11 +43,56 @@ export default [
         Date: 'readonly',
         HTMLElement: 'readonly',
         HTMLInputElement: 'readonly',
+        HTMLImageElement: 'readonly',
         Node: 'readonly',
         MutationObserver: 'readonly',
         KeyboardEvent: 'readonly',
         MutationRecord: 'readonly',
-        Element: 'readonly'
+        Element: 'readonly',
+        // Additional Chrome extension and web platform globals
+        HTMLDivElement: 'readonly',
+        DragEvent: 'readonly',
+        File: 'readonly',
+        TransformStream: 'readonly',
+        Response: 'readonly',
+        MessageEvent: 'readonly',
+        Headers: 'readonly',
+        Request: 'readonly',
+        RequestInit: 'readonly',
+        ReadableStream: 'readonly',
+        WritableStream: 'readonly',
+        FormData: 'readonly',
+        Intl: 'readonly',
+        performance: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        crypto: 'readonly',
+        confirm: 'readonly',
+        alert: 'readonly',
+        prompt: 'readonly',
+        ClipboardItem: 'readonly',
+        HTMLCanvasElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        HTMLTableElement: 'readonly',
+        XPathResult: 'readonly',
+        NodeListOf: 'readonly',
+        FileList: 'readonly',
+        DataTransfer: 'readonly',
+        TextEncoder: 'readonly',
+        AbortController: 'readonly',
+        localStorage: 'readonly',
+        MouseEvent: 'readonly',
+        Image: 'readonly',
+        HTMLAudioElement: 'readonly',
+        Worker: 'readonly',
+        HTMLTableRowElement: 'readonly',
+        CustomEvent: 'readonly',
+        EventTarget: 'readonly',
+        ProgressEvent: 'readonly',
+        NodeJS: 'readonly',
+        process: 'readonly',
+        requestIdleCallback: 'readonly',
+        Audio: 'readonly'
       }
     },
     plugins: {
@@ -59,10 +107,44 @@ export default [
         'warn',
         { allowConstantExport: true },
       ],
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
       'prefer-const': 'error',
       'no-var': 'error',
+    },
+  },
+  {
+    // Web Worker specific configuration
+    files: ['src/workers/**/*.ts', 'src/**/*.worker.ts'],
+    languageOptions: {
+      parser: typescriptParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly',
+        self: 'readonly',
+        postMessage: 'readonly',
+        onmessage: 'readonly',
+        MessageEvent: 'readonly',
+        AudioContext: 'readonly',
+        AnalyserNode: 'readonly',
+        Float32Array: 'readonly',
+        Uint8Array: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly'
+      }
+    },
+    plugins: {
+      '@typescript-eslint': typescript
+    },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'no-undef': 'off' // Web Workers have different global context
     },
   },
   {
@@ -92,12 +174,24 @@ export default [
       '@typescript-eslint': typescript
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
       'no-undef': 'off'
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'venv-whisper/**', '**/*.py']
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'venv-whisper/**',
+      'dspy-env/**',
+      'validate-*.js',
+      'validate-*.cjs',
+      '**/*.py',
+      '*.md',
+      'README.md',
+      'CLAUDE.md'
+    ]
   }
 ];

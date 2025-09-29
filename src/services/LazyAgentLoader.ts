@@ -62,7 +62,7 @@ export class LazyAgentLoader {
   /**
    * Load agent with caching and performance tracking
    */
-  async loadAgent(agentType: AgentType, preferPhase3: boolean = true): Promise<AgentLoadResult> {
+  async loadAgent(agentType: AgentType, preferEnhanced: boolean = true): Promise<AgentLoadResult> {
     const startTime = Date.now();
     
     // Check cache first
@@ -90,7 +90,7 @@ export class LazyAgentLoader {
     }
 
     // Create loading promise
-    const loadingPromise = this.createLoadingPromise(agentType, preferPhase3);
+    const loadingPromise = this.createLoadingPromise(agentType, preferEnhanced);
     this.loadingPromises.set(agentType, loadingPromise);
 
     try {
@@ -102,7 +102,7 @@ export class LazyAgentLoader {
       this.loadingPromises.delete(agentType);
       this.updateUsageStats(agentType, loadTime, true);
 
-      console.log(`📦 Loaded ${agentType} agent in ${loadTime}ms (Phase 3: ${preferPhase3})`);
+      console.log(`📦 Loaded ${agentType} agent in ${loadTime}ms (Enhanced: ${preferEnhanced})`);
 
       return {
         agent,
@@ -182,13 +182,13 @@ export class LazyAgentLoader {
   /**
    * Create loading promise for specific agent type
    */
-  private async createLoadingPromise(agentType: AgentType, preferPhase3: boolean): Promise<MedicalAgent> {
+  private async createLoadingPromise(agentType: AgentType, preferEnhanced: boolean): Promise<MedicalAgent> {
     try {
-      // Try loading Phase 3 version first if preferred
-      if (preferPhase3) {
-        const phase3Agent = await this.loadPhase3Agent(agentType);
-        if (phase3Agent) {
-          return phase3Agent;
+      // Try loading enhanced version first if preferred
+      if (preferEnhanced) {
+        const enhancedAgent = await this.loadEnhancedAgent(agentType);
+        if (enhancedAgent) {
+          return enhancedAgent;
         }
       }
 
@@ -202,33 +202,37 @@ export class LazyAgentLoader {
   }
 
   /**
-   * Load Phase 3 agent with dynamic import
+   * Load enhanced agent with dynamic import
    */
-  private async loadPhase3Agent(agentType: AgentType): Promise<MedicalAgent | null> {
+  private async loadEnhancedAgent(agentType: AgentType): Promise<MedicalAgent | null> {
     try {
       switch (agentType) {
-        case 'quick-letter':
-          const { QuickLetterAgent: QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
-          return new QuickLetterAgentPhase3();
+        case 'quick-letter': {
+          const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+          return new QuickLetterAgent();
+        }
           
-        case 'investigation-summary':
-          const { InvestigationSummaryAgent: InvestigationSummaryAgentPhase3 } = await import('@/agents/specialized/InvestigationSummaryAgent.Phase3');
-          return new InvestigationSummaryAgentPhase3();
+        case 'investigation-summary': {
+          const { InvestigationSummaryAgent } = await import('@/agents/specialized/InvestigationSummaryAgent');
+          return new InvestigationSummaryAgent();
+        }
           
-        case 'background':
-          const { BackgroundAgentPhase3 } = await import('@/agents/specialized/BackgroundAgent.Phase3');
-          return new BackgroundAgentPhase3();
+        case 'background': {
+          const { BackgroundAgent } = await import('@/agents/specialized/BackgroundAgent');
+          return new BackgroundAgent();
+        }
           
-        case 'medication':
-          const { MedicationAgentPhase3 } = await import('@/agents/specialized/MedicationAgent.Phase3');
-          return new MedicationAgentPhase3();
+        case 'medication': {
+          const { MedicationAgent } = await import('@/agents/specialized/MedicationAgent');
+          return new MedicationAgent();
+        }
           
         default:
-          // Phase 3 not available for this agent type
+          // Enhanced version not available for this agent type
           return null;
       }
     } catch (error) {
-      console.warn(`Phase 3 agent not available for ${agentType}, falling back to legacy`);
+      console.warn(`Enhanced agent not available for ${agentType}, falling back to legacy`);
       return null;
     }
   }
@@ -238,49 +242,65 @@ export class LazyAgentLoader {
    */
   private async loadLegacyAgent(agentType: AgentType): Promise<MedicalAgent> {
     switch (agentType) {
-      case 'tavi':
+      case 'tavi': {
         const { TAVIAgent } = await import('@/agents/specialized/TAVIAgent');
         return new TAVIAgent();
+      }
         
-      case 'angiogram-pci':
+      case 'angiogram-pci': {
         const { AngiogramPCIAgent } = await import('@/agents/specialized/AngiogramPCIAgent');
         return new AngiogramPCIAgent();
-        
-      case 'mteer':
+      }
+
+      case 'tavi-workup': {
+        const { TAVIWorkupAgent } = await import('@/agents/specialized/TAVIWorkupAgent');
+        return new TAVIWorkupAgent();
+      }
+
+      case 'mteer': {
         const { MTEERAgent } = await import('@/agents/specialized/MTEERAgent');
         return new MTEERAgent();
+      }
         
-      case 'pfo-closure':
+      case 'pfo-closure': {
         const { PFOClosureAgent } = await import('@/agents/specialized/PFOClosureAgent');
         return new PFOClosureAgent();
+      }
         
-      case 'right-heart-cath':
+      case 'right-heart-cath': {
         const { RightHeartCathAgent } = await import('@/agents/specialized/RightHeartCathAgent');
         return new RightHeartCathAgent();
+      }
         
-      case 'quick-letter':
-        const { QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
-        return new QuickLetterAgentPhase3();
+      case 'quick-letter': {
+        const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+        return new QuickLetterAgent();
+      }
         
-      case 'consultation':
+      case 'consultation': {
         const { ConsultationAgent } = await import('@/agents/specialized/ConsultationAgent');
         return new ConsultationAgent();
+      }
         
-      case 'investigation-summary':
-        const { InvestigationSummaryAgentPhase3 } = await import('@/agents/specialized/InvestigationSummaryAgent.Phase3');
-        return new InvestigationSummaryAgentPhase3();
+      case 'investigation-summary': {
+        const { InvestigationSummaryAgent } = await import('@/agents/specialized/InvestigationSummaryAgent');
+        return new InvestigationSummaryAgent();
+      }
         
-      case 'aus-medical-review':
+      case 'aus-medical-review': {
         const { BatchPatientReviewAgent } = await import('@/agents/specialized/BatchPatientReviewAgent');
         return new BatchPatientReviewAgent();
+      }
         
-      case 'background':
-        const { BackgroundAgentPhase3 } = await import('@/agents/specialized/BackgroundAgent.Phase3');
-        return new BackgroundAgentPhase3();
+      case 'background': {
+        const { BackgroundAgent } = await import('@/agents/specialized/BackgroundAgent');
+        return new BackgroundAgent();
+      }
         
-      case 'medication':
-        const { MedicationAgentPhase3 } = await import('@/agents/specialized/MedicationAgent.Phase3');
-        return new MedicationAgentPhase3();
+      case 'medication': {
+        const { MedicationAgent } = await import('@/agents/specialized/MedicationAgent');
+        return new MedicationAgent();
+      }
         
       default:
         throw new Error(`Unknown agent type: ${agentType}`);

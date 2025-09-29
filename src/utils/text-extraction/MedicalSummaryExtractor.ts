@@ -23,7 +23,7 @@ export interface MedicalSummaryConfig {
   australianCompliance?: boolean;
 }
 
-export type ClinicalFocusArea = 
+export type ClinicalFocusArea =
   | 'diagnosis'
   | 'procedures'
   | 'medications'
@@ -32,7 +32,9 @@ export type ClinicalFocusArea =
   | 'complications'
   | 'hemodynamics'
   | 'anatomy'
-  | 'management';
+  | 'management'
+  | 'correspondence'
+  | 'follow_up';
 
 export interface ClinicalFinding {
   category: ClinicalFocusArea;
@@ -135,6 +137,16 @@ export class MedicalSummaryExtractor {
       /(?:plan|recommend|advise|follow.?up|continue|discontinue)\s+([^.]+)/gi,
       /(?:increase|decrease|adjust|maintain)\s+([^.]+)/gi,
       /(?:clinic|appointment|review)\s+([^.]+)/gi
+    ],
+    follow_up: [
+      /(?:follow.?up|next appointment|return in|see in|review in)\s+([^.]+)/gi,
+      /(?:clinic|office|hospital)\s+(?:visit|appointment|review)/gi,
+      /(?:weekly|monthly|yearly|in\s+\d+\s+(?:days?|weeks?|months?))/gi
+    ],
+    correspondence: [
+      /(?:letter|report|note|communication|correspondence)\s+(?:to|from|regarding)\s+([^.]+)/gi,
+      /(?:GP|referring physician|consultant|specialist)\s+([^.]+)/gi,
+      /(?:copy|carbon copy|cc)\s+([^.]+)/gi
     ]
   };
 
@@ -207,7 +219,7 @@ export class MedicalSummaryExtractor {
         extractionStats,
         metadata: {
           agentType: config.agentType,
-          extractionMethod: 'Phase3_Consolidation',
+          extractionMethod: 'Enhanced_Consolidation',
           timestamp: Date.now(),
           version: '3.0.0'
         }
@@ -481,7 +493,7 @@ export class MedicalSummaryExtractor {
     originalText: string,
     summary: string,
     findings: ClinicalFinding[],
-    config: MedicalSummaryConfig
+    _config: MedicalSummaryConfig
   ): Promise<SummaryQualityMetrics> {
     
     const warnings: string[] = [];
@@ -541,7 +553,7 @@ export class MedicalSummaryExtractor {
   /**
    * Helper methods for quality assessment
    */
-  private assessClinicalAccuracy(originalText: string, summary: string, findings: ClinicalFinding[]): number {
+  private assessClinicalAccuracy(originalText: string, summary: string, _findings: ClinicalFinding[]): number {
     // Check preservation of key medical terms
     const originalMedicalTerms = this.extractMedicalTerms(originalText);
     const summaryMedicalTerms = this.extractMedicalTerms(summary);
@@ -741,7 +753,7 @@ export class MedicalSummaryExtractor {
     }
   }
 
-  private countDetectedPatterns(text: string, config: MedicalSummaryConfig): number {
+  private countDetectedPatterns(text: string, _config: MedicalSummaryConfig): number {
     let count = 0;
     const allPatterns = Object.values(this.clinicalPatterns).flat();
     

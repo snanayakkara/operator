@@ -75,11 +75,40 @@ class Logger {
     }
   }
 
-  public error(message: string, error?: Error, context?: LogContext): void {
-    if (this.shouldLog(LogLevel.ERROR)) {
-      const errorContext = error ? { ...context, error: error.message, stack: error.stack } : context;
-      console.error(this.formatMessage(LogLevel.ERROR, message, errorContext));
+  // eslint-disable-next-line no-dupe-class-members, @typescript-eslint/no-unused-vars
+  public error(message: string, context?: LogContext): void;
+  // eslint-disable-next-line no-dupe-class-members, @typescript-eslint/no-unused-vars
+  public error(message: string, error: Error, context?: LogContext): void;
+  // eslint-disable-next-line no-dupe-class-members
+  public error(
+    message: string,
+    errorOrContext?: Error | LogContext,
+    context?: LogContext
+  ): void {
+    if (!this.shouldLog(LogLevel.ERROR)) {
+      return;
     }
+
+    let error: Error | undefined;
+    let resolvedContext: LogContext | undefined;
+
+    if (errorOrContext instanceof Error) {
+      error = errorOrContext;
+      resolvedContext = context;
+    } else if (errorOrContext) {
+      resolvedContext = {
+        ...(errorOrContext as LogContext),
+        ...(context ?? {})
+      };
+    } else {
+      resolvedContext = context;
+    }
+
+    const errorContext = error
+      ? { ...resolvedContext, error: error.message, stack: error.stack }
+      : resolvedContext;
+
+    console.error(this.formatMessage(LogLevel.ERROR, message, errorContext));
   }
 
   // Convenience methods for medical operations

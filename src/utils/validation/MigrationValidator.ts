@@ -5,8 +5,8 @@
  * Ensures quality, safety, and backward compatibility during Phase 3 transitions.
  */
 
-import { MedicalReport, MedicalContext, AgentType } from '@/types/medical.types';
-import { MedicalSummaryResult, ClinicalFinding } from '@/utils/text-extraction/MedicalSummaryExtractor';
+import { MedicalReport, MedicalContext as _MedicalContext, AgentType } from '@/types/medical.types';
+import { MedicalSummaryResult as _MedicalSummaryResult, ClinicalFinding as _ClinicalFinding } from '@/utils/text-extraction/MedicalSummaryExtractor';
 
 export interface MigrationValidationConfig {
   agentType: AgentType;
@@ -24,7 +24,7 @@ export interface MigrationValidationConfig {
 export interface ValidationResult {
   isValid: boolean;
   score: number;
-  phase3Performance: AgentPerformanceMetrics;
+  enhancedPerformance: AgentPerformanceMetrics;
   legacyPerformance: AgentPerformanceMetrics;
   comparison: ValidationComparison;
   recommendations: string[];
@@ -57,7 +57,7 @@ export interface ValidationIssue {
   severity: 'critical' | 'major' | 'minor' | 'warning';
   category: 'performance' | 'quality' | 'medical' | 'format' | 'terminology';
   description: string;
-  phase3Value: any;
+  enhancedValue: any;
   legacyValue: any;
   impact: string;
   recommendation: string;
@@ -66,7 +66,7 @@ export interface ValidationIssue {
 export interface MigrationCheckpoint {
   timestamp: number;
   agentType: AgentType;
-  phase3Version: string;
+  enhancedVersion: string;
   legacyVersion: string;
   validationResult: ValidationResult;
   deploymentStatus: 'staged' | 'deployed' | 'rolled_back' | 'failed';
@@ -98,7 +98,7 @@ export class MigrationValidator {
    */
   async validateMigration(
     agentType: AgentType,
-    phase3Agent: any,
+    enhancedAgent: any,
     legacyAgent: any,
     config: MigrationValidationConfig
   ): Promise<ValidationResult> {
@@ -106,16 +106,16 @@ export class MigrationValidator {
     
     const testInputs = await this.getTestSamples(agentType, config.comparisonSamples);
     
-    const phase3Metrics = await this.benchmarkAgent(phase3Agent, testInputs, 'Phase3');
+    const enhancedMetrics = await this.benchmarkAgent(enhancedAgent, testInputs, 'Enhanced');
     const legacyMetrics = await this.benchmarkAgent(legacyAgent, testInputs, 'Legacy');
     
-    const comparison = this.comparePerformance(phase3Metrics, legacyMetrics);
-    const issues = this.identifyIssues(phase3Metrics, legacyMetrics, config);
+    const comparison = this.comparePerformance(enhancedMetrics, legacyMetrics);
+    const issues = this.identifyIssues(enhancedMetrics, legacyMetrics, config);
     
     const validationResult: ValidationResult = {
       isValid: this.determineValidity(comparison, issues, config),
       score: this.calculateOverallScore(comparison, issues),
-      phase3Performance: phase3Metrics,
+      enhancedPerformance: enhancedMetrics,
       legacyPerformance: legacyMetrics,
       comparison,
       recommendations: this.generateRecommendations(comparison, issues),
@@ -241,16 +241,16 @@ export class MigrationValidator {
    * Compare Phase 3 vs Legacy performance
    */
   private comparePerformance(
-    phase3: AgentPerformanceMetrics,
+    enhanced: AgentPerformanceMetrics,
     legacy: AgentPerformanceMetrics
   ): ValidationComparison {
     return {
-      processingTimeImprovement: (legacy.processingTime - phase3.processingTime) / legacy.processingTime,
-      qualityScoreChange: phase3.qualityScore - legacy.qualityScore,
-      confidenceScoreChange: phase3.confidenceScore - legacy.confidenceScore,
-      contentLengthChange: (phase3.contentLength - legacy.contentLength) / legacy.contentLength,
-      medicalAccuracyChange: phase3.medicalAccuracy - legacy.medicalAccuracy,
-      overallImprovement: this.calculateOverallImprovement(phase3, legacy)
+      processingTimeImprovement: (legacy.processingTime - enhanced.processingTime) / legacy.processingTime,
+      qualityScoreChange: enhanced.qualityScore - legacy.qualityScore,
+      confidenceScoreChange: enhanced.confidenceScore - legacy.confidenceScore,
+      contentLengthChange: (enhanced.contentLength - legacy.contentLength) / legacy.contentLength,
+      medicalAccuracyChange: enhanced.medicalAccuracy - legacy.medicalAccuracy,
+      overallImprovement: this.calculateOverallImprovement(enhanced, legacy)
     };
   }
 
@@ -258,19 +258,19 @@ export class MigrationValidator {
    * Identify validation issues
    */
   private identifyIssues(
-    phase3: AgentPerformanceMetrics,
+    enhanced: AgentPerformanceMetrics,
     legacy: AgentPerformanceMetrics,
-    config: MigrationValidationConfig
+    _config: MigrationValidationConfig
   ): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
 
     // Processing time regression
-    if (phase3.processingTime > legacy.processingTime * 1.2) {
+    if (enhanced.processingTime > legacy.processingTime * 1.2) {
       issues.push({
         severity: 'major',
         category: 'performance',
         description: 'Processing time regression detected',
-        phase3Value: phase3.processingTime,
+        enhancedValue: enhanced.processingTime,
         legacyValue: legacy.processingTime,
         impact: 'User experience degradation',
         recommendation: 'Optimize Phase 3 processing logic'
@@ -278,12 +278,12 @@ export class MigrationValidator {
     }
 
     // Quality score degradation
-    if (phase3.qualityScore < legacy.qualityScore - 0.1) {
+    if (enhanced.qualityScore < legacy.qualityScore - 0.1) {
       issues.push({
         severity: 'critical',
         category: 'quality',
         description: 'Quality score significantly decreased',
-        phase3Value: phase3.qualityScore,
+        enhancedValue: enhanced.qualityScore,
         legacyValue: legacy.qualityScore,
         impact: 'Medical report quality compromised',
         recommendation: 'Review and improve Phase 3 quality assessment'
@@ -291,12 +291,12 @@ export class MigrationValidator {
     }
 
     // Medical accuracy concerns
-    if (phase3.medicalAccuracy < legacy.medicalAccuracy - 0.05) {
+    if (enhanced.medicalAccuracy < legacy.medicalAccuracy - 0.05) {
       issues.push({
         severity: 'critical',
         category: 'medical',
         description: 'Medical accuracy decreased',
-        phase3Value: phase3.medicalAccuracy,
+        enhancedValue: enhanced.medicalAccuracy,
         legacyValue: legacy.medicalAccuracy,
         impact: 'Potential clinical safety concerns',
         recommendation: 'Mandatory medical accuracy review required'
@@ -304,12 +304,12 @@ export class MigrationValidator {
     }
 
     // Terminology preservation issues
-    if (phase3.terminologyPreservation < legacy.terminologyPreservation - 0.1) {
+    if (enhanced.terminologyPreservation < legacy.terminologyPreservation - 0.1) {
       issues.push({
         severity: 'major',
         category: 'terminology',
         description: 'Medical terminology preservation degraded',
-        phase3Value: phase3.terminologyPreservation,
+        enhancedValue: enhanced.terminologyPreservation,
         legacyValue: legacy.terminologyPreservation,
         impact: 'Loss of clinical precision',
         recommendation: 'Enhance Phase 3 terminology extraction'
@@ -317,12 +317,12 @@ export class MigrationValidator {
     }
 
     // Error rate increase
-    if (phase3.errors.length > legacy.errors.length) {
+    if (enhanced.errors.length > legacy.errors.length) {
       issues.push({
         severity: 'major',
         category: 'quality',
         description: 'Increased error rate detected',
-        phase3Value: phase3.errors.length,
+        enhancedValue: enhanced.errors.length,
         legacyValue: legacy.errors.length,
         impact: 'Decreased system reliability',
         recommendation: 'Address Phase 3 error handling'
@@ -338,7 +338,7 @@ export class MigrationValidator {
   private determineValidity(
     comparison: ValidationComparison,
     issues: ValidationIssue[],
-    config: MigrationValidationConfig
+    _config: MigrationValidationConfig
   ): boolean {
     // Critical issues automatically fail validation
     const criticalIssues = issues.filter(i => i.severity === 'critical');
@@ -446,12 +446,12 @@ export class MigrationValidator {
   private async createCheckpoint(
     agentType: AgentType,
     validationResult: ValidationResult,
-    config: MigrationValidationConfig
+    _config: MigrationValidationConfig
   ): Promise<void> {
     const checkpoint: MigrationCheckpoint = {
       timestamp: Date.now(),
       agentType,
-      phase3Version: 'Phase3-v1.0',
+      enhancedVersion: 'Enhanced-v1.0',
       legacyVersion: 'Legacy-v1.0',
       validationResult,
       deploymentStatus: validationResult.isValid ? 'staged' : 'failed'
@@ -478,7 +478,7 @@ export class MigrationValidator {
   /**
    * Generate recovery plan for rollback
    */
-  private generateRecoveryPlan(agentType: AgentType, reason: string): string[] {
+  private generateRecoveryPlan(agentType: AgentType, _reason: string): string[] {
     return [
       `Revert ${agentType} to legacy implementation`,
       'Monitor system stability for 24 hours',
@@ -599,7 +599,7 @@ export class MigrationValidator {
     return inputTerms.length > 0 ? preservedTerms.length / inputTerms.length : 1;
   }
 
-  private calculateOverallImprovement(phase3: AgentPerformanceMetrics, legacy: AgentPerformanceMetrics): number {
+  private calculateOverallImprovement(enhanced: AgentPerformanceMetrics, legacy: AgentPerformanceMetrics): number {
     // Weighted score considering all metrics
     const weights = {
       processingTime: 0.2,
@@ -608,10 +608,10 @@ export class MigrationValidator {
       medicalAccuracy: 0.3
     };
 
-    const timeImprovement = (legacy.processingTime - phase3.processingTime) / legacy.processingTime;
-    const qualityImprovement = phase3.qualityScore - legacy.qualityScore;
-    const confidenceImprovement = phase3.confidenceScore - legacy.confidenceScore;
-    const accuracyImprovement = phase3.medicalAccuracy - legacy.medicalAccuracy;
+    const timeImprovement = (legacy.processingTime - enhanced.processingTime) / legacy.processingTime;
+    const qualityImprovement = enhanced.qualityScore - legacy.qualityScore;
+    const confidenceImprovement = enhanced.confidenceScore - legacy.confidenceScore;
+    const accuracyImprovement = enhanced.medicalAccuracy - legacy.medicalAccuracy;
 
     return (
       timeImprovement * weights.processingTime +
@@ -668,5 +668,217 @@ export const DEFAULT_VALIDATION_CONFIGS: Record<AgentType, Partial<MigrationVali
       contentLength: 250
     },
     comparisonSamples: 6
+  },
+
+  // Add missing AgentType entries with default configurations
+  'tavi': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 5000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 500
+    },
+    comparisonSamples: 3
+  },
+  'angiogram-pci': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.75,
+      confidenceScore: 0.7,
+      contentLength: 400
+    },
+    comparisonSamples: 4
+  },
+  'consultation': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 6000,
+      qualityScore: 0.7,
+      confidenceScore: 0.6,
+      contentLength: 600
+    },
+    comparisonSamples: 5
+  },
+  'bloods': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 2000,
+      qualityScore: 0.8,
+      confidenceScore: 0.75,
+      contentLength: 200
+    },
+    comparisonSamples: 6
+  },
+  'imaging': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 3000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 300
+    },
+    comparisonSamples: 5
+  },
+  'mteer': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 4500,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 450
+    },
+    comparisonSamples: 3
+  },
+  'tteer': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 4500,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 450
+    },
+    comparisonSamples: 3
+  },
+  'pfo-closure': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 400
+    },
+    comparisonSamples: 3
+  },
+  'asd-closure': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 400
+    },
+    comparisonSamples: 3
+  },
+  'pvl-plug': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 400
+    },
+    comparisonSamples: 3
+  },
+  'bypass-graft': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 5000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 500
+    },
+    comparisonSamples: 3
+  },
+  'right-heart-cath': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 4500,
+      qualityScore: 0.8,
+      confidenceScore: 0.75,
+      contentLength: 450
+    },
+    comparisonSamples: 4
+  },
+  'tavi-workup': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 6000,
+      qualityScore: 0.8,
+      confidenceScore: 0.7,
+      contentLength: 600
+    },
+    comparisonSamples: 3
+  },
+  'ai-medical-review': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 3000,
+      qualityScore: 0.85,
+      confidenceScore: 0.8,
+      contentLength: 300
+    },
+    comparisonSamples: 5
+  },
+  'batch-ai-review': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 10000,
+      qualityScore: 0.8,
+      confidenceScore: 0.75,
+      contentLength: 1000
+    },
+    comparisonSamples: 2
+  },
+  'patient-education': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.75,
+      confidenceScore: 0.7,
+      contentLength: 800
+    },
+    comparisonSamples: 4
+  },
+  'ohif-viewer': {
+    validationLevel: 'basic',
+    benchmarkThresholds: {
+      processingTime: 2000,
+      qualityScore: 0.7,
+      confidenceScore: 0.6,
+      contentLength: 100
+    },
+    comparisonSamples: 3
+  },
+  'aus-medical-review': {
+    validationLevel: 'comprehensive',
+    benchmarkThresholds: {
+      processingTime: 5000,
+      qualityScore: 0.85,
+      confidenceScore: 0.8,
+      contentLength: 500
+    },
+    comparisonSamples: 5
+  },
+  'enhancement': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 3000,
+      qualityScore: 0.8,
+      confidenceScore: 0.75,
+      contentLength: 300
+    },
+    comparisonSamples: 4
+  },
+  'transcription': {
+    validationLevel: 'basic',
+    benchmarkThresholds: {
+      processingTime: 1500,
+      qualityScore: 0.9,
+      confidenceScore: 0.85,
+      contentLength: 1000
+    },
+    comparisonSamples: 6
+  },
+  'generation': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 4000,
+      qualityScore: 0.8,
+      confidenceScore: 0.75,
+      contentLength: 400
+    },
+    comparisonSamples: 4
   }
 };

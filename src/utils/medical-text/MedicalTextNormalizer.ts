@@ -7,7 +7,7 @@
  * and cross-agent pattern application.
  */
 
-import { cardiologyRegistry, type CardiologyPattern, type AgentCardiologyPatterns } from './CardiologyPatternRegistry';
+import { cardiologyRegistry, type CardiologyPattern, type AgentCardiologyPatterns as _AgentCardiologyPatterns } from './CardiologyPatternRegistry';
 import { MedicalPatternService } from './MedicalPatternService';
 import type { AgentType } from '@/types/medical.types';
 import { logger } from '@/utils/Logger';
@@ -105,6 +105,11 @@ export class MedicalTextNormalizer {
     exercisePatterns: [
       { pattern: /\bbruce stage\s+(\d+)\b/gi, replacement: 'Bruce Stage $1' },
       { pattern: /\bexercise for\b/gi, replacement: 'exercised for' },
+      // New patterns for direct dictation formats (most specific first)
+      { pattern: /\bexercised\s+(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi, replacement: 'exercised for $1 minutes, $2 METs' },
+      { pattern: /\b(\d+(?:\.\d+)?)\s+minutes,\s+(\d+(?:\.\d+)?)\s+mets?\b/gi, replacement: 'exercised for $1 minutes, $2 METs' },
+      { pattern: /\b(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi, replacement: 'exercised for $1 minutes, $2 METs' },
+      // Existing patterns (handle edge cases)
       { pattern: /\bexercised for\s+(\d+\.?\d*)\s+minutes,\s+(\d+\.?\d*)\s+minutes\b/gi, replacement: 'exercised for $1 minutes, $2 METs' },
       { pattern: /\bexercised for\s+(\d+\.?\d*)\s+minutes,\s+(\d+\.?\d*)\.\s*$/gi, replacement: 'exercised for $1 minutes, $2 METs;' }
     ],
@@ -326,8 +331,8 @@ export class MedicalTextNormalizer {
    * Narrative text normalization
    */
   private async normalizeNarrativeText(
-    text: string, 
-    config: NormalizationConfig
+    text: string,
+    _config: NormalizationConfig
   ): Promise<{
     normalizedText: string;
     appliedPatterns: string[];
@@ -362,8 +367,8 @@ export class MedicalTextNormalizer {
    * Summary text normalization  
    */
   private async normalizeSummaryText(
-    text: string, 
-    config: NormalizationConfig
+    text: string,
+    _config: NormalizationConfig
   ): Promise<{
     normalizedText: string;
     appliedPatterns: string[];
@@ -415,7 +420,7 @@ export class MedicalTextNormalizer {
   private applyCardiologyPatterns(
     text: string,
     patterns: CardiologyPattern[],
-    config: NormalizationConfig
+    _config: NormalizationConfig
   ): {
     text: string;
     appliedPatterns: string[];

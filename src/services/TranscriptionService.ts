@@ -206,10 +206,10 @@ export class TranscriptionService {
     // Use ASRCorrectionEngine's patterns to count medical terms
     const patterns = this.asrEngine.getCombinedPatterns('all');
     let count = 0;
-    const lowerText = text.toLowerCase();
+    const _lowerText = text.toLowerCase();
     
     // Count occurrences of medical pattern source terms
-    patterns.forEach(([pattern, replacement]) => {
+    patterns.forEach(([pattern, _replacement]) => {
       try {
         if (pattern instanceof RegExp) {
           const matches = text.match(pattern);

@@ -14,16 +14,14 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Eye, 
-  EyeOff, 
-  Edit3, 
-  Trash2, 
-  Download, 
-  Calendar, 
-  User, 
-  Save, 
-  X, 
+import {
+  Edit3,
+  Trash2,
+  Download,
+  Calendar,
+  User,
+  Save,
+  X,
   Search,
   Filter,
   RefreshCw,
@@ -31,13 +29,8 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronDown,
-  Check,
-  AlertCircle,
   FileText,
-  Clock,
-  Zap,
-  Archive,
-  Upload
+  Clock
 } from 'lucide-react';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { logger } from '@/utils/Logger';
@@ -48,7 +41,7 @@ interface FullPageCorrectionsViewerProps {
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
-type SortField = 'timestamp' | 'agentType' | 'original' | 'corrected';
+type SortField = 'timestamp' | 'agentType' | 'original' | 'corrected' | 'confidence';
 type SortDirection = 'asc' | 'desc';
 
 interface FilterState {
@@ -97,7 +90,7 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
 
   // UI state
   const [showFilters, setShowFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [_viewMode, _setViewMode] = useState<'table' | 'cards'>('table');
 
   // Load corrections on mount
   useEffect(() => {
@@ -155,18 +148,21 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
     // Date filter
     const now = Date.now();
     switch (filters.dateRange) {
-      case 'today':
+      case 'today': {
         const todayStart = new Date().setHours(0, 0, 0, 0);
         filtered = filtered.filter(correction => correction.timestamp >= todayStart);
         break;
-      case 'week':
+      }
+      case 'week': {
         const weekAgo = now - (7 * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(correction => correction.timestamp >= weekAgo);
         break;
-      case 'month':
+      }
+      case 'month': {
         const monthAgo = now - (30 * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(correction => correction.timestamp >= monthAgo);
         break;
+      }
       case 'custom':
         if (filters.customDateStart) {
           const startTime = new Date(filters.customDateStart).getTime();
@@ -200,13 +196,17 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
           aValue = a.rawText.toLowerCase();
           bValue = b.rawText.toLowerCase();
           break;
-        case 'corrected':
-          aValue = a.correctedText.toLowerCase();
-          bValue = b.correctedText.toLowerCase();
-          break;
-        default:
-          aValue = a.timestamp;
-          bValue = b.timestamp;
+      case 'corrected':
+        aValue = a.correctedText.toLowerCase();
+        bValue = b.correctedText.toLowerCase();
+        break;
+      case 'confidence':
+        aValue = a.confidence ?? -1;
+        bValue = b.confidence ?? -1;
+        break;
+      default:
+        aValue = a.timestamp;
+        bValue = b.timestamp;
       }
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
@@ -700,6 +700,9 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
               {currentItems.map((correction) => {
                 const isEditing = editingId === correction.id;
                 const isSelected = selectedCorrections.has(correction.id);
+                const confidenceValue = typeof correction.confidence === 'number' ? correction.confidence : 0;
+                const confidenceWidth = Math.max(0, Math.min(100, Math.round(confidenceValue * 100)));
+                const confidenceLabel = correction.confidence != null ? `${confidenceWidth}%` : 'N/A';
                 
                 return (
                   <tr 
@@ -778,11 +781,11 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
                         <div className="w-8 h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                            style={{ width: `${correction.confidence * 100}%` }}
+                            style={{ width: `${confidenceWidth}%` }}
                           />
                         </div>
                         <span className="font-mono text-xs">
-                          {(correction.confidence * 100).toFixed(0)}%
+                          {confidenceLabel}
                         </span>
                       </div>
                     </td>

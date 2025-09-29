@@ -2,8 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   TAVIMeasurementData,
   TAVIMeasurement,
-  ValveTypeOption,
-  MeasurementCoordinates
+  ValveTypeOption
 } from '@/types/medical.types';
 import { TAVIMeasurementTools } from './TAVIMeasurementTools';
 

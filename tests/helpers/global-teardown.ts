@@ -16,7 +16,9 @@ async function globalTeardown(config: FullConfig) {
     try {
       preview.kill('SIGTERM');
       console.log('✅ Preview server stopped');
-    } catch {}
+    } catch {
+      // Preview server may already be stopped
+    }
   }
 
   console.log('✅ Global teardown complete');

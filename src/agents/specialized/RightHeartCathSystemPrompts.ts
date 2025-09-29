@@ -123,17 +123,18 @@ PCWP | [a wave]/[v wave] (mean [value])
 CO [value]
 CI [value]
 
-TPG [value] (if calculated)
-PVR [value] (if calculated)
+TPG [value] (calculated from above)
+PVR [value] (calculated from above)
+RVSWI [value] (calculated from above)
 
 - Follow haemodynamic measurements with clinical narrative for laboratory values and interpretation
 - If exercise performed: describe protocol and changes in narrative format
 - Use flowing clinical language for non-haemodynamic elements: "Vascular access was obtained via...", "Laboratory assessment demonstrated..."
 
 **CONCLUSION**:
+- should be kept concise and focused, aiming for 2-3 sentences
 - Interpret haemodynamic profile in clinical narrative
 - Provide assessment and recommendations in professional language
-- Include follow-up requirements naturally
 
 CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or numbered sections. Preserve all medical facts accurately with Australian spelling (catheterisation, haemodynamic) and embed measurements naturally in sentences with proper units (mmHg, L/min, L/min/m², %, g/L, mmol/L).`
   }

@@ -3,7 +3,6 @@ import type {
   MedicalContext,
   ChatMessage,
   ReportSection,
-  TAVIReport,
   TAVIReportStructured,
   TAVIReportData,
   TAVIData,
@@ -17,7 +16,8 @@ import type {
 } from '@/types/medical.types';
 import { TAVIReportSchema } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { TAVISystemPrompts, TAVIMedicalPatterns, TAVIValidationRules } from './TAVISystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { TAVIMedicalPatterns, TAVIValidationRules } from './TAVISystemPrompts';
 
 /**
  * Specialized agent for processing Transcatheter Aortic Valve Implantation (TAVI/TAVR) procedures.
@@ -26,6 +26,7 @@ import { TAVISystemPrompts, TAVIMedicalPatterns, TAVIValidationRules } from './T
  */
 export class TAVIAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
   
   // TAVI-specific medical knowledge
   private readonly valveTypes: Record<string, ValveManufacturer> = {
@@ -82,12 +83,26 @@ export class TAVIAgent extends MedicalAgent {
       'Interventional Cardiology',
       'Generates comprehensive TAVI procedural reports with structured JSON data and narrative analysis',
       'tavi',
-      TAVISystemPrompts.taviProcedureAgent.systemPrompt
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('tavi', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ TAVIAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist interventional cardiologist generating comprehensive TAVI procedural reports.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<TAVIReportStructured> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     
     try {
@@ -135,7 +150,7 @@ export class TAVIAgent extends MedicalAgent {
         hemodynamics,
         valveAssessment,
         complications,
-        taviJsonData: jsonData,
+        taviJsonData: jsonData ?? undefined,
         validationErrors,
         isValidJson: validationErrors.length === 0
       };
@@ -165,19 +180,24 @@ export class TAVIAgent extends MedicalAgent {
         taviData: this.getEmptyTAVIData(),
         hemodynamics: this.getEmptyHemodynamicData(),
         valveAssessment: this.getEmptyValveAssessment(),
-        complications: []
+        complications: [],
+        taviJsonData: undefined,
+        validationErrors: [error instanceof Error ? error.message : String(error)],
+        isValidJson: false
       };
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
-    // Use centralized system prompts from TAVISystemPrompts
-    const systemPrompt = TAVISystemPrompts.taviProcedureAgent.systemPrompt;
-    const userPrompt = TAVISystemPrompts.taviProcedureAgent.userPromptTemplate.replace('{input}', input);
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
 
     return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+      { role: 'system', content: this.systemPrompt },
+      { role: 'user', content: `Please analyze this TAVI procedural dictation and generate a comprehensive report with structured JSON data:
+
+"${input}"
+
+Provide both JSON structured data and narrative analysis following TAVI procedural reporting standards.` }
     ];
   }
 
@@ -419,10 +439,14 @@ export class TAVIAgent extends MedicalAgent {
 EXTRACTED DATA CONTEXT:
 ${JSON.stringify(extractedData, null, 2)}`;
 
-      // Use the enhanced user prompt template for JSON + narrative output
-      const userPrompt = TAVISystemPrompts.taviProcedureAgent.userPromptTemplate.replace('{input}', originalInput);
+      // Use enhanced user prompt for JSON + narrative output
+      const _userPrompt = `Please analyze this TAVI procedural dictation and generate a comprehensive report with structured JSON data:
 
-      const report = await this.lmStudioService.processWithAgent(contextualPrompt, userPrompt);
+"${originalInput}"
+
+Provide both JSON structured data and narrative analysis following TAVI procedural reporting standards.`;
+
+      const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
       
       console.log('✅ TAVI report generated successfully');
       return report;
@@ -783,9 +807,9 @@ Note: This report was generated with limited AI processing due to technical issu
               validationErrors.push(`Missing fields: ${jsonData.missingFields.join(', ')}`);
             }
           } else {
-            console.warn('❌ TAVI JSON validation failed:', validationResult.error.errors);
+            console.warn('❌ TAVI JSON validation failed:', validationResult.error.issues);
             validationErrors.push('JSON schema validation failed');
-            validationErrors.push(...validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`));
+            validationErrors.push(...validationResult.error.issues.map((e: any) => `${e.path.join('.')}: ${e.message}`));
           }
         } catch (parseError) {
           console.warn('❌ Failed to parse TAVI JSON:', parseError);

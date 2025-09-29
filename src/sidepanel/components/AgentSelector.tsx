@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Brain, Heart, Eye, FileText, Stethoscope, Activity } from 'lucide-react';
+import { ChevronDown, Brain, Heart, Eye, FileText, Stethoscope, Activity, ClipboardList } from 'lucide-react';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
 import type { AgentType } from '@/types/medical.types';
@@ -38,6 +38,13 @@ const AGENT_CONFIGS = {
     icon: FileText,
     color: 'text-green-400',
     description: 'Brief medical notes and letters'
+  },
+  'tavi-workup': {
+    name: 'TAVI Workup',
+    fullName: 'TAVI Workup Dictation',
+    icon: ClipboardList,
+    color: 'text-red-400',
+    description: 'Pre-procedural workup summary'
   },
   'consultation': {
     name: 'Consultation',

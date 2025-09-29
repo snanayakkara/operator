@@ -11,15 +11,15 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Brain, FileCheck, CheckCircle, Clock, TrendingUp } from 'lucide-react';
-import { 
-  progressVariants,
+import { Search, Brain, FileCheck, CheckCircle, Clock, TrendingUp, BarChart3 as _BarChart3 } from 'lucide-react';
+import {
+  progressVariants as _progressVariants,
   listItemVariants,
-  cardVariants,
+  cardVariants as _cardVariants,
   textVariants,
   staggerContainer,
   withReducedMotion,
-  ANIMATION_DURATIONS,
+  ANIMATION_DURATIONS as _ANIMATION_DURATIONS,
   STAGGER_CONFIGS,
   createSpringTransition,
   SPRING_CONFIGS
@@ -320,7 +320,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
         className="mb-4"
         initial={{ opacity: 0, scaleX: 0 }}
         animate={{ opacity: 1, scaleX: 1 }}
-        transition={{ delay: 0.2, duration: ANIMATION_DURATIONS.normal }}
+        transition={{ delay: 0.2, duration: _ANIMATION_DURATIONS.normal }}
       >
         <div 
           className="w-full bg-gray-200 rounded-full h-1.5"
@@ -427,7 +427,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 4 }}
                       exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: ANIMATION_DURATIONS.quick }}
+                      transition={{ duration: _ANIMATION_DURATIONS.quick }}
                     >
                       <motion.div 
                         className="bg-indigo-600 h-1 rounded-full"
@@ -459,7 +459,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
         className="mt-4 pt-3 border-t border-gray-200"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5, duration: ANIMATION_DURATIONS.quick }}
+        transition={{ delay: 0.5, duration: _ANIMATION_DURATIONS.quick }}
       >
         <div className="flex flex-col items-center space-y-1">
           <p className="text-xs text-gray-500 text-center">

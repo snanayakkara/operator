@@ -216,20 +216,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
 
   // Early return AFTER all hooks to avoid React hook rule violations
   if (!isOpen || sessions.length === 0) {
-    console.log('🔍 SessionDropdown not rendering:', {
-      isOpen,
-      sessionsLength: sessions.length,
-      reason: !isOpen ? 'not open' : 'no sessions'
-    });
     return null;
   }
 
-  console.log('🔍 SessionDropdown rendering with sessions:', {
-    totalSessions: sessions.length,
-    completedSessions: visibleSessions.completed.length,
-    inProgressSessions: visibleSessions.inProgress.length,
-    erroredSessions: visibleSessions.errored.length
-  });
 
   const dropdownContent = (
     <div 
@@ -367,7 +356,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     e.stopPropagation();
                     handleSessionClick(session);
                   }}
-                  onMouseDown={(e) => {
+                  onMouseDown={(_e) => {
                     console.log('🖱️ Completed session mousedown!', session.id);
                   }}
                 >

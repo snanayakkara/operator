@@ -1,119 +1,125 @@
 /**
- * InvestigationSummaryAgent - Phase 3 Migration
- * 
- * Migrated version integrating with Phase 3 MedicalSummaryExtractor and Phase 2 normalization
- * while maintaining full backward compatibility and exact behavior for investigation formatting.
- * 
- * MIGRATION STATUS: Hybrid mode - uses Phase 3 for enhanced extraction, legacy for formatting
+ * InvestigationSummaryAgent - Enhanced with Phase 3 capabilities
+ *
+ * Processes voice-dictated investigation results with enhanced clinical finding extraction,
+ * intelligent medical pattern recognition, quality assessment and validation,
+ * and hybrid processing with legacy fallback for safety.
+ *
+ * Integrates MedicalSummaryExtractor and Phase 2 normalization while maintaining
+ * full backward compatibility and exact behavior for investigation formatting.
  */
 
 import { MedicalAgent } from '../base/MedicalAgent';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { INVESTIGATION_SUMMARY_SYSTEM_PROMPTS, preNormalizeInvestigationText } from './InvestigationSummarySystemPrompts';
-import type { 
-  MedicalContext, 
-  MedicalReport, 
-  ReportSection, 
-  ChatMessage 
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { preNormalizeInvestigationText } from './InvestigationSummarySystemPrompts';
+import { MedicalSummaryExtractor, MedicalSummaryConfig, ClinicalFocusArea } from '@/utils/text-extraction/MedicalSummaryExtractor';
+import { preNormalizeMedicalText } from '@/utils/medical-text/Phase2TextNormalizer';
+import type {
+  MedicalContext,
+  MedicalReport,
+  ReportSection,
+  ChatMessage
 } from '@/types/medical.types';
 
-// Phase 3 imports
-import { medicalSummaryExtractor, type MedicalSummaryConfig, type ClinicalFocusArea } from '@/utils/text-extraction/MedicalSummaryExtractor';
-import { medicalTextNormalizer } from '@/utils/medical-text/MedicalTextNormalizer';
-import { logger } from '@/utils/Logger';
-import { recordConsolidationBenchmark } from '@/utils/performance/ConsolidationMetrics';
-
 /**
- * Phase 3 Migrated Investigation Summary Agent
- * High consolidation potential due to intensive pattern processing and medical terminology extraction
+ * Enhanced Investigation Summary Agent with comprehensive clinical analysis
  */
-export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
+export class InvestigationSummaryAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
-  
-  private readonly enablePhase3: boolean = true; // Phase 3 processing enabled
-  private readonly fallbackToLegacy: boolean = false; // Phase 3 is stable, no fallback needed
-  private readonly enablePhase2Normalization: boolean = true; // Use Phase 2 for normalization
+  private systemPromptInitialized = false;
+  private medicalSummaryExtractor: MedicalSummaryExtractor;
+
+  private readonly enableEnhanced: boolean = true;
+  private readonly fallbackToLegacy: boolean = false;
+  private readonly enablePhase2Normalization: boolean = true;
 
   constructor() {
     super(
-      'Investigation Summary Agent (Phase 3)',
+      'Investigation Summary Agent',
       'Medical Investigation Documentation',
-      'Phase 3 migrated agent with unified summary extraction and enhanced investigation processing',
+      'Enhanced agent with unified summary extraction and comprehensive investigation processing',
       'investigation-summary',
-      INVESTIGATION_SUMMARY_SYSTEM_PROMPTS.primary
+      '' // Will be loaded dynamically
     );
-    
+
     this.lmStudioService = LMStudioService.getInstance();
-    
-    logger.info('InvestigationSummaryAgent Phase 3 initialized', {
-      enablePhase3: this.enablePhase3,
+    this.medicalSummaryExtractor = MedicalSummaryExtractor.getInstance();
+
+    console.log('InvestigationSummaryAgent enhanced initialized', {
+      enableEnhanced: this.enableEnhanced,
       enablePhase2: this.enablePhase2Normalization,
       fallbackEnabled: this.fallbackToLegacy
     });
   }
 
-  async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
-    const startTime = Date.now();
-    
-    logger.info('Starting InvestigationSummary Phase 3 processing', {
-      inputLength: input.length,
-      enablePhase3: this.enablePhase3,
-      enablePhase2: this.enablePhase2Normalization
-    });
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
 
     try {
-      // Phase 3: Try consolidated approach first
-      if (this.enablePhase3) {
-        const phase3Result = await this.processWithPhase3(input, context);
-        if (phase3Result) {
-          logger.info('InvestigationSummary Phase 3 processing successful', {
-            processingTime: Date.now() - startTime
-          });
-          return phase3Result;
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('investigation-summary', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ InvestigationSummaryAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a medical investigation summary specialist formatting voice-dictated investigation results.'; // Fallback
+    }
+  }
+
+  async process(input: string, _context?: MedicalContext): Promise<MedicalReport> {
+    await this.initializeSystemPrompt();
+
+    const startTime = Date.now();
+
+    console.log('🔬 InvestigationSummaryAgent processing input:', input?.substring(0, 100) + '...');
+
+    try {
+      // Enhanced processing attempt
+      if (this.enableEnhanced) {
+        const enhancedResult = await this.processWithEnhancedAnalysis(input, _context);
+        if (enhancedResult) {
+          const processingTime = Date.now() - startTime;
+          console.log(`✅ InvestigationSummaryAgent completed with enhanced processing in ${processingTime}ms`);
+          return enhancedResult;
         }
       }
 
       // Fallback to legacy processing
       if (this.fallbackToLegacy) {
-        logger.warn('InvestigationSummary falling back to legacy processing', {
-          reason: this.enablePhase3 ? 'Phase 3 failed' : 'Phase 3 disabled'
-        });
-        return await this.processWithLegacy(input, context);
+        console.log('📋 InvestigationSummaryAgent falling back to legacy processing');
+        return await this.processWithLegacy(input, _context);
       }
 
-      throw new Error('Both Phase 3 and legacy processing failed');
+      throw new Error('Both enhanced and legacy processing failed');
 
     } catch (error) {
-      logger.error('InvestigationSummary processing failed completely', error instanceof Error ? error : new Error(String(error)));
+      console.error('❌ InvestigationSummaryAgent processing failed completely:', error);
       return this.createErrorReport(input, error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
   /**
-   * Process with Phase 3 consolidated approach
+   * Enhanced processing with intelligent clinical finding extraction
    */
-  private async processWithPhase3(input: string, context?: MedicalContext): Promise<MedicalReport | null> {
-    const phase3StartTime = performance.now();
+  private async processWithEnhancedAnalysis(input: string, _context?: MedicalContext): Promise<MedicalReport | null> {
+    const enhancedStartTime = performance.now();
 
     try {
-      logger.debug('Phase 3 InvestigationSummary processing started', {
-        inputLength: input.length
-      });
+      console.log('🧠 Starting enhanced investigation processing');
 
       // Step 1: Enhanced normalization using Phase 2 + legacy
       const normalizedInput = await this.enhancedNormalization(input);
-      
-      // Step 2: Extract clinical findings using Phase 3 system
-      const summaryResult = await this.extractInvestigationFindings(normalizedInput, context);
-      
+
+      // Step 2: Extract clinical findings using enhanced system
+      const summaryResult = await this.extractInvestigationFindings(normalizedInput, _context);
+
       // Step 3: Generate structured investigation format
-      const structuredFormat = await this.generateStructuredInvestigationFormat(normalizedInput, summaryResult, context);
-      
+      const structuredFormat = await this.generateStructuredInvestigationFormat(normalizedInput, summaryResult, _context);
+
       // Step 4: Validate investigation format compliance
       const formatValidation = this.validateInvestigationFormat(structuredFormat, summaryResult);
-      
+
       if (!formatValidation.isValid) {
-        logger.warn('Phase 3 investigation format validation failed', {
+        console.warn('Enhanced investigation format validation failed', {
           issues: formatValidation.issues,
           confidence: formatValidation.confidence
         });
@@ -122,32 +128,29 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
 
       // Step 5: Parse structured sections using enhanced logic
       const sections = this.parseResponseEnhanced(structuredFormat, summaryResult);
-      
+
       const endTime = performance.now();
-      const processingTime = endTime - phase3StartTime;
+      const processingTime = endTime - enhancedStartTime;
 
-      // Record Phase 3 performance
-      recordConsolidationBenchmark('investigation_summary_phase3', processingTime, processingTime, 0);
-
-      // Create enhanced report with Phase 3 metadata
+      // Create enhanced report
       const report = this.createReport(
         structuredFormat.trim(),
         sections,
-        context,
+        _context,
         Math.round(processingTime),
         formatValidation.confidence,
         formatValidation.warnings,
         formatValidation.issues.length > 0 ? formatValidation.issues : undefined
       );
 
-      // Add Phase 3 metadata
+      // Add enhanced metadata
       report.metadata = {
         ...report.metadata,
-        phase3Processing: {
+        enhancedProcessing: {
           summaryExtraction: summaryResult.extractionStats,
           qualityMetrics: summaryResult.qualityMetrics,
           clinicalFindings: summaryResult.findings.length,
-          processingMethod: 'Phase3_Investigation_Consolidation',
+          processingMethod: 'Enhanced_Investigation_Processing',
           normalizedInputLength: normalizedInput.length,
           investigationTypes: this.extractInvestigationTypes(structuredFormat),
           medicalCodes: this.extractMedicalCodes(structuredFormat)
@@ -156,7 +159,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
         modelUsed: MODEL_CONFIG.QUICK_MODEL
       };
 
-      logger.info('Phase 3 InvestigationSummary processing completed successfully', {
+      console.log('✅ Enhanced InvestigationSummary processing completed successfully', {
         processingTime,
         confidence: formatValidation.confidence,
         clinicalFindings: summaryResult.findings.length,
@@ -166,7 +169,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       return report;
 
     } catch (error) {
-      logger.error('Phase 3 InvestigationSummary processing failed', error instanceof Error ? error : new Error(String(error)));
+      console.error('❌ Enhanced InvestigationSummary processing failed:', error);
       return null; // Trigger fallback
     }
   }
@@ -178,58 +181,31 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
     try {
       let normalizedText = input;
 
-      logger.debug('Enhanced normalization started', {
-        originalText: input,
-        originalLength: input.length
-      });
+      console.log('📝 Enhanced normalization started');
 
       // Step 1: Apply Phase 2 normalization first
       if (this.enablePhase2Normalization) {
-        const phase2Result = await medicalTextNormalizer.normalize(input, {
-          agentType: 'investigation-summary',
-          mode: 'investigation',
-          enableCrossAgentPatterns: true,
-          australianSpelling: true,
-          strictMedicalTerms: true,
-          preserveUnits: true
-        });
-        normalizedText = phase2Result.normalizedText;
-
-        logger.debug('Phase 2 normalization completed', {
-          originalText: input,
-          phase2Text: normalizedText,
-          originalLength: input.length,
-          normalizedLength: normalizedText.length,
-          patternsApplied: phase2Result.appliedPatterns.length,
-          confidence: phase2Result.confidence,
-          appliedPatterns: phase2Result.appliedPatterns
-        });
+        normalizedText = preNormalizeMedicalText(input);
+        console.log('📝 Phase 2 normalization completed');
       }
 
       // Step 2: Apply investigation-specific legacy normalization
       const investigationNormalized = preNormalizeInvestigationText(normalizedText);
 
-      logger.debug('Enhanced normalization completed', {
-        originalText: input,
-        phase2Text: normalizedText,
-        finalText: investigationNormalized,
-        originalLength: input.length,
-        phase2Length: normalizedText.length,
-        finalLength: investigationNormalized.length
-      });
+      console.log('📝 Enhanced normalization completed');
 
       return investigationNormalized;
 
     } catch (error) {
-      logger.warn('Enhanced normalization failed, using legacy only', { error: error instanceof Error ? error.message : String(error) });
+      console.warn('Enhanced normalization failed, using legacy only:', error);
       return preNormalizeInvestigationText(input);
     }
   }
 
   /**
-   * Extract investigation findings using Phase 3 system
+   * Extract investigation findings using enhanced system
    */
-  private async extractInvestigationFindings(normalizedInput: string, context?: MedicalContext) {
+  private async extractInvestigationFindings(normalizedInput: string, _context?: MedicalContext) {
     const summaryConfig: MedicalSummaryConfig = {
       agentType: 'investigation-summary',
       summaryLength: 'standard',
@@ -240,9 +216,9 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       australianCompliance: true
     };
 
-    const summaryResult = await medicalSummaryExtractor.extractSummary(normalizedInput, summaryConfig);
+    const summaryResult = await this.medicalSummaryExtractor.extractSummary(normalizedInput, summaryConfig);
 
-    logger.debug('Phase 3 investigation findings extraction completed', {
+    console.log('🔍 Enhanced investigation findings extraction completed', {
       findingsCount: summaryResult.findings.length,
       investigationFindings: summaryResult.findings.filter(f => f.category === 'investigations').length,
       anatomyFindings: summaryResult.findings.filter(f => f.category === 'anatomy').length,
@@ -279,30 +255,30 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
   }
 
   /**
-   * Generate structured investigation format using Phase 3 insights
+   * Generate structured investigation format using enhanced insights
    */
   private async generateStructuredInvestigationFormat(
     normalizedInput: string,
     summaryResult: any,
-    context?: MedicalContext
+    _context?: MedicalContext
   ): Promise<string> {
-    
-    // Build enhanced prompt with Phase 3 clinical insights
+
+    // Build enhanced prompt with clinical insights
     let enhancedPrompt = this.systemPrompt;
 
     // Add investigation-specific findings context
     if (summaryResult.findings.length > 0) {
-      const investigationFindings = summaryResult.findings.filter((f: any) => 
+      const investigationFindings = summaryResult.findings.filter((f: any) =>
         f.category === 'investigations' || f.category === 'anatomy' || f.category === 'hemodynamics'
       );
-      
+
       if (investigationFindings.length > 0) {
         const keyFindings = investigationFindings
           .filter((f: any) => f.confidence >= 75)
           .slice(0, 5)
           .map((f: any) => `${f.finding}${f.measurement ? ` (${f.measurement.value}${f.measurement.unit || ''})` : ''}`)
           .join(', ');
-        
+
         if (keyFindings) {
           enhancedPrompt += `\n\nKey clinical findings identified: ${keyFindings}. Ensure these are properly formatted in the investigation summary.`;
         }
@@ -315,13 +291,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       enhancedPrompt += `\n\nDetected investigation types: ${detectedTypes.join(', ')}. Use appropriate medical abbreviations and formatting.`;
     }
 
-    logger.debug('Generating structured investigation format', {
-      investigationTypes: detectedTypes,
-      keyFindings: summaryResult.findings.length,
-      enhancedPromptLength: enhancedPrompt.length,
-      normalizedInput: normalizedInput,
-      enhancedPrompt: enhancedPrompt.substring(0, 500) + '...' // First 500 chars for debugging
-    });
+    console.log('🤖 Generating structured investigation format with enhanced context');
 
     // Generate structured format using enhanced prompt
     const response = await this.lmStudioService.processWithAgent(
@@ -330,27 +300,16 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       'investigation-summary'
     );
 
-    logger.debug('LLM response received', {
-      rawResponse: response,
-      responseLength: response.length,
-      normalizedInputUsed: normalizedInput
-    });
-
     // Apply post-processing abbreviation enforcement
     const abbreviationEnforcedResponse = this.enforceAbbreviations(response);
 
-    logger.debug('Post-processing abbreviation enforcement applied', {
-      originalResponse: response,
-      enforcedResponse: abbreviationEnforcedResponse,
-      changesApplied: response !== abbreviationEnforcedResponse
-    });
+    console.log('📝 Post-processing abbreviation enforcement applied');
 
     return abbreviationEnforcedResponse;
   }
 
   /**
    * Enforce critical abbreviations in post-processing
-   * This acts as a final safety net to ensure abbreviations are applied
    */
   private enforceAbbreviations(response: string): string {
     let enforcedResponse = response;
@@ -380,6 +339,20 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       { pattern: /\btricuspid valve\b/gi, replacement: 'TV' },
       { pattern: /\bpulmonary valve\b/gi, replacement: 'PV' },
 
+      // Coronary anatomy - fix "osteo" to "ostial"
+      { pattern: /\bosteo D1\b/gi, replacement: 'ostial D1' },
+      { pattern: /\bosteo (\w+)\b/gi, replacement: 'ostial $1' },
+
+      // Stent sizing - fix format like "4x0.0 by 20" to "4.0x20"
+      { pattern: /\b(\d+)x0\.0\s+by\s+(\d+)\b/gi, replacement: '$1.0x$2' },
+      { pattern: /\b(\d+)\.(\d+)\s*x\s*(\d+)\s+by\s+(\d+)\b/gi, replacement: '$1.$2x$4' },
+
+      // Device abbreviations
+      { pattern: /\bDrug Eluding Stent\b/gi, replacement: 'DES' },
+      { pattern: /\bDrug Eluting Stent\b/gi, replacement: 'DES' },
+      { pattern: /\bSynergy Drug Eluding Stent\b/gi, replacement: 'Synergy DES' },
+      { pattern: /\bSynergy Drug Eluting Stent\b/gi, replacement: 'Synergy DES' },
+
       // Units - add mmHg to gradients without units
       { pattern: /\bmean gradient (\d+)(?!\s*(mmHg|mm Hg|mmhg))/gi, replacement: 'mean gradient $1mmHg' },
       { pattern: /\bpeak gradient (\d+)(?!\s*(mmHg|mm Hg|mmhg))/gi, replacement: 'peak gradient $1mmHg' },
@@ -389,15 +362,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
 
     // Apply each rule
     for (const rule of abbreviationRules) {
-      const originalResponse = enforcedResponse;
       enforcedResponse = enforcedResponse.replace(rule.pattern, rule.replacement);
-
-      if (originalResponse !== enforcedResponse) {
-        logger.debug(`Applied abbreviation rule: ${rule.pattern} → ${rule.replacement}`, {
-          before: originalResponse,
-          after: enforcedResponse
-        });
-      }
     }
 
     return enforcedResponse;
@@ -440,7 +405,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
     structuredFormat: string,
     summaryResult: any
   ): { isValid: boolean; confidence: number; issues: string[]; warnings: string[] } {
-    
+
     const issues: string[] = [];
     const warnings: string[] = [];
     let confidence = summaryResult.qualityMetrics.overallQuality;
@@ -470,7 +435,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
     const medicalTerms = ['TTE', 'CTCA', 'LAD', 'LV', 'RV', 'EF', 'MPG', 'SCAD', 'Ca score', 'METs'];
     const foundTerms = medicalTerms.filter(term => trimmedFormat.includes(term));
     const originalTerms = medicalTerms.filter(term => summaryResult.originalText.toLowerCase().includes(term.toLowerCase()));
-    
+
     if (originalTerms.length > 0) {
       const preservationRate = foundTerms.length / originalTerms.length;
       if (preservationRate < 0.8) {
@@ -494,7 +459,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
 
     const isValid = confidence >= 50 && !issues.some(i => i.includes('parsing error') || i.includes('too short'));
 
-    logger.debug('Phase 3 investigation format validation completed', {
+    console.log('🔍 Enhanced investigation format validation completed', {
       isValid,
       confidence,
       issues: issues.length,
@@ -507,14 +472,14 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
   }
 
   /**
-   * Parse response with enhanced Phase 3 insights
+   * Parse response with enhanced insights
    */
   private parseResponseEnhanced(structuredFormat: string, summaryResult: any): ReportSection[] {
     const cleanResponse = structuredFormat.trim();
-    
+
     // Extract investigation type and date if possible
     const investigationMatch = cleanResponse.match(/^([^(]+)\s*\(([^)]+)\):\s*(.+)$/);
-    
+
     const sections: ReportSection[] = [
       {
         title: 'Investigation Summary',
@@ -526,7 +491,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
 
     if (investigationMatch) {
       const [, investigationType, dateStr, findings] = investigationMatch;
-      
+
       sections.push(
         {
           title: 'Investigation Type',
@@ -549,7 +514,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       );
     }
 
-    // Add Phase 3 clinical findings if available
+    // Add enhanced clinical findings if available
     if (summaryResult.findings.length > 0) {
       const significantFindings = summaryResult.findings
         .filter((f: any) => f.confidence >= 70)
@@ -558,7 +523,7 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       if (significantFindings.length > 0) {
         sections.push({
           title: 'Clinical Findings',
-          content: significantFindings.map((f: any) => 
+          content: significantFindings.map((f: any) =>
             `${f.finding}${f.severity ? ` (${f.severity})` : ''}${f.measurement ? ` - ${f.measurement.value}${f.measurement.unit || ''}` : ''}`
           ).join('; '),
           type: 'structured',
@@ -580,14 +545,14 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
   /**
    * Legacy processing method (preserved for fallback)
    */
-  private async processWithLegacy(input: string, context?: MedicalContext): Promise<MedicalReport> {
-    logger.info('Using legacy InvestigationSummary processing');
+  private async processWithLegacy(input: string, _context?: MedicalContext): Promise<MedicalReport> {
+    console.log('📋 Using legacy InvestigationSummary processing');
 
     const startTime = Date.now();
 
     // Apply legacy normalization
     const normalizedInput = preNormalizeInvestigationText(input);
-    
+
     // Use legacy LLM processing
     const response = await this.lmStudioService.processWithAgent(
       this.systemPrompt,
@@ -595,14 +560,10 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
       'investigation-summary'
     );
 
-    // Apply post-processing abbreviation enforcement (same as Phase 3)
+    // Apply post-processing abbreviation enforcement (same as enhanced)
     const abbreviationEnforcedResponse = this.enforceAbbreviations(response);
 
-    logger.debug('Legacy processing with abbreviation enforcement', {
-      originalResponse: response,
-      enforcedResponse: abbreviationEnforcedResponse,
-      changesApplied: response !== abbreviationEnforcedResponse
-    });
+    console.log('📝 Legacy processing with abbreviation enforcement completed');
 
     // Check for error response
     const trimmedResponse = abbreviationEnforcedResponse.trim();
@@ -612,14 +573,14 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
     }
 
     // Parse using legacy method
-    const sections = this.parseResponse(abbreviationEnforcedResponse, context);
+    const sections = this.parseResponse(abbreviationEnforcedResponse, _context);
 
     const processingTime = Date.now() - startTime;
 
     const report = this.createReport(
       abbreviationEnforcedResponse.trim(),
       sections,
-      context,
+      _context,
       processingTime,
       this.assessConfidence(input, abbreviationEnforcedResponse)
     );
@@ -634,13 +595,21 @@ export class InvestigationSummaryAgentPhase3 extends MedicalAgent {
   }
 
   // ===== PRESERVED LEGACY METHODS =====
-  // All legacy methods preserved exactly for backward compatibility
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
+
+    let systemContent = this.systemPrompt;
+
+    // Add enhanced context if available
+    if (_context?.enhancedProcessing) {
+      systemContent += '\n\nEnhanced Processing: Focus on clinical accuracy, proper investigation formatting, and preservation of medical terminology.';
+    }
+
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: this.systemPrompt
+        content: systemContent
       },
       {
         role: 'user',
@@ -655,14 +624,14 @@ Remember to maintain the exact format: "INVESTIGATION (DD MMM YYYY): comma-separ
     return messages;
   }
 
-  protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
+  protected parseResponse(response: string, __context?: MedicalContext): ReportSection[] {
     const cleanResponse = response.trim();
-    
+
     const investigationMatch = cleanResponse.match(/^([^(]+)\s*\([^)]+\):\s*(.+)$/);
-    
+
     if (investigationMatch) {
       const [, investigationType, findings] = investigationMatch;
-      
+
       return [
         {
           title: 'Investigation Summary',
@@ -697,25 +666,25 @@ Remember to maintain the exact format: "INVESTIGATION (DD MMM YYYY): comma-separ
 
   private assessConfidence(input: string, output: string): number {
     let confidence = 0.5;
-    
+
     if (output.match(/^[^(]+\s*\([^)]+\):\s*[^,]+(,\s*[^,]+)*$/)) {
       confidence += 0.3;
     }
-    
+
     const medicalTerms = ['TTE', 'CTCA', 'LAD', 'LV', 'RV', 'EF', 'MPG', 'SCAD', 'Ca score', 'METs'];
     const inputTerms = medicalTerms.filter(term => input.toLowerCase().includes(term.toLowerCase()));
     const outputTerms = medicalTerms.filter(term => output.includes(term));
-    
+
     if (inputTerms.length > 0) {
       confidence += (outputTerms.length / inputTerms.length) * 0.2;
     }
-    
+
     return Math.min(confidence, 1.0);
   }
 
   private extractMedicalCodes(response: string): any[] {
     const codes = [];
-    
+
     if (response.includes('TTE')) {
       codes.push({ code: '93303', description: 'Transthoracic Echocardiogram' });
     }
@@ -728,7 +697,7 @@ Remember to maintain the exact format: "INVESTIGATION (DD MMM YYYY): comma-separ
     if (response.includes('Stress')) {
       codes.push({ code: '93017', description: 'Stress Test' });
     }
-    
+
     return codes;
   }
 
@@ -762,6 +731,3 @@ Remember to maintain the exact format: "INVESTIGATION (DD MMM YYYY): comma-separ
     };
   }
 }
-
-// Export for compatibility
-export { InvestigationSummaryAgentPhase3 as InvestigationSummaryAgent };

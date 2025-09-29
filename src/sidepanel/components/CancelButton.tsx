@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Square, Trash2 } from 'lucide-react';
+import { X, Square as _Square, Trash2 } from 'lucide-react';
 import type { ProcessingStatus } from '@/types/medical.types';
 
 interface CancelButtonProps {

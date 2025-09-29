@@ -7,8 +7,8 @@
  */
 
 import { medicalTextNormalizer, type NormalizationConfig } from './MedicalTextNormalizer';
-import { cardiologyRegistry } from './CardiologyPatternRegistry';
-import { MedicalPatternService } from './MedicalPatternService';
+import { cardiologyRegistry as _cardiologyRegistry } from './CardiologyPatternRegistry';
+import { MedicalPatternService as _MedicalPatternService } from './MedicalPatternService';
 import type { AgentType } from '@/types/medical.types';
 import { logger } from '@/utils/Logger';
 import { recordConsolidationBenchmark } from '@/utils/performance/ConsolidationMetrics';
@@ -156,7 +156,7 @@ export class AgentPatternIntegrationAdapter {
   private async processWithHybridMethod(
     agentType: AgentType,
     textInput: string,
-    config: AgentIntegrationConfig
+    _config: AgentIntegrationConfig
   ): Promise<{ result: string; migrationData: PatternMigrationResult }> {
     const startTime = performance.now();
 
@@ -214,7 +214,7 @@ export class AgentPatternIntegrationAdapter {
   private async processWithConsolidatedMethod(
     agentType: AgentType,
     textInput: string,
-    config: AgentIntegrationConfig
+    _config: AgentIntegrationConfig
   ): Promise<{ result: string; migrationData: PatternMigrationResult }> {
     const startTime = performance.now();
 
@@ -528,7 +528,7 @@ export class LegacyMethodIntegration {
   static async integrateMedicalTextCleaning(
     agentType: AgentType,
     input: string,
-    migrationMode: 'legacy' | 'hybrid' | 'consolidated' = 'hybrid'
+    _migrationMode: 'legacy' | 'hybrid' | 'consolidated' = 'hybrid'
   ): Promise<string> {
     // Use normalizer for medical text cleaning
     const result = await medicalTextNormalizer.normalize(input, {

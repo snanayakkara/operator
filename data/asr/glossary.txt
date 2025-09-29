@@ -1,2 +1,14 @@
 # Medical terms for Whisper prompt seeding
-# One term per line, automatically maintained by optimization system
+# One term per line, automatically maintained by optimization systemannulus
+annulus perimeter
+sinus of Valsalva
+left main height
+right coronary height
+Mosteller
+STS score
+EuroSCORE II
+dimensionless index
+coplanar
+Navitor
+Sapien
+Evolut

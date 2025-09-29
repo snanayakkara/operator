@@ -296,7 +296,7 @@ export class AudioOptimizationService {
   /**
    * Get compression recommendations based on audio size and duration
    */
-  getCompressionRecommendations(audioBlob: Blob, durationSeconds: number): AudioCompressionOptions {
+  getCompressionRecommendations(audioBlob: Blob, _durationSeconds: number): AudioCompressionOptions {
     const sizeMB = audioBlob.size / (1024 * 1024);
     
     if (sizeMB > 10) {

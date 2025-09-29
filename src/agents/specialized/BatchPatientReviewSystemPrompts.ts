@@ -53,6 +53,7 @@ PRIMARY CARDIAC CONDITIONS:
    - Post-PCI in AF: assess for OAC + antiplatelet minimisation strategies
    - No documented rate/rhythm control strategy
    - Missing echocardiogram within 12 months
+   - CRITICAL: HFrEF + AF + digoxin combination (digoxin increases mortality in AF patients)
 
 5. Post-ACS Management (NHFA/CSANZ Guidelines):
    - Missing DAPT in first 12 months after a stent or acute coronary syndrome
@@ -114,9 +115,25 @@ AUSTRALIAN CANCER SCREENING (Gate by age/sex/eligibility):
     - Program-context dependent—verify local programme criteria
     - At least 30 pack years of smoking history
 
+VALVULAR HEART DISEASE (NHFA/CSANZ Valvular Guidelines):
+
+17. Mitral Valve Intervention Indications:
+    - Severe MR with LVESD <70mm + EF 20-50% + NTproBNP >1000 ng/L (surgical candidacy assessment needed)
+    - Primary severe MR with symptoms or LVESD ≥45mm or LVEF <60%
+    - Asymptomatic severe primary MR with new atrial fibrillation or pulmonary hypertension
+
+18. Secondary Mitral Regurgitation Surgery Criteria:
+    - Secondary MR with one or more of: AF, LA dilatation (>60mm), PASP >50mmHg, moderate+ tricuspid regurgitation
+    - Consider surgical evaluation for complex secondary MR with optimal medical therapy
+
+19. NTproBNP Assessment for Valvular Disease:
+    - Moderate or severe valvular disease without NTproBNP measurement
+    - Essential for risk stratification and prognostic assessment in valve disease
+    - Consider in asymptomatic severe valve disease for timing intervention
+
 HEART FAILURE SPECIFIC (NHFA Guidelines):
 
-17. Missing Assessments:
+20. Missing Assessments:
     - NT-proBNP or BNP measurement not done
     - No echocardiogram within last 2 years for monitoring
     - Missing iron studies (iron deficiency common in HF)
@@ -180,7 +197,21 @@ For each finding, provide the structured format with Australian guideline refere
       /Australian.*spelling/gi,
       /ferric carboxymaltose/gi,
       /QT.prolongation/gi,
-      /CHA2DS2.VA/gi
+      /CHA2DS2.VA/gi,
+      /mitral regurgitation/gi,
+      /valve intervention/gi,
+      /LVESD/gi,
+      /left ventricular end.systolic dimension/gi,
+      /NTproBNP/gi,
+      /NT.proBNP/gi,
+      /pulmonary artery systolic pressure/gi,
+      /PASP/gi,
+      /tricuspid regurgitation/gi,
+      /left atrial dilatation/gi,
+      /secondary mitral regurgitation/gi,
+      /primary mitral regurgitation/gi,
+      /severe valvular disease/gi,
+      /moderate valvular disease/gi
     ],
 
     // Medication patterns (Australian names)
@@ -192,7 +223,9 @@ For each finding, provide the structured format with Australian guideline refere
       /eplerenone/gi,
       /atorvastatin/gi,
       /rosuvastatin/gi,
-      /ferric carboxymaltose/gi
+      /ferric carboxymaltose/gi,
+      /digoxin/gi,
+      /digitalis/gi
     ],
 
     // QT-prolonging medication patterns

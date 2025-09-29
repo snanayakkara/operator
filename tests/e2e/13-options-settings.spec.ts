@@ -36,7 +36,9 @@ async function getExtensionIdFromContext(context: import('@playwright/test').Bro
           await page.waitForTimeout(1000);
         }
       }
-    } catch {}
+    } catch {
+      // Ignore errors when trying to get extension ID
+    }
 
     // Find the extension card by visible name
     const card = page.locator('.extension-list-item').filter({ hasText: 'Operator' });
@@ -72,7 +74,9 @@ async function openOptionsPage(context: import('@playwright/test').BrowserContex
   try {
     await page.goto(`${base}/src/options/index.html`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     return page;
-  } catch {}
+  } catch {
+    // Fall through to extension URL fallback
+  }
 
   // Fallback: try through the loaded extension
   try {
@@ -82,7 +86,9 @@ async function openOptionsPage(context: import('@playwright/test').BrowserContex
       timeout: 30_000,
     });
     return page;
-  } catch {}
+  } catch {
+    // Unable to load options page via extension URL
+  }
 
   // Last resort: file URL (may not load assets with absolute paths)
   const path = await import('path');

@@ -89,18 +89,21 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
     // Date filter
     const now = Date.now();
     switch (dateRange) {
-      case 'today':
+      case 'today': {
         const todayStart = new Date().setHours(0, 0, 0, 0);
         filtered = filtered.filter(correction => correction.timestamp >= todayStart);
         break;
-      case 'week':
+      }
+      case 'week': {
         const weekAgo = now - (7 * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(correction => correction.timestamp >= weekAgo);
         break;
-      case 'month':
+      }
+      case 'month': {
         const monthAgo = now - (30 * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(correction => correction.timestamp >= monthAgo);
         break;
+      }
     }
 
     setFilteredCorrections(filtered);

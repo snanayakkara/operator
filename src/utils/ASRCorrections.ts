@@ -212,7 +212,7 @@ export const ASRCorrections: ASRCorrectionCategories = {
     // Medical terminology: cardiac wall regions
     [/\banteo[-\s]?receptal\b/gi, 'anteroseptal'],
     // Capitalization: medical descriptors should be lowercase
-    [/\antiraceptal\s+/g, 'anteroseptal '],
+    [/\bantiraceptal\s+/g, 'anteroseptal '],
     [/\bSubtle\s+/g, 'subtle '],
     [/\bbiventricular\b/gi, 'BiV'],
     [/\bleft\s+atri(?:um|al)\b/gi, 'LA'],

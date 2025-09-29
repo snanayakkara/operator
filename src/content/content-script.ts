@@ -62,7 +62,7 @@ class ContentScriptHandler {
 
   private detectEMRSystem(): EMRSystem | null {
     const hostname = window.location.hostname;
-    const url = window.location.href;
+    const _url = window.location.href;
 
     // Xestro EMR
     if (hostname.includes('my.xestro.com')) {
@@ -431,7 +431,7 @@ class ContentScriptHandler {
           sendResponse({ success: true });
           break;
 
-        case 'extract-patient-data':
+        case 'extract-patient-data': {
           const patientData = this.extractPatientData();
           if (patientData) {
             sendResponse({ success: true, data: patientData });
@@ -439,6 +439,7 @@ class ContentScriptHandler {
             sendResponse({ success: false, error: 'No patient data found' });
           }
           break;
+        }
 
         case 'quick-letter':
           await this.openQuickLetter();
@@ -683,13 +684,15 @@ class ContentScriptHandler {
           throw new Error(`Unknown field type: ${fieldType}`);
         }
 
-        const field = this.emrSystem.fields[fieldType];
-        const element = await this.findElement(field.selector, 5000);
+        {
+          const field = this.emrSystem.fields[fieldType];
+          const element = await this.findElement(field.selector, 5000);
 
-        if (element) {
-          this.focusElement(element);
-        } else {
-          throw new Error(`Field ${fieldType} not found`);
+          if (element) {
+            this.focusElement(element);
+          } else {
+            throw new Error(`Field ${fieldType} not found`);
+          }
         }
         break;
     }
@@ -1025,14 +1028,11 @@ class ContentScriptHandler {
     console.log('⏳ No textarea found immediately, waiting for dynamic content...');
     
     return new Promise<HTMLTextAreaElement | null>((resolve) => {
-      let timeoutId: ReturnType<typeof setTimeout>;
-      let observer: MutationObserver;
-      
       const cleanup = () => {
         if (timeoutId) clearTimeout(timeoutId);
         if (observer) observer.disconnect();
       };
-      
+
       const checkForTextarea = () => {
         // Prefer AddNoteArea if it appears dynamically
         const dynamicAddNoteArea = document.getElementById('AddNoteArea') as HTMLTextAreaElement | null;
@@ -1053,15 +1053,15 @@ class ContentScriptHandler {
             return;
           }
         }
-        
+
         // Try any visible textarea
         const allTextareas = document.querySelectorAll('textarea');
         for (let i = 0; i < allTextareas.length; i++) {
           const textarea = allTextareas[i] as HTMLTextAreaElement;
-          if (textarea.offsetParent !== null && 
-              !textarea.readOnly && 
+          if (textarea.offsetParent !== null &&
+              !textarea.readOnly &&
               !textarea.disabled &&
-              textarea.offsetWidth > 50 && 
+              textarea.offsetWidth > 50 &&
               textarea.offsetHeight > 30) {
             console.log(`✅ Found usable textarea dynamically at index ${i + 1}`);
             cleanup();
@@ -1070,9 +1070,9 @@ class ContentScriptHandler {
           }
         }
       };
-      
+
       // Set up MutationObserver to watch for new elements
-      observer = new MutationObserver((mutations) => {
+      const observer = new MutationObserver((mutations) => {
         let hasNewTextarea = false;
         mutations.forEach((mutation) => {
           if (mutation.type === 'childList') {
@@ -1102,7 +1102,7 @@ class ContentScriptHandler {
       const intervalId = setInterval(checkForTextarea, 500);
       
       // Set timeout to avoid waiting forever
-      timeoutId = setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         cleanup();
         clearInterval(intervalId);
         console.log('❌ Timeout waiting for textarea');
@@ -1723,7 +1723,7 @@ class ContentScriptHandler {
       const patientDetailDivs = Array.from(document.querySelectorAll('div')).filter(div => {
         // Look for divs that contain both patient name and pull-right with ID
         const textContent = div.textContent || '';
-        const hasPatientName = /^(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/.test(textContent.trim());
+        const hasPatientName = /^(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s()]+/.test(textContent.trim());
         const hasPullRight = div.querySelector('.pull-right');
         const hasId = textContent.includes('ID:');
         return hasPatientName && hasPullRight && hasId;
@@ -1866,7 +1866,7 @@ class ContentScriptHandler {
       // Fallback 4: Regex from full text
       if (!patientName) {
         const fullText = contentDiv.textContent || '';
-        const nameMatch = fullText.match(/\b(Mr|Mrs|Ms|Dr|Miss)\s+([A-Za-z\s\(\)]+?)(?=\s*ID:|$)/);
+        const nameMatch = fullText.match(/\b(Mr|Mrs|Ms|Dr|Miss)\s+([A-Za-z\s()]+?)(?=\s*ID:|$)/);
         if (nameMatch) {
           patientName = nameMatch[0].trim();
         }
@@ -1924,11 +1924,11 @@ class ContentScriptHandler {
 
       // Extract contact details from data-allow divs
       const dataAllowDivs = contentDiv.querySelectorAll('div[data-allow="1"]');
-      dataAllowDivs.forEach((div, index) => {
+      dataAllowDivs.forEach((div, _index) => {
         const text = div.textContent?.trim() || '';
         if (text) {
           // Phone number patterns
-          if (/^[\d\s\-\(\)\+]{8,}$/.test(text)) {
+          if (/^[\d\s\-()+]{8,}$/.test(text)) {
             patientData.phone = text;
             console.log('📝 Extracted phone:', patientData.phone);
           }
@@ -1994,7 +1994,7 @@ class ContentScriptHandler {
         }
         
         // Look for name in the same element or parent
-        const nameMatch = text.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/);
+        const nameMatch = text.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s()]+/);
         if (nameMatch) {
           patientData.name = nameMatch[0].trim();
           console.log('📝 Fallback extracted name:', patientData.name);
@@ -2005,7 +2005,7 @@ class ContentScriptHandler {
         const parent = element.parentElement;
         if (parent) {
           const parentText = parent.textContent || '';
-          const parentNameMatch = parentText.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s\(\)]+/);
+          const parentNameMatch = parentText.match(/(Mr|Mrs|Ms|Dr|Miss)\s+[A-Za-z\s()]+/);
           if (parentNameMatch) {
             patientData.name = parentNameMatch[0].trim();
             console.log('📝 Fallback extracted name from parent:', patientData.name);

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { X, Clock, Lightbulb, BookOpen, ChevronDown, ChevronRight, Mic } from 'lucide-react';
+import { X as _X, Clock as _Clock, Lightbulb, BookOpen, ChevronDown, ChevronRight, Mic as _Mic } from 'lucide-react';
 import { getRecordingPrompt, type RecordingPromptSection } from '@/config/recordingPrompts';
 import type { AgentType } from '@/types/medical.types';
 
@@ -37,7 +37,7 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
     }));
   }, []);
 
-  const handleStartRecording = useCallback(() => {
+  const _handleStartRecording = useCallback(() => {
     onStartRecording?.();
     onClose?.();
   }, [onStartRecording, onClose]);

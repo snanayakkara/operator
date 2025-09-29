@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Settings, Server, Mic, Sparkles, TrendingUp, Users, Brain, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, Server, Mic, Sparkles, Users, Brain, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { LMStudioService } from '@/services/LMStudioService';
 import type { ModelStatus } from '@/types/medical.types';
 import { AgentFactory } from '@/services/AgentFactory';
 import { logger } from '@/utils/Logger';
+import { PerformanceMetricsSection } from './PerformanceMetricsSection';
 
 export const DashboardSettings: React.FC = () => {
   const lmStudioService = useMemo(() => LMStudioService.getInstance(), []);
@@ -205,7 +206,8 @@ export const DashboardSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <PerformanceMetricsSection />
     </div>
   );
 };
-

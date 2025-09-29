@@ -5,11 +5,12 @@ export { TAVIAgent } from './TAVIAgent';
 export { AngiogramPCIAgent } from './AngiogramPCIAgent';
 export { QuickLetterAgent } from './QuickLetterAgent';
 export { ConsultationAgent } from './ConsultationAgent';
-export { InvestigationSummaryAgentPhase3 as InvestigationSummaryAgent } from './InvestigationSummaryAgent.Phase3';
+export { InvestigationSummaryAgent } from './InvestigationSummaryAgent';
 export { BackgroundAgent } from './BackgroundAgent';
 export { MedicationAgent } from './MedicationAgent';
 export { BloodsAgent } from './BloodsAgent';
 export { ImagingAgent } from './ImagingAgent';
+export { TAVIWorkupAgent } from './TAVIWorkupAgent';
 
 // Additional agents (implemented)
 export { MTEERAgent } from './MTEERAgent';

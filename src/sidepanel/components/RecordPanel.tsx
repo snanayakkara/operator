@@ -63,7 +63,8 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     isOpen: isExpanded,
     alignment: 'center',
     offset: { x: 0, y: 8 },
-    maxHeight: 400
+    maxHeight: 400,
+    dropdownWidth: 390
   });
 
   const formatTime = (seconds: number): string => {
@@ -295,10 +296,8 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
 
   // Monitor hover events to detect if they're working
   useEffect(() => {
-    let hoverTestTimeout: number;
-
     // After component mounts or props change, test hover functionality after a delay
-    hoverTestTimeout = window.setTimeout(() => {
+    const hoverTestTimeout = window.setTimeout(() => {
       if (!isRecording && !disabled && whisperServerRunning) {
         console.log('🔍 HOVER FUNCTIONALITY CHECK - button should be responsive', {
           componentReady: true,

@@ -1,12 +1,12 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { StopCircle, Mic, MicOff } from 'lucide-react';
-import { 
-  recordingVariants,
-  voiceActivityVariants,
-  cardVariants,
+import { StopCircle, Mic as _Mic, MicOff as _MicOff } from 'lucide-react';
+import {
+  recordingVariants as _recordingVariants,
+  voiceActivityVariants as _voiceActivityVariants,
+  cardVariants as _cardVariants,
   withReducedMotion,
-  ANIMATION_DURATIONS
+  ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 
 interface LiveAudioVisualizerProps {
@@ -110,7 +110,7 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
   };
 
   // Calculate VU meter angle (0 to 180 degrees)
-  const vuAngle = Math.min(voiceActivityLevel * 180, 180);
+  const _vuAngle = Math.min(voiceActivityLevel * 180, 180);
 
   // Create symmetrical frequency data for center-out visualization
   const createSymmetricalFrequencyData = (data: number[]) => {
@@ -124,26 +124,11 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
   // Get symmetrical frequency data
   const symmetricalFrequencyData = createSymmetricalFrequencyData(frequencyData);
 
-  // Debug logging for frequency data
-  React.useEffect(() => {
-    if (isRecording && frequencyData.length > 0 && Math.random() < 0.1) {
-      const maxFreq = Math.max(...frequencyData);
-      const avgFreq = frequencyData.reduce((sum, f) => sum + f, 0) / frequencyData.length;
-      console.log('📊 LiveAudioVisualizer Debug:', {
-        originalFreqData: frequencyData.length,
-        symmetricalLength: symmetricalFrequencyData.length,
-        maxOriginal: maxFreq.toFixed(3),
-        avgOriginal: avgFreq.toFixed(3),
-        voiceLevel: Math.round(voiceActivityLevel * 100) + '%',
-        firstFew: frequencyData.slice(0, 3).map(f => f.toFixed(3))
-      });
-    }
-  }, [isRecording, frequencyData, symmetricalFrequencyData, voiceActivityLevel]);
 
   return (
     <motion.div 
       className={`flex-1 flex flex-col items-center justify-center p-4 space-y-4 ${className}`}
-      variants={withReducedMotion(cardVariants)}
+      variants={withReducedMotion(_cardVariants)}
       initial="hidden"
       animate="visible"
     >
@@ -266,10 +251,6 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
                       return '#d1d5db'; // gray-300
                     };
 
-                    // Debug logging for first few bars
-                    if (index < 5 && Math.random() < 0.1) {
-                      console.log(`Bar ${index}: freq=${freq.toFixed(3)}, amplified=${amplifiedFreq.toFixed(3)}, height=${barHeight}px`);
-                    }
 
                     return (
                       <motion.div

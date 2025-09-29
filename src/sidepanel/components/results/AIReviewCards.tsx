@@ -42,7 +42,7 @@ const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
   className = '' 
 }) => {
   const [acknowledgedFindings, setAcknowledgedFindings] = useState<Set<number>>(new Set());
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [_isAnimating, _setIsAnimating] = useState(false);
   const [visibleCards, setVisibleCards] = useState<Set<number>>(new Set());
   
   // Debug logging for AI Review Cards
@@ -66,7 +66,7 @@ const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
     if (safeFindings.length > 0) {
       setAcknowledgedFindings(new Set());
       setVisibleCards(new Set());
-      setIsAnimating(true);
+      _setIsAnimating(true);
       console.log('🔄 Reset AI Review acknowledged findings for new review data');
       
       // Animate cards in sequence
@@ -78,7 +78,7 @@ const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
       
       // Stop animation state after all cards are visible
       setTimeout(() => {
-        setIsAnimating(false);
+        _setIsAnimating(false);
       }, safeFindings.length * 200 + 800);
     }
   }, [safeFindings.length, reviewData?.timestamp]);

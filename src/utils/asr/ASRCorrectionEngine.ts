@@ -10,12 +10,13 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 import { OptimizationService } from '@/services/OptimizationService';
 import { CacheManager } from '@/utils/CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
 import { PatternCompiler, type PatternCategory } from '@/utils/performance/PatternCompiler';
 import { ASRCorrections, getCombinedPatterns, type ReplacementPattern, type ASRCorrectionCategories } from '../ASRCorrections';
-import type { ASRCurrentState } from '@/types/optimization';
+import type { ASRCurrentState as _ASRCurrentState } from '@/types/optimization';
 
 // Advanced Pattern Recognition Integration (Phase 3 Week 2)
 import { MedicalPatternService } from '@/utils/medical-text/MedicalPatternService';
@@ -117,7 +118,8 @@ export class ASRCorrectionEngine {
       
       logger.info('ASRCorrectionEngine async initialization completed');
     } catch (error) {
-      logger.warn('ASRCorrectionEngine async initialization failed:', error);
+      const err = toError(error);
+      logger.warn('ASRCorrectionEngine async initialization failed:', err);
     }
   }
 
@@ -583,10 +585,10 @@ export class ASRCorrectionEngine {
   private containsDangerousPattern(text: string): boolean {
     const dangerousPatterns = [
       /(\*\+|\+\*)/,  // Catastrophic backtracking patterns
-      /\(\?\!/,       // Negative lookahead
-      /\(\?\=/,       // Positive lookahead
-      /\(\?\<\!/,     // Negative lookbehind
-      /\(\?\<\=/,     // Positive lookbehind
+      /\(\?!/,       // Negative lookahead
+      /\(\?=/,       // Positive lookahead
+      /\(\?<!/,     // Negative lookbehind
+      /\(\?<=/,     // Positive lookbehind
       /\{\d{3,}\}/,   // Very large repetition counts
       /\*\*+/,        // Multiple wildcards
       /\+\++/,        // Multiple plus operators
@@ -727,7 +729,8 @@ export class ASRCorrectionEngine {
               }
             }
           } catch (error) {
-            logger.debug('Term disambiguation failed for term:', term.term, error);
+            const err = toError(error);
+            logger.debug('Term disambiguation failed for term:', { term: term.term, error: err.message });
           }
         }
       }
@@ -735,7 +738,8 @@ export class ASRCorrectionEngine {
       return { text: disambiguatedText, matches: matchCount };
 
     } catch (error) {
-      logger.warn('Medical term disambiguation failed:', error);
+      const err = toError(error);
+      logger.warn('Medical term disambiguation failed:', err);
       return { text, matches: 0 };
     }
   }
@@ -756,7 +760,7 @@ export class ASRCorrectionEngine {
         detailLevel: 'comprehensive'
       });
 
-      let contextCorrectedText = text;
+      const contextCorrectedText = text;
       let matchCount = 0;
 
       // Apply corrections based on clinical context
@@ -790,7 +794,8 @@ export class ASRCorrectionEngine {
       return { text: contextCorrectedText, matches: matchCount };
 
     } catch (error) {
-      logger.warn('Context-aware corrections failed:', error);
+      const err = toError(error);
+      logger.warn('Context-aware corrections failed:', err);
       return { text, matches: 0 };
     }
   }
@@ -811,7 +816,7 @@ export class ASRCorrectionEngine {
         detailLevel: 'basic' // Use basic level for validation to avoid over-processing
       });
 
-      let validatedText = text;
+      const validatedText = text;
       let matchCount = 0;
 
       // If clinical coherence is low, log a warning but don't modify the text
@@ -829,7 +834,8 @@ export class ASRCorrectionEngine {
       return { text: validatedText, matches: matchCount };
 
     } catch (error) {
-      logger.warn('Clinical reasoning validation failed:', error);
+      const err = toError(error);
+      logger.warn('Clinical reasoning validation failed:', err);
       return { text, matches: 0 };
     }
   }
@@ -868,7 +874,8 @@ export class ASRCorrectionEngine {
         return cached as any;
       }
     } catch (error) {
-      logger.debug(`Cache miss for ASR correction: ${cacheKey}`, error);
+      const err = toError(error);
+      logger.debug(`Cache miss for ASR correction: ${cacheKey}`, { error: err.message });
     }
     return null;
   }
@@ -883,10 +890,11 @@ export class ASRCorrectionEngine {
     timestamp: number;
   }): Promise<void> {
     try {
-      await this.cacheManager.set(`asr_correction_${cacheKey}`, result, this.CACHE_TTL);
+      await this.cacheManager.set(`asr_correction_${cacheKey}`, result, undefined, this.CACHE_TTL);
       logger.debug(`Cached ASR correction: ${cacheKey}`);
     } catch (error) {
-      logger.warn('Failed to cache ASR correction:', error);
+      const err = toError(error);
+      logger.warn('Failed to cache ASR correction:', { error: err.message });
     }
   }
 
@@ -945,7 +953,7 @@ export class ASRCorrectionEngine {
   ): { text: string; patternMatches: number } {
     // For dynamic rules, use shorter cache duration due to adaptability
     const rulesHash = btoa(JSON.stringify(rules.slice(0, 10))); // Hash first 10 rules
-    const cacheKey = `dynamic_${rulesHash}_${btoa(text.substring(0, 30))}`;
+    const _cacheKey = `dynamic_${rulesHash}_${btoa(text.substring(0, 30))}`;
 
     let correctedText = text;
     let patternMatches = 0;
@@ -978,7 +986,7 @@ export class ASRCorrectionEngine {
     customRules: CorrectionRule[]
   ): { text: string; patternMatches: number } {
     const rulesHash = btoa(JSON.stringify(customRules.map(r => ({ raw: r.raw, fix: r.fix }))));
-    const cacheKey = `custom_${rulesHash.substring(0, 20)}`;
+    const _cacheKey = `custom_${rulesHash.substring(0, 20)}`;
 
     let correctedText = text;
     let patternMatches = 0;
@@ -1006,7 +1014,7 @@ export class ASRCorrectionEngine {
    * Apply Australian spelling corrections with caching
    */
   private applyAustralianSpellingWithCaching(text: string): { text: string; patternMatches: number } {
-    const cacheKey = `aus_spelling_${btoa(text.substring(0, 40))}`;
+    const _cacheKey = `aus_spelling_${btoa(text.substring(0, 40))}`;
 
     let correctedText = text;
     let patternMatches = 0;
@@ -1119,7 +1127,7 @@ export class ASRCorrectionEngine {
         },
         { 
           key: 'pressure_reading', 
-          source: '\\b(\\d{2,3})\\s*(?:over|on|\/)\\s*(\\d{2,3})\\s*(?:mmhg)?\\b', 
+          source: '\\b(\\d{2,3})\\s*(?:over|on|/)\\s*(\\d{2,3})\\s*(?:mmhg)?\\b', 
           flags: 'gi',
           category: 'hemodynamic_measurements' as PatternCategory,
           medicalDomain: 'cardiology'
@@ -1154,7 +1162,8 @@ export class ASRCorrectionEngine {
           this.compiledPatternCache.set(patternConfig.key, compiledRegex);
           compiledCount++;
         } catch (error) {
-          logger.warn(`Failed to pre-compile pattern: ${patternConfig.key}`, error);
+          const err = toError(error);
+          logger.warn(`Failed to pre-compile pattern: ${patternConfig.key}`, { error: err.message });
         }
       }
 
@@ -1164,7 +1173,8 @@ export class ASRCorrectionEngine {
         localCacheSize: this.compiledPatternCache.size
       });
     } catch (error) {
-      logger.error('Failed to pre-compile patterns:', error);
+      const err = toError(error);
+      logger.error('Failed to pre-compile patterns:', err);
     }
   }
 
@@ -1197,7 +1207,8 @@ export class ASRCorrectionEngine {
         poolEfficiency: poolStats.poolEfficiency.toFixed(1) + '%'
       });
     } catch (error) {
-      logger.warn('Failed to initialize pattern pool:', error);
+      const err = toError(error);
+      logger.warn('Failed to initialize pattern pool:', { error: err.message });
     }
   }
 
@@ -1208,15 +1219,15 @@ export class ASRCorrectionEngine {
    * This method consolidates scattered investigation-specific ASR patterns
    * and normalization logic into the centralized correction engine.
    */
-  async applyInvestigationCorrections(text: string, config: ASRCorrectionConfig = {}): Promise<string> {
+  async applyInvestigationCorrections(text: string, config: ASRCorrectionConfig = { categories: 'all' }): Promise<string> {
     const operationId = 'investigation_corrections';
-    const measurement = this.performanceMonitor.startMeasurement(operationId);
+    const measurement = this.performanceMonitor.startMeasurement(operationId, 'ASRCorrectionEngine');
     
     try {
       let correctedText = text;
       
       // Step 1: Apply basic ASR corrections first
-      correctedText = await this.correctText(correctedText, {
+      correctedText = await this.applyCorrections(correctedText, {
         categories: ['laboratory', 'cardiology', 'valves', 'severity'],
         enableDynamic: config.enableDynamic,
         australianTerms: config.australianTerms
@@ -1426,14 +1437,33 @@ export class ASRCorrectionEngine {
   private applyExerciseTestPatterns(text: string): string {
     let processed = text;
 
-    // Exercise test METs patterns
+    // New patterns for direct dictation formats
+    // Pattern 1: "exercised X minutes Y mets" -> "exercised for X minutes, Y METs" (most specific first)
     processed = processed.replace(
-      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\s+minutes?\b/gi, 
+      /\bexercised\s+(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
       'exercised for $1 minutes, $2 METs'
     );
-    
+
+    // Pattern 2: "X minutes, Y mets" -> "exercised for X minutes, Y METs"
     processed = processed.replace(
-      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\.?\s+/gi, 
+      /\b(\d+(?:\.\d+)?)\s+minutes,\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
+      'exercised for $1 minutes, $2 METs'
+    );
+
+    // Pattern 3: "X minutes Y mets" -> "exercised for X minutes, Y METs" (most general last)
+    processed = processed.replace(
+      /\b(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
+      'exercised for $1 minutes, $2 METs'
+    );
+
+    // Exercise test METs patterns - existing patterns (handle edge cases)
+    processed = processed.replace(
+      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\s+minutes?\b/gi,
+      'exercised for $1 minutes, $2 METs'
+    );
+
+    processed = processed.replace(
+      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\.?\s+/gi,
       'exercised for $1 minutes, $2 METs; '
     );
 
@@ -1446,6 +1476,7 @@ export class ASRCorrectionEngine {
    */
   async preNormalizeInvestigationText(input: string): Promise<string> {
     return await this.applyInvestigationCorrections(input, {
+      categories: 'all',
       enableInvestigationNormalization: true,
       normalizeDateFormats: true,
       applyInvestigationAbbreviations: true,

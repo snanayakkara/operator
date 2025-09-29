@@ -20,9 +20,9 @@ interface AudioProcessingResponse {
   };
 }
 
-const audioContext: AudioContext | null = null;
-const analyser: AnalyserNode | null = null;
-const dataArray: Uint8Array | null = null;
+const _audioContext: AudioContext | null = null;
+const _analyser: AnalyserNode | null = null;
+const _dataArray: Uint8Array | null = null;
 
 // Initialize audio processing in worker
 function initializeAudioProcessing(sampleRate: number, bufferSize: number) {

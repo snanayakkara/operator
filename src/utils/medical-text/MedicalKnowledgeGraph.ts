@@ -19,7 +19,7 @@
 import { logger } from '@/utils/Logger';
 import { CacheManager } from '@/utils/CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
-import { PatternCompiler, type PatternCategory } from '@/utils/performance/PatternCompiler';
+import { PatternCompiler, type PatternCategory as _PatternCategory } from '@/utils/performance/PatternCompiler';
 
 export interface MedicalConcept {
   id: string;
@@ -763,7 +763,7 @@ export class MedicalKnowledgeGraph {
 
   private calculateClusterCohesion(conceptIds: string[]): number {
     let totalConnections = 0;
-    let possibleConnections = conceptIds.length * (conceptIds.length - 1) / 2;
+    const possibleConnections = conceptIds.length * (conceptIds.length - 1) / 2;
 
     for (let i = 0; i < conceptIds.length; i++) {
       for (let j = i + 1; j < conceptIds.length; j++) {

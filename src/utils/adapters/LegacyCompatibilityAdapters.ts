@@ -15,7 +15,7 @@ import { recordConsolidationBenchmark } from '@/utils/performance/ConsolidationM
 
 // Phase 2 imports
 import { medicalTextNormalizer } from '@/utils/medical-text/MedicalTextNormalizer';
-import { agentIntegrationAdapter } from '@/utils/medical-text/Phase2AdapterPatterns';
+import { agentIntegrationAdapter as _agentIntegrationAdapter } from '@/utils/medical-text/Phase2AdapterPatterns';
 
 // Legacy ASR Corrections compatibility
 import type { ReplacementPattern, ASRCorrectionCategories } from '@/utils/ASRCorrections';
@@ -50,7 +50,7 @@ export class ASRCorrectionsAdapter {
     const startTime = performance.now();
     
     try {
-      const result = await this.asrEngine.correctText(text, {
+      const result = await this.asrEngine.applyCorrections(text, {
         categories,
         enableDynamic: false, // Legacy behavior was static-only
         australianTerms: true

@@ -57,6 +57,7 @@ interface DisplaySessionState {
   displayTranscription: string;
   displayResults: string;
   displaySummary?: string;
+  displayTaviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
@@ -109,6 +110,7 @@ type AppAction =
   | { type: 'SET_CURRENT_AGENT_NAME'; payload: string | null }
   | { type: 'SET_FAILED_RECORDINGS'; payload: FailedAudioRecording[] }
   | { type: 'SET_REVIEW_DATA'; payload: BatchAIReviewReport | null }
+  | { type: 'SET_TAVI_STRUCTURED_SECTIONS'; payload: any }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
   | { type: 'SET_CANCELLING'; payload: boolean }
   | { type: 'SET_WARNINGS'; payload: string[] }
@@ -160,7 +162,9 @@ type AppAction =
   | { type: 'RECOVER_STUCK_STATE' }
   // Display session actions for isolation
   | { type: 'SET_DISPLAY_SESSION'; payload: { session: PatientSession } }
-  | { type: 'CLEAR_DISPLAY_SESSION' };
+  | { type: 'CLEAR_DISPLAY_SESSION' }
+  // Enhanced UI state management to prevent freeze
+  | { type: 'FORCE_UI_READY_STATE' };
 
 // Initial state
 const initialState: CombinedAppState = {
@@ -192,6 +196,7 @@ const initialState: CombinedAppState = {
   processingStartTime: null,
   failedAudioRecordings: [],
   reviewData: null,
+  taviStructuredSections: undefined,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -228,6 +233,7 @@ const initialState: CombinedAppState = {
     displayTranscription: '',
     displayResults: '',
     displaySummary: undefined,
+    displayTaviStructuredSections: undefined,
     displayAgent: null,
     displayAgentName: null,
     displayPatientInfo: null
@@ -307,17 +313,18 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       if (state.processingStatus === action.payload) return state;
       return { ...state, processingStatus: action.payload };
       
-    case 'SET_VOICE_ACTIVITY':
+    case 'SET_VOICE_ACTIVITY': {
       // Only update if there's a meaningful change (throttling)
       const timeSinceLastUpdate = Date.now() - (state.modelStatus.lastPing || 0);
       if (timeSinceLastUpdate < 200) return state; // Throttle to 200ms
-      
+
       return {
         ...state,
         voiceActivityLevel: action.payload.level,
         frequencyData: action.payload.frequencyData,
         modelStatus: { ...state.modelStatus, lastPing: Date.now() }
       };
+    }
       
     case 'SET_MODEL_STATUS':
       return { ...state, modelStatus: action.payload };
@@ -334,6 +341,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       
     case 'SET_REVIEW_DATA':
       return { ...state, reviewData: action.payload };
+
+    case 'SET_TAVI_STRUCTURED_SECTIONS':
+      if (state.taviStructuredSections === action.payload) return state;
+      return { ...state, taviStructuredSections: action.payload };
       
     case 'SET_ACTIVE_WORKFLOW':
       if (state.ui.activeWorkflow === action.payload) return state;
@@ -439,6 +450,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         totalProcessingTime: null,
         processingStartTime: null,
         reviewData: null,
+        taviStructuredSections: undefined,
         // Clear streaming state to allow record button access
         streaming: false,
         streamBuffer: '',
@@ -452,6 +464,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTranscription: '',
           displayResults: '',
           displaySummary: undefined,
+          displayTaviStructuredSections: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null
@@ -553,7 +566,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_TRANSCRIPTION_APPROVAL':
       return { ...state, transcriptionApproval: action.payload };
 
-    case 'COMPLETE_PROCESSING_ATOMIC':
+    case 'COMPLETE_PROCESSING_ATOMIC': {
       // Atomic completion to prevent UI state inconsistencies
       console.log('🏁 ATOMIC COMPLETION: Processing complete for session:', action.payload.sessionId);
 
@@ -574,16 +587,28 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         // Set results with safety checks
         results: safeResults,
         aiGeneratedSummary: safeSummary,
+        resultsSummary: safeSummary,
 
-        // Clear UI processing indicators
+        // Clear stream buffer and timing data to prevent display issues
+        streamBuffer: '',
+        ttftMs: null,
+        processingStartTime: null,
+
+        // Clear UI processing indicators completely to prevent freeze
         ui: {
           ...state.ui,
           showProcessingPhase: false,
-          showFieldIngestionOverlay: false
+          showFieldIngestionOverlay: false,
+          isCancelling: false,
+          processingProgress: 0,
+          processingStartTime: 0,
+          // Ensure active workflow is cleared to enable record button
+          activeWorkflow: null
         }
       };
+    }
 
-    case 'VALIDATE_STATE':
+    case 'VALIDATE_STATE': {
       // Validate state consistency and log warnings
       const warnings = [];
       if (state.processingStatus === 'complete' && state.isProcessing) {
@@ -599,24 +624,45 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         console.warn('⚠️ STATE VALIDATION WARNINGS:', warnings);
       }
       return state;
+    }
 
     case 'RECOVER_STUCK_STATE':
-      // Recover from stuck processing states
+      // Enhanced recovery from stuck processing states
       console.log('🔄 RECOVERING FROM STUCK STATE');
       return {
         ...state,
+        // Reset all processing states
         isProcessing: false,
         processingStatus: 'idle',
         streaming: false,
         currentSessionId: null,
+        // Clear buffers and timing data
+        streamBuffer: '',
+        ttftMs: null,
+        processingStartTime: null,
+        // Reset transcription approval state
+        transcriptionApproval: {
+          status: 'pending',
+          originalText: '',
+          currentText: '',
+          hasBeenEdited: false
+        },
+        // Comprehensive UI reset
         ui: {
           ...state.ui,
           showProcessingPhase: false,
-          showFieldIngestionOverlay: false
+          showFieldIngestionOverlay: false,
+          isCancelling: false,
+          processingProgress: 0,
+          processingStartTime: 0,
+          activeWorkflow: null,
+          // Clear error states that might block UI
+          warnings: [],
+          errors: []
         }
       };
 
-    case 'SET_DISPLAY_SESSION':
+    case 'SET_DISPLAY_SESSION': {
       const session = action.payload.session;
       return {
         ...state,
@@ -627,11 +673,13 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTranscription: session.transcription || '',
           displayResults: session.results || '',
           displaySummary: session.summary,
+          displayTaviStructuredSections: session.taviStructuredSections,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null
         }
       };
+    }
 
     case 'CLEAR_DISPLAY_SESSION':
       return {
@@ -643,9 +691,32 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTranscription: '',
           displayResults: '',
           displaySummary: undefined,
+          displayTaviStructuredSections: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null
+        }
+      };
+
+    case 'FORCE_UI_READY_STATE':
+      // Force UI into ready state - use when workflows complete but UI remains frozen
+      console.log('🔧 FORCING UI READY STATE - clearing all processing indicators');
+      return {
+        ...state,
+        // Ensure recording is available
+        isRecording: false,
+        isProcessing: false,
+        streaming: false,
+        currentSessionId: null,
+        // Clear all UI overlays and indicators
+        ui: {
+          ...state.ui,
+          activeWorkflow: null,
+          isCancelling: false,
+          showProcessingPhase: false,
+          showFieldIngestionOverlay: false,
+          processingProgress: 0,
+          processingStartTime: 0
         }
       };
 
@@ -733,6 +804,10 @@ export function useAppState() {
     
     setReviewData: useCallback((data: BatchAIReviewReport | null) => {
       dispatch({ type: 'SET_REVIEW_DATA', payload: data });
+    }, []),
+
+    setTaviStructuredSections: useCallback((sections: any) => {
+      dispatch({ type: 'SET_TAVI_STRUCTURED_SECTIONS', payload: sections });
     }, []),
     
     setActiveWorkflow: useCallback((workflow: AgentType | null) => {
@@ -926,9 +1001,13 @@ export function useAppState() {
 
     clearDisplaySession: useCallback(() => {
       dispatch({ type: 'CLEAR_DISPLAY_SESSION' });
+    }, []),
+    // Force UI into ready state when completion handlers fail to clear properly
+    forceUIReadyState: useCallback(() => {
+      dispatch({ type: 'FORCE_UI_READY_STATE' });
     }, [])
   };
-  
+
   return {
     state,
     actions

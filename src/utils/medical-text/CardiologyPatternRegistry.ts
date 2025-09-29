@@ -529,5 +529,4 @@ export class CardiologyPatternRegistry {
 // Convenience exports
 export const cardiologyRegistry = CardiologyPatternRegistry.getInstance();
 
-// Type exports for external use
-export type { AgentCardiologyPatterns, CardiologyPattern, PatternReplacement };
+// Types are already exported above as interfaces

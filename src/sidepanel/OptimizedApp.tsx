@@ -11,6 +11,7 @@ import './styles/globals.css';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { AudioDeviceProvider, useAudioDeviceContext } from '@/contexts/AudioDeviceContext';
 import { OptimizedResultsPanel } from './components/results/OptimizedResultsPanel';
+import { TranscriptionSection } from './components/results/TranscriptionSection';
 import { QuickActions } from './components/QuickActions';
 import { AIReviewSection } from './components/AIReviewSection';
 import { StatusIndicator } from './components/StatusIndicator';
@@ -19,7 +20,7 @@ import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
 import { FieldIngestionOverlay } from './components/FieldIngestionOverlay';
 import { ProcessingPhaseIndicator } from './components/ProcessingPhaseIndicator';
-import { SessionsPanel } from './components/SessionsPanel';
+import { SessionsPanel as _SessionsPanel } from './components/SessionsPanel';
 import { RecordingPromptCard } from './components/RecordingPromptCard';
 import { hasRecordingPrompt } from '@/config/recordingPrompts';
 import { MetricsDashboard } from './components/MetricsDashboard';
@@ -34,7 +35,8 @@ import { WhisperServerService } from '@/services/WhisperServerService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput as _BatchAIReviewInput, ProcessingStatus } from '@/types/medical.types';
+import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { useRecorder } from '@/hooks/useRecorder';
 import { ToastService } from '@/services/ToastService';
@@ -124,6 +126,18 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [actions]);
 
   const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
+    try {
+      // Use the centralized SystemPromptLoader for all agents
+      const { systemPromptLoader } = await import('@/services/SystemPromptLoader');
+      return await systemPromptLoader.loadSystemPrompt(agent, 'primary');
+    } catch (error) {
+      console.error('Failed to load system prompt for agent:', agent, error);
+      return null;
+    }
+  }, []);
+
+  // Legacy method for specific agent handling if needed
+  const _getLegacySystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
     try {
       switch (agent) {
         case 'quick-letter': {
@@ -240,8 +254,8 @@ const OptimizedAppContent: React.FC = memo(() => {
           (async () => {
             try {
               // Import QuickLetterAgent for missing info detection
-              const { QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
-              const quickLetterAgent = new QuickLetterAgentPhase3();
+              const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+              const _quickLetterAgent = new QuickLetterAgent();
               // Call the missing info detection method directly (we need to make it public or create a wrapper)
               // For now, use a basic fallback detection
               const text = input.toLowerCase();
@@ -288,9 +302,22 @@ const OptimizedAppContent: React.FC = memo(() => {
         console.log('🏁 TAVI Completion: Using atomic completion for streaming results');
         console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
 
-        actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
+        try {
+          actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
+          console.log('🏁 TAVI Completion: Atomic completion done for streaming workflow');
 
-        console.log('🏁 TAVI Completion: Atomic completion done for streaming workflow');
+          // Defensive check: ensure UI is actually ready after completion
+          setTimeout(() => {
+            if (state.streaming || state.currentSessionId !== null) {
+              console.warn('🚨 UI still showing active state after completion - forcing ready state');
+              actions.forceUIReadyState();
+            }
+          }, 1000);
+        } catch (error) {
+          console.error('❌ Atomic completion failed for streaming workflow:', error);
+          actions.forceUIReadyState(); // Fallback to ensure UI is ready
+        }
+
         processingAbortRef.current = null;
         actions.updatePatientSession(sessionId, {
           results: letterContent, // Store only letter content in results
@@ -319,7 +346,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const [isOptimizationPanelOpen, setIsOptimizationPanelOpen] = useState(false);
   
   // Initialize BatchAIReviewOrchestrator only once using lazy initialization
-  const getBatchOrchestrator = useCallback(() => {
+  const _getBatchOrchestrator = useCallback(() => {
     if (!batchOrchestrator.current) {
       batchOrchestrator.current = new BatchAIReviewOrchestrator();
     }
@@ -372,7 +399,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [actions, state.failedAudioRecordings]);
 
   // Clear failed recordings
-  const clearFailedRecordings = useCallback(() => {
+  const _clearFailedRecordings = useCallback(() => {
     actions.setFailedRecordings([]);
     console.log('🗑️ Cleared all failed audio recordings');
   }, [actions]);
@@ -453,12 +480,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           console.log(`📖 Applied ${appliedCorrections} phrasebook corrections`);
 
           // Update UI to show corrections applied
-          actions.addToast({
-            id: `corrections-${sessionId}`,
-            message: `Applied ${appliedCorrections} terminology correction${appliedCorrections === 1 ? '' : 's'}`,
-            type: 'info',
-            duration: 3000
-          });
+          ToastService.getInstance().info(`Applied ${appliedCorrections} terminology correction${appliedCorrections === 1 ? '' : 's'}`);
         }
       } catch (error) {
         console.warn('⚠️ Failed to apply phrasebook corrections:', error);
@@ -714,7 +736,22 @@ const OptimizedAppContent: React.FC = memo(() => {
 
         // Handle both successful and error reports - error reports may not have summary property
         const summaryText = result.summary || result.content || 'TAVI workup completed';
-        actions.completeProcessingAtomic(sessionId, result.content, summaryText);
+
+        try {
+          actions.completeProcessingAtomic(sessionId, result.content, summaryText);
+          console.log('🏁 Background completion successful');
+
+          // Defensive check for background sessions too
+          setTimeout(() => {
+            if (state.streaming || state.currentSessionId !== null) {
+              console.warn('🚨 UI still showing active state after background completion - forcing ready state');
+              actions.forceUIReadyState();
+            }
+          }, 1000);
+        } catch (error) {
+          console.error('❌ Atomic completion failed for background session:', error);
+          actions.forceUIReadyState(); // Fallback to ensure UI is ready
+        }
 
         // Set missing info separately for TAVI workups
         if (result.missingInfo) {
@@ -961,7 +998,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, []);
 
   // Memoized intelligent summary selection that prioritizes AI-generated summaries
-  const getDisplaySummary = useCallback((results: string, aiSummary?: string): string => {
+  const _getDisplaySummary = useCallback((results: string, aiSummary?: string): string => {
     // Prioritize AI-generated summary from agents like QuickLetter
     if (aiSummary && aiSummary.trim()) {
       return aiSummary.trim();
@@ -1369,7 +1406,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Mark as edited but don't auto-submit for training
         const updatedApprovalState = {
           ...state.transcriptionApproval,
-          status: 'edited' as import('@/types/medical.types').TranscriptionApprovalStatus,
+          status: 'edited' as TranscriptionApprovalStatus,
           originalText: state.transcriptionApproval.originalText || originalTranscription,
           currentText: editedText,
           hasBeenEdited: true,
@@ -1390,7 +1427,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Reset approval state if text matches original
         const resetApprovalState = {
           ...state.transcriptionApproval,
-          status: 'pending' as import('@/types/medical.types').TranscriptionApprovalStatus,
+          status: 'pending' as TranscriptionApprovalStatus,
           currentText: editedText,
           hasBeenEdited: false
         };
@@ -1418,7 +1455,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [state.transcription, state.transcriptionApproval, state.currentAgent, state.selectedSessionId, actions]);
 
   // Handle transcription approval for ASR training
-  const handleTranscriptionApproval = useCallback(async (status: import('@/types/medical.types').TranscriptionApprovalStatus) => {
+  const handleTranscriptionApproval = useCallback(async (status: TranscriptionApprovalStatus) => {
     try {
       console.log('✅ Transcription approval status changed:', status);
       
@@ -1447,7 +1484,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         await ASRCorrectionsLog.getInstance().addCorrection({
           rawText: originalText,
           correctedText: currentTranscription,
-          agentType: state.currentAgent || 'unknown',
+          agentType: state.currentAgent || 'transcription',
           sessionId: state.selectedSessionId || 'streaming',
           approvalStatus: 'approved',
           userExplicitlyApproved: true,
@@ -1628,8 +1665,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setGeneratingPatientVersion(true);
       
       // Import QuickLetterAgent dynamically to avoid bundle bloat
-      const { QuickLetterAgentPhase3 } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
-      const quickLetterAgent = new QuickLetterAgentPhase3();
+      const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+      const quickLetterAgent = new QuickLetterAgent();
       
       // Generate patient version from the existing letter content
       const patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(state.results);
@@ -1756,7 +1793,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [state.selectedSessionId, state.currentSessionId, state.patientSessions, state.currentPatientInfo, extractPatientData, actions]);
 
   // EMR insertion with field-specific targeting
-  const handleInsertToEMR = useCallback(async (text: string, targetField?: string, agentContext?: AgentType) => {
+  const handleInsertToEMR = useCallback(async (text: string, targetField?: string, agentContext?: AgentType | null) => {
     try {
       // Step 1: Validate patient names before insertion
       const shouldProceed = await validatePatientBeforeInsertion(text);
@@ -1789,11 +1826,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Field-specific insertion: first open field, then insert text
         console.log(`📝 Opening specific EMR field: ${field} (${getFieldDisplayName(field)})`);
 
-        // Step 1: Open the specific field using the specific action (same as Type button)
+        // Step 1: Open the specific field (same as Type action)
         await chrome.runtime.sendMessage({
           type: 'EXECUTE_ACTION',
           action: field, // Use the field name as the action (e.g., 'investigation-summary')
-          data: { type: 'manual' }
+          data: {} // Empty data, same as Type Quick Action
         });
 
         // Step 2: Wait for field to be ready, then insert text
@@ -1950,15 +1987,14 @@ const OptimizedAppContent: React.FC = memo(() => {
           hasResults: !!state.results
         });
 
-        // Use atomic completion or recovery based on the situation
+        // Use enhanced recovery mechanisms to prevent UI freeze
         if (state.results && state.processingStatus === 'complete') {
-          // Just clear the stuck active state indicators
-          actions.setStreaming(false);
-          actions.setCurrentSessionId(null);
-          actions.setProcessingPhase(false);
-          actions.setFieldIngestionOverlay(false);
+          // For completed workflows with lingering indicators, force UI ready state
+          console.log('🔧 Using forceUIReadyState for completed workflow with stuck indicators');
+          actions.forceUIReadyState();
         } else {
           // Full recovery for other stuck states
+          console.log('🔧 Using recoverStuckState for processing state inconsistencies');
           actions.recoverStuckState();
         }
       }
@@ -1978,8 +2014,8 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Agent preloading and memory management
   useEffect(() => {
-    let preloadingTimeoutId: number;
-    let memoryOptimizationIntervalId: number;
+    let preloadingTimeoutId: ReturnType<typeof setTimeout>;
+    let memoryOptimizationIntervalId: ReturnType<typeof setInterval>;
     
     // Preload critical agents immediately on app start
     const initializeAgents = async () => {
@@ -2120,12 +2156,35 @@ const OptimizedAppContent: React.FC = memo(() => {
                     {state.processingStatus === 'transcribing' ? 'Transcribing Audio...' : 'Processing Report...'}
                   </h3>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Transcription:</h4>
-                  <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
-                    {state.transcription}
-                  </div>
-                </div>
+                {/* Use TranscriptionSection for consistent UI */}
+                <TranscriptionSection
+                  originalTranscription={state.transcription}
+                  onTranscriptionCopy={(text) => {
+                    navigator.clipboard.writeText(text);
+                    ToastService.getInstance().success('Transcription copied to clipboard');
+                  }}
+                  onTranscriptionInsert={async (text) => {
+                    try {
+                      await chrome.runtime.sendMessage({
+                        type: 'EXECUTE_ACTION',
+                        action: 'insert-text',
+                        data: { content: text }
+                      });
+                      ToastService.getInstance().success('Transcription inserted to EMR');
+                    } catch (error) {
+                      console.error('Failed to insert transcription:', error);
+                      ToastService.getInstance().error('Failed to insert transcription');
+                    }
+                  }}
+                  onTranscriptionEdit={(text) => {
+                    // Update the transcription in state when edited during processing
+                    actions.setTranscription(text);
+                  }}
+                  currentAgent={state.currentAgent}
+                  isProcessing={state.processingStatus === 'processing'}
+                  defaultExpanded={true}
+                  className="border-0 bg-transparent"
+                />
                 {state.processingStatus === 'processing' && (
                   <div className="mt-3 flex items-center space-x-2 text-sm text-blue-600">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -2233,12 +2292,12 @@ const OptimizedAppContent: React.FC = memo(() => {
                     resultsSummary={displayData.summary || ''}
                     warnings={state.ui.warnings}
                     errors={state.ui.errors}
-                    agentType={displayData.agent}
+                    agentType={displayData.agent || null}
                     onCopy={handleCopy}
-                    onInsertToEMR={(text, targetField) => handleInsertToEMR(text, targetField, displayData.agent)}
+                    onInsertToEMR={(text: string, targetField?: string) => { handleInsertToEMR(text, targetField, displayData.agent || null); }}
                     originalTranscription={displayData.transcription}
                     onTranscriptionCopy={handleCopy}
-                    onTranscriptionInsert={(text, targetField) => handleInsertToEMR(text, targetField, displayData.agent)}
+                    onTranscriptionInsert={(text: string) => { handleInsertToEMR(text, undefined, displayData.agent || null); }}
                     onTranscriptionEdit={handleTranscriptionEdit}
                     transcriptionSaveStatus={transcriptionSaveStatus}
                     onAgentReprocess={displayData.isDisplayingSession ? undefined : handleAgentReprocess}
@@ -2254,7 +2313,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                       ? (status) => {
                           console.log(`🧠 TAVI workup transcription approval for completed session:`, {
                             status,
-                            sessionId: displayData.displayPatientInfo?.name || 'unknown',
+                            sessionId: (displayData.isDisplayingSession ? displayData.patientInfo?.name : null) || 'unknown',
                             transcriptionLength: displayData.transcription?.length || 0
                           });
                           // For completed sessions, we can still collect approval data for training
@@ -2272,7 +2331,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 totalProcessingTime={displayData.isDisplayingSession ? null : state.totalProcessingTime}
                 processingStatus={displayData.processingStatus}
                 currentAgentName={displayData.agentName}
-                selectedSessionId={displayData.isDisplayingSession ? displayData.displayPatientInfo?.name || 'Unknown' : stableSelectedSessionId}
+                selectedSessionId={displayData.isDisplayingSession ? displayData.patientInfo?.name || 'Unknown' : stableSelectedSessionId}
                 selectedPatientName={displayData.patientInfo?.name || stableSelectedPatientName}
                 patientVersion={displayData.isDisplayingSession ? null : state.patientVersion}
                 isGeneratingPatientVersion={displayData.isDisplayingSession ? false : state.isGeneratingPatientVersion}
@@ -2281,7 +2340,11 @@ const OptimizedAppContent: React.FC = memo(() => {
                 streamBuffer={displayData.isDisplayingSession ? '' : state.streamBuffer || ''}
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
                 onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
-                processingProgress={displayData.isDisplayingSession ? undefined : displayData.processingProgress}
+                processingProgress={displayData.isDisplayingSession ? undefined : (
+                  typeof state.ui.processingProgress === 'number'
+                    ? { phase: 'processing', progress: state.ui.processingProgress, details: undefined }
+                    : state.ui.processingProgress
+                )}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                   />
                 );
@@ -2290,7 +2353,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && !getCurrentDisplayData().isDisplayingSession && (
+          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">

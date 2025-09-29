@@ -13,6 +13,7 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 import type {
   ASRPreview,
   ASRApplyRequest,
@@ -127,8 +128,9 @@ export class OptimizationService {
 
     } catch (error) {
       clearTimeout(timeoutId);
-      
-      if (error.name === 'AbortError') {
+      const err = toError(error);
+
+      if (err.name === 'AbortError') {
         const timeoutError = new OptimizationError(
           `Request timeout after ${timeout || this.timeout}ms`,
           'TIMEOUT_ERROR',
@@ -143,21 +145,21 @@ export class OptimizationService {
         throw timeoutError;
       }
 
-      if (error instanceof OptimizationError) {
-        throw error;
+      if (err instanceof OptimizationError) {
+        throw err;
       }
 
       const networkError = new OptimizationError(
-        `Network error: ${error.message}`,
+        `Network error: ${err.message}`,
         'NETWORK_ERROR',
-        { endpoint, requestId, originalError: error.message }
+        { endpoint, requestId, originalError: err.message }
       );
       
       logger.error('Optimization request failed', {
         component: 'OptimizationService',
         requestId,
         endpoint,
-        error: error.message
+        error: err.message
       });
       
       throw networkError;
@@ -185,11 +187,12 @@ export class OptimizationService {
         optimization: optimizationStatus
       };
     } catch (error) {
+      const err = toError(error);
       logger.error('Health check failed', {
         component: 'OptimizationService',
-        error: error.message
+        error: err.message
       });
-      throw error;
+      throw err;
     }
   }
 
@@ -221,12 +224,13 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
+      const err = toError(error);
       // Graceful degradation for ASR server unavailability
-      if (error instanceof OptimizationError && 
-          (error.code === 'HTTP_ERROR' || error.code === 'NETWORK_ERROR')) {
+      if (err instanceof OptimizationError && 
+          (err.code === 'HTTP_ERROR' || err.code === 'NETWORK_ERROR')) {
         logger.warn('ASR server unavailable for preview, returning empty suggestions', {
           component: 'OptimizationService',
-          error: error.message
+          error: err.message
         });
         // Return empty preview instead of throwing error
         return {
@@ -234,8 +238,8 @@ export class OptimizationService {
           rule_candidates: []
         };
       }
-      if (error instanceof ASROptimizationError) throw error;
-      throw new ASROptimizationError(`Failed to preview ASR corrections: ${error.message}`);
+      if (err instanceof ASROptimizationError) throw err;
+      throw new ASROptimizationError(`Failed to preview ASR corrections: ${err.message}`);
     }
   }
 
@@ -262,8 +266,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof ASROptimizationError) throw error;
-      throw new ASROptimizationError(`Failed to apply ASR corrections: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof ASROptimizationError) throw err;
+      throw new ASROptimizationError(`Failed to apply ASR corrections: ${err.message}`);
     }
   }
 
@@ -280,12 +285,13 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
+      const err = toError(error);
       // Graceful degradation for ASR server unavailability
-      if (error instanceof OptimizationError && 
-          (error.code === 'HTTP_ERROR' || error.code === 'NETWORK_ERROR')) {
+      if (err instanceof OptimizationError && 
+          (err.code === 'HTTP_ERROR' || err.code === 'NETWORK_ERROR')) {
         logger.warn('ASR server unavailable, returning empty state', {
           component: 'OptimizationService',
-          error: error.message
+          error: err.message
         });
         // Return empty state instead of throwing error
         return {
@@ -293,8 +299,8 @@ export class OptimizationService {
           rules: []
         };
       }
-      if (error instanceof ASROptimizationError) throw error;
-      throw new ASROptimizationError(`Failed to get ASR state: ${error.message}`);
+      if (err instanceof ASROptimizationError) throw err;
+      throw new ASROptimizationError(`Failed to get ASR state: ${err.message}`);
     }
   }
 
@@ -319,19 +325,20 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
+      const err = toError(error);
       // Graceful degradation for ASR server unavailability
-      if (error instanceof OptimizationError && 
-          (error.code === 'HTTP_ERROR' || error.code === 'NETWORK_ERROR')) {
+      if (err instanceof OptimizationError && 
+          (err.code === 'HTTP_ERROR' || err.code === 'NETWORK_ERROR')) {
         logger.warn('ASR server unavailable for corrections upload, saving locally only', {
           component: 'OptimizationService',
-          error: error.message,
+          error: err.message,
           correctionsCount: corrections.length
         });
         // Return success response with local count - corrections are already saved in Chrome storage
         return { uploaded: corrections.length };
       }
-      if (error instanceof ASROptimizationError) throw error;
-      throw new ASROptimizationError(`Failed to upload corrections: ${error.message}`);
+      if (err instanceof ASROptimizationError) throw err;
+      throw new ASROptimizationError(`Failed to upload corrections: ${err.message}`);
     }
   }
 
@@ -360,8 +367,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof GEPAOptimizationError) throw error;
-      throw new GEPAOptimizationError(`Failed to preview GEPA optimization: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof GEPAOptimizationError) throw err;
+      throw new GEPAOptimizationError(`Failed to preview GEPA optimization: ${err.message}`);
     }
   }
 
@@ -387,8 +395,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof GEPAOptimizationError) throw error;
-      throw new GEPAOptimizationError(`Failed to apply GEPA optimization: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof GEPAOptimizationError) throw err;
+      throw new GEPAOptimizationError(`Failed to apply GEPA optimization: ${err.message}`);
     }
   }
 
@@ -405,8 +414,9 @@ export class OptimizationService {
 
       return response.data || [];
     } catch (error) {
-      if (error instanceof GEPAOptimizationError) throw error;
-      throw new GEPAOptimizationError(`Failed to get GEPA history: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof GEPAOptimizationError) throw err;
+      throw new GEPAOptimizationError(`Failed to get GEPA history: ${err.message}`);
     }
   }
 
@@ -474,8 +484,9 @@ export class OptimizationService {
         errors: data.errors
       };
     } catch (error) {
-      if (error instanceof GEPAOptimizationError) throw error;
-      throw new GEPAOptimizationError(`Failed to run privacy cleanup: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof GEPAOptimizationError) throw err;
+      throw new GEPAOptimizationError(`Failed to run privacy cleanup: ${err.message}`);
     }
   }
 
@@ -503,8 +514,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof OvernightOptimizationError) throw error;
-      throw new OvernightOptimizationError(`Failed to start overnight optimization: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof OvernightOptimizationError) throw err;
+      throw new OvernightOptimizationError(`Failed to start overnight optimization: ${err.message}`);
     }
   }
 
@@ -521,8 +533,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof OvernightOptimizationError) throw error;
-      throw new OvernightOptimizationError(`Failed to get job status: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof OvernightOptimizationError) throw err;
+      throw new OvernightOptimizationError(`Failed to get job status: ${err.message}`);
     }
   }
 
@@ -546,8 +559,9 @@ export class OptimizationService {
 
       return response.data!;
     } catch (error) {
-      if (error instanceof OvernightOptimizationError) throw error;
-      throw new OvernightOptimizationError(`Failed to cancel job: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof OvernightOptimizationError) throw err;
+      throw new OvernightOptimizationError(`Failed to cancel job: ${err.message}`);
     }
   }
 
@@ -569,8 +583,9 @@ export class OptimizationService {
 
       return response.data || [];
     } catch (error) {
-      if (error instanceof OvernightOptimizationError) throw error;
-      throw new OvernightOptimizationError(`Failed to get completed jobs: ${error.message}`);
+      const err = toError(error);
+      if (err instanceof OvernightOptimizationError) throw err;
+      throw new OvernightOptimizationError(`Failed to get completed jobs: ${err.message}`);
     }
   }
 
@@ -677,9 +692,10 @@ export class OptimizationService {
       await this.checkHealth();
       return true;
     } catch (error) {
+      const err = toError(error);
       logger.warn('DSPy server connection test failed', {
         component: 'OptimizationService',
-        error: error.message
+        error: err.message
       });
       return false;
     }

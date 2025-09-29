@@ -16,13 +16,12 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Moon, Clock, CheckCircle, AlertCircle, Calendar, Zap } from 'lucide-react';
+import { Moon, Calendar } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import { OvernightOptimizationError } from '@/types/optimization';
-import type { 
+import type {
   OvernightJob,
-  JobStatus,
-  AgentType 
+  AgentType
 } from '@/types/optimization';
 
 interface OvernightOptimizationCardProps {
@@ -42,9 +41,9 @@ export const OvernightOptimizationCard: React.FC<OvernightOptimizationCardProps>
     new Set(['quick-letter', 'angiogram-pci'])
   );
   const [iterations, setIterations] = useState(5);
-  const [currentJob, setCurrentJob] = useState<OvernightJob | null>(null);
+  const [currentJob, _setCurrentJob] = useState<OvernightJob | null>(null);
   const [isScheduling, setIsScheduling] = useState(false);
-  const [isPolling, setIsPolling] = useState(false);
+  const [_isPolling, _setIsPolling] = useState(false);
 
   const scheduleOvernight = useCallback(async () => {
     try {

@@ -171,7 +171,7 @@ MANDATORY: Begin immediately with { and end with } - no prefacing text, markdown
 
 JSON VALIDATION REQUIREMENTS:
 - Response MUST be valid JSON that can be parsed without errors
-- All string values must be properly escaped (use \" for quotes within content)
+- All string values must be properly escaped (use backslash-quote for quotes within content)
 - Do not include trailing commas or syntax errors
 - Ensure all opening braces { have matching closing braces }
 - Ensure all opening brackets [ have matching closing brackets ]

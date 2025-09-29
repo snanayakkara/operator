@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, XCircle, AlertCircle, Eye, ThumbsUp, ThumbsDown, RotateCcw, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Eye, ThumbsUp, RotateCcw, Clock } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import { logger } from '@/utils/Logger';
 import type { 

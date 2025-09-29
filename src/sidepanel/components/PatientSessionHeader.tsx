@@ -24,7 +24,7 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = memo(({
     });
   };
 
-  const getAgentIcon = (agentType: string) => {
+  const getAgentIcon = (_agentType: string) => {
     // Return appropriate icon based on agent type
     return <FileText className="w-4 h-4" />;
   };

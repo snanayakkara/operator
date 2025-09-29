@@ -5,13 +5,13 @@ import { Upload, Combine, Copy, Trash2, X, ImageIcon } from 'lucide-react';
 import {
   modalVariants,
   backdropVariants,
-  staggerContainer,
-  listItemVariants,
-  buttonVariants,
+  staggerContainer as _staggerContainer,
+  listItemVariants as _listItemVariants,
+  buttonVariants as _buttonVariants,
   textVariants,
   withReducedMotion,
-  STAGGER_CONFIGS,
-  ANIMATION_DURATIONS
+  STAGGER_CONFIGS as _STAGGER_CONFIGS,
+  ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 import { ScreenshotCombiner, AnnotatedScreenshot } from '../../services/ScreenshotCombiner';
 import { FileToasts } from '@/utils/toastHelpers';
@@ -32,7 +32,6 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
   const combinerRef = useRef(new ScreenshotCombiner(4));
   const modalRef = useRef<HTMLDivElement>(null);
 
-  if (!isOpen) return null;
 
   const handleClose = () => {
     setScreenshots([null, null, null, null]);
@@ -131,13 +130,13 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     }
   }, [targetSlot]);
 
-  const handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
+  const _handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     console.log('🎯 Drag enter on drop zone', index);
     setDragOverIndex(index);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+  const _handleDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (e.dataTransfer) {
       try { 
@@ -150,13 +149,13 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     setDragOverIndex(index);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const _handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     console.log('🚫 Drag leave drop zone');
     setDragOverIndex(null);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, index: number) => {
+  const _handleDrop = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (e.dataTransfer) {
       try { 
@@ -213,7 +212,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     return false;
   }, [handleFileSelect]);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+  const _handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>, index: number) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFileSelect(files[0], index);
@@ -422,6 +421,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     };
   }, []);
 
+  if (!isOpen) return null;
 
   return (
     <AnimatePresence>

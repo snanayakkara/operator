@@ -11,10 +11,10 @@ import {
 } from 'lucide-react';
 import type { PatientEducationInput } from '@/agents/specialized/PatientEducationAgent';
 import type { PatientEducationModule } from '@/agents/specialized/PatientEducationSystemPrompts';
-import type { PatientInfo } from '@/types/medical.types';
+import type { PatientInfo as _PatientInfo } from '@/types/medical.types';
 
 // Dynamic import types
-type PatientEducationAgent = any;
+type _PatientEducationAgent = any;
 type PriorityOption = { value: string; label: string; description: string };
 type AgentStaticMethods = {
   getPriorityOptions: () => PriorityOption[];

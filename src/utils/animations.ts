@@ -4,6 +4,8 @@
  */
 import { Transition, Variants } from 'framer-motion';
 
+type BezierTuple = [number, number, number, number];
+
 // Animation timing constants
 export const ANIMATION_DURATIONS = {
   instant: 0,
@@ -15,18 +17,21 @@ export const ANIMATION_DURATIONS = {
 } as const;
 
 // Easing curves
-export const ANIMATION_EASINGS = {
+export const ANIMATION_EASINGS: Record<
+  'standard' | 'decelerate' | 'accelerate' | 'sharp' | 'gentle' | 'professional' | 'responsive',
+  BezierTuple
+> = {
   // Standard Material Design curves
   standard: [0.4, 0.0, 0.2, 1],
   decelerate: [0.0, 0.0, 0.2, 1],
   accelerate: [0.4, 0.0, 1, 1],
   sharp: [0.4, 0.0, 0.6, 1],
-  
+
   // Medical-appropriate custom curves
   gentle: [0.25, 0.46, 0.45, 0.94],
   professional: [0.4, 0.0, 0.2, 1],
   responsive: [0.34, 1.56, 0.64, 1],
-} as const;
+};
 
 // Spring physics for medical UI
 export const SPRING_CONFIGS = {
@@ -56,14 +61,16 @@ export const SPRING_CONFIGS = {
   }
 } as const;
 
+type SpringConfig = typeof SPRING_CONFIGS[keyof typeof SPRING_CONFIGS];
+
 // Base transition configurations
-export const createTransition = (duration: number, easing: number[] = ANIMATION_EASINGS.professional): Transition => ({
+export const createTransition = (duration: number, easing: BezierTuple = ANIMATION_EASINGS.professional): Transition => ({
   duration,
   ease: easing,
   type: "tween"
 });
 
-export const createSpringTransition = (config: typeof SPRING_CONFIGS.gentle = SPRING_CONFIGS.gentle): Transition => config;
+export const createSpringTransition = (config: SpringConfig = SPRING_CONFIGS.gentle): Transition => config;
 
 // Stagger configurations
 export const STAGGER_CONFIGS = {
@@ -421,25 +428,23 @@ export const listItemVariants: Variants = {
 /**
  * Utility function to create reduced motion variants
  */
-export const withReducedMotion = <T extends Variants>(variants: T): T => {
-  const prefersReducedMotion = typeof window !== 'undefined' && 
-    window.matchMedia && 
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const withReducedMotion = (variants: Variants): Variants => {
+  const prefersReducedMotion = getReducedMotionPreference();
 
   if (!prefersReducedMotion) return variants;
 
   // Create reduced motion versions
-  const reducedVariants = {} as T;
+  const reducedVariants: Variants = {};
   
   Object.keys(variants).forEach(key => {
     const variant = variants[key];
     if (typeof variant === 'object' && variant !== null) {
-      reducedVariants[key as keyof T] = {
-        ...variant,
+      reducedVariants[key] = {
+        ...(variant as Record<string, unknown>),
         transition: { duration: 0.01 }
-      };
+      } as Variants[string];
     } else {
-      reducedVariants[key as keyof T] = variant;
+      reducedVariants[key] = variant;
     }
   });
 
@@ -447,12 +452,12 @@ export const withReducedMotion = <T extends Variants>(variants: T): T => {
 };
 
 /**
- * Hook to get reduced motion preference
+ * Utility to get reduced motion preference (not a React hook)
  */
-export const useReducedMotion = (): boolean => {
+export const getReducedMotionPreference = (): boolean => {
   if (typeof window === 'undefined') return false;
-  
-  return window.matchMedia && 
+
+  return window.matchMedia &&
          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 };
 
@@ -460,9 +465,9 @@ export const useReducedMotion = (): boolean => {
  * Custom transition for accessibility
  */
 export const createAccessibleTransition = (duration: number): Transition => {
-  const prefersReducedMotion = useReducedMotion();
-  
-  return prefersReducedMotion 
+  const prefersReducedMotion = getReducedMotionPreference();
+
+  return prefersReducedMotion
     ? { duration: 0.01 }
     : createTransition(duration, ANIMATION_EASINGS.professional);
 };

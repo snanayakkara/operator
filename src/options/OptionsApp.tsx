@@ -47,6 +47,22 @@ export const OptionsApp: React.FC = () => {
     initialize();
   }, []);
 
+  useEffect(() => {
+    if (isLoading) return;
+
+    const hash = window.location.hash ? window.location.hash.slice(1) : '';
+    if (hash === 'performance-metrics' && activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+      return;
+    }
+    if (hash) {
+      const target = document.getElementById(hash);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [isLoading, activeTab]);
+
   // Render loading state
   if (isLoading) {
     return (
@@ -66,7 +82,7 @@ export const OptionsApp: React.FC = () => {
       <div className="settings-header">
         <div className="settings-container">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-3">
                 <Settings className="w-8 h-8 text-ink-primary" />
                 <div>

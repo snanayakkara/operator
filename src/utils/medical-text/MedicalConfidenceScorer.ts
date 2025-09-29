@@ -1,10 +1,11 @@
-import { Logger } from '@/utils/Logger';
-import { CacheManager } from '@/utils/performance/CacheManager';
+import { logger } from '@/utils/Logger';
+import { CacheManager, type CacheKey } from '../CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
 import { MedicalPatternService } from './MedicalPatternService';
 import { ContextualMedicalAnalyzer } from './ContextualMedicalAnalyzer';
-import { MedicalTerminologyDisambiguator } from './MedicalTerminologyDisambiguator';
+import { MedicalTerminologyDisambiguator, type DisambiguationResult } from './MedicalTerminologyDisambiguator';
 import { MedicalKnowledgeGraph } from './MedicalKnowledgeGraph';
+import { getErrorMessage as _getErrorMessage, toError } from '@/utils/errorHelpers';
 
 export interface ConfidenceMetrics {
   overallConfidence: number;
@@ -97,7 +98,11 @@ export type MedicalDomain =
   | 'pharmacology'
   | 'radiology'
   | 'pathology'
+  | 'emergency'
   | 'emergency_medicine'
+  | 'intensive_care'
+  | 'outpatient'
+  | 'preventive'
   | 'surgery';
 
 export interface ConfidenceScoringConfig {
@@ -143,16 +148,20 @@ export class MedicalConfidenceScorer {
     config: ConfidenceScoringConfig = {}
   ): Promise<ValidationResult> {
     const operationId = `validate_medical_accuracy_${Date.now()}`;
-    const cacheKey = `medical_validation:${this.generateCacheKey(text, config)}`;
+    const cacheKey: CacheKey = {
+      patientId: 'system',
+      dataType: 'validation_result',
+      version: this.generateCacheSignature(text, config)
+    };
 
     try {
-      this.performanceMonitor.startOperation(operationId, 'medical_validation');
+      this.performanceMonitor.startOperation(operationId, 'medical_validation', 'medical-confidence');
 
       // Check cache first
-      const cached = await this.cacheManager.get(cacheKey);
-      if (cached) {
-        Logger.info('🎯 Medical validation cache hit', { cacheKey });
-        return cached as ValidationResult;
+      const cached = await this.cacheManager.get<ValidationResult>(cacheKey);
+      if (cached.hit && cached.data) {
+        logger.info('🎯 Medical validation cache hit', { cacheKey: cacheKey.version });
+        return cached.data;
       }
 
       const issues: ValidationIssue[] = [];
@@ -162,6 +171,10 @@ export class MedicalConfidenceScorer {
 
       // Extract medical patterns for analysis
       const medicalTerms = await this.medicalPatternService.extractMedicalTerms(text, {
+        domains: ['cardiology', 'pathology', 'medication', 'anatomy', 'general'],
+        extractionMode: 'comprehensive',
+        preserveContext: true,
+        includeUnits: true,
         semanticAnalysis: true,
         includeRelationships: true,
         australianCompliance: true
@@ -215,10 +228,10 @@ export class MedicalConfidenceScorer {
       };
 
       // Cache the result
-      await this.cacheManager.set(cacheKey, result, 20 * 60 * 1000); // 20 minutes
+      await this.cacheManager.set(cacheKey, result, undefined, 20 * 60 * 1000); // 20 minutes
 
       this.performanceMonitor.endOperation(operationId);
-      Logger.info('✅ Medical accuracy validation completed', { 
+      logger.info('✅ Medical accuracy validation completed', { 
         operationId,
         overallConfidence: confidence.overallConfidence,
         issuesFound: filteredIssues.length,
@@ -228,9 +241,10 @@ export class MedicalConfidenceScorer {
       return result;
 
     } catch (error) {
-      this.performanceMonitor.recordError(operationId, error as Error);
-      Logger.error('❌ Medical accuracy validation failed', { error, operationId });
-      throw error;
+      const err = toError(error);
+      this.performanceMonitor.recordError(operationId, err);
+      logger.error('❌ Medical accuracy validation failed', err, { operationId });
+      throw err;
     }
   }
 
@@ -272,24 +286,22 @@ export class MedicalConfidenceScorer {
         }
       });
 
-      // Validate semantic relationships
-      if (semanticAnalysis.relationships) {
-        for (const relationship of semanticAnalysis.relationships) {
-          if (relationship.confidence < 0.6) {
-            accuracyFlags.push({
-              type: 'clinical_guideline',
-              description: `Low confidence clinical relationship: ${relationship.type}`,
-              severity: 'minor',
-              medicalRationale: 'Clinical relationship may need verification',
-              suggestedCorrection: 'Review and clarify the clinical relationship',
-              australianGuideline: relationship.australianGuideline
-            });
-          }
+      // Validate semantic relationships derived from detected patterns
+      const relationships = semanticAnalysis.patterns.flatMap(pattern => pattern.relationships ?? []);
+      relationships.forEach(relationship => {
+        if (relationship.strength < 0.6) {
+          accuracyFlags.push({
+            type: 'clinical_guideline',
+            description: `Low confidence clinical relationship: ${relationship.type}`,
+            severity: 'minor',
+            medicalRationale: 'Clinical relationship may need verification',
+            suggestedCorrection: 'Review and clarify the clinical relationship'
+          });
         }
-      }
+      });
 
     } catch (error) {
-      Logger.error('❌ Semantic accuracy validation failed', { error });
+      logger.error('❌ Semantic accuracy validation failed', toError(error));
     }
   }
 
@@ -305,7 +317,7 @@ export class MedicalConfidenceScorer {
 
       for (const term of potentialTerms) {
         const disambiguation = await this.terminologyDisambiguator.disambiguateTerm(term, text, {
-          includeAustralianTerminology: true,
+          includeAlternatives: true,
           contextWindow: 50
         });
 
@@ -315,27 +327,29 @@ export class MedicalConfidenceScorer {
             severity: 'minor',
             description: `Ambiguous medical term: "${term}"`,
             location: this.findTextLocation(text, term),
-            suggestion: `Consider using: ${disambiguation.alternatives.slice(0, 2).map(alt => alt.term).join(' or ')}`,
+            suggestion: `Consider: ${disambiguation.alternatives
+              .slice(0, 2)
+              .map(alt => alt.term)
+              .join(' or ')}`,
             confidence: disambiguation.confidence,
-            medicalDomain: disambiguation.domain
+            medicalDomain: disambiguation.domain as MedicalDomain
           });
         }
 
-        // Check for terminology precision
-        if (disambiguation.australianVariant && disambiguation.australianVariant !== term) {
+        if (!disambiguation.australianCompliant) {
+          const suggested = this.findAustralianPreferredTerm(disambiguation);
           accuracyFlags.push({
             type: 'terminology_precision',
-            description: `Australian terminology variant available: "${disambiguation.australianVariant}"`,
+            description: `Terminology may not align with Australian standards: "${term}"`,
             severity: 'informational',
             medicalRationale: 'Australian medical terminology standards recommend local variants',
-            suggestedCorrection: disambiguation.australianVariant,
-            australianGuideline: 'Australian Medical Terminology Standards'
+            suggestedCorrection: suggested ?? term
           });
         }
       }
 
     } catch (error) {
-      Logger.error('❌ Terminology accuracy validation failed', { error });
+      logger.error('❌ Terminology accuracy validation failed', toError(error));
     }
   }
 
@@ -350,50 +364,44 @@ export class MedicalConfidenceScorer {
         detailLevel: 'expert'
       });
 
-      // Check for clinical reasoning gaps
-      if (reasoning.patterns) {
-        for (const pattern of reasoning.patterns) {
-          if (pattern.confidence < 0.6) {
-            issues.push({
-              type: 'clinical_reasoning_gap',
-              severity: 'major',
-              description: `Weak clinical reasoning pattern detected: ${pattern.type}`,
-              location: { start: 0, end: text.length, context: text.substring(0, 100) },
-              suggestion: 'Strengthen clinical justification and evidence',
-              confidence: pattern.confidence
-            });
-          }
-
-          // Check for missing components in clinical reasoning
-          if (pattern.components && pattern.components.length < 2) {
-            accuracyFlags.push({
-              type: 'clinical_guideline',
-              description: 'Clinical reasoning may lack sufficient supporting components',
-              severity: 'minor',
-              medicalRationale: 'Comprehensive clinical reasoning should include multiple supporting elements',
-              suggestedCorrection: 'Add supporting clinical evidence or rationale'
-            });
-          }
+      for (const pattern of reasoning.patterns) {
+        if (pattern.confidence < 0.6) {
+          issues.push({
+            type: 'clinical_reasoning_gap',
+            severity: 'major',
+            description: `Weak clinical reasoning pattern detected: ${pattern.type}`,
+            location: { start: 0, end: text.length, context: text.substring(0, 100) },
+            suggestion: 'Strengthen clinical justification and evidence',
+            confidence: pattern.confidence
+          });
         }
-      }
 
-      // Validate workflow completeness
-      if (reasoning.workflow && reasoning.workflow.steps) {
-        const criticalSteps = reasoning.workflow.steps.filter(step => step.isCritical);
-        if (criticalSteps.length === 0) {
+        if (pattern.components.length < 2) {
+          accuracyFlags.push({
+            type: 'clinical_guideline',
+            description: 'Clinical reasoning may lack sufficient supporting components',
+            severity: 'minor',
+            medicalRationale: 'Comprehensive clinical reasoning should include multiple supporting elements',
+            suggestedCorrection: 'Add supporting clinical evidence or rationale'
+          });
+        }
+
+        const workflowSteps = pattern.workflow ?? [];
+        const hasHighEvidenceStep = workflowSteps.some(step => step.evidence_level === 'A');
+        if (workflowSteps.length > 0 && !hasHighEvidenceStep) {
           issues.push({
             type: 'completeness_issue',
             severity: 'major',
-            description: 'No critical clinical steps identified in workflow',
+            description: 'Clinical workflow lacks high-evidence steps',
             location: { start: 0, end: text.length, context: text.substring(0, 100) },
-            suggestion: 'Ensure critical clinical decision points are clearly documented',
+            suggestion: 'Document high-confidence clinical decision points',
             confidence: 0.8
           });
         }
       }
 
     } catch (error) {
-      Logger.error('❌ Clinical reasoning validation failed', { error });
+      logger.error('❌ Clinical reasoning validation failed', toError(error));
     }
   }
 
@@ -465,7 +473,7 @@ export class MedicalConfidenceScorer {
       }
 
     } catch (error) {
-      Logger.error('❌ Australian compliance validation failed', { error });
+      logger.error('❌ Australian compliance validation failed', toError(error));
     }
   }
 
@@ -483,12 +491,17 @@ export class MedicalConfidenceScorer {
       for (const measurement of measurements) {
         const result = await this.validateMeasurementAccuracy(measurement, text);
         if (!result.isValid) {
+          const issueDescription = result.issue ?? `Measurement requires review: ${measurement}`;
+          const severity = (result.severity as MedicalAccuracyFlag['severity']) ?? 'minor';
+          const rationale = result.rationale ?? 'Measurement falls outside typical clinical bounds';
+          const suggestion = result.suggestion ?? 'Confirm value and ensure correct units/context';
+
           accuracyFlags.push({
             type: 'measurement_unit',
-            description: result.issue,
-            severity: result.severity as any,
-            medicalRationale: result.rationale,
-            suggestedCorrection: result.suggestion
+            description: issueDescription,
+            severity,
+            medicalRationale: rationale,
+            suggestedCorrection: suggestion
           });
         }
       }
@@ -516,13 +529,13 @@ export class MedicalConfidenceScorer {
       }
 
     } catch (error) {
-      Logger.error('❌ Factual accuracy validation failed', { error });
+      logger.error('❌ Factual accuracy validation failed', toError(error));
     }
   }
 
   private async validateMeasurementAccuracy(
     measurement: string,
-    context: string
+    _context: string
   ): Promise<{
     isValid: boolean;
     issue?: string;
@@ -575,7 +588,7 @@ export class MedicalConfidenceScorer {
     issues: ValidationIssue[],
     accuracyFlags: MedicalAccuracyFlag[]
   ): Promise<ConfidenceMetrics> {
-    const totalIssues = issues.length;
+    const _totalIssues = issues.length;
     const criticalIssues = issues.filter(i => i.severity === 'critical').length;
     const majorIssues = issues.filter(i => i.severity === 'major').length;
     const minorIssues = issues.filter(i => i.severity === 'minor').length;
@@ -805,6 +818,18 @@ export class MedicalConfidenceScorer {
     };
   }
 
+  private findAustralianPreferredTerm(disambiguation: DisambiguationResult): string | undefined {
+    const australianAlternative = disambiguation.alternatives.find(alt =>
+      alt.reasoning.toLowerCase().includes('australian')
+    );
+
+    if (australianAlternative) {
+      return australianAlternative.term;
+    }
+
+    return disambiguation.disambiguatedTerm;
+  }
+
   private inferMedicalDomain(term: string): MedicalDomain {
     const cardiologyTerms = ['cardiac', 'heart', 'coronary', 'artery', 'valve', 'ecg', 'ekg'];
     const pharmacologyTerms = ['mg', 'mcg', 'dose', 'medication', 'drug', 'tablet'];
@@ -819,7 +844,7 @@ export class MedicalConfidenceScorer {
     return 'general_medicine';
   }
 
-  private generateCacheKey(text: string, config: ConfidenceScoringConfig): string {
+  private generateCacheSignature(text: string, config: ConfidenceScoringConfig): string {
     const textHash = text.length > 100 ? 
       `${text.substring(0, 50)}...${text.substring(text.length - 50)}_${text.length}` : text;
     const configHash = JSON.stringify(config);
@@ -827,11 +852,15 @@ export class MedicalConfidenceScorer {
   }
 
   async calculateQuickConfidence(text: string): Promise<number> {
-    const cacheKey = `quick_confidence:${this.generateCacheKey(text, {})}`;
-    
-    const cached = await this.cacheManager.get(cacheKey);
-    if (cached) {
-      return cached as number;
+    const cacheKey: CacheKey = {
+      patientId: 'quick_confidence',
+      dataType: 'validation_result',
+      version: this.generateCacheSignature(text, {})
+    };
+
+    const cached = await this.cacheManager.get<number>(cacheKey);
+    if (cached.hit && typeof cached.data === 'number') {
+      return cached.data;
     }
 
     // Quick confidence calculation without full validation
@@ -845,7 +874,7 @@ export class MedicalConfidenceScorer {
 
     const quickConfidence = (lengthScore + Math.min(1.0, medicalDensity * 5) + structureScore) / 3;
 
-    await this.cacheManager.set(cacheKey, quickConfidence, 10 * 60 * 1000); // 10 minutes
+    await this.cacheManager.set(cacheKey, quickConfidence, undefined, 10 * 60 * 1000); // 10 minutes
     return quickConfidence;
   }
 }

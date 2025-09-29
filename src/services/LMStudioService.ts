@@ -20,7 +20,7 @@ import { StreamingParser } from '@/utils/StreamingParser';
  * - QUICK_MODEL: Used for simple formatting tasks (investigation-summary, quick-letter, etc.)
  */
 export const MODEL_CONFIG = {
-  REASONING_MODEL: 'lmstudio-community/medgemma-27b-text-it-MLX-4bit',
+  REASONING_MODEL: 'medgemma-27b-text-it-mlx',
   QUICK_MODEL: 'google/gemma-3n-e4b'
 } as const;
 
@@ -83,19 +83,20 @@ export class LMStudioService {
       retryAttempts: 3,
       agentModels: {
         // OPTIMIZED MODELS FOR SPECIFIC TASKS:
-        
+
         // Fast formatting tasks - Use lightweight model for 3-8s processing
         'investigation-summary': MODEL_CONFIG.QUICK_MODEL, // Simple investigation result formatting
         'medication': MODEL_CONFIG.QUICK_MODEL, // Simple medication list formatting
         'background': MODEL_CONFIG.QUICK_MODEL, // Simple medical background/history formatting with ↪ arrows
         'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
-        
+
+
         // All workflow buttons use default REASONING_MODEL for comprehensive medical analysis:
         // - 'quick-letter': Uses REASONING_MODEL for proper medical dictation processing
         // - 'ai-medical-review': Uses REASONING_MODEL (3-4min processing)
         // - 'tavi', 'angiogram-pci', 'mteer': Use REASONING_MODEL (8-15min processing)
         // - 'consultation': Uses REASONING_MODEL (30s-4min processing)
-        
+
         // This configuration ensures optimal speed for simple tasks while maintaining
         // medical accuracy for complex clinical analysis and detailed procedure reports
       },
@@ -106,6 +107,7 @@ export class LMStudioService {
         
         // Complex procedure agents need detailed reports
         'tavi': 8000,
+        'tavi-workup': 6000,
         'angiogram-pci': 8000,
         'mteer': 7000,
         'pfo-closure': 7000,
@@ -129,6 +131,7 @@ export class LMStudioService {
         
         // Complex procedure agents need extended processing time
         'tavi': 480000,              // 8 minutes
+        'tavi-workup': 360000,
         'angiogram-pci': 480000,     // 8 minutes  
         'mteer': 420000,             // 7 minutes
         'pfo-closure': 360000,       // 6 minutes
@@ -168,7 +171,12 @@ export class LMStudioService {
   }
 
 
-  public async transcribeAudio(audioBlob: Blob, signal?: AbortSignal, agentType?: string): Promise<string> {
+  public async transcribeAudio(
+    audioBlob: Blob,
+    signal?: AbortSignal,
+    agentType?: string,
+    onProgress?: (progress: number, details?: string) => void
+  ): Promise<string> {
     const startTime = Date.now();
     
     logger.info('LMStudioService.transcribeAudio() called', {
@@ -181,6 +189,19 @@ export class LMStudioService {
     });
     
     try {
+      // Progress callback helper
+      const reportProgress = (progress: number, details?: string) => {
+        if (onProgress) {
+          onProgress(progress, details);
+        }
+      };
+
+      // Estimate processing time based on audio duration for progress calculation
+      const audioDurationMs = audioBlob.size / 16; // Rough estimate: 16 bytes per ms of audio
+      const estimatedTranscriptionTime = Math.min(Math.max(audioDurationMs / 50, 3000), 120000); // 50x realtime, min 3s, max 2min
+
+      reportProgress(5, 'Checking MLX Whisper server status');
+
       // Ensure Whisper server is running before attempting transcription
       const serverStatus = await this.whisperServerService.ensureServerRunning();
       if (!serverStatus.running) {
@@ -189,16 +210,20 @@ export class LMStudioService {
           operation: 'transcribe-whisper-check',
           instructions: ['./start-whisper-server.sh', 'source venv-whisper/bin/activate && python whisper-server.py']
         });
-        
+
         return `[MLX Whisper server not running. ${serverStatus.error || 'Please start the server manually.'}]`;
       }
 
+      reportProgress(10, 'MLX Whisper server ready');
+
       // Audio optimization for better performance
+      reportProgress(15, 'Optimizing audio for transcription');
       let processedAudioBlob = audioBlob;
       const audioOptimizer = AudioOptimizationService.getInstance();
-      
+
       // Check if compression would be beneficial
       if (audioOptimizer.shouldCompress(audioBlob)) {
+        reportProgress(20, 'Compressing audio for better performance');
         logger.info('Compressing audio for better transcription performance', {
           component: 'lm-studio',
           operation: 'audio-compression-start'
@@ -207,6 +232,7 @@ export class LMStudioService {
           const compressionResult = await audioOptimizer.compressAudio(audioBlob);
           processedAudioBlob = compressionResult.compressedBlob;
           
+          reportProgress(25, `Audio compressed: ${Math.round(compressionResult.compressedSize / 1024)}KB`);
           logger.info('Audio compression completed', {
             component: 'lm-studio',
             operation: 'audio-compression-success',
@@ -231,6 +257,7 @@ export class LMStudioService {
         });
       }
       // Get glossary terms for Whisper prompt seeding
+      reportProgress(30, 'Loading medical glossary terms');
       let glossaryPrompt = '';
       try {
         const asrEngine = ASRCorrectionEngine.getInstance();
@@ -283,15 +310,30 @@ export class LMStudioService {
         timeout: this.config.timeout
       });
       
+      reportProgress(35, 'Sending audio to MLX Whisper for transcription');
+
       // Combine user signal with timeout signal for robust cancellation
       const timeoutSignal = AbortSignal.timeout(this.config.timeout);
       const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-      
-      const response = await fetch(fullUrl, {
-        method: 'POST',
-        body: formData,
-        signal: combinedSignal
-      });
+
+      // Start progress simulation for long transcriptions
+      const progressSimulation = this.startTranscriptionProgressSimulation(
+        estimatedTranscriptionTime,
+        35, // starting progress
+        85, // ending progress
+        reportProgress
+      );
+
+      try {
+        const response = await fetch(fullUrl, {
+          method: 'POST',
+          body: formData,
+          signal: combinedSignal
+        });
+
+        // Clear progress simulation
+        clearInterval(progressSimulation);
+        reportProgress(90, 'Processing transcription response');
       
       console.log('📡 Transcription response:', {
         status: response.status,
@@ -304,6 +346,7 @@ export class LMStudioService {
       if (response.ok) {
         const text = await response.text();
         const processingTime = Date.now() - startTime;
+        reportProgress(100, `Transcription complete (${processingTime}ms)`);
         
         console.log('✅ Transcription successful:', {
           responseLength: text.length,
@@ -360,6 +403,12 @@ export class LMStudioService {
           
           return placeholderText;
         }
+      }
+
+      } catch (fetchError) {
+        // Clear progress simulation on fetch error
+        clearInterval(progressSimulation);
+        throw fetchError;
       }
 
     } catch (error) {
@@ -657,16 +706,33 @@ export class LMStudioService {
   public async makeRequest(request: LMStudioRequest, signal?: AbortSignal, agentType?: string): Promise<string> {
     const startTime = Date.now();
     let lastError: Error | null = null;
-    
+
     // Determine agent-specific timeout
     const agentTimeout = (agentType && this.config.agentTimeouts?.[agentType])
       ? this.config.agentTimeouts[agentType]
       : this.config.agentTimeouts?.['default'] || this.config.timeout;
-    
+
     const timeoutMinutes = Math.round(agentTimeout / 60000);
     console.log(`🚀 Starting LMStudio request for agent: ${agentType || 'default'}`);
     console.log(`⏰ Timeout: ${timeoutMinutes} minutes (${agentTimeout}ms) for this agent type`);
-    
+
+    // Create request body string once for reuse
+    const requestBody = JSON.stringify(request);
+
+    // TEMP DEBUG: Log TAVI requests to identify Gemma formatting issue
+    if (agentType === 'tavi-workup') {
+      console.log('🔍 TAVI REQUEST DEBUG:', {
+        model: request.model,
+        messagesCount: request.messages?.length,
+        firstMessageRole: request.messages?.[0]?.role,
+        firstMessageContentLength: request.messages?.[0]?.content?.length,
+        firstMessagePreview: request.messages?.[0]?.content?.substring(0, 200) + '...',
+        requestBodyLength: requestBody.length,
+        hasGemmaTokens: request.messages?.[0]?.content?.includes('<start_of_turn>')
+      });
+    }
+
+
     // Set up timeout warning at 2 minutes or 1/3 of timeout, whichever is shorter
     const warningTime = Math.min(120000, agentTimeout / 3);
     const warningTimeout = setTimeout(() => {
@@ -685,13 +751,13 @@ export class LMStudioService {
         // Combine user signal with agent-specific timeout signal for robust cancellation
         const timeoutSignal = AbortSignal.timeout(agentTimeout);
         const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-        
+
         const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(request),
+          body: requestBody,
           signal: combinedSignal
         });
 
@@ -876,36 +942,18 @@ export class LMStudioService {
     // Check DSPy server status
     try {
       const dspyService = DSPyService.getInstance();
-      const dspyStatus = await dspyService.getServerStatus();
-      
-      if (dspyStatus) {
-        this.modelStatus.dspyServer = {
-          running: dspyStatus.status === 'healthy',
-          ready: dspyStatus.dspy?.ready || false,
-          port: dspyStatus.server?.port || 8002,
-          lastChecked: Date.now(),
-          version: dspyStatus.server?.version,
-          uptime: dspyStatus.server?.uptime_seconds,
-          stats: dspyStatus.stats ? {
-            requests_processed: dspyStatus.stats.requests_processed,
-            errors_encountered: dspyStatus.stats.errors_encountered,
-            active_optimizations: dspyStatus.stats.active_optimizations
-          } : undefined,
-          dspy: dspyStatus.dspy ? {
-            config_loaded: dspyStatus.dspy.config_loaded,
-            available_agents: dspyStatus.dspy.available_agents,
-            enabled_agents: dspyStatus.dspy.enabled_agents
-          } : undefined
-        };
-      } else {
-        this.modelStatus.dspyServer = {
-          running: false,
-          ready: false,
-          port: 8002,
-          lastChecked: Date.now(),
-          error: 'DSPy server not responding'
-        };
-      }
+      const isHealthy = await dspyService.checkServerHealth();
+
+      this.modelStatus.dspyServer = {
+        running: isHealthy,
+        ready: isHealthy,
+        port: 8002,
+        lastChecked: Date.now(),
+        version: undefined,
+        uptime: undefined,
+        stats: undefined,
+        dspy: undefined
+      };
     } catch (error) {
       // DSPy server check failed - this is expected when not running
       this.modelStatus.dspyServer = {
@@ -994,6 +1042,32 @@ export class LMStudioService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Starts a progress simulation for transcription operations to provide user feedback
+   * during long audio processing operations.
+   */
+  private startTranscriptionProgressSimulation(
+    estimatedTimeMs: number,
+    startProgress: number,
+    endProgress: number,
+    onProgress: (progress: number, details?: string) => void
+  ): NodeJS.Timeout {
+    const progressRange = endProgress - startProgress;
+    const updateIntervalMs = Math.max(Math.min(estimatedTimeMs / 10, 2000), 500); // Update every 500ms-2s
+    let currentProgress = startProgress;
+
+    return setInterval(() => {
+      const increment = progressRange / (estimatedTimeMs / updateIntervalMs);
+      currentProgress = Math.min(currentProgress + increment, endProgress - 1); // Stop 1% before end
+
+      const details = currentProgress < 50
+        ? 'Processing audio with MLX Whisper...'
+        : 'Generating transcription...';
+
+      onProgress(Math.round(currentProgress), details);
+    }, updateIntervalMs);
+  }
+
 }
 
 // Streaming types and helpers for SSE chat completions
@@ -1039,6 +1113,7 @@ export async function streamChatCompletion(opts: StreamOpts): Promise<void> {
     let pending = '';
     let finalText = '';
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;

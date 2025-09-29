@@ -6,6 +6,7 @@ import type {
   MedicalReport,
   MedicalCode
 } from '@/types/medical.types';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { ANGIOGRAM_PCI_SYSTEM_PROMPTS, ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE } from './AngiogramPCISystemPrompts';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 
@@ -18,6 +19,7 @@ type ProcedureType = 'DIAGNOSTIC_ANGIOGRAM' | 'PCI_INTERVENTION' | 'COMBINED';
  */
 export class AngiogramPCIAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
   
   // Combined medical knowledge from both specialties
   private readonly vesselSegments = ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE.coronarySegments;
@@ -37,12 +39,26 @@ export class AngiogramPCIAgent extends MedicalAgent {
       'Interventional Cardiology',
       'Unified agent for cardiac catheterization: diagnostic angiography, PCI interventions, and combined procedures',
       'angiogram-pci',
-      ANGIOGRAM_PCI_SYSTEM_PROMPTS.primary
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('angiogram-pci', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ AngiogramPCIAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist interventional cardiologist generating comprehensive angiogram and PCI procedural reports.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     
     try {
@@ -179,7 +195,9 @@ ${input}`;
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
+
     // Detect procedure type if not already stored in memory
     const procedureType: ProcedureType = this.getMemory().shortTerm['detectedProcedureType'] || 'DIAGNOSTIC_ANGIOGRAM';
     // Always use unified 3-section report format

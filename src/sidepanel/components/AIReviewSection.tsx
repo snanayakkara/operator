@@ -91,7 +91,7 @@ export const AIReviewSection: React.FC<AIReviewSectionProps> = ({
           console.log('📋 EMR EXTRACTION: Successfully received data:', emrData);
           
           // Validate data and format for AI review
-          const fieldsWithData = Object.entries(emrData).filter(([key, value]) => 
+          const fieldsWithData = Object.entries(emrData).filter(([_key, value]) =>
             value && typeof value === 'string' && value.trim().length > 0
           );
           

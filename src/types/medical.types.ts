@@ -16,9 +16,24 @@ export interface MedicalContext {
   timestamp: number;
   isReprocessing?: boolean;
   withMissingInfo?: boolean;
-  // Phase 3 feature flags (optional)
-  processingMode?: 'legacy' | 'phase3';
-  phase3Enhancement?: boolean;
+  // Enhanced processing mode (optional)
+  processingMode?: 'legacy' | 'enhanced';
+  enhancedProcessing?: boolean;
+  // Progress tracking for long recordings
+  onProgress?: (phase: string, progress: number, details?: string) => void;
+  // Cross-agent intelligence properties
+  sharedInsights?: any[];
+  riskAssessment?: any[];
+  drugInteractions?: any[];
+  clinicalCorrelations?: any[];
+  terminologyPreferences?: string;
+  recommendations?: string[];
+}
+
+// Custom error interface for enhanced error handling
+export interface CustomError extends Error {
+  component?: string;
+  error?: any;
 }
 
 export interface MedicalReport {
@@ -47,8 +62,8 @@ export interface ReportMetadata {
   confidence: number;
   processingTime: number;
   modelUsed: string;
-  // Optional Phase 3 metadata extensions
-  phase3Processing?: Record<string, unknown>;
+  // Optional enhanced processing metadata extensions
+  enhancedProcessing?: Record<string, unknown>;
   validationResults?: Record<string, unknown>;
   enhancedFeatures?: {
     intelligentWaiting?: boolean;
@@ -159,7 +174,7 @@ export interface LMStudioResponse {
   };
 }
 
-export type AgentType = 
+export type AgentType =
   | 'tavi'
   | 'angiogram-pci'
   | 'quick-letter'
@@ -180,6 +195,8 @@ export type AgentType =
   | 'ai-medical-review'
   | 'batch-ai-review'
   | 'patient-education'
+  | 'ohif-viewer'
+  | 'aus-medical-review'
   | 'enhancement'
   | 'transcription'
   | 'generation';
@@ -210,12 +227,14 @@ export interface AppState {
   failedAudioRecordings: FailedAudioRecording[];
   // AI Review structured data
   reviewData?: any;
+  // TAVI Workup structured data
+  taviStructuredSections?: TAVIWorkupStructuredSections;
   // Patient version generation
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
 }
 
-export type ProcessingStatus = 
+export type ProcessingStatus =
   | 'idle'
   | 'recording'
   | 'transcribing'
@@ -226,6 +245,7 @@ export type ProcessingStatus =
   | 'error'
   | 'cancelled'
   | 'cancelling';
+
 
 export interface ModelStatus {
   isConnected: boolean;
@@ -419,108 +439,165 @@ export interface TAVIComplication {
 // TAVI Workup Types
 export interface TAVIWorkupReport extends MedicalReport {
   workupData: TAVIWorkupData;
-  tavitoolAnalysis?: TavitoolAnalysis;
-  completenessScore: number;
+  alerts: TAVIWorkupAlerts;
+  missingFields: string[];
+  // New JSON structure for narrative-based PDF export
+  structuredSections?: TAVIWorkupStructuredSections;
+}
+
+// New interface for JSON narrative structure matching system prompt output
+export interface TAVIWorkupStructuredSections {
+  patient: TAVIWorkupSection;
+  clinical: TAVIWorkupSection;
+  laboratory: TAVIWorkupSection;
+  ecg: TAVIWorkupSection;
+  background: TAVIWorkupSection;
+  medications: TAVIWorkupSection;
+  social_history: TAVIWorkupSection;
+  investigations: TAVIWorkupSection;
+  echocardiography: TAVIWorkupSection;
+  enhanced_ct: TAVIWorkupSection;
+  procedure_planning: TAVIWorkupSection;
+  alerts: TAVIWorkupSection;
+  missing_summary: TAVIWorkupMissingSummary;
+}
+
+export interface TAVIWorkupSection {
+  content: string;
+  missing: string[];
+  // Pre-anaesthetic review fields (only for alerts section)
+  pre_anaesthetic_review_text?: string;
+  pre_anaesthetic_review_json?: any;
+}
+
+export interface TAVIWorkupMissingSummary {
+  missing_clinical: string[];
+  missing_diagnostic: string[];
+  missing_measurements: string[];
+  completeness_score: string;
 }
 
 export interface TAVIWorkupData {
-  patientInfo: TAVIPatientInfo;
-  ctSizing: CTSizing;
-  echoParameters: EchoParameters;
-  angiogramFindings: AngiogramFindings;
-  clinicalBackground: ClinicalBackground;
-  procedurePlanning: ProcedurePlanning;
+  patient: TAVIWorkupPatient;
+  clinical: TAVIWorkupClinical;
+  laboratory: TAVIWorkupLaboratory;
+  ecg: TAVIWorkupECG;
+  echocardiography: TAVIWorkupEchocardiography;
+  ctMeasurements: TAVIWorkupCTMeasurements;
+  procedurePlan: TAVIWorkupProcedurePlan;
+  devicesPlanned?: string;
 }
 
-export interface TAVIPatientInfo {
+export interface TAVIWorkupPatient {
   name?: string;
-  mrn?: string;
-  age?: string;
-  weight?: string;
-  height?: string;
-  bsa?: string;
+  dob?: string;
+  ageYears?: number;
+  heightCm?: number;
+  weightKg?: number;
+  bmi?: number;
+  bsaMosteller?: number;
 }
 
-export interface CTSizing {
-  annulusMeasurements: AnnulusMeasurements;
-  lvotDimensions: LVOTDimensions;
-  coronaryHeights: CoronaryHeights;
-  accessAssessment: AccessAssessment;
+export interface TAVIWorkupClinical {
+  indication?: string;
+  nyhaClass?: 'I' | 'II' | 'III' | 'IV';
+  stsPercent?: number;
+  euroScorePercent?: number;
 }
 
-export interface AnnulusMeasurements {
-  minDiameter: string;
-  maxDiameter: string;
-  area: string;
-  perimeter: string;
+export interface TAVIWorkupLaboratory {
+  creatinine?: number; // μmol/L
+  egfr?: number; // mL/min/1.73m²
+  hemoglobin?: number; // g/L
+  albumin?: number; // g/L
 }
 
-export interface LVOTDimensions {
-  diameter: string;
-  area: string;
-  calcification: string;
+export interface TAVIWorkupECG {
+  rate?: number; // bpm
+  rhythm?: string; // e.g., "SR", "AF", "sinus rhythm", "atrial fibrillation"
+  morphology?: string; // e.g., "narrow", "LBBB", "RBBB", "normal"
+  qrsWidthMs?: number; // ms
+  prIntervalMs?: number; // ms
 }
 
-export interface CoronaryHeights {
-  lcaHeight: string;
-  rcaHeight: string;
+export interface TAVIWorkupEchocardiography {
+  studyDate?: string;
+  ejectionFractionPercent?: number;
+  septalThicknessMm?: number;
+  meanGradientMmHg?: number;
+  aorticValveAreaCm2?: number;
+  dimensionlessIndex?: number;
+  mitralRegurgitationGrade?: string;
+  rightVentricularSystolicPressureMmHg?: number;
+  comments?: string;
 }
 
-export interface AccessAssessment {
-  femoral: string;
-  subclavian: string;
-  transaortic: string;
-}
-
-export interface EchoParameters {
-  lvef: string;
-  aorticGradients: {
-    peak: string;
-    mean: string;
+export interface TAVIWorkupCTMeasurements {
+  annulusAreaMm2?: number;
+  annulusPerimeterMm?: number;
+  annulusMinDiameterMm?: number;
+  annulusMaxDiameterMm?: number;
+  coronaryHeights: {
+    leftMainMm?: number;
+    rightCoronaryMm?: number;
   };
-  valveArea: string;
-  mitralRegurgitation: string;
-  tricuspidRegurgitation: string;
-  pulmonaryPressure: string;
+  sinusOfValsalva: {
+    leftMm?: number;
+    rightMm?: number;
+    nonCoronaryMm?: number;
+  };
+  coplanarAngles: string[];
+  accessVessels: {
+    rightCIAmm?: number;
+    leftCIAmm?: number;
+    rightEIAmm?: number;
+    leftEIAmm?: number;
+    rightCFAmm?: number;
+    leftCFAmm?: number;
+  };
+  // Enhanced LVOT measurements
+  lvotAreaMm2?: number;
+  lvotPerimeterMm?: number;
+  stjDiameterMm?: number;
+  stjHeightMm?: number;
+  // Calcium scoring
+  calciumScore?: number;
+  lvotCalciumScore?: number;
+  // Detailed aortic measurements
+  aorticDimensions?: {
+    [key: string]: number; // Flexible for various aortic measurements
+  };
 }
 
-export interface AngiogramFindings {
-  coronaryDominance: string;
-  coronaryDisease: CoronaryDisease;
-  accessSite: string;
-  complications: string;
-}
-
-export interface CoronaryDisease {
-  lad: string;
-  lcx: string;
-  rca: string;
-  significantDisease: string;
-}
-
-export interface ClinicalBackground {
-  indication: string;
-  comorbidities: string;
-  medications: string;
-  surgicalRisk: string;
-}
-
-export interface ProcedurePlanning {
+export interface TAVIWorkupProcedurePlan {
   valveSelection: {
-    type: string;
-    size: string;
-    rationale: string;
+    type?: string; // e.g., "Edwards", "Medtronic CoreValve", "Boston Scientific Lotus"
+    size?: string; // e.g., "26mm", "29mm"
+    model?: string; // e.g., "SAPIEN 3", "Evolut R"
+    reason?: string; // e.g., "future coronary access", "optimal sizing"
   };
-  balloonDilation: string;
-  approach: string;
-  specialConsiderations: string;
+  access: {
+    primary?: string; // e.g., "RFA", "LFA", "Right femoral artery"
+    secondary?: string; // e.g., "Right radial artery", "Left radial"
+    wire?: string; // e.g., "Confida", "Safari", "Lunderquist"
+  };
+  strategy: {
+    pacing?: string; // e.g., "Femoral venous", "Right ventricular", "Transvenous"
+    bav?: string; // e.g., "20mm", "22mm", "Not planned"
+    closure?: string; // e.g., "ProStyle + AngioSeal", "Perclose", "Manual compression"
+    protamine?: boolean; // true/false for protamine reversal
+  };
+  goals?: string; // e.g., "Suitable for OT", "Minimize contrast", "Preserve coronary access"
+  caseNotes?: string; // e.g., "Future PCI to LAD; consider guide picture at end"
 }
 
-export interface TavitoolAnalysis {
-  recommendedValve: string;
-  sizingConfidence: string;
-  riskAssessment: string;
-  alternativeOptions: string;
+export interface TAVIWorkupAlerts {
+  alertMessages: string[];
+  triggers: {
+    lowLeftMainHeight: boolean;
+    lowSinusDiameters: string[];
+    smallAccessVessels: string[];
+  };
 }
 
 // Medical Image Analysis Types
@@ -634,6 +711,7 @@ export interface PatientSession {
   transcription: string;
   results: string;
   summary?: string; // Summary for dual card display (especially for QuickLetter)
+  taviStructuredSections?: TAVIWorkupStructuredSections; // TAVI structured data for specialized display
   agentType: AgentType;
   agentName: string;
   timestamp: number;
@@ -648,6 +726,12 @@ export interface PatientSession {
   processingStartTime?: number;
   completedTime?: number;
   audioBlob?: Blob; // Store audio for reprocessing
+  // Progress tracking for long recordings (TAVI workup)
+  processingProgress?: {
+    phase: string;
+    progress: number;
+    details?: string;
+  };
 }
 
 export interface LetterTemplate {
@@ -1080,7 +1164,11 @@ export type TAVIReportData = z.infer<typeof TAVIReportSchema>;
 
 // Enhanced TAVI Report interface with structured JSON data
 export interface TAVIReportStructured extends MedicalReport {
+  taviData?: any;
   taviJsonData?: TAVIReportData;
+  hemodynamics?: any;
+  valveAssessment?: any;
+  complications?: any[];
   validationErrors?: string[];
   isValidJson: boolean;
 }

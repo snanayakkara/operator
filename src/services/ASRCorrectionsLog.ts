@@ -12,6 +12,7 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 import { PhrasebookService } from '@/services/PhrasebookService';
 import type {
   ASRCorrectionsEntry,
@@ -94,12 +95,12 @@ export class ASRCorrectionsLog {
       });
 
     } catch (error) {
-      logger.error('Failed to add ASR correction', {
+      const err = toError(error);
+      logger.error('Failed to add ASR correction', err, {
         component: 'ASRCorrectionsLog',
-        error: error instanceof Error ? error.message : String(error),
         agentType: entry.agentType
       });
-      throw error;
+      throw err;
     }
   }
 
@@ -147,9 +148,9 @@ export class ASRCorrectionsLog {
       return entries;
 
     } catch (error) {
-      logger.error('Failed to get ASR corrections', {
+      const err = toError(error);
+      logger.error('Failed to get ASR corrections', err, {
         component: 'ASRCorrectionsLog',
-        error: error.message,
         options
       });
       return [];
@@ -173,7 +174,7 @@ export class ASRCorrectionsLog {
 
       for (const entry of entries) {
         // Extract potential glossary terms (words that appear in both raw and corrected)
-        const rawWords = this.extractMedicalTerms(entry.rawText);
+        const _rawWords = this.extractMedicalTerms(entry.rawText);
         const correctedWords = this.extractMedicalTerms(entry.correctedText);
 
         for (const word of correctedWords) {
@@ -233,9 +234,9 @@ export class ASRCorrectionsLog {
       return { glossaryTerms, correctionRules };
 
     } catch (error) {
-      logger.error('Failed to aggregate ASR corrections', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to aggregate ASR corrections', err, {
+        component: 'ASRCorrectionsLog'
       });
       return { glossaryTerms: [], correctionRules: [] };
     }
@@ -268,9 +269,9 @@ export class ASRCorrectionsLog {
       return deletedCount;
 
     } catch (error) {
-      logger.error('Failed to clear old corrections', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to clear old corrections', err, {
+        component: 'ASRCorrectionsLog'
       });
       return 0;
     }
@@ -297,9 +298,9 @@ export class ASRCorrectionsLog {
       };
 
     } catch (error) {
-      logger.error('Failed to get storage quota', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to get storage quota', err, {
+        component: 'ASRCorrectionsLog'
       });
       return {
         used: 0,
@@ -330,9 +331,9 @@ export class ASRCorrectionsLog {
       return { ...defaultSettings, ...result[this.SETTINGS_KEY] };
 
     } catch (error) {
-      logger.error('Failed to get optimization settings', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to get optimization settings', err, {
+        component: 'ASRCorrectionsLog'
       });
       return {
         overnight_enabled: true,
@@ -368,11 +369,11 @@ export class ASRCorrectionsLog {
       });
 
     } catch (error) {
-      logger.error('Failed to update optimization settings', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to update optimization settings', err, {
+        component: 'ASRCorrectionsLog'
       });
-      throw error;
+      throw err;
     }
   }
 
@@ -423,10 +424,12 @@ export class ASRCorrectionsLog {
         await this.addCorrection({
           rawText: transcription,
           correctedText,
-          agentType: agentType || 'unknown',
+          agentType: agentType ?? 'transcription',
           confidence: 0.95, // High confidence for user-defined corrections
           source: 'phrasebook',
-          correctionType: 'terminology'
+          correctionType: 'terminology',
+          approvalStatus: 'approved',
+          userExplicitlyApproved: true
         });
       }
 
@@ -436,9 +439,9 @@ export class ASRCorrectionsLog {
       };
 
     } catch (error) {
-      logger.error('Failed to apply phrasebook corrections', {
+      const err = toError(error);
+      logger.error('Failed to apply phrasebook corrections', err, {
         component: 'ASRCorrectionsLog',
-        error: error instanceof Error ? error.message : String(error),
         agentType
       });
 
@@ -480,9 +483,9 @@ export class ASRCorrectionsLog {
       return stored;
 
     } catch (error) {
-      logger.error('Failed to get stored ASR data', {
-        component: 'ASRCorrectionsLog',
-        error: error.message
+      const err = toError(error);
+      logger.error('Failed to get stored ASR data', err, {
+        component: 'ASRCorrectionsLog'
       });
       return {
         entries: [],
@@ -509,12 +512,12 @@ export class ASRCorrectionsLog {
       this.cacheTimestamp = Date.now();
 
     } catch (error) {
-      logger.error('Failed to save ASR corrections', {
+      const err = toError(error);
+      logger.error('Failed to save ASR corrections', err, {
         component: 'ASRCorrectionsLog',
-        error: error.message,
         entriesCount: data.entries.length
       });
-      throw error;
+      throw err;
     }
   }
 

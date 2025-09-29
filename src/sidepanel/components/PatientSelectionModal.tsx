@@ -16,13 +16,13 @@ import type { PatientAppointment } from '@/types/medical.types';
 import {
   modalVariants,
   backdropVariants,
-  staggerContainer,
-  listItemVariants,
-  buttonVariants,
+  staggerContainer as _staggerContainer,
+  listItemVariants as _listItemVariants,
+  buttonVariants as _buttonVariants,
   textVariants,
   withReducedMotion,
-  STAGGER_CONFIGS,
-  ANIMATION_DURATIONS
+  STAGGER_CONFIGS as _STAGGER_CONFIGS,
+  ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 
 interface PatientSelectionModalProps {

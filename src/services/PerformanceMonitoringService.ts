@@ -61,32 +61,36 @@ export class PerformanceMonitoringService {
     duration: number,
     additionalData?: Partial<PerformanceMetrics>
   ): void {
-    const metrics: PerformanceMetrics = {
-      timestamp: Date.now(),
-      processingPhase: phase,
-      duration,
-      memoryUsage: this.getMemoryInfo(),
-      systemLoad: this.getSystemLoad(),
-      ...additionalData
-    };
+    try {
+      const metrics: PerformanceMetrics = {
+        timestamp: Date.now(),
+        processingPhase: phase,
+        duration: Math.max(0, duration || 0), // Ensure positive duration
+        memoryUsage: this.getMemoryInfo(),
+        systemLoad: this.getSystemLoad(),
+        ...additionalData
+      };
 
-    this.metrics.push(metrics);
+      this.metrics.push(metrics);
 
-    // Keep only recent metrics to prevent memory bloat
-    if (this.metrics.length > this.maxMetricsHistory) {
-      this.metrics = this.metrics.slice(-this.maxMetricsHistory);
+      // Keep only recent metrics to prevent memory bloat
+      if (this.metrics.length > this.maxMetricsHistory) {
+        this.metrics = this.metrics.slice(-this.maxMetricsHistory);
+      }
+
+      console.log(`📊 Performance: ${phase} completed in ${duration}ms`, {
+        phase,
+        duration,
+        agentType: additionalData?.agentType,
+        audioSize: additionalData?.audioSize ? Math.round(additionalData.audioSize / 1024) + 'KB' : undefined,
+        memoryUsage: metrics.memoryUsage?.estimatedMemoryMB ? metrics.memoryUsage.estimatedMemoryMB + 'MB' : 'N/A'
+      });
+
+      // Check for performance issues
+      this.detectPerformanceIssues(metrics);
+    } catch (error) {
+      console.warn('⚠️ Failed to record performance metrics:', error);
     }
-
-    console.log(`📊 Performance: ${phase} completed in ${duration}ms`, {
-      phase,
-      duration,
-      agentType: additionalData?.agentType,
-      audioSize: additionalData?.audioSize ? Math.round(additionalData.audioSize / 1024) + 'KB' : undefined,
-      memoryUsage: metrics.memoryUsage?.estimatedMemoryMB + 'MB'
-    });
-
-    // Check for performance issues
-    this.detectPerformanceIssues(metrics);
   }
 
   /**
@@ -98,26 +102,39 @@ export class PerformanceMonitoringService {
     try {
       // This will be available when AgentFactory is loaded
       if (typeof window !== 'undefined' && (window as any).AgentFactory) {
-        agentMemory = (window as any).AgentFactory.getMemoryEstimate();
+        const memEstimate = (window as any).AgentFactory.getMemoryEstimate();
+        if (memEstimate && typeof memEstimate === 'object') {
+          agentMemory = {
+            totalAgents: Math.max(0, memEstimate.totalAgents || 0),
+            estimatedMemoryMB: Math.max(0, memEstimate.estimatedMemoryMB || 0)
+          };
+        }
       }
     } catch (error) {
-      // AgentFactory not loaded yet
+      // AgentFactory not loaded yet or error accessing it
     }
 
-    // Get JavaScript heap information
-    const performance = (window as any).performance;
+    // Get JavaScript heap information with feature detection
     let heapInfo = {
       jsHeapSizeLimit: 0,
       jsHeapTotalSize: 0,
       jsHeapUsedSize: 0
     };
 
-    if (performance && performance.memory) {
-      heapInfo = {
-        jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
-        jsHeapTotalSize: performance.memory.totalJSHeapSize,
-        jsHeapUsedSize: performance.memory.usedJSHeapSize
-      };
+    try {
+      if (typeof window !== 'undefined' &&
+          window.performance &&
+          'memory' in window.performance &&
+          window.performance.memory) {
+        const memory = window.performance.memory as any;
+        heapInfo = {
+          jsHeapSizeLimit: Math.max(0, memory.jsHeapSizeLimit || 0),
+          jsHeapTotalSize: Math.max(0, memory.totalJSHeapSize || 0),
+          jsHeapUsedSize: Math.max(0, memory.usedJSHeapSize || 0)
+        };
+      }
+    } catch (error) {
+      // Performance memory API not available or access restricted
     }
 
     return {
@@ -130,66 +147,92 @@ export class PerformanceMonitoringService {
    * Estimate system load based on processing patterns
    */
   private getSystemLoad(): SystemLoad {
-    const recentMetrics = this.metrics.slice(-5); // Last 5 operations
-    
-    if (recentMetrics.length === 0) {
+    try {
+      const recentMetrics = this.metrics.slice(-5).filter(m =>
+        m && typeof m.duration === 'number' && m.duration >= 0
+      );
+
+      if (recentMetrics.length === 0) {
+        return {};
+      }
+
+      // Estimate CPU usage based on processing times vs expected times
+      const totalDuration = recentMetrics.reduce((sum, m) => sum + (m.duration || 0), 0);
+      const avgDuration = totalDuration / recentMetrics.length;
+
+      const expectedDurations = {
+        'transcription': 2000,      // Expected ~2s for transcription
+        'agent-loading': 500,       // Expected ~500ms for agent loading
+        'agent-processing': 5000,   // Expected ~5s for processing
+        'complete': 0
+      };
+
+      let cpuLoad = 0;
+      recentMetrics.forEach(metric => {
+        const expected = expectedDurations[metric.processingPhase] || 1000;
+        if (expected > 0) {
+          const ratio = (metric.duration || 0) / expected;
+          cpuLoad += Math.min(Math.max(ratio, 0), 3); // Cap between 0 and 3x expected time
+        }
+      });
+
+      const avgCpuLoad = recentMetrics.length > 0 ? (cpuLoad / recentMetrics.length) * 100 : 0;
+
+      return {
+        cpuUsage: Math.min(Math.max(avgCpuLoad, 0), 100),
+        isMainThreadBlocked: avgDuration > 10000, // Over 10s suggests blocking
+        frameDrops: avgCpuLoad > 200 ? Math.max(0, Math.floor(avgCpuLoad / 50)) : 0
+      };
+    } catch (error) {
+      console.warn('⚠️ Failed to calculate system load:', error);
       return {};
     }
-
-    // Estimate CPU usage based on processing times vs expected times
-    const avgDuration = recentMetrics.reduce((sum, m) => sum + m.duration, 0) / recentMetrics.length;
-    const expectedDurations = {
-      'transcription': 2000,      // Expected ~2s for transcription
-      'agent-loading': 500,       // Expected ~500ms for agent loading  
-      'agent-processing': 5000,   // Expected ~5s for processing
-      'complete': 0
-    };
-
-    let cpuLoad = 0;
-    recentMetrics.forEach(metric => {
-      const expected = expectedDurations[metric.processingPhase] || 1000;
-      const ratio = metric.duration / expected;
-      cpuLoad += Math.min(ratio, 3); // Cap at 3x expected time
-    });
-    
-    const avgCpuLoad = (cpuLoad / recentMetrics.length) * 100;
-
-    return {
-      cpuUsage: Math.min(avgCpuLoad, 100),
-      isMainThreadBlocked: avgDuration > 10000, // Over 10s suggests blocking
-      frameDrops: avgCpuLoad > 200 ? Math.floor(avgCpuLoad / 50) : 0
-    };
   }
 
   /**
    * Detect and log performance issues
    */
   private detectPerformanceIssues(metrics: PerformanceMetrics): void {
-    const issues: string[] = [];
+    try {
+      if (!metrics || typeof metrics.duration !== 'number') {
+        return;
+      }
 
-    // Check for slow transcription
-    if (metrics.processingPhase === 'transcription' && metrics.duration > 10000) {
-      issues.push(`Slow transcription (${metrics.duration}ms) - check MLX Whisper server`);
-    }
+      const issues: string[] = [];
+      const duration = Math.max(0, metrics.duration);
 
-    // Check for slow agent processing
-    if (metrics.processingPhase === 'agent-processing' && metrics.duration > 30000) {
-      issues.push(`Slow processing (${metrics.duration}ms) - agent: ${metrics.agentType}`);
-    }
+      // Check for slow transcription
+      if (metrics.processingPhase === 'transcription' && duration > 10000) {
+        issues.push(`Slow transcription (${duration}ms) - check MLX Whisper server`);
+      }
 
-    // Check for high memory usage
-    if (metrics.memoryUsage && metrics.memoryUsage.jsHeapUsedSize > 100 * 1024 * 1024) { // 100MB
-      issues.push(`High memory usage (${Math.round(metrics.memoryUsage.jsHeapUsedSize / 1024 / 1024)}MB)`);
-    }
+      // Check for slow agent processing
+      if (metrics.processingPhase === 'agent-processing' && duration > 30000) {
+        const agentType = metrics.agentType || 'unknown';
+        issues.push(`Slow processing (${duration}ms) - agent: ${agentType}`);
+      }
 
-    // Check for too many loaded agents
-    if (metrics.memoryUsage && metrics.memoryUsage.totalAgents > 8) {
-      issues.push(`Too many agents loaded (${metrics.memoryUsage.totalAgents}) - consider cache optimization`);
-    }
+      // Check for high memory usage with safe access
+      if (metrics.memoryUsage &&
+          typeof metrics.memoryUsage.jsHeapUsedSize === 'number' &&
+          metrics.memoryUsage.jsHeapUsedSize > 100 * 1024 * 1024) { // 100MB
+        const memoryMB = Math.round(metrics.memoryUsage.jsHeapUsedSize / 1024 / 1024);
+        issues.push(`High memory usage (${memoryMB}MB)`);
+      }
 
-    // Log issues
-    if (issues.length > 0) {
-      console.warn('⚠️ Performance issues detected:', issues);
+      // Check for too many loaded agents
+      if (metrics.memoryUsage &&
+          typeof metrics.memoryUsage.totalAgents === 'number' &&
+          metrics.memoryUsage.totalAgents > 8) {
+        issues.push(`Too many agents loaded (${metrics.memoryUsage.totalAgents}) - consider cache optimization`);
+      }
+
+      // Log issues
+      if (issues.length > 0) {
+        console.warn('⚠️ Performance issues detected:', issues);
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to detect performance issues:', error);
     }
   }
 
@@ -250,23 +293,42 @@ export class PerformanceMonitoringService {
    * Analyze memory usage trend
    */
   private analyzeMemoryTrend(): 'stable' | 'increasing' | 'decreasing' {
-    const recentMetrics = this.metrics.slice(-20).filter(m => m.memoryUsage); // Last 20 with memory data
-    
-    if (recentMetrics.length < 5) {
+    try {
+      const recentMetrics = this.metrics
+        .slice(-20)
+        .filter(m => m && m.memoryUsage && typeof m.memoryUsage.jsHeapUsedSize === 'number');
+
+      if (recentMetrics.length < 5) {
+        return 'stable';
+      }
+
+      const midpoint = Math.floor(recentMetrics.length / 2);
+      const firstHalf = recentMetrics.slice(0, midpoint);
+      const secondHalf = recentMetrics.slice(midpoint);
+
+      if (firstHalf.length === 0 || secondHalf.length === 0) {
+        return 'stable';
+      }
+
+      const firstHalfSum = firstHalf.reduce((sum, m) => sum + (m.memoryUsage?.jsHeapUsedSize || 0), 0);
+      const secondHalfSum = secondHalf.reduce((sum, m) => sum + (m.memoryUsage?.jsHeapUsedSize || 0), 0);
+
+      const firstHalfAvg = firstHalfSum / firstHalf.length;
+      const secondHalfAvg = secondHalfSum / secondHalf.length;
+
+      if (firstHalfAvg === 0) {
+        return 'stable';
+      }
+
+      const changePercent = ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100;
+
+      if (changePercent > 10) return 'increasing';
+      if (changePercent < -10) return 'decreasing';
+      return 'stable';
+    } catch (error) {
+      console.warn('⚠️ Failed to analyze memory trend:', error);
       return 'stable';
     }
-
-    const firstHalf = recentMetrics.slice(0, Math.floor(recentMetrics.length / 2));
-    const secondHalf = recentMetrics.slice(Math.floor(recentMetrics.length / 2));
-
-    const firstHalfAvg = firstHalf.reduce((sum, m) => sum + (m.memoryUsage?.jsHeapUsedSize || 0), 0) / firstHalf.length;
-    const secondHalfAvg = secondHalf.reduce((sum, m) => sum + (m.memoryUsage?.jsHeapUsedSize || 0), 0) / secondHalf.length;
-
-    const changePercent = ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100;
-
-    if (changePercent > 10) return 'increasing';
-    if (changePercent < -10) return 'decreasing';
-    return 'stable';
   }
 
   /**

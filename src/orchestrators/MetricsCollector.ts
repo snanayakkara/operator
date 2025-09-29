@@ -10,7 +10,7 @@ import type {
   PerformanceMetrics,
   MemorySnapshot,
   OperationTiming,
-  TimingInfo,
+  TimingInfo as _TimingInfo,
   PerformanceIndicators
 } from '@/types/BatchProcessingTypes';
 
@@ -113,7 +113,7 @@ export class MetricsCollector {
   private config: MetricsConfig;
   private memorySnapshots: MemorySnapshot[] = [];
   private activeOperations: Map<string, number> = new Map();
-  private memoryMonitorInterval?: number;
+  private memoryMonitorInterval?: ReturnType<typeof setInterval>;
   private debugMode = false;
 
   private constructor() {
@@ -176,7 +176,7 @@ export class MetricsCollector {
   /**
    * Start timing an operation
    */
-  public startOperation(operationId: string, operation: string, patientIndex?: number): void {
+  public startOperation(operationId: string, operation: string, _patientIndex?: number): void {
     const startTime = Date.now();
     this.activeOperations.set(operationId, startTime);
     
@@ -706,7 +706,7 @@ export class MetricsCollector {
     }
 
     const averageGrowth = growthValues.reduce((sum, growth) => sum + growth, 0) / growthValues.length;
-    const totalGrowth = recentSnapshots[recentSnapshots.length - 1].heapUsed - recentSnapshots[0].heapUsed;
+    const _totalGrowth = recentSnapshots[recentSnapshots.length - 1].heapUsed - recentSnapshots[0].heapUsed;
 
     if (averageGrowth > 1024 * 1024) { // 1MB per sample
       leaks.push({

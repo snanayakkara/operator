@@ -269,7 +269,7 @@ export class Phase2ValidationSuite {
       try {
         console.log(`   Testing ${agentType}...`);
         
-        const { result, migrationData, recommendedMode } = await agentIntegrationAdapter.integrateAgent(
+        const { result: _result, migrationData, recommendedMode } = await agentIntegrationAdapter.integrateAgent(
           agentType,
           testInput,
           {

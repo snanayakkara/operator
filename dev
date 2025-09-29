@@ -194,14 +194,18 @@ ensure_dual_models_loaded() {
     # Load reasoning model if needed
     if [ $reasoning_loaded -eq 0 ] && [ ! -z "$reasoning_model" ]; then
         info "Loading reasoning model: $reasoning_model"
-        info "This may take several minutes for large models..."
+        info "This may take several minutes for large models (timeout: 10 minutes)..."
 
-        # Show progress and use longer timeout for large models
+        # Show progress with elapsed time
+        local start_time=$(date +%s)
         (
             echo -n "   Loading"
             while true; do
                 sleep 3
-                echo -n "."
+                local elapsed=$(($(date +%s) - start_time))
+                local minutes=$((elapsed / 60))
+                local seconds=$((elapsed % 60))
+                echo -n " [${minutes}m ${seconds}s]."
             done
         ) &
         progress_pid=$!
@@ -221,13 +225,15 @@ ensure_dual_models_loaded() {
         fi
 
         kill $progress_pid 2>/dev/null
+        wait $progress_pid 2>/dev/null
         echo ""
 
         if [ $load_success -eq 1 ]; then
-            log "✅ Reasoning model loaded successfully"
+            local total_time=$(($(date +%s) - start_time))
+            log "✅ Reasoning model loaded successfully (took ${total_time}s)"
             reasoning_loaded=1
         else
-            warn "Failed to load reasoning model (timeout after 10 minutes)"
+            warn "⏰ Failed to load reasoning model (timeout after 10 minutes)"
             if [ ! -z "$load_output" ]; then
                 warn "CLI output: $load_output"
             fi
@@ -237,11 +243,12 @@ ensure_dual_models_loaded() {
             local short_name=$(echo "$reasoning_model" | cut -d'/' -f2)
             if [ ! -z "$short_name" ] && [ "$short_name" != "$reasoning_model" ]; then
                 info "Attempting load with short name: $short_name"
-                if run_with_timeout 300 lms load "$short_name" > /dev/null 2>&1; then
+                if run_with_timeout 300 lms load "$short_name" 2>&1; then
                     log "✅ Reasoning model loaded with short name"
                     reasoning_loaded=1
                 else
-                    warn "Alternative loading failed as well"
+                    error "❌ Alternative loading failed - model may not be downloaded"
+                    error "Please download the model in LM Studio first"
                 fi
             fi
         fi
@@ -250,14 +257,18 @@ ensure_dual_models_loaded() {
     # Load quick model if needed
     if [ $quick_loaded -eq 0 ] && [ ! -z "$quick_model" ]; then
         info "Loading quick model: $quick_model"
-        info "This should be faster than the reasoning model..."
+        info "This should be faster than the reasoning model (timeout: 5 minutes)..."
 
-        # Show progress indicator
+        # Show progress with elapsed time
+        local start_time=$(date +%s)
         (
             echo -n "   Loading"
             while true; do
                 sleep 2
-                echo -n "."
+                local elapsed=$(($(date +%s) - start_time))
+                local minutes=$((elapsed / 60))
+                local seconds=$((elapsed % 60))
+                echo -n " [${minutes}m ${seconds}s]."
             done
         ) &
         progress_pid=$!
@@ -277,13 +288,15 @@ ensure_dual_models_loaded() {
         fi
 
         kill $progress_pid 2>/dev/null
+        wait $progress_pid 2>/dev/null
         echo ""
 
         if [ $load_success -eq 1 ]; then
-            log "✅ Quick model loaded successfully"
+            local total_time=$(($(date +%s) - start_time))
+            log "✅ Quick model loaded successfully (took ${total_time}s)"
             quick_loaded=1
         else
-            warn "Failed to load quick model (timeout after 5 minutes)"
+            warn "⏰ Failed to load quick model (timeout after 5 minutes)"
             if [ ! -z "$load_output" ]; then
                 warn "CLI output: $load_output"
             fi
@@ -292,11 +305,12 @@ ensure_dual_models_loaded() {
             local short_name=$(echo "$quick_model" | cut -d'/' -f2)
             if [ ! -z "$short_name" ] && [ "$short_name" != "$quick_model" ]; then
                 info "Attempting load with short name: $short_name"
-                if run_with_timeout 180 lms load "$short_name" > /dev/null 2>&1; then
+                if run_with_timeout 180 lms load "$short_name" 2>&1; then
                     log "✅ Quick model loaded with short name"
                     quick_loaded=1
                 else
-                    warn "Alternative loading method also failed"
+                    error "❌ Alternative loading failed - model may not be downloaded"
+                    error "Please download the model in LM Studio first"
                 fi
             fi
         fi
@@ -330,28 +344,56 @@ ensure_dual_models_loaded() {
 # Start MLX Whisper server if needed
 ensure_whisper_server() {
     info "Checking MLX Whisper server (localhost:8001)..."
-    
+
     if check_service_health "http://localhost:8001/v1/health"; then
         log "MLX Whisper server is already running and healthy"
         return 0
     fi
-    
+
     if [ -f "./start-whisper-server.sh" ]; then
         info "Starting MLX Whisper server..."
-        ./start-whisper-server.sh start > /dev/null 2>&1 &
-        
+
+        # Create a temporary log file for startup errors
+        local whisper_log="/tmp/whisper-startup-$$.log"
+
+        # Start the server and capture output
+        ./start-whisper-server.sh > "$whisper_log" 2>&1 &
+        local whisper_pid=$!
+
         # Wait for server to start
         local retries=0
         while [ $retries -lt 30 ]; do
             if check_service_health "http://localhost:8001/v1/health"; then
                 log "MLX Whisper server started successfully"
+                rm -f "$whisper_log"
                 return 0
             fi
+
+            # Check if the process is still running
+            if ! kill -0 $whisper_pid 2>/dev/null; then
+                error "Failed to start MLX Whisper server - process died"
+                if [ -f "$whisper_log" ]; then
+                    error "Startup log:"
+                    tail -20 "$whisper_log" | while IFS= read -r line; do
+                        error "  $line"
+                    done
+                    rm -f "$whisper_log"
+                fi
+                return 1
+            fi
+
             sleep 1
             ((retries++))
         done
-        
-        error "Failed to start MLX Whisper server"
+
+        error "Failed to start MLX Whisper server - timeout after 30 seconds"
+        if [ -f "$whisper_log" ]; then
+            warn "Check startup log for details:"
+            tail -20 "$whisper_log" | while IFS= read -r line; do
+                warn "  $line"
+            done
+            rm -f "$whisper_log"
+        fi
         return 1
     else
         warn "MLX Whisper startup script not found: ./start-whisper-server.sh"

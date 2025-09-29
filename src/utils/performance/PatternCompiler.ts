@@ -115,11 +115,16 @@ export class PatternCompiler {
     }
     
     // Check persistent cache
-    const cacheKey = `pattern_${patternKey}` as any; // Type assertion for CacheKey
-    const persistentCache = await this.cacheManager.get(cacheKey);
-    if (persistentCache && typeof persistentCache === 'object' && 'source' in persistentCache) {
+    const cacheKey = `pattern_${patternKey}`;
+    const persistentCache = await this.cacheManager.get<{
+      source: string;
+      flags: string;
+      category: PatternCategory;
+      compiledAt?: number;
+    }>(cacheKey);
+    if (persistentCache.hit && persistentCache.data && 'source' in persistentCache.data) {
       try {
-        const regex = new RegExp(persistentCache.source as string, request.flags);
+        const regex = new RegExp(persistentCache.data.source, request.flags);
         await this.storeInPool(patternKey, regex, request);
         this.compileStats.cacheHits++;
         logger.debug(`Pattern persistent cache hit: ${patternKey}`);
@@ -141,13 +146,13 @@ export class PatternCompiler {
       
       // Store in both pool and persistent cache
       await this.storeInPool(patternKey, regex, request, compileTime);
-      const persistentCacheKey = `pattern_${patternKey}` as any; // Type assertion for CacheKey
+      const persistentCacheKey = `pattern_${patternKey}`;
       await this.cacheManager.set(persistentCacheKey, {
         source: request.source,
         flags: request.flags,
         category: request.category,
         compiledAt: Date.now()
-      }, this.CACHE_TTL);
+      }, undefined, this.CACHE_TTL);
       
       this.compileStats.totalCompiles++;
       this.compileStats.totalCompileTime += compileTime;
@@ -166,6 +171,37 @@ export class PatternCompiler {
         source: request.source
       });
       throw error;
+    }
+  }
+
+  public preWarmPattern(
+    source: string,
+    category: PatternCategory,
+    cacheNamespace?: string,
+    flags: string = ''
+  ): void {
+    const baseKey = this.generatePatternKey(source, flags, category);
+    const patternKey = cacheNamespace ? `${baseKey}_${cacheNamespace}` : baseKey;
+
+    if (this.patternPool.has(patternKey)) {
+      return;
+    }
+
+    try {
+      const regex = new RegExp(source, flags);
+      const request: PatternRequest = {
+        source,
+        flags,
+        category
+      };
+
+      void this.storeInPool(patternKey, regex, request);
+    } catch (error) {
+      logger.debug('Pre-warm pattern failed', {
+        error: error instanceof Error ? error.message : String(error),
+        category,
+        patternKey
+      });
     }
   }
   

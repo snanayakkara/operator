@@ -11,7 +11,7 @@ import type {
   WaitResult, 
   WaitCheckResult,
   BatchProcessingMessage,
-  BatchMessageType
+  BatchMessageType as _BatchMessageType
 } from '@/types/BatchProcessingTypes';
 
 export class DynamicWaitUtils {
@@ -227,7 +227,7 @@ export class DynamicWaitUtils {
   ): Promise<WaitResult> {
     const startTime = Date.now();
     const checkResults: WaitCheckResult[] = [];
-    const { earlyReturn = true, logProgress = this.debugMode } = options;
+    const { earlyReturn: _earlyReturn = true, logProgress = this.debugMode } = options;
 
     this.log(`Starting wait for condition: ${condition.name} - ${condition.description}`);
 

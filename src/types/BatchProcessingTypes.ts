@@ -280,6 +280,7 @@ export interface CacheEntry {
   expiryTime: number;
   accessCount: number;
   lastAccessed: number;
+  dataType?: string;
 }
 
 export interface CacheConfig {

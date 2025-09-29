@@ -96,7 +96,6 @@ export const INVESTIGATION_SUMMARY_MEDICAL_KNOWLEDGE = {
 };
 
 import { ASRCorrectionEngine } from '../../utils/asr/ASRCorrectionEngine';
-import type { ReplacementPattern } from '../../utils/ASRCorrections';
 
 /**
  * Pre-normalise dictated text before sending to the LLM.

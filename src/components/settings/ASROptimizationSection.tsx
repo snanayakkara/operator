@@ -16,19 +16,16 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Upload, Download, Check, X, Eye, RefreshCw, AlertTriangle, ServerOff } from 'lucide-react';
+import { Upload, Check, RefreshCw, AlertTriangle, ServerOff } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { DynamicASRCorrections } from '@/utils/DynamicASRCorrections';
 import { LocalCorrectionsViewer } from './LocalCorrectionsViewer';
 import { logger } from '@/utils/Logger';
 import { ASROptimizationError } from '@/types/optimization';
-import type { 
+import type {
   ASRPreview,
-  ASRCurrentState,
-  ASRCorrectionsEntry,
-  GlossaryTerm,
-  RuleCandidate 
+  ASRCurrentState
 } from '@/types/optimization';
 
 interface ASROptimizationSectionProps {

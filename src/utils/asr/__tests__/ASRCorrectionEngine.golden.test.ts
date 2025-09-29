@@ -268,7 +268,7 @@ describe('ASRCorrectionEngine Golden Tests', () => {
       
       // Should be able to apply domain rules
       expect(() => {
-        engine.applyCorrections('test domain-term', { medicalDomain: 'cardiology' });
+        engine.applyCorrections('test domain-term', { categories: 'all', medicalDomain: 'cardiology' });
       }).not.toThrow();
     });
   });
@@ -372,7 +372,7 @@ describe('ASRCorrectionEngine Golden Tests', () => {
       ];
 
       const input = 'test [invalid regex pattern';
-      const result = await engine.applyCorrections(input, { customRules });
+      const result = await engine.applyCorrections(input, { categories: 'all', customRules });
       
       // Should not throw and should return original text
       expect(typeof result).toBe('string');

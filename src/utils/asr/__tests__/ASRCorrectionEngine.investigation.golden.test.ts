@@ -1,11 +1,12 @@
 /**
  * Golden Tests for ASR Investigation Corrections
  * Ensures consolidated implementation preserves exact behavior of preNormalizeInvestigationText()
- * 
+ *
  * These tests validate that the consolidation of scattered ASR patterns into
  * ASRCorrectionEngine maintains 100% behavioral accuracy for investigation text processing.
  */
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ASRCorrectionEngine } from '../ASRCorrectionEngine';
 
 describe('ASR Investigation Corrections Golden Tests', () => {
@@ -331,6 +332,32 @@ describe('ASR Investigation Corrections Golden Tests', () => {
         description: 'exercise test with Bruce stage',
         input: 'bruce stage 3, exercised for 7.3 minutes, 8.9 minutes',
         expected: 'Bruce Stage 3, exercised for 7.3 minutes, 8.9 METs'
+      },
+      // New test cases for direct dictation formats
+      {
+        description: 'direct minutes and mets format',
+        input: '3.5 minutes 5.6 mets',
+        expected: 'exercised for 3.5 minutes, 5.6 METs'
+      },
+      {
+        description: 'direct minutes and METs format (uppercase)',
+        input: '4.2 minutes 7.1 METs',
+        expected: 'exercised for 4.2 minutes, 7.1 METs'
+      },
+      {
+        description: 'direct minutes with comma and mets',
+        input: '6.0 minutes, 9.2 mets',
+        expected: 'exercised for 6.0 minutes, 9.2 METs'
+      },
+      {
+        description: 'exercised without for prefix',
+        input: 'exercised 8.5 minutes 12.3 mets',
+        expected: 'exercised for 8.5 minutes, 12.3 METs'
+      },
+      {
+        description: 'user specific case from bug report',
+        input: 'Stress echo 17th January 2025 3.5 minutes 5.6 mets, normal biventricular size and function satisfactory valvular function no evidence of inducible ischaemia',
+        expected: 'Stress echo 17th January 2025 exercised for 3.5 minutes, 5.6 METs, normal biventricular size and function satisfactory valvular function no evidence of inducible ischaemia'
       }
     ];
 

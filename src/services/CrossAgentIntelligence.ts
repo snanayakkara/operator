@@ -5,7 +5,7 @@
  * for enhanced clinical accuracy and comprehensive patient assessment.
  */
 
-import type { AgentType, MedicalContext, MedicalReport } from '@/types/medical.types';
+import type { AgentType, MedicalReport } from '@/types/medical.types';
 
 export interface MedicalInsight {
   id: string;
@@ -151,7 +151,7 @@ export class CrossAgentIntelligence {
     profile.lastUpdated = Date.now();
 
     // Generate cross-agent recommendations
-    const recommendations = this.generateComprehensiveRecommendations(profile);
+    const _recommendations = this.generateComprehensiveRecommendations(profile);
     
     console.log(`📋 Analyzed patient profile: ${profile.medicalHistory.length} conditions, ${profile.currentMedications.length} medications`);
     
@@ -429,7 +429,7 @@ export class CrossAgentIntelligence {
     const recommendations: CrossAgentRecommendation[] = [];
 
     // Apply correlation rules
-    this.correlationRules.forEach((ruleFunc, ruleName) => {
+    this.correlationRules.forEach((ruleFunc, _ruleName) => {
       const allInsights = [
         ...profile.medicalHistory,
         ...profile.currentMedications,
@@ -619,18 +619,18 @@ export class CrossAgentIntelligence {
     };
   }
 
-  private generateComprehensiveRecommendations(profile: PatientProfile): CrossAgentRecommendation[] {
+  private generateComprehensiveRecommendations(_profile: PatientProfile): CrossAgentRecommendation[] {
     // This would implement comprehensive recommendation generation
     // based on the complete patient profile
     return [];
   }
 
-  private findCorrelation(finding1: string, finding2: string): any {
+  private findCorrelation(_finding1: string, _finding2: string): any {
     // Implement correlation finding logic
     return null;
   }
 
-  private getRelatedConditions(condition: string): string[] {
+  private getRelatedConditions(_condition: string): string[] {
     // Implement related condition lookup
     return [];
   }

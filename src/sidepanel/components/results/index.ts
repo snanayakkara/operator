@@ -10,3 +10,5 @@ export { AIReviewCards } from './AIReviewCards';
 export { ActionButtons } from './ActionButtons';
 export { WarningsPanel } from './WarningsPanel';
 export { TroubleshootingSection } from './TroubleshootingSection';
+export { TAVIWorkupDisplay } from './TAVIWorkupDisplay';
+export { RightHeartCathDisplay } from './RightHeartCathDisplay';

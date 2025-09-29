@@ -12,7 +12,8 @@ import type {
   ClosureIndication
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { PFOClosureSystemPrompts, PFOClosureMedicalPatterns, PFOClosureValidationRules } from './PFOClosureSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { PFOClosureMedicalPatterns, PFOClosureValidationRules } from './PFOClosureSystemPrompts';
 
 /**
  * Specialized agent for processing Patent Foramen Ovale (PFO) closure procedures.
@@ -21,6 +22,7 @@ import { PFOClosureSystemPrompts, PFOClosureMedicalPatterns, PFOClosureValidatio
  */
 export class PFOClosureAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
   
   // PFO closure-specific medical knowledge
   private readonly occluderTypes: Record<string, OccluderType> = {
@@ -75,12 +77,26 @@ export class PFOClosureAgent extends MedicalAgent {
       'Interventional Cardiology',
       'Generates comprehensive PFO closure procedural reports with device deployment and closure assessment',
       'pfo-closure',
-      'You are a specialist interventional cardiologist generating PFO closure procedural reports for medical records.'
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('pfo-closure', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ PFOClosureAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist interventional cardiologist generating PFO closure procedural reports for medical records.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<PFOClosureReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     
     try {
@@ -156,14 +172,16 @@ export class PFOClosureAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
-    // Use centralized system prompts from PFOClosureSystemPrompts
-    const systemPrompt = PFOClosureSystemPrompts.pfoClosureProcedureAgent.systemPrompt;
-    const userPrompt = PFOClosureSystemPrompts.pfoClosureProcedureAgent.userPromptTemplate.replace('{input}', input);
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
 
     return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+      { role: 'system', content: this.systemPrompt },
+      { role: 'user', content: `Please format this PFO closure procedural dictation into a structured report:
+
+"${input}"
+
+Generate a comprehensive PFO closure procedural report with device deployment and closure assessment. Use Australian medical terminology (TOE, ICE, anaesthesia, colour Doppler) and proper clinical formatting.` }
     ];
   }
 

@@ -295,14 +295,17 @@ export const SessionsPanel: React.FC<SessionsPanelProps> = ({
                         </button>
                       </div>
                       
-                      {/* Show transcription preview if available */}
+                      {/* Show transcription preview if available - uses consistent styling with TranscriptionSection */}
                       {session.transcription && (
-                        <div className="mt-2 p-2 bg-white rounded text-xs text-gray-700 border border-blue-100">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <FileText className="w-3 h-3 text-blue-600" />
-                            <span className="font-medium">Transcription:</span>
+                        <div className="mt-2 p-3 bg-gray-50/80 rounded-lg border border-gray-200/50">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <FileText className="w-3 h-3 text-gray-600" />
+                            <span className="font-medium text-sm text-gray-900">Transcription Preview</span>
+                            <span className="text-xs text-gray-500">
+                              {session.transcription.split(' ').filter(w => w.trim()).length} words
+                            </span>
                           </div>
-                          <p className="line-clamp-2">
+                          <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">
                             {session.transcription.substring(0, 120)}
                             {session.transcription.length > 120 ? '...' : ''}
                           </p>

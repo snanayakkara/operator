@@ -1,4 +1,5 @@
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 
 export interface AnnotatedScreenshot {
   id: string;
@@ -118,7 +119,8 @@ export class ScreenshotCombiner {
       });
       return result;
     } catch (error) {
-      logger.error('Failed to combine screenshots', error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error('Failed to combine screenshots', err, {
         component: 'screenshot-combiner',
         operation: 'combine-error'
       });
@@ -234,7 +236,8 @@ export class ScreenshotCombiner {
             tryFinish();
           };
           img.onerror = (error) => {
-            logger.error(`Failed to load slot ${i + 1} image`, undefined, {
+            const err = toError(error);
+            logger.error(`Failed to load slot ${i + 1} image`, err, {
               component: 'screenshot-combiner',
               operation: 'load-image',
               slot: i + 1,
@@ -248,7 +251,8 @@ export class ScreenshotCombiner {
         });
 
       } catch (error) {
-        logger.error('Error setting up canvas combination', error instanceof Error ? error : undefined, {
+        const err = toError(error);
+        logger.error('Error setting up canvas combination', err, {
           component: 'screenshot-combiner',
           operation: 'canvas-setup'
         });
@@ -279,7 +283,8 @@ export class ScreenshotCombiner {
         operation: 'copy-clipboard'
       });
     } catch (error) {
-      logger.error('Failed to copy to clipboard', error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error('Failed to copy to clipboard', err, {
         component: 'screenshot-combiner',
         operation: 'copy-clipboard'
       });

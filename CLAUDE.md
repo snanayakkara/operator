@@ -33,7 +33,7 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 
 ---
 
-## 2) Agents (Phase 3 enhanced; DSPy‑optimised when available)
+## 2) Agents (Enhanced; DSPy‑optimised when available)
 
 **Core procedures**: TAVI; Angiogram/PCI; mTEER; PFO Closure; Right Heart Cath  
 **Documentation & review**: Quick Letter; Consultation; Investigation Summary  
@@ -47,7 +47,7 @@ Each agent has dedicated SystemPrompts, validation patterns, template structure,
 - **LazyAgentLoader**: dynamic agent chunks (~7–38 KB); 0 ms cached, ~2 s first load; cache stats; preloads popular agents
 - **CrossAgentIntelligence**: builds patient profile; shares insights (drug interactions, correlations) between agents
 - **SmartRecommendationEngine**: complexity assessment + agent suggestions (confidence & ETA)
-- **Phase3ProcessingIndicator**: multi‑phase progress with quality hints
+- **ProcessingIndicator**: multi‑phase progress with quality hints
 
 ---
 
@@ -175,23 +175,36 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture  
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.2.1**  
-**Last Updated**: September 2025
+**Current Version**: **3.6.0**
+**Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
 
-**v3.2.1 (Sep 2025)**  
-- **AudioProcessingQueueService** (priority, concurrency 2, retries, cleanup, metrics)  
-- **Full‑page Settings** (transcription management; expanded optimisation panel)  
+**v3.6.0 (Jan 2025)**
+- **Code Quality Excellence**: Achieved ZERO ESLint errors (479 errors eliminated across 141 files)
+- **Developer Experience**: Enhanced ./dev script with real-time model loading feedback and Whisper server diagnostics
+- **TAVI Workup Stability**: Fixed multiple display bugs including persistent "Processing Report" and "Loading Session" issues
+- **Session Management**: Resolved race conditions and state management bugs affecting session display
+- **UI Consistency**: Implemented consistent transcription UI across all processing states
+
+**v3.5.0 (Sep 2025)**
+- **TAVI Workup Critical Fixes**: Resolved HTTP 400 LM Studio errors, fixed Gemma prompt formatting
+- **Enhanced TAVI Display**: Structured UI with interactive transcription controls (Skip/Accept/Edit)
+- **Performance Optimizations**: Reduced console debug spam, improved error handling
+- **Data Safety**: Added anti-hallucination guardrails and input validation for clinical accuracy
+
+**v3.2.1 (Sep 2025)**
+- **AudioProcessingQueueService** (priority, concurrency 2, retries, cleanup, metrics)
+- **Full‑page Settings** (transcription management; expanded optimisation panel)
 - **Design system**: monochrome, responsive
 
-**v3.2.0 (Sep 2025)**  
-- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, Phase3ProcessingIndicator, bundle splitting  
+**v3.2.0 (Sep 2025)**
+- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, ProcessingIndicator, bundle splitting
 - **DSPy/GEPA**: production‑ready, rubric, versioning, audit trails
 
-**Earlier highlights**  
+**Earlier highlights**
 - **11→14+ agents**, batch review, EMR enhancements, cancellation system, improved letter intelligence, SystemPrompts extraction, MLX Whisper integration
 
 ---
@@ -237,11 +250,11 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 - **Generation**: MedGemma‑27B MLX (complex) + Gemma‑3n‑e4b (simple).  
 - **DSPy + GEPA**: prompt optimisation with a 30‑point rubric and human‑in‑the‑loop.  
 - **SystemPrompts** per agent; Australian spelling/terminology.
-- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, Phase3ProcessingIndicator.
+- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, ProcessingIndicator.
 
 ---
 
-## 2) Medical Agents (Phase 3 enhanced, DSPy‑optimised)
+## 2) Medical Agents (Enhanced, DSPy‑optimised)
 
 **Core procedures**  
 1. **TAVI** — sizing, haemodynamics, pre/post steps.  
@@ -273,7 +286,7 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 - **LazyAgentLoader**: dynamic agent chunks (7–38 KB), 0 ms cached loads, ~2 s cold loads, cache metrics & preloading (Quick Letter/Consultation).  
 - **CrossAgentIntelligence**: patient profile, drug interactions, clinical correlations, shared insights.  
 - **SmartRecommendationEngine**: complexity assessment + agent suggestions w/ confidence & ETA.  
-- **Phase3ProcessingIndicator**: multi‑phase progress with quality hints.
+- **ProcessingIndicator**: multi‑phase progress with quality hints.
 
 ---
 
@@ -404,17 +417,30 @@ llm/ (DSPy server + prompts); eval/ (datasets + feedback); tests/e2e/*; whisper-
 
 ## 14) Recent Major Updates (highlights)
 
-**v3.2.1 (Sep 2025)**  
-- **AudioProcessingQueueService** (priority, concurrency 2, retries, cleanup, metrics).  
-- **Full‑page Settings**: transcription management UI; expanded optimisation panel; corrected “Open Settings”.  
-- **Design system**: monochrome, responsive.
+**v3.6.0 (Jan 2025)**
+- **Code Quality Excellence**: Achieved ZERO ESLint errors (479 errors eliminated across 141 files)
+- **Developer Experience**: Enhanced ./dev script with real-time model loading feedback and Whisper server diagnostics
+- **TAVI Workup Stability**: Fixed multiple display bugs including persistent "Processing Report" and "Loading Session" issues
+- **Session Management**: Resolved race conditions and state management bugs affecting session display
+- **UI Consistency**: Implemented consistent transcription UI across all processing states
 
-**v3.2.0 (Sep 2025)**  
-- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, Phase3ProcessingIndicator, bundle splitting.  
-- **DSPy/GEPA**: production‑ready, rubric, versioning, audit trails.
+**v3.5.0 (Sep 2025)**
+- **TAVI Workup Critical Fixes**: Resolved HTTP 400 LM Studio errors, fixed Gemma prompt formatting
+- **Enhanced TAVI Display**: Structured UI with interactive transcription controls (Skip/Accept/Edit)
+- **Performance Optimizations**: Reduced console debug spam, improved error handling
+- **Data Safety**: Added anti-hallucination guardrails and input validation for clinical accuracy
 
-**Earlier highlights**  
-- **11→14+ agents**, batch review, EMR enhancements, cancellation system, improved letter intelligence, SystemPrompts extraction, MLX Whisper integration.
+**v3.2.1 (Sep 2025)**
+- **AudioProcessingQueueService** (priority, concurrency 2, retries, cleanup, metrics)
+- **Full‑page Settings**: transcription management UI; expanded optimisation panel; corrected "Open Settings"
+- **Design system**: monochrome, responsive
+
+**v3.2.0 (Sep 2025)**
+- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, ProcessingIndicator, bundle splitting
+- **DSPy/GEPA**: production‑ready, rubric, versioning, audit trails
+
+**Earlier highlights**
+- **11→14+ agents**, batch review, EMR enhancements, cancellation system, improved letter intelligence, SystemPrompts extraction, MLX Whisper integration
 
 ---
 
@@ -460,7 +486,7 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture.  
 - **Update both** `package.json` and `manifest.json` for significant changes.
 
-**Current Version**: **3.2.1**  
-**Last Updated**: September 2025
+**Current Version**: **3.6.0**
+**Last Updated**: January 2025
 
 **Focus**: local‑first medical AI with intelligent queuing, dynamic agent loading, DSPy‑optimised prompts, human‑in‑the‑loop QA, and real‑time cross‑agent intelligence.

@@ -34,7 +34,7 @@ function cleanUpSummary(summary: string): string {
  */
 function extractClinicalFindings(text: string): string[] {
   const findings: string[] = [];
-  const lowerText = text.toLowerCase();
+  const _lowerText = text.toLowerCase();
   
   // Look for common medical findings patterns
   const patterns = [

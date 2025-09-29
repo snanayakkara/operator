@@ -8,7 +8,7 @@
 import { test, expect, describe } from '@playwright/test';
 import { ValidationPipeline, ValidationPipelineConfig } from '@/utils/validation/ValidationPipeline';
 import { MigrationValidator, MigrationValidationConfig } from '@/utils/validation/MigrationValidator';
-import { AgentType } from '@/types/medical.types';
+// import { AgentType } from '@/types/medical.types'; // Currently unused
 
 // Test configuration for validation pipeline
 const TEST_VALIDATION_CONFIG: ValidationPipelineConfig = {
@@ -30,7 +30,7 @@ const TEST_VALIDATION_CONFIG: ValidationPipelineConfig = {
 
 describe('Phase 3 Migration Validation Pipeline', () => {
   test.describe('MigrationValidator Core Functionality', () => {
-    test('should validate QuickLetterAgent migration successfully', async ({ page }) => {
+    test('should validate QuickLetterAgent migration successfully', async ({ page: _page }) => {
       const validator = MigrationValidator.getInstance();
       
       // Mock agent configuration for testing
@@ -48,12 +48,12 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       };
 
       // Create mock agents for testing
-      const mockPhase3Agent = {
-        async process(input: string) {
+      const mockEnhancedAgent = {
+        async process(_input: string) {
           return {
             id: `test-${Date.now()}`,
-            agentName: 'QuickLetterAgent.Phase3',
-            content: `Phase 3 processed: ${input}`,
+            agentName: 'QuickLetterAgent',
+            content: `Enhanced processed: ${input}`,
             sections: [
               {
                 title: 'Test Section',
@@ -74,7 +74,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       };
 
       const mockLegacyAgent = {
-        async process(input: string) {
+        async process(_input: string) {
           return {
             id: `legacy-${Date.now()}`,
             agentName: 'QuickLetterAgent',
@@ -101,7 +101,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       // Run validation
       const result = await validator.validateMigration(
         'quick-letter',
-        mockPhase3Agent,
+        mockEnhancedAgent,
         mockLegacyAgent,
         config
       );
@@ -120,7 +120,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(result.comparison.qualityScoreChange).toBeGreaterThanOrEqual(0);
     });
 
-    test('should trigger rollback for poor performance', async ({ page }) => {
+    test('should trigger rollback for poor performance', async ({ page: _page }) => {
       const validator = MigrationValidator.getInstance();
       
       const config: MigrationValidationConfig = {
@@ -137,11 +137,11 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       };
 
       // Create problematic Phase 3 agent
-      const problematicPhase3Agent = {
-        async process(input: string) {
+      const problematicEnhancedAgent = {
+        async process(_input: string) {
           return {
             id: `problematic-${Date.now()}`,
-            agentName: 'InvestigationSummaryAgent.Phase3',
+            agentName: 'InvestigationSummaryAgent',
             content: 'Poor quality output',
             sections: [],
             metadata: {
@@ -156,7 +156,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       };
 
       const goodLegacyAgent = {
-        async process(input: string) {
+        async process(_input: string) {
           return {
             id: `good-legacy-${Date.now()}`,
             agentName: 'InvestigationSummaryAgent',
@@ -182,7 +182,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
 
       const result = await validator.validateMigration(
         'investigation-summary',
-        problematicPhase3Agent,
+        problematicEnhancedAgent,
         goodLegacyAgent,
         config
       );
@@ -197,7 +197,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(criticalIssues.length).toBeGreaterThan(0);
     });
 
-    test('should execute rollback procedure correctly', async ({ page }) => {
+    test('should execute rollback procedure correctly', async ({ page: _page }) => {
       const validator = MigrationValidator.getInstance();
       
       const rollbackSuccess = await validator.executeRollback(
@@ -214,7 +214,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
   });
 
   test.describe('ValidationPipeline Orchestration', () => {
-    test('should run full validation pipeline successfully', async ({ page }) => {
+    test('should run full validation pipeline successfully', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
       // Run full pipeline
@@ -231,7 +231,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(result.validationResults.has('investigation-summary')).toBe(true);
     });
 
-    test('should handle individual agent validation', async ({ page }) => {
+    test('should handle individual agent validation', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
       const result = await pipeline.validateAgent('quick-letter');
@@ -243,7 +243,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(result.legacyPerformance).toBeDefined();
     });
 
-    test('should provide pipeline status tracking', async ({ page }) => {
+    test('should provide pipeline status tracking', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
       // Start validation in background
@@ -263,7 +263,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(['completed', 'rolled_back', 'failed'].includes(job!.status)).toBe(true);
     });
 
-    test('should generate appropriate recommendations', async ({ page }) => {
+    test('should generate appropriate recommendations', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance({
         ...TEST_VALIDATION_CONFIG,
         rollbackThreshold: 0.9 // High threshold to trigger recommendations
@@ -279,18 +279,18 @@ describe('Phase 3 Migration Validation Pipeline', () => {
   });
 
   test.describe('Safety and Rollback Mechanisms', () => {
-    test('should handle validation errors gracefully', async ({ page }) => {
+    test('should handle validation errors gracefully', async ({ page: _page }) => {
       const validator = MigrationValidator.getInstance();
       
       // Create agent that throws errors
       const errorAgent = {
-        async process(input: string) {
+        async process(_input: string) {
           throw new Error('Simulated processing error');
         }
       };
 
       const normalAgent = {
-        async process(input: string) {
+        async process(_input: string) {
           return {
             id: `normal-${Date.now()}`,
             agentName: 'NormalAgent',
@@ -329,7 +329,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(result.rollbackRequired).toBe(true);
     });
 
-    test('should respect rollback configuration', async ({ page }) => {
+    test('should respect rollback configuration', async ({ page: _page }) => {
       const pipelineWithRollback = ValidationPipeline.getInstance({
         ...TEST_VALIDATION_CONFIG,
         enableAutomaticRollback: true,
@@ -352,7 +352,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(resultWithoutRollback).toBeDefined();
     });
 
-    test('should validate agent performance benchmarks', async ({ page }) => {
+    test('should validate agent performance benchmarks', async ({ page: _page }) => {
       const validator = MigrationValidator.getInstance();
       
       // Test with strict benchmarks
@@ -371,10 +371,10 @@ describe('Phase 3 Migration Validation Pipeline', () => {
 
       // Create agents that may not meet strict benchmarks
       const phase3Agent = {
-        async process(input: string) {
+        async process(_input: string) {
           return {
             id: `test-${Date.now()}`,
-            agentName: 'TestAgent.Phase3',
+            agentName: 'TestAgent',
             content: 'Short content', // May not meet length requirement
             sections: [],
             metadata: {
@@ -388,7 +388,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       };
 
       const legacyAgent = {
-        async process(input: string) {
+        async process(_input: string) {
           return {
             id: `legacy-${Date.now()}`,
             agentName: 'TestAgent.Legacy',
@@ -424,7 +424,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
   });
 
   test.describe('Integration with Phase 3 Agents', () => {
-    test('should validate actual Phase 3 QuickLetterAgent', async ({ page }) => {
+    test('should validate actual Phase 3 QuickLetterAgent', async ({ page: _page }) => {
       // This test would validate against actual Phase 3 implementation
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
@@ -443,7 +443,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       }
     });
 
-    test('should validate actual Phase 3 InvestigationSummaryAgent', async ({ page }) => {
+    test('should validate actual Phase 3 InvestigationSummaryAgent', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
       try {
@@ -459,7 +459,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       }
     });
 
-    test('should track validation history and checkpoints', async ({ page }) => {
+    test('should track validation history and checkpoints', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance(TEST_VALIDATION_CONFIG);
       
       // Run validation
@@ -479,7 +479,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
   });
 
   test.describe('Performance and Scalability', () => {
-    test('should complete validation within reasonable time', async ({ page }) => {
+    test('should complete validation within reasonable time', async ({ page: _page }) => {
       const startTime = Date.now();
       
       const pipeline = ValidationPipeline.getInstance({
@@ -496,7 +496,7 @@ describe('Phase 3 Migration Validation Pipeline', () => {
       expect(result.success).toBeDefined();
     });
 
-    test('should handle concurrent validations', async ({ page }) => {
+    test('should handle concurrent validations', async ({ page: _page }) => {
       const pipeline = ValidationPipeline.getInstance({
         ...TEST_VALIDATION_CONFIG,
         enableParallelValidation: true,

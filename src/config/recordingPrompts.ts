@@ -199,6 +199,75 @@ export const RECORDING_PROMPTS: readonly RecordingPromptConfig[] = [
   },
 
   {
+    id: 'tavi-workup',
+    title: 'TAVI Workup Dictation',
+    description: 'Single-pass dictation covering the clinical, echocardiographic, and CT sizing inputs for TAVI planning',
+    estimatedTime: '3-5 minutes',
+    sections: [
+      {
+        title: 'Patient Basics',
+        icon: '🧍',
+        items: [
+          'State the patient name and date of birth clearly',
+          'Latest height in centimetres and weight in kilograms',
+          'Note any symptomatic change prompting assessment'
+        ]
+      },
+      {
+        title: 'Risk Profile',
+        icon: '⚕️',
+        items: [
+          'Indication for TAVI workup',
+          'NYHA functional class (I-IV only)',
+          'STS and EuroSCORE II percentages'
+        ]
+      },
+      {
+        title: 'Echocardiography Highlights',
+        icon: '🩻',
+        items: [
+          'Echo study date and ejection fraction',
+          'Septal thickness and mean pressure gradient',
+          'Aortic valve area, dimensionless index, MR grade, RVSP',
+          'Key qualitative comments'
+        ]
+      },
+      {
+        title: 'CT Sizing',
+        icon: '🧠',
+        items: [
+          'Annulus area, perimeter, minimum and maximum diameters',
+          'Left main and right coronary heights',
+          'Sinus of Valsalva diameters for each cusp',
+          'Coplanar acquisition angles (e.g., "LAO 12 cranial 6")',
+          'Access vessel minimal diameters (CIA, EIA, CFA) with laterality'
+        ]
+      },
+      {
+        title: 'Device Planning',
+        icon: '🛠️',
+        items: [
+          'Intended valve platform (Sapien, Evolut, Navitor)',
+          'Planned valve size and rationale',
+          'Any anatomical cautions (coronary height, annular calcification, access limitations)'
+        ]
+      }
+    ],
+    tips: [
+      'Say "percent" after risk scores to avoid misinterpretation',
+      'Use centimetres when dictating distances so the system can convert to millimetres',
+      'Work systematically: patient basics -> risk -> echo -> CT -> access/device'
+    ],
+    terminology: [
+      'Annulus area/perimeter',
+      'Dimensionless index (DVI)',
+      'Sinus of Valsalva',
+      'Common/external iliac, common femoral',
+      'Coplanar LAO/RAO cranial/caudal angles'
+    ]
+  },
+
+  {
     id: 'consultation',
     title: 'Consultation Recording',
     description: 'Comprehensive patient assessments - Detailed clinical evaluation',

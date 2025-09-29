@@ -6,6 +6,7 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 
 export interface PhrasebookEntry {
   id: string;
@@ -61,7 +62,8 @@ export class PhrasebookService {
       });
       return [...entries];
     } catch (error) {
-      logger.error('Failed to load phrasebook entries', error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error('Failed to load phrasebook entries', err, {
         component: 'phrasebook',
         operation: 'load'
       });
@@ -368,7 +370,8 @@ ${bullets.join('\n')}
       await chrome.storage.local.set({ [this.STORAGE_KEY]: entries });
       this.cache = [...entries]; // Update cache
     } catch (error) {
-      logger.error('Failed to save phrasebook entries', error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error('Failed to save phrasebook entries', err, {
         component: 'phrasebook',
         operation: 'save-all'
       });

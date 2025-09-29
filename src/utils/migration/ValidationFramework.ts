@@ -78,7 +78,7 @@ export class ConsolidationValidationFramework {
     config: ConsolidationValidationConfig = this.getDefaultConfig()
   ): Promise<ValidationResult> {
     const operationId = `validation_${validationName}`;
-    const measurement = this.performanceMonitor.startMeasurement(operationId);
+    const measurement = this.performanceMonitor.startMeasurement(operationId, 'ValidationFramework');
 
     logger.info(`Starting consolidation validation: ${validationName}`, {
       testCasesCount: testCases.length,
@@ -123,7 +123,7 @@ export class ConsolidationValidationFramework {
               config.behaviorToleranceLevel
             );
 
-            if (!behaviorValid.isValid) {
+            if (!behaviorValid.isValid && behaviorValid.failure) {
               failures.push(behaviorValid.failure);
             } else {
               testsPassed++;
@@ -139,7 +139,7 @@ export class ConsolidationValidationFramework {
               config.performanceTolerance
             );
 
-            if (!performanceValid.isValid) {
+            if (!performanceValid.isValid && performanceValid.failure) {
               failures.push(performanceValid.failure);
             }
           }

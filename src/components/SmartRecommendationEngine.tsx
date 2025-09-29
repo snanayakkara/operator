@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AgentType } from '@/types/medical.types';
-import { CrossAgentIntelligence, MedicalInsight } from '@/services/CrossAgentIntelligence';
+import { CrossAgentIntelligence } from '@/services/CrossAgentIntelligence';
 import { LazyAgentLoader } from '@/services/LazyAgentLoader';
 
 interface SmartRecommendation {
@@ -60,7 +60,7 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
   const [inputAnalysis, setInputAnalysis] = useState<InputAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [crossAgentIntelligence] = useState(() => CrossAgentIntelligence.getInstance());
-  const [agentLoader] = useState(() => LazyAgentLoader.getInstance());
+  const [_agentLoader] = useState(() => LazyAgentLoader.getInstance());
 
   // Analyze input and generate recommendations
   const analyzeInput = useCallback(async (input: string) => {
@@ -268,32 +268,55 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
 
     // Agent scoring based on input content
     const agentScores: { [key in AgentType]?: number } = {};
+    const lowerInput = input.toLowerCase();
 
     // Investigation terms suggest investigation-summary agent
     const investigationTerms = ['TTE', 'CTCA', 'stress test', 'echocardiogram', 'angiogram'];
-    if (investigationTerms.some(term => input.toLowerCase().includes(term.toLowerCase()))) {
+    if (investigationTerms.some(term => lowerInput.includes(term.toLowerCase()))) {
       agentScores['investigation-summary'] = 0.9;
     }
 
     // Medication terms suggest medication agent
     const medicationTerms = ['medication', 'drug', 'aspirin', 'metoprolol', 'atorvastatin'];
-    if (medicationTerms.some(term => input.toLowerCase().includes(term.toLowerCase()))) {
+    if (medicationTerms.some(term => lowerInput.includes(term.toLowerCase()))) {
       agentScores['medication'] = 0.85;
     }
 
     // Background/history terms suggest background agent
     const backgroundTerms = ['history', 'background', 'previous', 'past medical', 'comorbid'];
-    if (backgroundTerms.some(term => input.toLowerCase().includes(term.toLowerCase()))) {
+    if (backgroundTerms.some(term => lowerInput.includes(term.toLowerCase()))) {
       agentScores['background'] = 0.8;
     }
 
     // Procedure terms suggest specific procedure agents
-    if (input.toLowerCase().includes('tavi') || input.toLowerCase().includes('tavr')) {
+    if (lowerInput.includes('tavi') || lowerInput.includes('tavr')) {
       agentScores['tavi'] = 0.95;
     }
     
-    if (input.toLowerCase().includes('pci') || input.toLowerCase().includes('angioplasty')) {
+    if (lowerInput.includes('pci') || lowerInput.includes('angioplasty')) {
       agentScores['angiogram-pci'] = 0.9;
+    }
+
+    const workupMarkers = [
+      'annulus',
+      'annular',
+      'sinus of valsalva',
+      'left main height',
+      'right coronary height',
+      'dimensionless index',
+      'sts',
+      'euro',
+      'coplanar',
+      'navitor',
+      'evolut',
+      'sapien'
+    ];
+    if (workupMarkers.some(marker => lowerInput.includes(marker))) {
+      agentScores['tavi-workup'] = Math.max(agentScores['tavi-workup'] ?? 0, 0.88);
+    }
+
+    if (lowerInput.includes('workup') && (lowerInput.includes('tavi') || lowerInput.includes('tavr'))) {
+      agentScores['tavi-workup'] = Math.max(agentScores['tavi-workup'] ?? 0, 0.95);
     }
 
     // Default to quick-letter for general content
@@ -338,10 +361,12 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
       'consultation': 'Consultation narrative detected',
       'ai-medical-review': 'AI medical review context detected',
       'batch-ai-review': 'Batch review context detected',
-      'tavi-workup': 'TAVI workup content detected',
+      'tavi-workup': 'TAVI workup markers detected (annulus sizing, risk scores, or device planning)',
       'imaging': 'Imaging content detected',
       'bloods': 'Blood tests content detected',
       'patient-education': 'Patient education content detected',
+      'ohif-viewer': 'OHIF viewer content detected',
+      'aus-medical-review': 'Australian medical review context detected',
       'enhancement': 'Enhancement context detected',
       'transcription': 'Transcription context detected',
       'generation': 'Content generation context'
@@ -424,6 +449,7 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
       'imaging': 'Imaging',
       'bloods': 'Bloods',
       'patient-education': 'Patient Education',
+      'ohif-viewer': 'OHIF Viewer',
       'enhancement': 'Enhancement',
       'transcription': 'Transcription',
       'generation': 'Generation',

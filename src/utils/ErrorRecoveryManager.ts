@@ -6,14 +6,13 @@
  * and comprehensive error handling for batch processing operations.
  */
 
-import type { 
+import type {
   ErrorRecoveryStrategy,
   ErrorType,
   BackoffStrategy,
   ErrorRecoveryStrategyType,
   OperationContext,
-  FailedAttempt,
-  RetryInfo
+  FailedAttempt
 } from '@/types/BatchProcessingTypes';
 
 export interface RecoveryConfig {
@@ -232,7 +231,7 @@ export class ErrorRecoveryManager {
       maxRetries: 3,
       backoffStrategy: 'exponential',
       recoveryTimeout: 30000,
-      shouldRetry: (error, attemptCount, context) => {
+      shouldRetry: (error, attemptCount, _context) => {
         return attemptCount <= 3 && !error.message.includes('permanent');
       }
     });
@@ -243,8 +242,8 @@ export class ErrorRecoveryManager {
       maxRetries: 5,
       backoffStrategy: 'linear',
       recoveryTimeout: 20000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 5;
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 5;
       },
       fallbackAction: async () => {
         // Try page refresh or alternative selectors
@@ -258,8 +257,8 @@ export class ErrorRecoveryManager {
       maxRetries: 2,
       backoffStrategy: 'fixed',
       recoveryTimeout: 15000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 2;
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 2;
       },
       fallbackAction: async () => {
         // Reinject content script
@@ -273,8 +272,8 @@ export class ErrorRecoveryManager {
       maxRetries: 4,
       backoffStrategy: 'fibonacci',
       recoveryTimeout: 25000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 4 && !error.message.includes('no data available');
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 4 && !_error.message.includes('no data available');
       }
     });
 
@@ -284,8 +283,8 @@ export class ErrorRecoveryManager {
       maxRetries: 2,
       backoffStrategy: 'exponential',
       recoveryTimeout: 60000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 2 && !error.message.includes('model unavailable');
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 2 && !_error.message.includes('model unavailable');
       }
     });
 
@@ -295,8 +294,8 @@ export class ErrorRecoveryManager {
       maxRetries: 3,
       backoffStrategy: 'linear',
       recoveryTimeout: 20000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 3;
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 3;
       }
     });
 
@@ -306,7 +305,7 @@ export class ErrorRecoveryManager {
       maxRetries: 1,
       backoffStrategy: 'fixed',
       recoveryTimeout: 5000,
-      shouldRetry: (error, attemptCount, context) => {
+      shouldRetry: (_error, _attemptCount, _context) => {
         return false; // Don't retry permission errors
       }
     });
@@ -317,8 +316,8 @@ export class ErrorRecoveryManager {
       maxRetries: 1,
       backoffStrategy: 'fixed',
       recoveryTimeout: 10000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount === 1; // Try once after cleanup
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount === 1; // Try once after cleanup
       },
       fallbackAction: async () => {
         // Trigger garbage collection if available
@@ -339,8 +338,8 @@ export class ErrorRecoveryManager {
       maxRetries: 2,
       backoffStrategy: 'exponential',
       recoveryTimeout: 15000,
-      shouldRetry: (error, attemptCount, context) => {
-        return attemptCount <= 2;
+      shouldRetry: (_error, _attemptCount, _context) => {
+        return _attemptCount <= 2;
       }
     });
   }
@@ -624,7 +623,7 @@ export class ErrorRecoveryManager {
 
   private async attemptGracefulDegradation<T>(
     context: OperationContext,
-    error: Error
+    _error: Error
   ): Promise<T | null> {
     this.log(`🔄 Attempting graceful degradation for ${context.operation}`);
 

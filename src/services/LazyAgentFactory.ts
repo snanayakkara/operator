@@ -7,10 +7,11 @@
 
 import type { AgentType, MedicalAgent, MedicalContext, MedicalReport } from '@/types/medical.types';
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 
 // Type definitions for lazy-loaded agents
 type AgentConstructor = new () => MedicalAgent;
-type AgentModule = { [key: string]: AgentConstructor };
+type _AgentModule = { [key: string]: AgentConstructor };
 
 // Cache for loaded agents to avoid re-importing
 const agentCache = new Map<AgentType, MedicalAgent>();
@@ -49,70 +50,88 @@ export class LazyAgentFactory {
       let AgentClass: AgentConstructor;
       
       switch (agentType) {
-        case 'tavi':
+        case 'tavi': {
           const taviModule = await import('@/agents/specialized/TAVIAgent');
           AgentClass = taviModule.TAVIAgent;
           break;
+        }
           
-        case 'angiogram-pci':
+        case 'angiogram-pci': {
           const angiogramModule = await import('@/agents/specialized/AngiogramPCIAgent');
           AgentClass = angiogramModule.AngiogramPCIAgent;
           break;
-          
-        case 'quick-letter':
-          const quickLetterModule = await import('@/agents/specialized/QuickLetterAgent.Phase3');
-          AgentClass = quickLetterModule.QuickLetterAgentPhase3;
+        }
+        case 'tavi-workup': {
+          const taviWorkupModule = await import('@/agents/specialized/TAVIWorkupAgent');
+          AgentClass = taviWorkupModule.TAVIWorkupAgent;
           break;
+        }
           
-        case 'consultation':
+        case 'quick-letter': {
+          const quickLetterModule = await import('@/agents/specialized/QuickLetterAgent');
+          AgentClass = quickLetterModule.QuickLetterAgent;
+          break;
+        }
+          
+        case 'consultation': {
           const consultationModule = await import('@/agents/specialized/ConsultationAgent');
           AgentClass = consultationModule.ConsultationAgent;
           break;
+        }
           
-        case 'investigation-summary':
-          const investigationModule = await import('@/agents/specialized/InvestigationSummaryAgent.Phase3');
-          AgentClass = investigationModule.InvestigationSummaryAgentPhase3;
+        case 'investigation-summary': {
+          const investigationModule = await import('@/agents/specialized/InvestigationSummaryAgent');
+          AgentClass = investigationModule.InvestigationSummaryAgent;
           break;
+        }
           
-        case 'background':
-          const backgroundModule = await import('@/agents/specialized/BackgroundAgent.Phase3');
-          AgentClass = backgroundModule.BackgroundAgentPhase3;
+        case 'background': {
+          const backgroundModule = await import('@/agents/specialized/BackgroundAgent');
+          AgentClass = backgroundModule.BackgroundAgent;
           break;
+        }
           
-        case 'medication':
-          const medicationModule = await import('@/agents/specialized/MedicationAgent.Phase3');
-          AgentClass = medicationModule.MedicationAgentPhase3;
+        case 'medication': {
+          const medicationModule = await import('@/agents/specialized/MedicationAgent');
+          AgentClass = medicationModule.MedicationAgent;
           break;
+        }
           
-        case 'bloods':
+        case 'bloods': {
           const bloodsModule = await import('@/agents/specialized/BloodsAgent');
           AgentClass = bloodsModule.BloodsAgent;
           break;
+        }
           
-        case 'mteer':
+        case 'mteer': {
           const mteerModule = await import('@/agents/specialized/MTEERAgent');
           AgentClass = mteerModule.MTEERAgent;
           break;
+        }
           
-        case 'pfo-closure':
+        case 'pfo-closure': {
           const pfoModule = await import('@/agents/specialized/PFOClosureAgent');
           AgentClass = pfoModule.PFOClosureAgent;
           break;
+        }
           
-        case 'right-heart-cath':
+        case 'right-heart-cath': {
           const rhcModule = await import('@/agents/specialized/RightHeartCathAgent');
           AgentClass = rhcModule.RightHeartCathAgent;
           break;
+        }
           
-        case 'ai-medical-review':
+        case 'ai-medical-review': {
           const aiReviewModule = await import('@/agents/specialized/BatchPatientReviewAgent');
           AgentClass = aiReviewModule.BatchPatientReviewAgent;
           break;
+        }
           
-        case 'patient-education':
+        case 'patient-education': {
           const patientEducationModule = await import('@/agents/specialized/PatientEducationAgent');
           AgentClass = patientEducationModule.PatientEducationAgent;
           break;
+        }
           
         default:
           throw new Error(`Unknown agent type: ${agentType}`);
@@ -129,7 +148,8 @@ export class LazyAgentFactory {
       return agent;
       
     } catch (error) {
-      logger.error(`Failed to load ${agentType} agent`, error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error(`Failed to load ${agentType} agent`, err, {
         component: 'lazy-agent-factory',
         operation: 'load-error',
         agentType
@@ -171,7 +191,8 @@ export class LazyAgentFactory {
       return result;
       
     } catch (error) {
-      logger.error(`Agent processing failed for ${agentType}`, error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error(`Agent processing failed for ${agentType}`, err, {
         component: 'lazy-agent-factory',
         operation: 'process-error',
         agentType

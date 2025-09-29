@@ -457,7 +457,7 @@ class BackgroundService {
 
                             const showOverlay = () => { if (overlay) overlay.style.display = 'flex'; };
                             // Keep overlay persistent while the annotator is open
-                            const hideOverlay = () => { /* no-op: persist overlay */ };
+                            const _hideOverlay = () => { /* no-op: persist overlay */ };
 
                             const onDragEnter = (e: DragEvent) => { e.preventDefault(); showOverlay(); };
                             const onDragOver = (e: DragEvent) => { e.preventDefault(); if (e.dataTransfer) { e.dataTransfer.dropEffect = 'copy'; } };
@@ -1200,7 +1200,7 @@ class BackgroundService {
     console.log(`🧭 Navigating tab ${tabId} to: ${url}`);
     
     return new Promise((resolve, reject) => {
-      chrome.tabs.update(tabId, { url }, async (tab) => {
+      chrome.tabs.update(tabId, { url }, async (_tab) => {
         if (chrome.runtime.lastError) {
           reject(new Error(`Navigation failed: ${chrome.runtime.lastError.message}`));
           return;

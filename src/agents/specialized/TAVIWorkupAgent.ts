@@ -7,7 +7,7 @@ import type {
   ChatMessage
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { TAVI_WORKUP_SYSTEM_PROMPTS } from './TAVIWorkupSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
 
 /**
  * Streamlined TAVI Workup Agent following standard MedicalAgent pattern.
@@ -16,6 +16,7 @@ import { TAVI_WORKUP_SYSTEM_PROMPTS } from './TAVIWorkupSystemPrompts';
  */
 export class TAVIWorkupAgent extends MedicalAgent {
   protected lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
 
   constructor() {
     super(
@@ -23,12 +24,26 @@ export class TAVIWorkupAgent extends MedicalAgent {
       'Interventional Cardiology',
       'Processes comprehensive TAVI dictation into structured sections for clinical documentation',
       'tavi-workup',
-      TAVI_WORKUP_SYSTEM_PROMPTS.generation
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('tavi-workup', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ TAVIWorkupAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist interventional cardiologist processing comprehensive TAVI workup documentation.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<TAVIWorkupReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     const processingType = context?.isReprocessing ? 'REPROCESSING' : 'ORIGINAL';
     console.log(`🫀 TAVI Workup [${processingType}]: Starting streamlined TAVI workup processing`);
@@ -147,7 +162,9 @@ export class TAVIWorkupAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
+
     return [
       { role: 'system', content: this.systemPrompt },
       { role: 'user', content: input },

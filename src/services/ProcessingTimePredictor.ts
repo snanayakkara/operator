@@ -6,7 +6,7 @@
  * Replaces static estimates with data-driven predictions.
  */
 
-import type { AgentType, PatientSession } from '@/types/medical.types';
+import type { AgentType } from '@/types/medical.types';
 import { PerformanceMonitoringService } from './PerformanceMonitoringService';
 import { logger } from '@/utils/Logger';
 
@@ -85,6 +85,12 @@ export class ProcessingTimePredictor {
       lengthScalingFactor: 0.9,
       modelComplexity: 'lightweight',
       expectedRange: { min: 1200, max: 3400 }
+    },
+    'ohif-viewer': {
+      baselineMs: 2400,
+      lengthScalingFactor: 0.8,
+      modelComplexity: 'lightweight',
+      expectedRange: { min: 1500, max: 5000 }
     },
 
     // Standard agents (MedGemma-27b MLX model)
@@ -175,6 +181,12 @@ export class ProcessingTimePredictor {
       lengthScalingFactor: 3.0,
       modelComplexity: 'heavy',
       expectedRange: { min: 10000, max: 45000 }
+    },
+    'aus-medical-review': {
+      baselineMs: 5200,
+      lengthScalingFactor: 1.6,
+      modelComplexity: 'standard',
+      expectedRange: { min: 3200, max: 12000 }
     },
     'patient-education': {
       baselineMs: 4500,
@@ -416,7 +428,7 @@ export class ProcessingTimePredictor {
   private calculateSystemPerformanceFactor(systemPerformance?: number): number {
     if (!systemPerformance) {
       // Try to get current system performance from performance service
-      const performanceSummary = this.performanceService.getPerformanceSummary();
+      const _performanceSummary = this.performanceService.getPerformanceSummary();
       const recentIssues = this.performanceService.getRecentIssues(2);
       
       if (recentIssues.length > 0) {
@@ -448,7 +460,7 @@ export class ProcessingTimePredictor {
    */
   private calculateConfidenceLevel(
     historicalSessionCount: number,
-    lengthCategory: TranscriptionLengthCategory
+    _lengthCategory: TranscriptionLengthCategory
   ): 'high' | 'medium' | 'low' {
     if (historicalSessionCount >= 20) return 'high';
     if (historicalSessionCount >= 8) return 'medium';

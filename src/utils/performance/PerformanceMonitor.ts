@@ -20,6 +20,15 @@ export interface ProcessingMetrics {
   medicalAccuracy?: number;
   australianCompliance?: boolean;
   timestamp: number;
+  errors?: PerformanceErrorEntry[];
+  resultMetadata?: Record<string, unknown>;
+}
+
+export interface PerformanceErrorEntry {
+  message: string;
+  stack?: string;
+  timestamp: number;
+  details?: Record<string, unknown>;
 }
 
 export interface PerformanceBaseline {
@@ -68,6 +77,7 @@ export class PerformanceMonitor {
   private maxMetricsHistory = 10000; // Keep last 10k operations
   private baselineUpdateInterval = 300000; // 5 minutes
   private lastBaselineUpdate = 0;
+  private activeMeasurements: Map<string, PerformanceMeasurement> = new Map();
 
   private constructor() {
     logger.info('PerformanceMonitor initialized');
@@ -131,6 +141,29 @@ export class PerformanceMonitor {
    */
   public startMeasurement(operation: string, agentType: string): PerformanceMeasurement {
     return new PerformanceMeasurement(operation, agentType, this);
+  }
+
+  /**
+   * Compatibility helper for legacy code paths tracking operations by id
+   */
+  public startOperation(operationId: string, operation: string, agentType: string = 'system'): void {
+    const measurement = this.startMeasurement(operation, agentType);
+    this.activeMeasurements.set(operationId, measurement);
+  }
+
+  public endOperation(operationId: string, outputLength: number = 0): void {
+    const measurement = this.activeMeasurements.get(operationId);
+    if (measurement) {
+      measurement.end(outputLength);
+      this.activeMeasurements.delete(operationId);
+    }
+  }
+
+  public recordError(operationId: string, error: Error): void {
+    const measurement = this.activeMeasurements.get(operationId);
+    if (measurement) {
+      measurement.setError(error);
+    }
   }
 
   /**
@@ -275,6 +308,7 @@ export class PerformanceMonitor {
     this.metrics = [];
     this.baselines.clear();
     this.lastBaselineUpdate = 0;
+    this.activeMeasurements.clear();
     logger.info('Performance metrics cleared');
   }
 
@@ -532,6 +566,8 @@ export class PerformanceMeasurement {
   private confidenceScore?: number;
   private medicalAccuracy?: number;
   private australianCompliance?: boolean;
+  private errors: PerformanceErrorEntry[] = [];
+  private resultMetadata?: Record<string, unknown>;
 
   constructor(operation: string, agentType: string, monitor: PerformanceMonitor) {
     this.operation = operation;
@@ -568,6 +604,30 @@ export class PerformanceMeasurement {
     return this;
   }
 
+  public setError(error: Error, details?: Record<string, unknown>): PerformanceMeasurement {
+    this.errors.push({
+      message: error.message,
+      stack: error.stack,
+      timestamp: Date.now(),
+      details
+    });
+    return this;
+  }
+
+  public addError(error: Error, details?: Record<string, unknown>): PerformanceMeasurement {
+    return this.setError(error, details);
+  }
+
+  public clearErrors(): PerformanceMeasurement {
+    this.errors = [];
+    return this;
+  }
+
+  public setResult(metadata: Record<string, unknown>): PerformanceMeasurement {
+    this.resultMetadata = metadata;
+    return this;
+  }
+
   public end(outputLength: number = 0): void {
     const endTime = performance.now();
     const endMemory = (performance as any).memory?.usedJSHeapSize || this.startMemory;
@@ -585,6 +645,14 @@ export class PerformanceMeasurement {
       australianCompliance: this.australianCompliance,
       timestamp: Date.now()
     };
+
+    if (this.errors.length > 0) {
+      metrics.errors = [...this.errors];
+    }
+
+    if (this.resultMetadata) {
+      metrics.resultMetadata = { ...this.resultMetadata };
+    }
 
     this.monitor.trackProcessing(metrics);
   }

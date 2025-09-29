@@ -37,7 +37,9 @@ export const AGENT_TO_FIELD_MAPPING: Record<AgentType, string | null> = {
   // Analysis agents - fallback to generic insertion
   'ai-medical-review': null,
   'batch-ai-review': null,
+  'aus-medical-review': null,
   'patient-education': null,
+  'ohif-viewer': null,
   'enhancement': null,
   'transcription': null,
   'generation': null

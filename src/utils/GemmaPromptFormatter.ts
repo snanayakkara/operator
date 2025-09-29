@@ -41,7 +41,14 @@ export class GemmaPromptFormatter {
       ? `${systemPrompt}\n\n${userContent}`
       : systemPrompt || userContent;
 
-    gemmaPrompt = `<start_of_turn>user\n${combinedUserContent}<end_of_turn>\n<start_of_turn>model\n${gemmaPrompt}`;
+    // Build the final prompt - include existing model responses if any, otherwise end cleanly
+    if (gemmaPrompt.length > 0) {
+      // There are existing model responses, include them
+      gemmaPrompt = `<start_of_turn>user\n${combinedUserContent}<end_of_turn>\n<start_of_turn>model\n${gemmaPrompt}`;
+    } else {
+      // No existing model responses, create a clean prompt
+      gemmaPrompt = `<start_of_turn>user\n${combinedUserContent}<end_of_turn>\n<start_of_turn>model\n`;
+    }
 
     return {
       prompt: gemmaPrompt,
@@ -57,9 +64,10 @@ export class GemmaPromptFormatter {
   }
 
   static createGemmaRequest(messages: ChatMessage[], modelName: string, options: Record<string, unknown> = {}) {
-    if (this.isGemmaModel(modelName)) {
+    // TEMP DEBUG: Disable Gemma formatting for medgemma-27b-text-it-mlx to test
+    if (this.isGemmaModel(modelName) && !modelName.includes('medgemma-27b')) {
       const formatted = this.formatForGemma(messages);
-      
+
       // For Gemma models, convert the formatted prompt back to a single user message
       // This works with LMStudio's chat/completions endpoint
       return {
@@ -70,8 +78,8 @@ export class GemmaPromptFormatter {
         ...options
       };
     }
-    
-    // For non-Gemma models, use the original messages
+
+    // For non-Gemma models OR medgemma-27b (testing), use the original messages
     return {
       model: modelName,
       messages,

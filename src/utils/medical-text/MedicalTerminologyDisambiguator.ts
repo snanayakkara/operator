@@ -18,7 +18,8 @@
 import { logger } from '@/utils/Logger';
 import { CacheManager } from '@/utils/CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
-import { PatternCompiler, type PatternCategory } from '@/utils/performance/PatternCompiler';
+import { PatternCompiler, type PatternCategory as _PatternCategory } from '@/utils/performance/PatternCompiler';
+import { toError } from '@/utils/errorHelpers';
 
 export interface AmbiguousTermDefinition {
   term: string;
@@ -406,7 +407,7 @@ export class MedicalTerminologyDisambiguator {
 
   // Private implementation methods
 
-  private async extractContextFactors(context: string, windowSize: number): Promise<ContextFactor[]> {
+  private async extractContextFactors(context: string, _windowSize: number): Promise<ContextFactor[]> {
     const factors: ContextFactor[] = [];
     
     // Extract different types of context factors
@@ -443,7 +444,7 @@ export class MedicalTerminologyDisambiguator {
 
   private getTermRegistry(term: string): TermRegistry | undefined {
     // Check direct match
-    let registry = this.termRegistry.get(term.toLowerCase());
+    const registry = this.termRegistry.get(term.toLowerCase());
     if (registry) return registry;
 
     // Check variations and aliases
@@ -733,8 +734,13 @@ export class MedicalTerminologyDisambiguator {
     try {
       const cached = await this.cacheManager.get(`disambiguation_${cacheKey}` as any);
       if (cached && typeof cached === 'object' && 'originalTerm' in cached) {
-        logger.debug(`Disambiguation cache hit: ${cacheKey}`);
-        return cached as DisambiguationResult;
+        // Validate cached result has required DisambiguationResult properties
+        const result = cached as any;
+        if (result.disambiguatedTerm !== undefined && result.confidence !== undefined &&
+            result.domain !== undefined && result.definition !== undefined) {
+          logger.debug(`Disambiguation cache hit: ${cacheKey}`);
+          return result as DisambiguationResult;
+        }
       }
     } catch (error) {
       logger.debug(`Disambiguation cache miss: ${cacheKey}`);
@@ -744,10 +750,11 @@ export class MedicalTerminologyDisambiguator {
 
   private async cacheDisambiguation(cacheKey: string, result: DisambiguationResult): Promise<void> {
     try {
-      await this.cacheManager.set(`disambiguation_${cacheKey}` as any, result, this.CACHE_TTL);
+      await this.cacheManager.set(`disambiguation_${cacheKey}` as any, result, undefined, this.CACHE_TTL);
       logger.debug(`Cached disambiguation: ${cacheKey}`);
     } catch (error) {
-      logger.warn('Failed to cache disambiguation result:', error);
+      const err = toError(error);
+      logger.warn('Failed to cache disambiguation result:', { error: err.message });
     }
   }
 

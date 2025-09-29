@@ -10,6 +10,7 @@
  */
 
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 
 export interface DSPyConfig {
   api_base: string;
@@ -22,6 +23,7 @@ export interface DSPyConfig {
     model_override?: string;
     max_tokens: number;
     temperature: number;
+    timeout_ms?: number;
   }>;
 }
 
@@ -33,10 +35,29 @@ export interface DSPyResult {
   cached?: boolean;
 }
 
+export type DSPyServerStatus = 'unknown' | 'healthy' | 'unhealthy';
+
+export interface EvaluationResult {
+  task: string;
+  score: number;
+  metrics: Record<string, any>;
+  timestamp: string;
+}
+
+export interface OptimizationResult {
+  task: string;
+  iterations: number;
+  improvements: Record<string, any>;
+  timestamp: string;
+}
+
 export class DSPyService {
   private static instance: DSPyService;
   private configCache: DSPyConfig | null = null;
   private requestIdCounter = 0;
+  private serverStatus: DSPyServerStatus = 'unknown';
+  private lastHealthCheck = 0;
+  private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
   private constructor() {
     logger.info('DSPyService initialized (browser context)', { 
@@ -98,9 +119,10 @@ export class DSPyService {
           });
         }
       } catch (error) {
+        const err = toError(error);
         logger.warn('Failed to check localStorage for DSPy flag', { 
           component: 'DSPyService',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: err.message
         });
       }
     }
@@ -135,11 +157,10 @@ export class DSPyService {
   }
 
   /**
-   * Process transcript using DSPy predictor
-   * Note: DSPy requires external Python environment setup
+   * Process transcript using DSPy predictor via external server
    */
   public async processWithDSPy(
-    agentType: string, 
+    agentType: string,
     transcript: string,
     options: {
       timeout?: number;
@@ -147,7 +168,8 @@ export class DSPyService {
     } = {}
   ): Promise<DSPyResult> {
     const startTime = Date.now();
-    
+    const requestId = this.generateRequestId();
+
     try {
       // Check if DSPy is enabled
       if (!(await this.isDSPyEnabled(agentType))) {
@@ -157,37 +179,105 @@ export class DSPyService {
         };
       }
 
-      // DSPy integration requires external setup
-      logger.info('DSPy processing requested but not available in Chrome extension', { 
+      logger.info('Processing with external DSPy server', {
         component: 'DSPyService',
         agent_type: agentType,
-        transcript_length: transcript.length
+        transcript_length: transcript.length,
+        request_id: requestId
       });
 
-      return {
-        success: false,
-        error: 'DSPy processing requires external Python environment. Chrome extensions cannot spawn Python processes directly. Please use direct LMStudio processing instead.',
-        processing_time: Date.now() - startTime
+      // Check server health first
+      const isHealthy = await this.checkServerHealth();
+      if (!isHealthy) {
+        return {
+          success: false,
+          error: 'DSPy server is not available at localhost:8002. Please ensure the server is running.',
+          processing_time: Date.now() - startTime
+        };
+      }
+
+      // Prepare request payload
+      const payload = {
+        agent_type: agentType,
+        transcript: transcript,
+        request_id: requestId,
+        options: {
+          timeout: options.timeout || 60000,
+          ...options
+        }
       };
 
+      // Make HTTP request to external DSPy server
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), options.timeout || 60000);
+
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => controller.abort());
+      }
+
+      try {
+        const response = await fetch('http://localhost:8002/api/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        logger.info('DSPy processing completed', {
+          component: 'DSPyService',
+          agent_type: agentType,
+          request_id: requestId,
+          processing_time: Date.now() - startTime,
+          cached: result.cached || false
+        });
+
+        return {
+          success: true,
+          result: result.result,
+          processing_time: Date.now() - startTime,
+          cached: result.cached || false
+        };
+
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
     } catch (error) {
-      logger.error('DSPy processing setup failed', { 
+      const err = toError(error);
+      logger.error('DSPy processing failed', err, {
         component: 'DSPyService',
         agent_type: agentType,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        request_id: requestId
       });
+
+      if (err.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'DSPy processing was cancelled',
+          processing_time: Date.now() - startTime
+        };
+      }
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'DSPy not available in Chrome extension environment',
+        error: err.message,
         processing_time: Date.now() - startTime
       };
     }
   }
 
   /**
-   * Run evaluation on development set
-   * Note: DSPy evaluation requires external Python environment
+   * Run evaluation on development set via external server
    */
   public async runEvaluation(
     agentType: string,
@@ -197,33 +287,76 @@ export class DSPyService {
       freshRun?: boolean;
     } = {}
   ): Promise<DSPyResult> {
+    const startTime = Date.now();
+
     try {
-      logger.info('DSPy evaluation requested but not available in Chrome extension', {
+      logger.info('Running DSPy evaluation via external server', {
+        component: 'DSPyService',
+        agent_type: agentType,
+        options
+      });
+
+      // Check server health first
+      const isHealthy = await this.checkServerHealth();
+      if (!isHealthy) {
+        return {
+          success: false,
+          error: 'DSPy server is not available at localhost:8002. Please ensure the server is running.',
+          processing_time: Date.now() - startTime
+        };
+      }
+
+      const payload = {
+        agent_type: agentType,
+        dev_set_path: options.devSetPath,
+        output_path: options.outputPath,
+        fresh_run: options.freshRun || false
+      };
+
+      const response = await fetch('http://localhost:8002/api/evaluate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      logger.info('DSPy evaluation completed', {
+        component: 'DSPyService',
+        agent_type: agentType,
+        processing_time: Date.now() - startTime,
+        score: result.score
+      });
+
+      return {
+        success: true,
+        result: JSON.stringify(result),
+        processing_time: Date.now() - startTime
+      };
+
+    } catch (error) {
+      const err = toError(error);
+      logger.error('DSPy evaluation failed', err, {
         component: 'DSPyService',
         agent_type: agentType
       });
 
       return {
         success: false,
-        error: 'DSPy evaluation requires external Python environment. Please run evaluations using: npm run eval:angiogram'
-      };
-
-    } catch (error) {
-      logger.error('DSPy evaluation setup failed', {
-        component: 'DSPyService',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'DSPy evaluation not available in Chrome extension environment'
+        error: err.message,
+        processing_time: Date.now() - startTime
       };
     }
   }
 
   /**
-   * Run GEPA optimization
-   * Note: GEPA optimization requires external Python environment
+   * Run GEPA optimization via external server
    */
   public async runOptimization(
     agentType: string,
@@ -233,28 +366,70 @@ export class DSPyService {
       freshRun?: boolean;
     } = {}
   ): Promise<DSPyResult> {
+    const startTime = Date.now();
+
     try {
-      logger.info('GEPA optimization requested but not available in Chrome extension', {
+      logger.info('Running GEPA optimization via external server', {
         component: 'DSPyService',
         agent_type: agentType,
-        iterations: options.iterations,
-        with_human: options.withHuman
+        options
+      });
+
+      // Check server health first
+      const isHealthy = await this.checkServerHealth();
+      if (!isHealthy) {
+        return {
+          success: false,
+          error: 'DSPy server is not available at localhost:8002. Please ensure the server is running.',
+          processing_time: Date.now() - startTime
+        };
+      }
+
+      const payload = {
+        agent_type: agentType,
+        iterations: options.iterations || 5,
+        with_human: options.withHuman || false,
+        fresh_run: options.freshRun || false
+      };
+
+      const response = await fetch('http://localhost:8002/api/optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      logger.info('GEPA optimization completed', {
+        component: 'DSPyService',
+        agent_type: agentType,
+        processing_time: Date.now() - startTime,
+        iterations: result.iterations
       });
 
       return {
-        success: false,
-        error: 'GEPA optimization requires external Python environment. Please run optimization using: npm run optim:angiogram'
+        success: true,
+        result: JSON.stringify(result),
+        processing_time: Date.now() - startTime
       };
 
     } catch (error) {
-      logger.error('GEPA optimization setup failed', {
+      const err = toError(error);
+      logger.error('GEPA optimization failed', err, {
         component: 'DSPyService',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        agent_type: agentType
       });
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'GEPA optimization not available in Chrome extension environment'
+        error: err.message,
+        processing_time: Date.now() - startTime
       };
     }
   }
@@ -323,6 +498,62 @@ export class DSPyService {
   }
 
   /**
+   * Check DSPy server health
+   */
+  public async checkServerHealth(): Promise<boolean> {
+    const now = Date.now();
+
+    // Use cached result if recent
+    if (now - this.lastHealthCheck < this.HEALTH_CHECK_INTERVAL) {
+      return this.serverStatus === 'healthy';
+    }
+
+    try {
+      logger.debug('Checking DSPy server health', { component: 'DSPyService' });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const response = await fetch('http://localhost:8002/api/health', {
+        method: 'GET',
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const health = await response.json();
+        this.serverStatus = health.status === 'healthy' ? 'healthy' : 'unhealthy';
+        this.lastHealthCheck = now;
+
+        logger.debug('DSPy server health check completed', {
+          component: 'DSPyService',
+          status: this.serverStatus,
+          details: health
+        });
+
+        return this.serverStatus === 'healthy';
+      } else {
+        this.serverStatus = 'unhealthy';
+        this.lastHealthCheck = now;
+        return false;
+      }
+
+    } catch (error) {
+      const err = toError(error);
+      this.serverStatus = 'unhealthy';
+      this.lastHealthCheck = now;
+
+      logger.debug('DSPy server health check failed', {
+        component: 'DSPyService',
+        error: err.message
+      });
+
+      return false;
+    }
+  }
+
+  /**
    * Force refresh server status
    */
   public async refreshServerStatus(): Promise<boolean> {
@@ -330,6 +561,3 @@ export class DSPyService {
     return await this.checkServerHealth();
   }
 }
-
-// Re-export types for convenience
-export type { DSPyServerStatus, EvaluationResult, OptimizationResult };

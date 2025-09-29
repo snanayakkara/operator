@@ -302,7 +302,7 @@ export class ConsolidationMetricsCollector {
     };
   }
 
-  private updateComponentMetrics(operation: string, benchmark: PerformanceBenchmark): void {
+  private updateComponentMetrics(operation: string, _benchmark: PerformanceBenchmark): void {
     const component = this.mapOperationToComponent(operation);
     if (!component) return;
 

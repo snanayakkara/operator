@@ -5,7 +5,8 @@
  */
 
 import { MedicalAgent } from '../base/MedicalAgent';
-import { BLOODS_SYSTEM_PROMPTS, BLOODS_MEDICAL_PATTERNS } from './BloodsSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { BLOODS_MEDICAL_PATTERNS } from './BloodsSystemPrompts';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine';
 import type { 
@@ -18,6 +19,7 @@ import type {
 export class BloodsAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
   private asrEngine: ASRCorrectionEngine;
+  private systemPromptInitialized = false;
 
   constructor() {
     super(
@@ -25,14 +27,28 @@ export class BloodsAgent extends MedicalAgent {
       'Pathology',
       'Blood test and pathology ordering specialist',
       'bloods',
-      BLOODS_SYSTEM_PROMPTS.primary
+      '' // Will be loaded dynamically
     );
     
     this.lmStudioService = LMStudioService.getInstance();
     this.asrEngine = ASRCorrectionEngine.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('bloods', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ BloodsAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a blood test and pathology ordering specialist.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     console.log('🩸 BloodsAgent: Processing blood test order:', input.substring(0, 100));
 
@@ -41,8 +57,7 @@ export class BloodsAgent extends MedicalAgent {
       const correctedInput = await this.asrEngine.applyPathologyCorrections(input);
       console.log('🔄 Applied consolidated pathology ASR corrections:', correctedInput);
 
-      // Build messages for AI processing
-      const messages = this.buildMessages(correctedInput, context);
+      // Note: buildMessages could be used for custom message formatting if needed
       
       // Get AI response using LMStudio service
       const response = await this.lmStudioService.processWithAgent(
@@ -55,8 +70,7 @@ export class BloodsAgent extends MedicalAgent {
       // Parse the response into structured sections
       const sections = this.parseResponse(response, context);
 
-      // Extract medical terms and patterns
-      const medicalTerms = this.extractMedicalTerms(response);
+      // Note: Medical terms extraction available if needed for advanced processing
       
       // Build final report
       const report: MedicalReport = {
@@ -81,20 +95,26 @@ export class BloodsAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, context?: MedicalContext): ChatMessage[] {
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
+
     return [
       {
         role: 'system',
-        content: BLOODS_SYSTEM_PROMPTS.primary
+        content: this.systemPrompt
       },
       {
-        role: 'user', 
-        content: BLOODS_SYSTEM_PROMPTS.userPromptTemplate.replace('{input}', input)
+        role: 'user',
+        content: `Please format this voice-dictated blood test order into structured pathology requisitions:
+
+"${input}"
+
+Format into ↪ arrow structure for each blood test with clinical indications and urgency as appropriate.`
       }
     ];
   }
 
-  protected parseResponse(response: string, context?: MedicalContext): ReportSection[] {
+  protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
     const sections: ReportSection[] = [];
     
     // Clean the response by removing any AI conversational text
@@ -221,7 +241,7 @@ export class BloodsAgent extends MedicalAgent {
     const inputLower = input.toLowerCase();
     
     // Check for common test abbreviations and expansions
-    for (const [abbrev, full] of Object.entries(BLOODS_MEDICAL_PATTERNS.expansionRules)) {
+    for (const [abbrev] of Object.entries(BLOODS_MEDICAL_PATTERNS.expansionRules)) {
       if (inputLower.includes(abbrev.toLowerCase())) {
         identified.push(abbrev);
       }

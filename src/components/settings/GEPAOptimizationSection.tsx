@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Play, Download, History, Settings, TrendingUp } from 'lucide-react';
+import { Play, TrendingUp } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import { GEPAOptimizationError } from '@/types/optimization';
 import type { 
@@ -52,10 +52,10 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
   const [selectedTasks, setSelectedTasks] = useState<Set<AgentType>>(new Set(['quick-letter']));
   const [iterations, setIterations] = useState(5);
   const [withHuman, setWithHuman] = useState(false);
-  const [preview, setPreview] = useState<GEPAPreview | null>(null);
+  const [_preview, _setPreview] = useState<GEPAPreview | null>(null);
 
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
+  const [_isApplying, _setIsApplying] = useState(false);
 
   const toggleTask = useCallback((taskId: AgentType) => {
     setSelectedTasks(prev => {

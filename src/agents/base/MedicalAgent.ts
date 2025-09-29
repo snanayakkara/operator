@@ -51,7 +51,7 @@ export abstract class MedicalAgent implements IMedicalAgent {
 
   abstract process(input: string, context?: MedicalContext): Promise<MedicalReport>;
   
-  protected abstract buildMessages(input: string, context?: MedicalContext): ChatMessage[];
+  protected abstract buildMessages(input: string, context?: MedicalContext): Promise<ChatMessage[]> | ChatMessage[];
   
   protected abstract parseResponse(response: string, context?: MedicalContext): ReportSection[];
 

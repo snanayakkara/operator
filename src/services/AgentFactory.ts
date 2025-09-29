@@ -14,6 +14,7 @@ import { CrossAgentIntelligence } from './CrossAgentIntelligence';
 import { PhrasebookService } from './PhrasebookService';
 import { NotificationService } from './NotificationService';
 import { logger } from '@/utils/Logger';
+import { toError } from '@/utils/errorHelpers';
 
 export class AgentFactory {
   private static lazyFactory = LazyAgentFactory.getInstance();
@@ -24,8 +25,8 @@ export class AgentFactory {
    * Process input with Phase 4 enhanced agent loading and intelligence
    */
   public static async processWithAgent(
-    workflowId: AgentType, 
-    input: string, 
+    workflowId: AgentType,
+    input: string,
     context?: any,
     _signal?: AbortSignal,
     options?: {
@@ -33,8 +34,9 @@ export class AgentFactory {
       skipNotification?: boolean;
       sessionId?: string;
       usePhase4Enhancement?: boolean;
+      onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any }> {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any }> {
     const startTime = Date.now();
     
     try {
@@ -68,6 +70,16 @@ export class AgentFactory {
           component: 'agent-factory',
           operation: 'batch-review',
           findings: batchPatientReviewData.findings?.length || 0
+        });
+      }
+
+      // Check if this is a TAVIWorkupAgent with structured sections
+      const taviStructuredSections = (report as any).structuredSections;
+      if (workflowId === 'tavi-workup' && taviStructuredSections) {
+        logger.info(`TAVI Workup found structured sections`, {
+          component: 'agent-factory',
+          operation: 'tavi-workup',
+          sectionsFound: Object.keys(taviStructuredSections).length
         });
       }
       
@@ -108,23 +120,25 @@ export class AgentFactory {
         processingTime: report.metadata.processingTime,
         agentName: report.agentName,
         reviewData: batchPatientReviewData, // Include structured data for Batch Patient Review
-        missingInfo: report.metadata?.missingInformation
+        missingInfo: report.metadata?.missingInformation,
+        taviStructuredSections: taviStructuredSections // Include structured data for TAVI Workup
       };
       
     } catch (error) {
-      logger.error(`Agent processing failed for ${workflowId}`, error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error(`Agent processing failed for ${workflowId}`, err, {
         component: 'agent-factory',
         operation: 'process',
         workflow: workflowId
       });
-      throw error;
+      throw err;
     }
   }
 
   /**
    * Determine if Phase 4 Enhancement should be used for this agent
    */
-  private static shouldUsePhase4Enhancement(workflowId: AgentType, context?: any): boolean {
+  private static shouldUsePhase4Enhancement(workflowId: AgentType, _context?: any): boolean {
     // Enable Phase 4 for agents that benefit from cross-agent intelligence
     const phase4Agents: AgentType[] = [
       'investigation-summary',
@@ -132,6 +146,7 @@ export class AgentFactory {
       'medication',
       'quick-letter',
       'consultation',
+      'tavi-workup',
       'ai-medical-review'
     ];
 
@@ -149,6 +164,7 @@ export class AgentFactory {
       sessionId?: string;
       patientName?: string;
       skipNotification?: boolean;
+      onProgress?: (phase: string, progress: number, details?: string) => void;
     }
   ) {
     const startTime = Date.now();
@@ -176,14 +192,18 @@ export class AgentFactory {
           workflowId
         );
 
+        const recommendationSummaries = contextEnhancement.recommendations
+          ? contextEnhancement.recommendations.map(rec => rec.title ?? rec.description)
+          : [];
+
         enhancedContext = {
           ...enhancedContext,
-          phase4Enhancement: true,
+          enhancedProcessing: true,
           sharedInsights: contextEnhancement.sharedInsights,
           riskAssessment: contextEnhancement.riskAssessment,
           drugInteractions: contextEnhancement.drugInteractions,
           clinicalCorrelations: contextEnhancement.clinicalCorrelations,
-          recommendations: contextEnhancement.recommendations
+          recommendations: recommendationSummaries
         };
 
         logger.info(`Enhanced context with ${contextEnhancement.sharedInsights.length} shared insights`, {
@@ -194,12 +214,25 @@ export class AgentFactory {
       }
 
       // Step 3: Process with enhanced agent
-      const report = await agent.process(input, enhancedContext);
+      let report;
+      if (workflowId === 'tavi-workup' && options?.onProgress) {
+        // TAVI workup with progress tracking
+        const taviContext = {
+          ...enhancedContext,
+          onProgress: options.onProgress
+        };
+        report = await agent.process(input, taviContext);
+      } else {
+        // Standard processing
+        report = await agent.process(input, enhancedContext);
+      }
       
       // Step 4: Register insights with cross-agent intelligence
-      if (options?.sessionId && report.metadata?.phase3Processing) {
-        const extractedFindings = report.metadata.phase3Processing.clinicalFindings 
-          ? Array.from({ length: report.metadata.phase3Processing.clinicalFindings }, (_, i) => ({
+      if (options?.sessionId && report.metadata?.enhancedProcessing) {
+        const enhancedMetadata = report.metadata.enhancedProcessing as { clinicalFindings?: number } | undefined;
+        const clinicalFindingsCount = enhancedMetadata?.clinicalFindings ?? 0;
+        const extractedFindings = clinicalFindingsCount > 0
+          ? Array.from({ length: clinicalFindingsCount }, (_, i) => ({
               finding: `Clinical finding ${i + 1}`,
               confidence: 0.8,
               category: 'medical_history'
@@ -234,9 +267,10 @@ export class AgentFactory {
       
       // Send completion notification
       if (!options?.skipNotification) {
-        await NotificationService.sendProcessingCompleteNotification(
-          report.agentName,
+        await NotificationService.showCompletionNotification(
+          workflowId,
           totalTime,
+          undefined,
           options?.patientName
         );
       }
@@ -260,7 +294,8 @@ export class AgentFactory {
       };
 
     } catch (error) {
-      logger.error(`Phase 4 Enhanced processing failed for ${workflowId}`, error instanceof Error ? error : undefined, {
+      const err = toError(error);
+      logger.error(`Phase 4 Enhanced processing failed for ${workflowId}`, err, {
         component: 'agent-factory',
         operation: 'phase4-error',
         workflow: workflowId
@@ -366,7 +401,7 @@ export class AgentFactory {
    * Enhance medical context with user phrasebook terminology preferences
    */
   private static async enhanceWithPhrasebook(
-    context: MedicalContext = {},
+    context: MedicalContext = { sessionId: 'default', timestamp: Date.now() },
     agentType: AgentType
   ): Promise<MedicalContext> {
     try {
@@ -376,7 +411,7 @@ export class AgentFactory {
       if (terminologyBias.trim().length > 0) {
         const enhancedContext: MedicalContext = {
           ...context,
-          phrasebookEnhancement: true,
+          enhancedProcessing: true,
           terminologyPreferences: terminologyBias
         };
 
@@ -390,10 +425,11 @@ export class AgentFactory {
 
       return context;
     } catch (error) {
+      const err = toError(error);
       logger.warn('Failed to enhance context with phrasebook', {
         component: 'agent-factory',
         operation: 'phrasebook-enhancement',
-        error: error instanceof Error ? error.message : String(error)
+        error: err.message
       });
       return context;
     }

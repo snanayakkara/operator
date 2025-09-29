@@ -312,7 +312,7 @@ export class BatchAIReviewOrchestrator {
   ): Promise<BatchAIReviewReport> {
     this.log(`🔄 Resuming batch processing from checkpoint: ${checkpointId}`);
 
-    const { checkpoint, resumeStrategy, warnings } = await this.checkpointManager.resumeFromCheckpoint(checkpointId);
+    const { checkpoint, resumeStrategy: _resumeStrategy, warnings } = await this.checkpointManager.resumeFromCheckpoint(checkpointId);
     
     // Log warnings
     for (const warning of warnings) {
@@ -383,7 +383,7 @@ export class BatchAIReviewOrchestrator {
     patients: PatientAppointment[],
     startIndex: number,
     onProgress?: ProgressCallback,
-    batchStartTime?: number
+    _batchStartTime?: number
   ): Promise<{ results: PatientReviewResult[], errors: string[] }> {
     const results: PatientReviewResult[] = [];
     const errors: string[] = [];
@@ -470,14 +470,14 @@ export class BatchAIReviewOrchestrator {
     
     // Process AI reviews in batches to respect maxConcurrentOperations
     const successfulExtractions = extractedDataBatch.filter(item => item.success);
-    const aiReviewPromises: Promise<PatientReviewResult>[] = [];
+    const _aiReviewPromises: Promise<PatientReviewResult>[] = [];
     
     // Create chunks for parallel processing
     const chunks = this.chunkArray(successfulExtractions, this.config.maxConcurrentOperations);
     
     for (const chunk of chunks) {
       // Process each chunk in parallel
-      const chunkPromises = chunk.map(async (item, chunkIndex) => {
+      const chunkPromises = chunk.map(async (item, _chunkIndex) => {
         try {
           // Update progress for AI processing phase
           const progressPercent = 50 + ((results.length / patients.length) * 50); // Second 50% for AI processing
@@ -690,7 +690,7 @@ export class BatchAIReviewOrchestrator {
     }
   }
 
-  private async activatePatientWithIntelligentWaiting(patientIndex: number): Promise<void> {
+  private async activatePatientWithIntelligentWaiting(_patientIndex: number): Promise<void> {
     const tabId = await this.getCurrentTabId();
     
     // Get the patient data from the current processing context
@@ -1162,7 +1162,7 @@ export class BatchAIReviewOrchestrator {
     return null;
   }
 
-  private async handleResumeOption(checkpoint: any, onProgress?: ProgressCallback): Promise<boolean> {
+  private async handleResumeOption(checkpoint: any, _onProgress?: ProgressCallback): Promise<boolean> {
     // For now, automatically resume. In a full implementation, this could prompt the user
     this.log(`🔄 Auto-resuming from checkpoint with ${checkpoint.completedPatients.length} completed patients`);
     return true;
@@ -1172,8 +1172,8 @@ export class BatchAIReviewOrchestrator {
     input: BatchAIReviewInput,
     completedPatients: PatientReviewResult[],
     currentIndex: number,
-    errors: string[],
-    startTime: number
+    _errors: string[],
+    _startTime: number
   ): Promise<void> {
     if (!this.config.enableCheckpoints || !this.currentBatchId) return;
 

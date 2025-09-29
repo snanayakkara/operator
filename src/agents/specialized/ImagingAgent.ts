@@ -5,7 +5,8 @@
  */
 
 import { MedicalAgent } from '../base/MedicalAgent';
-import { IMAGING_SYSTEM_PROMPTS, IMAGING_MEDICAL_PATTERNS } from './ImagingSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { IMAGING_MEDICAL_PATTERNS } from './ImagingSystemPrompts';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import type { 
   MedicalReport, 
@@ -16,6 +17,7 @@ import type {
 
 export class ImagingAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
 
   constructor() {
     super(
@@ -23,19 +25,32 @@ export class ImagingAgent extends MedicalAgent {
       'Radiology',
       'Medical imaging and radiology ordering specialist',
       'imaging',
-      IMAGING_SYSTEM_PROMPTS.primary
+      '' // Will be loaded dynamically
     );
     
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('imaging', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ ImagingAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a medical imaging and radiology ordering specialist.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     console.log('📷 ImagingAgent: Processing imaging order:', input.substring(0, 100));
 
     try {
-      // Build messages for AI processing
-      const messages = this.buildMessages(input, context);
+      // Note: buildMessages could be used for custom message formatting if needed
       
       // Get AI response using LMStudio service
       const response = await this.lmStudioService.processWithAgent(
@@ -48,8 +63,7 @@ export class ImagingAgent extends MedicalAgent {
       // Parse the response into structured sections
       const sections = this.parseResponse(response, context);
 
-      // Extract medical terms and patterns
-      const medicalTerms = this.extractMedicalTerms(response);
+      // Note: Medical terms extraction available if needed for advanced processing
       
       // Build final report
       const report: MedicalReport = {
@@ -74,20 +88,26 @@ export class ImagingAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, context?: MedicalContext): ChatMessage[] {
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
+
     return [
       {
         role: 'system',
-        content: IMAGING_SYSTEM_PROMPTS.primary
+        content: this.systemPrompt
       },
       {
-        role: 'user', 
-        content: IMAGING_SYSTEM_PROMPTS.userPromptTemplate.replace('{input}', input)
+        role: 'user',
+        content: `Please format this voice-dictated imaging order into structured radiology requisitions:
+
+"${input}"
+
+Format into ↪ arrow structure for each imaging study with clinical indications and urgency as appropriate.`
       }
     ];
   }
 
-  protected parseResponse(response: string, context?: MedicalContext): ReportSection[] {
+  protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
     const sections: ReportSection[] = [];
     const lines = response.split('\n').filter(line => line.trim());
     
@@ -190,7 +210,7 @@ export class ImagingAgent extends MedicalAgent {
     const inputLower = input.toLowerCase();
     
     // Check for common study abbreviations and expansions
-    for (const [abbrev, full] of Object.entries(IMAGING_MEDICAL_PATTERNS.expansionRules)) {
+    for (const [abbrev] of Object.entries(IMAGING_MEDICAL_PATTERNS.expansionRules)) {
       if (inputLower.includes(abbrev.toLowerCase())) {
         identified.push(abbrev);
       }

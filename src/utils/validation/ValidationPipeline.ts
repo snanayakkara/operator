@@ -7,8 +7,8 @@
 
 import { MigrationValidator, ValidationResult, MigrationValidationConfig, DEFAULT_VALIDATION_CONFIGS } from './MigrationValidator';
 import { AgentType } from '@/types/medical.types';
-import { QuickLetterAgentPhase3 } from '@/agents/specialized/QuickLetterAgent.Phase3';
-import { InvestigationSummaryAgentPhase3 } from '@/agents/specialized/InvestigationSummaryAgent.Phase3';
+import { QuickLetterAgent as _QuickLetterAgent } from '@/agents/specialized/QuickLetterAgent';
+import { InvestigationSummaryAgent as _InvestigationSummaryAgent } from '@/agents/specialized/InvestigationSummaryAgent';
 
 export interface ValidationPipelineConfig {
   enableParallelValidation: boolean;
@@ -135,12 +135,12 @@ export class ValidationPipeline {
     this.activeJobs.set(agentType, job);
 
     try {
-      const { phase3Agent, legacyAgent } = await this.getAgentPair(agentType);
+      const { enhancedAgent, legacyAgent } = await this.getAgentPair(agentType);
       const config = this.getValidationConfig(agentType);
       
       const result = await this.migrationValidator.validateMigration(
         agentType,
-        phase3Agent,
+        enhancedAgent,
         legacyAgent,
         config
       );
@@ -260,20 +260,20 @@ export class ValidationPipeline {
    * Quick validation for continuous monitoring
    */
   private async runQuickValidation(agentType: AgentType): Promise<ValidationResult> {
-    const { phase3Agent } = await this.getAgentPair(agentType);
+    const { enhancedAgent } = await this.getAgentPair(agentType);
     const testInput = 'Quick health check validation input for continuous monitoring';
     
     const startTime = Date.now();
     
     try {
-      const result = await phase3Agent.process(testInput);
+      const result = await enhancedAgent.process(testInput);
       const processingTime = Date.now() - startTime;
       
       // Simplified validation result
       return {
         isValid: !result.errors || result.errors.length === 0,
         score: result.metadata?.confidence || 0.5,
-        phase3Performance: {
+        enhancedPerformance: {
           processingTime,
           qualityScore: result.metadata?.confidence || 0.5,
           confidenceScore: result.metadata?.confidence || 0.5,
@@ -302,7 +302,7 @@ export class ValidationPipeline {
       return {
         isValid: false,
         score: 0,
-        phase3Performance: {} as any,
+        enhancedPerformance: {} as any,
         legacyPerformance: {} as any,
         comparison: {} as any,
         recommendations: ['Agent health check failed - investigate immediately'],
@@ -310,7 +310,7 @@ export class ValidationPipeline {
           severity: 'critical',
           category: 'performance',
           description: `Health check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          phase3Value: null,
+          enhancedValue: null,
           legacyValue: null,
           impact: 'Agent may be unavailable',
           recommendation: 'Investigate error and consider rollback'
@@ -458,22 +458,24 @@ export class ValidationPipeline {
   /**
    * Get agent pair (Phase 3 and Legacy) for validation
    */
-  private async getAgentPair(agentType: AgentType): Promise<{ phase3Agent: any; legacyAgent: any }> {
+  private async getAgentPair(agentType: AgentType): Promise<{ enhancedAgent: any; legacyAgent: any }> {
     switch (agentType) {
-      case 'quick-letter':
+      case 'quick-letter': {
         // Dynamically import Phase 3 agent
-        const { QuickLetterAgentPhase3: QuickLetterAgentPhase3Import } = await import('@/agents/specialized/QuickLetterAgent.Phase3');
+        const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
         return {
-          phase3Agent: new QuickLetterAgentPhase3Import(),
-          legacyAgent: new QuickLetterAgentPhase3() // Use Phase 3 as legacy is deprecated
+          enhancedAgent: new QuickLetterAgent(),
+          legacyAgent: new QuickLetterAgent() // Using consolidated agent
         };
+      }
         
-      case 'investigation-summary':
-        const { InvestigationSummaryAgentPhase3: InvestigationSummaryAgentPhase3Import } = await import('@/agents/specialized/InvestigationSummaryAgent.Phase3');
+      case 'investigation-summary': {
+        const { InvestigationSummaryAgent } = await import('@/agents/specialized/InvestigationSummaryAgent');
         return {
-          phase3Agent: new InvestigationSummaryAgentPhase3Import(),
-          legacyAgent: new InvestigationSummaryAgentPhase3() // Use Phase 3 as legacy is deprecated
+          enhancedAgent: new InvestigationSummaryAgent(),
+          legacyAgent: new InvestigationSummaryAgent() // Using consolidated agent
         };
+      }
         
       default:
         throw new Error(`Agent type ${agentType} not supported for validation`);

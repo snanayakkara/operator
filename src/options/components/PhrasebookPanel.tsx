@@ -13,7 +13,7 @@ import {
   Upload,
   Edit,
   Trash2,
-  Filter,
+  Filter as _Filter,
   Check,
   X,
   FileText,
@@ -39,7 +39,7 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<PhrasebookEntry | null>(null);
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [_showImportModal, _setShowImportModal] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({

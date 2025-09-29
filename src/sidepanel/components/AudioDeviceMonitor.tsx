@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
+import { Mic, MicOff, AlertTriangle, CheckCircle as _CheckCircle, Activity } from 'lucide-react';
 
 interface AudioDeviceMonitorProps {
   isRecording: boolean;

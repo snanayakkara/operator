@@ -12,7 +12,8 @@ import type {
   MRSeverityGrade
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
-import { MTEERSystemPrompts, MTEERMedicalPatterns, MTEERValidationRules } from './MTEERSystemPrompts';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { MTEERMedicalPatterns, MTEERValidationRules } from './MTEERSystemPrompts';
 
 /**
  * Specialized agent for processing Mitral Transcatheter Edge-to-Edge Repair (mTEER) procedures.
@@ -21,6 +22,7 @@ import { MTEERSystemPrompts, MTEERMedicalPatterns, MTEERValidationRules } from '
  */
 export class MTEERAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
   
   // mTEER-specific medical knowledge
   private readonly clipTypes: Record<string, ClipType> = {
@@ -68,12 +70,26 @@ export class MTEERAgent extends MedicalAgent {
       'Interventional Cardiology',
       'Generates comprehensive mTEER procedural reports with clip deployment and mitral regurgitation assessment',
       'mteer',
-      'You are a specialist interventional cardiologist generating mTEER procedural reports for medical records.'
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('mteer', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ MTEERAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist interventional cardiologist generating mTEER procedural reports for medical records.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<MTEERReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     
     try {
@@ -150,14 +166,12 @@ export class MTEERAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
-    // Use centralized system prompts from MTEERSystemPrompts
-    const systemPrompt = MTEERSystemPrompts.mteerProcedureAgent.systemPrompt;
-    const userPrompt = MTEERSystemPrompts.mteerProcedureAgent.userPromptTemplate.replace('{input}', input);
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
 
     return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+      { role: 'system', content: this.systemPrompt },
+      { role: 'user', content: `Please analyze this mTEER procedural dictation and generate a comprehensive report:\n\n"${input}"\n\nGenerate a comprehensive mTEER procedural report with clip deployment and mitral regurgitation assessment. Use Australian medical terminology (TOE, anaesthesia, colour Doppler) and proper clinical formatting.` }
     ];
   }
 

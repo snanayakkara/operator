@@ -17,7 +17,7 @@ import {
   cardVariants, 
   listItemVariants,
   textVariants,
-  statusVariants,
+  statusVariants as _statusVariants,
   withReducedMotion,
   STAGGER_CONFIGS,
   ANIMATION_DURATIONS
@@ -32,12 +32,13 @@ import {
   ActionButtons,
   WarningsPanel,
   TroubleshootingSection,
-  TAVIWorkupDisplay
+  TAVIWorkupDisplay,
+  RightHeartCathDisplay
 } from './index';
 import type { AgentType, FailedAudioRecording } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
-import { Phase3ProcessingIndicator } from '../../../components/Phase3ProcessingIndicator';
-import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/medical.types';
+import { ProcessingIndicator } from '../../../components/ProcessingIndicator';
+import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
 
 interface OptimizedResultsPanelProps {
   results: string;
@@ -249,7 +250,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     URL.revokeObjectURL(url);
   }, [resultsSummary]);
 
-  const handleLetterDownload = useCallback(() => {
+  const _handleLetterDownload = useCallback(() => {
     const blob = new Blob([results], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -302,6 +303,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Check if this is a TAVI Workup with structured display
   const isTAVIWorkup = agentType === 'tavi-workup' && results;
 
+  // Check if this is a Right Heart Cath with structured display
+  const isRightHeartCath = agentType === 'right-heart-cath' && results;
+
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
     console.log('🔍 TAVI Detection Debug:', {
@@ -319,8 +323,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Determine readiness of final results for auto-collapse behavior
   const quickLetterReady = agentType === 'quick-letter' && !!results && !!resultsSummary;
   const taviReady = agentType === 'tavi-workup' && !!results;
-  const genericReady = agentType !== 'quick-letter' && agentType !== 'tavi-workup' && !!results;
-  const resultsReady = quickLetterReady || taviReady || genericReady;
+  const rhcReady = agentType === 'right-heart-cath' && !!results;
+  const genericReady = agentType !== 'quick-letter' && agentType !== 'tavi-workup' && agentType !== 'right-heart-cath' && !!results;
+  const resultsReady = quickLetterReady || taviReady || rhcReady || genericReady;
   
   // Transcription display logic optimized for performance
   
@@ -460,12 +465,12 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             transition={{ duration: ANIMATION_DURATIONS.normal }}
             className="p-4 border-b border-gray-200"
           >
-            <Phase3ProcessingIndicator
+            <ProcessingIndicator
               agentType={agentType}
               isProcessing={true}
               processingStatus={{
                 agentType,
-                isPhase3: true,
+                isEnhanced: true,
                 currentPhase: processingProgress.phase,
                 overallProgress: processingProgress.progress,
                 phases: [],
@@ -480,7 +485,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* Original Transcription Section - Hide during streaming, show when complete */}
       <AnimatePresence>
-        {originalTranscription && !streaming && !isTAVIWorkup && (
+        {originalTranscription && !streaming && !isTAVIWorkup && !isRightHeartCath && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -888,7 +893,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             <div className="space-y-6">
               {/* Transcription Section for TAVI */}
               <TranscriptionSection
-                originalTranscription={originalTranscription}
+                originalTranscription={originalTranscription || ''}
                 onTranscriptionCopy={onTranscriptionCopy}
                 onTranscriptionInsert={onTranscriptionInsert}
                 onTranscriptionEdit={onTranscriptionEdit}
@@ -913,6 +918,26 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 onReprocessWithAnswers={onReprocessWithAnswers}
               />
             </div>
+          ) : isRightHeartCath ? (
+            // Right Heart Cath with transcription section + structured display
+            <RightHeartCathDisplay
+              results={results}
+              onCopy={onCopy}
+              onInsertToEMR={onInsertToEMR}
+              originalTranscription={originalTranscription}
+              onTranscriptionCopy={onTranscriptionCopy}
+              onTranscriptionInsert={onTranscriptionInsert}
+              onTranscriptionEdit={onTranscriptionEdit}
+              transcriptionSaveStatus={transcriptionSaveStatus}
+              onAgentReprocess={onAgentReprocess}
+              currentAgent={currentAgent}
+              isProcessing={isProcessing}
+              audioBlob={audioBlob}
+              defaultTranscriptionExpanded={!resultsReady}
+              collapseTranscriptionWhen={resultsReady}
+              approvalState={approvalState}
+              onTranscriptionApprove={onTranscriptionApprove}
+            />
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary
             <ReportDisplay
@@ -926,7 +951,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, or TAVI workup */}
       <AnimatePresence>
-        {!isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && (
+        {!isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && !isRightHeartCath && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -21,17 +21,13 @@ import { GEPAOptimizationSection } from './GEPAOptimizationSection';
 import { OvernightOptimizationCard } from './OvernightOptimizationCard';
 import { MorningReviewCard } from './MorningReviewCard';
 import { logger } from '@/utils/Logger';
-import type { 
+import type {
   ServerHealthStatus,
-  OvernightJob,
-  AgentType
+  OvernightJob
 } from '@/types/optimization';
 
-import { 
-  OptimizationError,
-  ASROptimizationError,
-  GEPAOptimizationError,
-  OvernightOptimizationError
+import {
+  OptimizationError
 } from '@/types/optimization';
 
 interface OptimizationPanelProps {

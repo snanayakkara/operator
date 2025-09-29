@@ -1,7 +1,7 @@
 /**
- * Phase 4: Real-Time Phase 3 Processing Indicator
- * 
- * Provides detailed progress feedback for Phase 3 agent processing
+ * Real-Time Processing Indicator
+ *
+ * Provides detailed progress feedback for enhanced agent processing
  * with intelligent phase detection and quality monitoring.
  */
 
@@ -28,9 +28,9 @@ export interface ProcessingSubPhase {
   description?: string;
 }
 
-export interface Phase3ProcessingStatus {
+export interface EnhancedProcessingStatus {
   agentType: AgentType;
-  isPhase3: boolean;
+  isEnhanced: boolean;
   currentPhase: string;
   overallProgress: number;
   phases: ProcessingPhase[];
@@ -45,23 +45,23 @@ export interface Phase3ProcessingStatus {
   insights: string[];
 }
 
-interface Phase3ProcessingIndicatorProps {
+interface ProcessingIndicatorProps {
   agentType: AgentType;
   isProcessing: boolean;
-  processingStatus?: Phase3ProcessingStatus;
+  processingStatus?: EnhancedProcessingStatus;
   onPhaseUpdate?: (phase: string, progress: number) => void;
 }
 
 /**
  * Advanced processing indicator for Phase 3 agents with real-time feedback
  */
-export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps> = ({
+export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
   agentType,
   isProcessing,
   processingStatus,
   onPhaseUpdate
 }) => {
-  const [currentStatus, setCurrentStatus] = useState<Phase3ProcessingStatus | null>(processingStatus || null);
+  const [currentStatus, setCurrentStatus] = useState<EnhancedProcessingStatus | null>(processingStatus || null);
   const [animationState, setAnimationState] = useState<'idle' | 'processing' | 'completing'>('idle');
 
   // Update animation state based on processing status
@@ -79,19 +79,19 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
   // Simulate Phase 3 processing phases if not provided
   useEffect(() => {
     if (isProcessing && !processingStatus) {
-      simulatePhase3Processing();
+      simulateEnhancedProcessing();
     } else if (processingStatus) {
       setCurrentStatus(processingStatus);
     }
   }, [isProcessing, processingStatus, agentType]);
 
-  // Simulate realistic Phase 3 processing phases
-  const simulatePhase3Processing = useCallback(() => {
-    const phases = createPhase3Phases(agentType);
+  // Simulate realistic enhanced processing phases
+  const simulateEnhancedProcessing = useCallback(() => {
+    const phases = createEnhancedPhases(agentType);
     
     setCurrentStatus({
       agentType,
-      isPhase3: isPhase3Agent(agentType),
+      isEnhanced: isEnhancedAgent(agentType),
       currentPhase: phases[0].name,
       overallProgress: 0,
       phases,
@@ -175,8 +175,8 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
     return () => clearInterval(progressInterval);
   }, [agentType, onPhaseUpdate]);
 
-  // Create Phase 3 specific processing phases
-  const createPhase3Phases = (agentType: AgentType): ProcessingPhase[] => {
+  // Create enhanced processing phases
+  const createEnhancedPhases = (agentType: AgentType): ProcessingPhase[] => {
     const basePhases: ProcessingPhase[] = [
       {
         id: 'initialization',
@@ -191,45 +191,123 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
       }
     ];
 
-    if (isPhase3Agent(agentType)) {
-      basePhases.push(
-        {
-          id: 'normalization',
-          name: 'Enhanced Normalization',
-          description: 'Applying Phase 2 + specialized medical text normalization',
-          status: 'pending',
-          progress: 0,
-          subPhases: [
-            { name: 'Phase 2 normalization', status: 'pending', progress: 0 },
-            { name: 'Specialized patterns', status: 'pending', progress: 0 },
-            { name: 'Medical terminology', status: 'pending', progress: 0 }
-          ]
-        },
-        {
-          id: 'extraction',
-          name: 'Clinical Finding Extraction',
-          description: 'Extracting clinical insights using MedicalSummaryExtractor',
-          status: 'pending',
-          progress: 0,
-          subPhases: [
-            { name: 'Pattern recognition', status: 'pending', progress: 0 },
-            { name: 'Quality assessment', status: 'pending', progress: 0 },
-            { name: 'Confidence scoring', status: 'pending', progress: 0 }
-          ]
-        },
-        {
-          id: 'cross_agent',
-          name: 'Cross-Agent Intelligence',
-          description: 'Analyzing shared insights and medical correlations',
-          status: 'pending',
-          progress: 0,
-          subPhases: [
-            { name: 'Context enhancement', status: 'pending', progress: 0 },
-            { name: 'Risk assessment', status: 'pending', progress: 0 },
-            { name: 'Drug interactions', status: 'pending', progress: 0 }
-          ]
-        }
-      );
+    if (isEnhancedAgent(agentType)) {
+      if (agentType === 'tavi-workup') {
+        // TAVI-specific processing phases matching the 6 phases in TAVIWorkupAgent
+        basePhases.push(
+          {
+            id: 'data_extraction',
+            name: 'Data Extraction',
+            description: 'Extracting structured TAVI data from dictation using TAVIWorkupExtractor',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Dictation parsing', status: 'pending', progress: 0 },
+              { name: 'Missing fields detection', status: 'pending', progress: 0 },
+              { name: 'Alert generation', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'emr_integration',
+            name: 'EMR Integration',
+            description: 'Extracting EMR dialog fields and patient context',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'EMR field extraction', status: 'pending', progress: 0 },
+              { name: 'Patient data correlation', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'llm_processing',
+            name: 'Main LLM Processing',
+            description: 'Processing with MedGemma-27b for structured narrative generation',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Payload preparation', status: 'pending', progress: 0 },
+              { name: 'LLM inference', status: 'pending', progress: 0 },
+              { name: 'Response generation', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'response_parsing',
+            name: 'Multi-Strategy Response Parsing',
+            description: 'Parsing LLM response using JSON → Text → Deterministic strategies',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'JSON parsing attempt', status: 'pending', progress: 0 },
+              { name: 'Text pattern parsing', status: 'pending', progress: 0 },
+              { name: 'Deterministic fallback', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'missing_info_detection',
+            name: 'Missing Information Detection',
+            description: 'Analyzing missing clinical information with dedicated LLM call',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Clinical assessment gaps', status: 'pending', progress: 0 },
+              { name: 'Diagnostic completeness', status: 'pending', progress: 0 },
+              { name: 'Procedural planning gaps', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'report_composition',
+            name: 'Report Composition',
+            description: 'Creating final TAVI workup report with enhanced metadata',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Section compilation', status: 'pending', progress: 0 },
+              { name: 'Metadata enhancement', status: 'pending', progress: 0 },
+              { name: 'Quality validation', status: 'pending', progress: 0 }
+            ]
+          }
+        );
+      } else {
+        // Standard Phase 3 processing phases for other agents
+        basePhases.push(
+          {
+            id: 'normalization',
+            name: 'Enhanced Normalization',
+            description: 'Applying Phase 2 + specialized medical text normalization',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Phase 2 normalization', status: 'pending', progress: 0 },
+              { name: 'Specialized patterns', status: 'pending', progress: 0 },
+              { name: 'Medical terminology', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'extraction',
+            name: 'Clinical Finding Extraction',
+            description: 'Extracting clinical insights using MedicalSummaryExtractor',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Pattern recognition', status: 'pending', progress: 0 },
+              { name: 'Quality assessment', status: 'pending', progress: 0 },
+              { name: 'Confidence scoring', status: 'pending', progress: 0 }
+            ]
+          },
+          {
+            id: 'cross_agent',
+            name: 'Cross-Agent Intelligence',
+            description: 'Analyzing shared insights and medical correlations',
+            status: 'pending',
+            progress: 0,
+            subPhases: [
+              { name: 'Context enhancement', status: 'pending', progress: 0 },
+              { name: 'Risk assessment', status: 'pending', progress: 0 },
+              { name: 'Drug interactions', status: 'pending', progress: 0 }
+            ]
+          }
+        );
+      }
     }
 
     basePhases.push(
@@ -274,16 +352,17 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
   };
 
   // Helper functions
-  const isPhase3Agent = (agentType: AgentType): boolean => {
-    return ['quick-letter', 'investigation-summary', 'background', 'medication'].includes(agentType);
+  const isEnhancedAgent = (agentType: AgentType): boolean => {
+    return ['quick-letter', 'investigation-summary', 'background', 'medication', 'tavi-workup'].includes(agentType);
   };
 
   const getModelName = (agentType: AgentType): string => {
     const modelMap = {
       'investigation-summary': 'Google Gemma-3n-e4b (Fast)',
-      'background': 'Google Gemma-3n-e4b (Fast)',  
+      'background': 'Google Gemma-3n-e4b (Fast)',
       'medication': 'Google Gemma-3n-e4b (Fast)',
-      'quick-letter': 'MedGemma-27b MLX (Comprehensive)'
+      'quick-letter': 'MedGemma-27b MLX (Comprehensive)',
+      'tavi-workup': 'MedGemma-27b MLX (Comprehensive)'
     };
     return modelMap[agentType as keyof typeof modelMap] || 'MedGemma-27b MLX';
   };
@@ -293,12 +372,13 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
       'investigation-summary': 3000,
       'background': 4000,
       'medication': 3500,
-      'quick-letter': 6000
+      'quick-letter': 6000,
+      'tavi-workup': 12000 // Longer processing time for comprehensive TAVI workups
     };
     return timeMap[agentType as keyof typeof timeMap] || 5000;
   };
 
-  const generateQualityMetrics = (progress: number): Phase3ProcessingStatus['qualityMetrics'] => {
+  const generateQualityMetrics = (progress: number): EnhancedProcessingStatus['qualityMetrics'] => {
     if (progress < 60) return undefined;
 
     return {
@@ -313,6 +393,38 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
     if (!currentPhase) return [];
 
     const insights: { [key: string]: string[] } = {
+      // TAVI-specific processing insights
+      'Data Extraction': [
+        'Parsing TAVI procedural dictation',
+        'Identifying anatomical measurements and alerts',
+        'Extracting risk assessment scores'
+      ],
+      'EMR Integration': [
+        'Correlating with patient electronic records',
+        'Validating demographic information',
+        'Enhancing clinical context'
+      ],
+      'Main LLM Processing': [
+        'Generating comprehensive TAVI workup narrative',
+        'Applying interventional cardiology expertise',
+        'Structuring clinical findings systematically'
+      ],
+      'Multi-Strategy Response Parsing': [
+        'Attempting JSON-structured parsing',
+        'Applying text pattern recognition',
+        'Ensuring robust data extraction'
+      ],
+      'Missing Information Detection': [
+        'Analyzing clinical assessment completeness',
+        'Identifying procedural planning gaps',
+        'Assessing risk stratification adequacy'
+      ],
+      'Report Composition': [
+        'Compiling final TAVI workup report',
+        'Adding procedural metadata',
+        'Validating clinical accuracy'
+      ],
+      // Standard Phase 3 insights
       'Enhanced Normalization': [
         'Applying medical terminology standardization',
         'Preserving clinical context and meaning',
@@ -348,7 +460,7 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
-            {currentStatus?.isPhase3 ? 'Phase 3' : 'Legacy'} Processing
+            {currentStatus?.isEnhanced ? 'Enhanced' : 'Legacy'} Processing
           </h3>
           <p className="text-sm text-gray-600">
             {formatAgentName(agentType)} Agent
@@ -529,6 +641,7 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
       'imaging': 'Imaging',
       'bloods': 'Bloods',
       'patient-education': 'Patient Education',
+      'ohif-viewer': 'OHIF Viewer',
       'enhancement': 'Enhancement',
       'transcription': 'Transcription',
       'generation': 'Generation',
@@ -540,4 +653,4 @@ export const Phase3ProcessingIndicator: React.FC<Phase3ProcessingIndicatorProps>
   }
 };
 
-export default Phase3ProcessingIndicator;
+export default ProcessingIndicator;

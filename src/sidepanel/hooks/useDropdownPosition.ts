@@ -12,10 +12,17 @@ interface UseDropdownPositionOptions {
   offset?: { x: number; y: number };
   alignment?: 'left' | 'right' | 'center';
   maxHeight?: number;
+  dropdownWidth?: number;
 }
 
 export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
-  const { isOpen, offset = { x: 0, y: 8 }, alignment = 'right', maxHeight = 320 } = options;
+  const {
+    isOpen,
+    offset = { x: 0, y: 8 },
+    alignment = 'right',
+    maxHeight = 320,
+    dropdownWidth = 280
+  } = options;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState<DropdownPosition>({ top: 0, left: 0 });
@@ -35,18 +42,18 @@ export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
 
     // Adjust horizontal positioning based on alignment
     if (alignment === 'right') {
-      left = triggerRect.right - 280; // Assume dropdown width of 280px
+      left = triggerRect.right - dropdownWidth;
       right = viewport.width - triggerRect.right + offset.x;
     } else if (alignment === 'center') {
-      left = triggerRect.left + triggerRect.width / 2 - 140; // Half of assumed dropdown width
+      left = triggerRect.left + triggerRect.width / 2 - dropdownWidth / 2;
     }
 
     // Ensure dropdown doesn't go off screen horizontally
     if (left < 8) {
       left = 8;
       right = undefined;
-    } else if (left + 280 > viewport.width - 8) {
-      left = viewport.width - 280 - 8;
+    } else if (left + dropdownWidth > viewport.width - 8) {
+      left = viewport.width - dropdownWidth - 8;
       right = 8;
     }
 

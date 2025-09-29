@@ -1,37 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Mic, 
-  Brain, 
-  Zap, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Mic,
+  Brain,
+  Zap,
+  CheckCircle,
+  AlertCircle,
   Loader2,
-  Volume2,
+  Volume2 as _Volume2,
   X,
-  Trash2,
-  Wifi,
-  WifiOff,
+  Trash2 as _Trash2,
+  Wifi as _Wifi,
+  WifiOff as _WifiOff,
   RefreshCw,
   ListRestart,
   Server,
   Settings,
   AlertTriangle,
   Bell,
-  Square,
+  Square as _Square,
   BarChart3,
   Sparkles,
-  Users,
-  Target,
-  TrendingUp
+  Users as _Users,
+  Target as _Target,
+  TrendingUp as _TrendingUp
 } from 'lucide-react';
-import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus, PatientSession } from '@/types/medical.types';
+import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus as _WhisperServerStatus, PatientSession } from '@/types/medical.types';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
 import { RecordPanel } from './RecordPanel';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { ToastService } from '@/services/ToastService';
-import { AudioDeviceSelector } from './AudioDeviceSelector';
+import { AudioDeviceSelector as _AudioDeviceSelector } from './AudioDeviceSelector';
 import { CompactAudioDeviceDisplay } from './CompactAudioDeviceDisplay';
 import { AgentFactory } from '@/services/AgentFactory';
 
@@ -171,7 +171,7 @@ const AGENT_DISPLAY_NAMES = {
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ 
   status, 
   currentAgent,
-  onCompleteRecording,
+  onCompleteRecording: _onCompleteRecording,
   onCancelProcessing,
   isRecording = false,
   modelStatus,
@@ -204,12 +204,20 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const [isOpeningSessions, setIsOpeningSessions] = useState(false);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
 
+  const SERVICE_DROPDOWN_WIDTH = 360;
+  const SERVICE_DROPDOWN_MAX_HEIGHT = 520;
+
   const { triggerRef, position } = useDropdownPosition({
     isOpen: showServicesDetails,
     alignment: 'right',
     offset: { x: 0, y: 8 },
-    maxHeight: 400
+    maxHeight: SERVICE_DROPDOWN_MAX_HEIGHT,
+    dropdownWidth: SERVICE_DROPDOWN_WIDTH
   });
+
+  const dropdownMaxHeight = position.maxHeight && position.maxHeight < SERVICE_DROPDOWN_MAX_HEIGHT
+    ? position.maxHeight
+    : undefined;
 
   // Keyboard escape handling for AI Services modal
   React.useEffect(() => {
@@ -318,7 +326,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
     return 'offline';
   };
 
-  const getConnectionStatusColor = () => {
+  const _getConnectionStatusColor = () => {
     const systemStatus = getOverallSystemStatus();
     if (systemStatus === 'offline') return 'text-accent-red';
     if (systemStatus === 'partial') return 'text-accent-amber';
@@ -567,8 +575,11 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             top: position.top,
             left: position.left,
             right: position.right,
-            maxHeight: position.maxHeight,
-            width: 320,
+            maxHeight: dropdownMaxHeight,
+            width: SERVICE_DROPDOWN_WIDTH,
+            minWidth: SERVICE_DROPDOWN_WIDTH,
+            maxWidth: `min(${SERVICE_DROPDOWN_WIDTH}px, calc(100vw - 24px))`,
+            overflowY: dropdownMaxHeight ? 'auto' : 'visible',
             zIndex: 9999
           }}
         >
@@ -688,7 +699,9 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 </div>
                 <div>
                   <span className="text-ink-secondary">Model:</span>
-                  <span className="text-ink-secondary ml-1 truncate">{modelStatus.whisperServer?.model || 'whisper-large-v3-turbo'}</span>
+                  <span className="text-ink-secondary ml-1 break-words leading-snug">
+                    {modelStatus.whisperServer?.model || 'whisper-large-v3-turbo'}
+                  </span>
                 </div>
               </div>
               
@@ -754,7 +767,22 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             {onShowMetrics && (
               <div className="border-t border-gray-200 pt-3">
                 <button 
-                  onClick={onShowMetrics}
+                  onClick={() => {
+                    try {
+                      const targetUrl = chrome?.runtime?.getURL
+                        ? `${chrome.runtime.getURL('src/options/index.html')}#performance-metrics`
+                        : null;
+
+                      if (targetUrl) {
+                        window.open(targetUrl, '_blank', 'noopener');
+                      } else if (onShowMetrics) {
+                        onShowMetrics();
+                      }
+                    } catch (error) {
+                      console.warn('Failed to open performance metrics settings:', error);
+                      onShowMetrics?.();
+                    }
+                  }}
                   className="w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded p-2 flex items-center justify-center space-x-2"
                 >
                   <BarChart3 className="w-3 h-3 text-accent-violet" />

@@ -33,6 +33,17 @@ export const WORKFLOWS: readonly WorkflowConfig[] = [
     complexity: 'low'
   },
   {
+    id: 'tavi-workup',
+    label: 'TAVI Workup',
+    description: 'Pre-procedural TAVI anatomical and clinical workup summary',
+    agent: 'TAVIWorkupAgent',
+    icon: 'ClipboardList',
+    color: 'red',
+    category: 'documentation',
+    estimatedTime: '3-5 min',
+    complexity: 'medium'
+  },
+  {
     id: 'consultation',
     label: 'Consultation',
     description: 'Comprehensive patient assessments',
@@ -99,6 +110,17 @@ export const WORKFLOWS: readonly WorkflowConfig[] = [
     category: 'procedure',
     estimatedTime: '6-10 min',
     complexity: 'medium'
+  },
+  {
+    id: 'ohif-viewer',
+    label: 'OHIF Viewer',
+    description: 'Medical imaging viewer (coming soon)',
+    agent: 'OHIFViewerAgent',
+    icon: 'Monitor',
+    color: 'cyan',
+    category: 'investigation',
+    estimatedTime: 'N/A',
+    complexity: 'low'
   }
 
 ] as const;

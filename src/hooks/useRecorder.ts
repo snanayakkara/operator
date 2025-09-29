@@ -110,16 +110,6 @@ export function useRecorder(options: RecorderOptions) {
       const maxValue = Math.max(...dataArray);
       const hasAudioData = maxValue > 0;
       
-      if (Math.random() < 0.01) { // 1% chance for minimal spam
-        console.log('🎤 detectVoiceActivity debug:', {
-          bufferLength,
-          firstFewValues: Array.from(dataArray.slice(0, 5)),
-          maxValue,
-          hasAudioData,
-          contextState: audioContext.state,
-          analyserConnected: analyser.numberOfInputs > 0
-        });
-      }
       
       // More frequent logging if no audio data is detected
       if (!hasAudioData && Math.random() < 0.05) {
@@ -164,8 +154,8 @@ export function useRecorder(options: RecorderOptions) {
       
       const deviceIsWorking = recentAverageLevel > 0.01 || normalizedLevel > 0.05; // Working if recent activity
       
-      // Debug logging for frequency data (only log every 30 frames to avoid spam)
-      if (normalizedLevel > 0.05 && Math.random() < 0.03) {
+      // Debug logging for frequency data (minimal logging to avoid console spam)
+      if (normalizedLevel > 0.1 && Math.random() < 0.001) {
         console.log('🎤 Audio Debug:', {
           level: Math.round(normalizedLevel * 100) + '%',
           frequencyBars: frequencies.length,

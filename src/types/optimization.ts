@@ -68,7 +68,16 @@ export interface ASRCorrectionsEntry {
   userExplicitlyApproved: boolean;
   editTimestamp?: number;
   approvalTimestamp?: number;
+  // Additional properties used in FullPageCorrectionsViewer
+  original?: string;
+  corrected?: string;
+  confidence?: number;
+  source?: string;
+  correctionType?: string;
 }
+
+// Sort field type for FullPageCorrectionsViewer
+export type SortField = 'timestamp' | 'agentType' | 'approvalStatus' | 'confidence';
 
 // GEPA Optimization Types
 

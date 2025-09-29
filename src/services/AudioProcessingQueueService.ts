@@ -22,7 +22,7 @@ export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canc
 export interface ProcessingJob {
   id: string;
   sessionId: string;
-  audioBlob: Blob;
+  audioBlob?: Blob;
   workflowId: AgentType;
   priority: JobPriority;
   status: JobStatus;
@@ -52,9 +52,10 @@ export interface QueueStats {
  * Priority mapping for different workflow types
  * Quick Letter has highest priority as it's the most commonly used workflow
  */
-const WORKFLOW_PRIORITIES: Record<AgentType, JobPriority> = {
+const WORKFLOW_PRIORITIES: Partial<Record<AgentType, JobPriority>> = {
   'quick-letter': 'urgent',   // Most common workflow - highest priority
   'tavi': 'urgent',           // Critical cardiac procedure
+  'tavi-workup': 'urgent',    // TAVI workup - complex and critical
   'angiogram-pci': 'urgent',  // Critical cardiac procedure
   'consultation': 'high',     // Common consultation workflow
   'mteer': 'high',            // Important cardiac procedure
@@ -125,6 +126,11 @@ export class AudioProcessingQueueService {
       throw new Error(error);
     }
 
+    // Special handling for TAVI workup - longer recordings need extended timeouts
+    const isTAVIWorkup = workflowId === 'tavi-workup';
+    const audioDurationEstimate = audioBlob.size / 16000; // Rough estimate in seconds
+    const isLongRecording = audioDurationEstimate > 300; // 5+ minutes
+
     const job: ProcessingJob = {
       id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       sessionId,
@@ -134,11 +140,23 @@ export class AudioProcessingQueueService {
       status: 'queued',
       queuedAt: Date.now(),
       retryCount: 0,
-      maxRetries: this.maxRetries,
+      maxRetries: isTAVIWorkup && isLongRecording ? 2 : this.maxRetries, // Fewer retries for long TAVI
       onProgress: callbacks?.onProgress,
       onComplete: callbacks?.onComplete,
       onError: callbacks?.onError
     };
+
+    // Log performance optimization details for TAVI workup
+    if (isTAVIWorkup) {
+      logger.info('TAVI workup job optimization applied', {
+        component: 'AudioProcessingQueueService',
+        jobId: job.id,
+        audioDurationEstimate: audioDurationEstimate.toFixed(1) + 's',
+        isLongRecording,
+        maxRetries: job.maxRetries,
+        priority: job.priority
+      });
+    }
 
     // Insert job in priority order
     this.insertJobByPriority(job);
@@ -362,6 +380,10 @@ export class AudioProcessingQueueService {
         setTimeout(() => reject(new Error('Job timeout')), this.jobTimeoutMs);
       });
 
+      if (!job.audioBlob) {
+        throw new Error('Audio blob unavailable for processing');
+      }
+
       // Process the audio with timeout
       const transcriptionPromise = lmStudioService.transcribeAudio(
         job.audioBlob,
@@ -464,19 +486,29 @@ export class AudioProcessingQueueService {
     setInterval(() => {
       const now = Date.now();
       
-      // Remove old completed jobs (older than 1 hour)
+      // Enhanced cleanup for long TAVI recordings - remove them sooner to free memory
       const oneHourAgo = now - 3600000;
+      const thirtyMinutesAgo = now - 1800000; // 30 minutes for TAVI workup jobs
       const beforeCount = this.completedJobs.length;
-      
-      this.completedJobs = this.completedJobs.filter(job => 
-        (job.completedAt || job.queuedAt) > oneHourAgo
-      );
+
+      this.completedJobs = this.completedJobs.filter(job => {
+        const cutoffTime = job.workflowId === 'tavi-workup' ? thirtyMinutesAgo : oneHourAgo;
+        return (job.completedAt || job.queuedAt) > cutoffTime;
+      });
+
+      // Clear audio blobs from completed jobs to free memory
+      this.completedJobs.forEach(job => {
+        if (job.audioBlob && (job.completedAt || job.queuedAt) < thirtyMinutesAgo) {
+          job.audioBlob = undefined; // Clear blob reference for garbage collection
+        }
+      });
 
       if (this.completedJobs.length < beforeCount) {
-        logger.info('Cleaned up old completed audio processing jobs', {
+        logger.info('Cleaned up old completed audio processing jobs with TAVI optimization', {
           component: 'AudioProcessingQueueService',
           removedCount: beforeCount - this.completedJobs.length,
-          remainingCount: this.completedJobs.length
+          remainingCount: this.completedJobs.length,
+          taviOptimization: 'Aggressive cleanup for TAVI workup jobs (30min vs 1hr)'
         });
       }
 

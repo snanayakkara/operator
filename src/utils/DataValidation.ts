@@ -425,7 +425,7 @@ export class DataValidation {
     tabId: number,
     originalData: ExtractedData,
     fieldResults: Map<string, FieldExtractionResult>,
-    config: ExtractionConfig
+    _config: ExtractionConfig
   ): Promise<ExtractedData | null> {
     this.log('🔄 Attempting fallback extraction strategies');
 
@@ -570,7 +570,7 @@ export class DataValidation {
     return content
       .trim()
       .replace(/\s+/g, ' ')  // Normalize whitespace
-      .replace(/[\x00-\x1F\x7F]/g, ''); // Remove control characters
+      .replace(/[\\u0000-\\u001F\\u007F]/g, ''); // Remove control characters
   }
 
   private assessFieldQuality(fieldName: string, content: string): DataQualityReport {

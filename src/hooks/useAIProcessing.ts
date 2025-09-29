@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { AgentFactory } from '@/services/AgentFactory';
-import { LMStudioService, streamChatCompletion } from '@/services/LMStudioService';
+import { LMStudioService } from '@/services/LMStudioService';
 import { SystemToasts } from '@/utils/toastHelpers';
 import type { AgentType } from '@/types/medical.types';
 

@@ -13,6 +13,7 @@ import type {
   RHCIndication
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
+import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { RightHeartCathSystemPrompts, RightHeartCathMedicalPatterns, RightHeartCathValidationRules } from './RightHeartCathSystemPrompts';
 
 /**
@@ -22,6 +23,7 @@ import { RightHeartCathSystemPrompts, RightHeartCathMedicalPatterns, RightHeartC
  */
 export class RightHeartCathAgent extends MedicalAgent {
   private lmStudioService: LMStudioService;
+  private systemPromptInitialized = false;
   
   // RHC-specific medical knowledge
   private readonly venousAccessSites: Record<string, VenousAccess> = {
@@ -80,12 +82,26 @@ export class RightHeartCathAgent extends MedicalAgent {
       'Cardiology',
       'Generates comprehensive right heart catheterisation procedural reports with structured haemodynamic assessment',
       'right-heart-cath',
-      'You are a specialist cardiologist generating right heart catheterisation procedural reports for medical records.'
+      '' // Will be loaded dynamically
     );
     this.lmStudioService = LMStudioService.getInstance();
   }
 
+  private async initializeSystemPrompt(): Promise<void> {
+    if (this.systemPromptInitialized) return;
+
+    try {
+      this.systemPrompt = await systemPromptLoader.loadSystemPrompt('right-heart-cath', 'primary');
+      this.systemPromptInitialized = true;
+    } catch (error) {
+      console.error('❌ RightHeartCathAgent: Failed to load system prompt:', error);
+      this.systemPrompt = 'You are a specialist cardiologist generating right heart catheterisation procedural reports for medical records.'; // Fallback
+    }
+  }
+
   async process(input: string, context?: MedicalContext): Promise<RightHeartCathReport> {
+    await this.initializeSystemPrompt();
+
     const startTime = Date.now();
     
     try {
@@ -126,8 +142,23 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // Create comprehensive RHC report
       const processingTime = Date.now() - startTime;
+
+      // Serialize structured data for display layer parsing
+      const structuredDataJson = JSON.stringify({
+        rhcData,
+        haemodynamicPressures,
+        cardiacOutput,
+        exerciseHaemodynamics,
+        complications
+      }, null, 2);
+
+      // Combine report content with JSON data for backward compatibility
+      const combinedContent = `${reportContent}\n\n<!-- RHC_STRUCTURED_DATA_JSON -->\n${structuredDataJson}`;
+
+      const baseReport = this.createReport(combinedContent, sections, context, processingTime, 0.95);
+
       const report: RightHeartCathReport = {
-        ...this.createReport(reportContent, sections, context, processingTime, 0.95),
+        ...baseReport,
         rhcData,
         haemodynamicPressures,
         cardiacOutput,
@@ -167,14 +198,12 @@ export class RightHeartCathAgent extends MedicalAgent {
     }
   }
 
-  protected buildMessages(input: string, _context?: MedicalContext): ChatMessage[] {
-    // Use centralized system prompts from RightHeartCathSystemPrompts
-    const systemPrompt = RightHeartCathSystemPrompts.rightHeartCathProcedureAgent.systemPrompt;
-    const userPrompt = RightHeartCathSystemPrompts.rightHeartCathProcedureAgent.userPromptTemplate.replace('{input}', input);
+  protected async buildMessages(input: string, _context?: MedicalContext): Promise<ChatMessage[]> {
+    await this.initializeSystemPrompt();
 
     return [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+      { role: 'system', content: this.systemPrompt },
+      { role: 'user', content: `Please analyze this right heart catheterisation procedural dictation and generate a comprehensive report:\n\n"${input}"\n\nGenerate a comprehensive right heart catheterisation procedural report with structured haemodynamic assessment. Use Australian medical terminology (catheterisation, haemodynamic, anaesthesia, colour Doppler) and proper clinical formatting.` }
     ];
   }
 
