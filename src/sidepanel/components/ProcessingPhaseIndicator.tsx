@@ -9,9 +9,11 @@
  * Includes enhanced real-time timer with proper formatting.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Brain, FileCheck, CheckCircle, Clock, TrendingUp, BarChart3 as _BarChart3 } from 'lucide-react';
+import { Search, Brain, FileCheck, Clock, TrendingUp } from 'lucide-react';
+import { VerticalStepper, type Step } from './VerticalStepper';
+import { formatElapsedTime } from '@/utils/formatting';
 import {
   progressVariants as _progressVariants,
   listItemVariants,
@@ -166,62 +168,35 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
     }
   }, [isActive, agentType, transcriptionLength, showTimeEstimate, prediction, currentProgress, elapsedTime, onProcessingComplete, predictor]);
 
-  // Format timer with enhanced formatting: seconds for first 60s, then minutes:seconds
-  const formatElapsedTime = (ms: number): string => {
-    const totalSeconds = Math.floor(ms / 1000);
-    
-    if (totalSeconds < 60) {
-      // Show seconds only for first 60 seconds
-      return `${totalSeconds}s`;
-    } else {
-      // Show minutes:seconds format after 60 seconds  
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds % 60;
-      return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
-    }
-  };
+  // Convert PROCESSING_PHASES to Step[] for VerticalStepper
+  const steps: Step[] = useMemo(() => {
+    return PROCESSING_PHASES.map(phase => {
+      const isCompleted = completedPhases.has(phase.id);
+      const isActive = activePhaseId === phase.id;
+      const phaseProgress = getPhaseProgress(phase);
 
-  const getPhaseStatus = (phase: ProcessingPhase) => {
-    if (completedPhases.has(phase.id)) {
-      return 'completed';
-    } else if (activePhaseId === phase.id) {
-      return 'active';
-    } else {
-      return 'pending';
-    }
-  };
+      let status: 'queued' | 'running' | 'done' | 'failed' = 'queued';
+      if (isCompleted) status = 'done';
+      else if (isActive) status = 'running';
+
+      return {
+        id: phase.id,
+        label: phase.label,
+        description: phase.description,
+        icon: phase.icon,
+        status,
+        progress: isActive ? phaseProgress : undefined
+      };
+    });
+  }, [completedPhases, activePhaseId, currentProgress]);
 
   const getPhaseProgress = (phase: ProcessingPhase) => {
     const [start, end] = phase.progressRange;
     if (currentProgress <= start) return 0;
     if (currentProgress >= end) return 100;
-    
+
     // Calculate progress within this phase
     return ((currentProgress - start) / (end - start)) * 100;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'text-green-600 bg-green-100 border-green-200';
-      case 'active':
-        return 'text-indigo-600 bg-indigo-100 border-indigo-200';
-      default:
-        return 'text-gray-400 bg-gray-50 border-gray-200';
-    }
-  };
-
-  const getIconComponent = (phase: ProcessingPhase, status: string) => {
-    if (status === 'completed') {
-      return <CheckCircle className="w-5 h-5 text-green-600" />;
-    }
-    
-    const IconComponent = phase.icon;
-    const iconClass = status === 'active' 
-      ? 'w-5 h-5 text-indigo-600' 
-      : 'w-5 h-5 text-gray-400';
-    
-    return <IconComponent className={iconClass} />;
   };
 
   // Calculate remaining time based on prediction and current progress
@@ -265,8 +240,8 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
   }
 
   return (
-    <motion.div 
-      className={`bg-white rounded-lg border border-gray-200 p-4 ${className}`}
+    <motion.div
+      className={`bg-white rounded-lg border border-gray-200 p-4 pointer-events-auto ${className}`}
       role="status"
       aria-labelledby="processing-status-title"
       aria-describedby="processing-status-description"
@@ -339,120 +314,8 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
         </div>
       </motion.div>
 
-      {/* Phase List */}
-      <motion.div 
-        className="space-y-3"
-        variants={withReducedMotion(staggerContainer)}
-        initial="hidden"
-        animate="visible"
-        transition={{
-          staggerChildren: STAGGER_CONFIGS.tight,
-          delayChildren: 0.3
-        }}
-      >
-        {PROCESSING_PHASES.map((phase, index) => {
-          const status = getPhaseStatus(phase);
-          const phaseProgress = getPhaseProgress(phase);
-          
-          return (
-            <motion.div
-              key={phase.id}
-              className={`relative flex items-start space-x-3 p-3 rounded-lg border ${getStatusColor(status)}`}
-              role="listitem"
-              aria-label={`${phase.label}: ${status === 'completed' ? 'Complete' : status === 'active' ? 'In progress' : 'Pending'}`}
-              variants={withReducedMotion(listItemVariants)}
-              animate={{
-                scale: status === 'active' ? [1, 1.02, 1] : 1,
-                borderColor: status === 'active' ? ['rgb(199, 210, 254)', 'rgb(129, 140, 248)', 'rgb(199, 210, 254)'] : undefined
-              }}
-              transition={{
-                scale: {
-                  duration: 2,
-                  repeat: status === 'active' ? Infinity : 0,
-                  ease: 'easeInOut'
-                },
-                ...createSpringTransition(SPRING_CONFIGS.gentle)
-              }}
-            >
-              {/* Phase Icon */}
-              <motion.div 
-                className="flex-shrink-0 mt-0.5"
-                animate={{
-                  scale: status === 'active' ? [1, 1.1, 1] : 1,
-                  rotate: status === 'active' && phase.icon === Brain ? [0, 5, -5, 0] : 0
-                }}
-                transition={{
-                  scale: {
-                    duration: 1.5,
-                    repeat: status === 'active' ? Infinity : 0,
-                    ease: 'easeInOut'
-                  },
-                  rotate: {
-                    duration: 2,
-                    repeat: status === 'active' && phase.icon === Brain ? Infinity : 0,
-                    ease: 'easeInOut'
-                  }
-                }}
-              >
-                {getIconComponent(phase, status)}
-              </motion.div>
-
-              {/* Phase Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h5 className="text-sm font-medium text-gray-900">
-                    {phase.label}
-                  </h5>
-                  {status === 'active' && (
-                    <span className="text-xs text-indigo-600 font-medium">
-                      {Math.round(phaseProgress)}%
-                    </span>
-                  )}
-                </div>
-                
-                <p className="text-xs text-gray-600 mb-2">
-                  {phase.description}
-                </p>
-
-                {/* Phase-specific Progress Bar */}
-                <AnimatePresence>
-                  {status === 'active' && (
-                    <motion.div 
-                      className="w-full bg-indigo-200 rounded-full h-1"
-                      role="progressbar"
-                      aria-valuenow={phaseProgress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={`${phase.label} progress`}
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 4 }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: _ANIMATION_DURATIONS.quick }}
-                    >
-                      <motion.div 
-                        className="bg-indigo-600 h-1 rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${phaseProgress}%` }}
-                        transition={{
-                          type: 'spring',
-                          damping: 25,
-                          stiffness: 400,
-                          mass: 0.5
-                        }}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Connection Line to Next Phase */}
-              {index < PROCESSING_PHASES.length - 1 && (
-                <div className="absolute left-6 top-12 w-0.5 h-4 bg-gray-200" />
-              )}
-            </motion.div>
-          );
-        })}
-      </motion.div>
+      {/* Vertical Stepper for Phases */}
+      <VerticalStepper steps={steps} />
 
       {/* Footer */}
       <motion.div 
