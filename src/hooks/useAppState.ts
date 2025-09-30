@@ -5,41 +5,66 @@
  * to dramatically reduce re-renders and improve performance.
  */
 
-import { useReducer, useCallback, useRef } from 'react';
-import type { AppState, AgentType, ProcessingStatus, FailedAudioRecording, PatientAppointment, BatchAIReviewReport, PatientSession, PatientInfo } from '@/types/medical.types';
+import { useReducer, useCallback, useRef, useMemo } from 'react';
+import type {
+  AppState,
+  AgentType,
+  ProcessingStatus,
+  FailedAudioRecording,
+  PatientAppointment,
+  BatchAIReviewReport,
+  PatientSession,
+  PatientInfo
+} from '@/types/medical.types';
 import type { TranscriptionApprovalState } from '@/types/optimization';
 import type { PatientNameComparison } from '@/utils/PatientNameValidator';
 
+export type AppUIMode =
+  | 'idle'
+  | 'recording'
+  | 'processing'
+  | 'reviewing'
+  | 'configuring'
+  | 'batch';
+
+export type UIOverlay =
+  | 'none'
+  | 'patient-selection'
+  | 'patient-mismatch'
+  | 'screenshot-annotation'
+  | 'bp-diary-importer'
+  | 'patient-education'
+  | 'field-ingestion'
+  | 'processing-phase';
+
+export type UISidePanel =
+  | 'none'
+  | 'metrics-dashboard'
+  | 'recording-prompts'
+  | 'main-menu'
+  | 'batch-progress';
+
+interface ModeContext {
+  sessionId: string | null;
+  origin: 'auto' | 'user';
+}
+
 // Consolidated UI state interface
 interface UIState {
-  // Recording state
+  mode: AppUIMode;
+  modeContext: ModeContext;
+  overlay: UIOverlay;
+  sidePanel: UISidePanel;
   activeWorkflow: AgentType | null;
   isCancelling: boolean;
-  
-  // UI visibility state
   showAlerts: boolean;
-  showPatientSelectionModal: boolean;
-  showScreenshotAnnotationModal: boolean;
-  showPatientEducationConfig: boolean;
-  showPatientMismatchModal: boolean;
-  showMainMenu: boolean;
-  showRecordingPrompts: boolean;
-  showMetricsDashboard: boolean;
   isExtractingPatients: boolean;
   isBatchProcessing: boolean;
-  
-  // AI Medical Review overlay states
-  showFieldIngestionOverlay: boolean;
-  showProcessingPhase: boolean;
   processingProgress: number;
   processingStartTime: number;
-  
-  // Content state
   warnings: string[];
   errors: string[];
   resultSummary: string;
-  
-  // Calendar and batch processing state
   calendarData: {
     appointmentDate: string;
     patients: PatientAppointment[];
@@ -79,6 +104,12 @@ interface CombinedAppState extends AppState {
   streamBuffer?: string;
   ttftMs?: number | null;
   streaming?: boolean;
+
+  // Processing progress tracking (for UI)
+  processingPhase?: string; // Current phase: "extraction" | "analysis" | "generation"
+  processingStepProgress?: Record<string, number>; // Per-step progress: { extraction: 100, analysis: 45, generation: 0 }
+  processingGlobalProgress?: number; // Global progress 0-100
+
   // Transcription approval tracking
   transcriptionApproval: TranscriptionApprovalState;
 
@@ -103,6 +134,7 @@ type AppAction =
   | { type: 'SET_MISSING_INFO'; payload: any | null }
   | { type: 'SET_MISSING_INFO_ANSWERS'; payload: Record<string, string> }
   | { type: 'CLEAR_MISSING_INFO' }
+  | { type: 'SET_PROCESSING_PHASE'; payload: { phase: string; stepProgress: Record<string, number>; globalProgress: number } }
   | { type: 'SET_PROCESSING_STATUS'; payload: ProcessingStatus }
   | { type: 'SET_VOICE_ACTIVITY'; payload: { level: number; frequencyData: number[] } }
   | { type: 'SET_MODEL_STATUS'; payload: AppState['modelStatus'] }
@@ -117,14 +149,11 @@ type AppAction =
   | { type: 'SET_ERRORS'; payload: string[] }
   | { type: 'SET_ALERTS_VISIBLE'; payload: boolean }
   | { type: 'SET_RESULT_SUMMARY'; payload: string }
-  | { type: 'SET_PATIENT_MODAL'; payload: boolean }
-  | { type: 'SET_SCREENSHOT_ANNOTATION_MODAL'; payload: boolean }
-  | { type: 'SET_PATIENT_EDUCATION_CONFIG'; payload: boolean }
-  | { type: 'SET_PATIENT_MISMATCH_MODAL'; payload: boolean }
+  | { type: 'SET_UI_MODE'; payload: { mode: AppUIMode; context?: Partial<ModeContext> } }
+  | { type: 'SET_UI_OVERLAY'; payload: UIOverlay }
+  | { type: 'CLEAR_UI_OVERLAY'; payload?: UIOverlay }
+  | { type: 'SET_UI_SIDE_PANEL'; payload: UISidePanel }
   | { type: 'SET_PATIENT_MISMATCH_DATA'; payload: CombinedAppState['patientMismatchData'] }
-  | { type: 'SET_MAIN_MENU'; payload: boolean }
-  | { type: 'SET_RECORDING_PROMPTS'; payload: boolean }
-  | { type: 'SET_METRICS_DASHBOARD'; payload: boolean }
   | { type: 'SET_CALENDAR_DATA'; payload: UIState['calendarData'] }
   | { type: 'SET_EXTRACTING_PATIENTS'; payload: boolean }
   | { type: 'SET_EXTRACT_ERROR'; payload: string | null }
@@ -140,8 +169,6 @@ type AppAction =
   | { type: 'CLEAR_PATIENT_SESSIONS' }
   | { type: 'SET_CURRENT_SESSION_ID'; payload: string | null }
   | { type: 'SET_SELECTED_SESSION_ID'; payload: string | null }
-  | { type: 'SET_FIELD_INGESTION_OVERLAY'; payload: boolean }
-  | { type: 'SET_PROCESSING_PHASE'; payload: boolean }
   | { type: 'SET_PROCESSING_PROGRESS'; payload: number }
   | { type: 'SET_AI_REVIEW_START_TIME'; payload: number }
   | { type: 'SET_PATIENT_VERSION'; payload: string | null }
@@ -203,7 +230,12 @@ const initialState: CombinedAppState = {
   streamBuffer: '',
   ttftMs: null,
   streaming: false,
-  
+
+  // Processing progress tracking
+  processingPhase: undefined,
+  processingStepProgress: {},
+  processingGlobalProgress: 0,
+
   // Transcription approval tracking
   transcriptionApproval: {
     status: 'pending',
@@ -241,25 +273,20 @@ const initialState: CombinedAppState = {
   
   // UI state
   ui: {
+    mode: 'idle',
+    modeContext: {
+      sessionId: null,
+      origin: 'auto'
+    },
+    overlay: 'none',
+    sidePanel: 'none',
     activeWorkflow: null,
     isCancelling: false,
     showAlerts: true,
-    showPatientSelectionModal: false,
-    showScreenshotAnnotationModal: false,
-    showPatientEducationConfig: false,
-    showPatientMismatchModal: false,
-    showMainMenu: false,
-    showRecordingPrompts: false,
-    showMetricsDashboard: false,
     isExtractingPatients: false,
     isBatchProcessing: false,
-    
-    // AI Medical Review overlay states
-    showFieldIngestionOverlay: false,
-    showProcessingPhase: false,
     processingProgress: 0,
     processingStartTime: 0,
-    
     warnings: [],
     errors: [],
     resultSummary: '',
@@ -308,7 +335,15 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     
     case 'CLEAR_MISSING_INFO':
       return { ...state, missingInfo: null, missingInfoAnswers: {} };
-      
+
+    case 'SET_PROCESSING_PHASE':
+      return {
+        ...state,
+        processingPhase: action.payload.phase,
+        processingStepProgress: action.payload.stepProgress,
+        processingGlobalProgress: action.payload.globalProgress
+      };
+
     case 'SET_PROCESSING_STATUS':
       if (state.processingStatus === action.payload) return state;
       return { ...state, processingStatus: action.payload };
@@ -368,36 +403,70 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       if (state.ui.resultSummary === action.payload) return state;
       return { ...state, ui: { ...state.ui, resultSummary: action.payload } };
       
-    case 'SET_PATIENT_MODAL':
-      if (state.ui.showPatientSelectionModal === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showPatientSelectionModal: action.payload } };
-      
-    case 'SET_SCREENSHOT_ANNOTATION_MODAL':
-      if (state.ui.showScreenshotAnnotationModal === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showScreenshotAnnotationModal: action.payload } };
-      
-    case 'SET_PATIENT_EDUCATION_CONFIG':
-      if (state.ui.showPatientEducationConfig === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showPatientEducationConfig: action.payload } };
+    case 'SET_UI_MODE': {
+      if (
+        state.ui.mode === action.payload.mode &&
+        (action.payload.context?.sessionId === undefined || state.ui.modeContext.sessionId === action.payload.context?.sessionId)
+      ) {
+        return state;
+      }
 
-    case 'SET_PATIENT_MISMATCH_MODAL':
-      if (state.ui.showPatientMismatchModal === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showPatientMismatchModal: action.payload } };
+      const nextContext: ModeContext = {
+        sessionId: action.payload.context?.sessionId ?? null,
+        origin: action.payload.context?.origin ?? 'auto'
+      };
+
+      let overlay = state.ui.overlay;
+      let sidePanel = state.ui.sidePanel;
+
+      if (action.payload.mode !== 'processing' && overlay === 'processing-phase') {
+        overlay = 'none';
+      }
+      if (action.payload.mode !== 'processing' && overlay === 'field-ingestion') {
+        overlay = 'none';
+      }
+      if (action.payload.mode === 'processing' && overlay === 'none') {
+        overlay = 'processing-phase';
+      }
+      if (action.payload.mode === 'recording') {
+        sidePanel = sidePanel === 'metrics-dashboard' ? 'none' : sidePanel;
+      }
+      if (action.payload.mode !== 'configuring' && sidePanel === 'metrics-dashboard') {
+        sidePanel = 'none';
+      }
+      if (action.payload.mode !== 'recording' && sidePanel === 'recording-prompts') {
+        sidePanel = 'none';
+      }
+
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          mode: action.payload.mode,
+          modeContext: nextContext,
+          overlay,
+          sidePanel
+        }
+      };
+    }
+
+    case 'SET_UI_OVERLAY':
+      if (state.ui.overlay === action.payload) return state;
+      return { ...state, ui: { ...state.ui, overlay: action.payload } };
+
+    case 'CLEAR_UI_OVERLAY':
+      if (action.payload && state.ui.overlay !== action.payload) {
+        return state;
+      }
+      if (state.ui.overlay === 'none') return state;
+      return { ...state, ui: { ...state.ui, overlay: 'none' } };
+
+    case 'SET_UI_SIDE_PANEL':
+      if (state.ui.sidePanel === action.payload) return state;
+      return { ...state, ui: { ...state.ui, sidePanel: action.payload } };
 
     case 'SET_PATIENT_MISMATCH_DATA':
       return { ...state, patientMismatchData: action.payload };
-      
-    case 'SET_MAIN_MENU':
-      if (state.ui.showMainMenu === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showMainMenu: action.payload } };
-      
-    case 'SET_RECORDING_PROMPTS':
-      if (state.ui.showRecordingPrompts === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showRecordingPrompts: action.payload } };
-      
-    case 'SET_METRICS_DASHBOARD':
-      if (state.ui.showMetricsDashboard === action.payload) return state;
-      return { ...state, ui: { ...state.ui, showMetricsDashboard: action.payload } };
       
     case 'SET_CALENDAR_DATA':
       return { ...state, ui: { ...state.ui, calendarData: action.payload } };
@@ -455,6 +524,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         streaming: false,
         streamBuffer: '',
         ttftMs: null,
+        // Clear processing progress state
+        processingPhase: undefined,
+        processingStepProgress: {},
+        processingGlobalProgress: 0,
         // Clear session IDs to reset "actively working" state
         currentSessionId: null,
         selectedSessionId: null,
@@ -481,7 +554,14 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           warnings: [],
           errors: [],
           resultSummary: '',
-          isCancelling: false
+          isCancelling: false,
+          mode: 'idle',
+          modeContext: {
+            sessionId: null,
+            origin: 'auto'
+          },
+          overlay: 'none',
+          sidePanel: 'none'
         }
       };
       
@@ -515,12 +595,6 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       
     case 'SET_SELECTED_SESSION_ID':
       return { ...state, selectedSessionId: action.payload };
-      
-    case 'SET_FIELD_INGESTION_OVERLAY':
-      return { ...state, ui: { ...state.ui, showFieldIngestionOverlay: action.payload } };
-      
-    case 'SET_PROCESSING_PHASE':
-      return { ...state, ui: { ...state.ui, showProcessingPhase: action.payload } };
       
     case 'SET_PROCESSING_PROGRESS':
       return { ...state, ui: { ...state.ui, processingProgress: action.payload } };
@@ -576,34 +650,33 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
 
       console.log('🔒 ATOMIC COMPLETION: Safety checks applied - Results length:', safeResults.length, 'Summary length:', safeSummary.length);
 
+      const clearingOverlay = ['processing-phase', 'field-ingestion'].includes(state.ui.overlay);
+      const shouldTransitionToReview =
+        state.ui.mode === 'processing' && state.ui.modeContext.sessionId === action.payload.sessionId;
+
       return {
         ...state,
-        // Clear all processing states atomically
         isProcessing: false,
         processingStatus: 'complete',
         streaming: false,
-        currentSessionId: null, // Clear active session to enable record button
-
-        // Set results with safety checks
+        currentSessionId: null,
         results: safeResults,
         aiGeneratedSummary: safeSummary,
         resultsSummary: safeSummary,
-
-        // Clear stream buffer and timing data to prevent display issues
         streamBuffer: '',
         ttftMs: null,
         processingStartTime: null,
-
-        // Clear UI processing indicators completely to prevent freeze
         ui: {
           ...state.ui,
-          showProcessingPhase: false,
-          showFieldIngestionOverlay: false,
+          activeWorkflow: null,
           isCancelling: false,
           processingProgress: 0,
           processingStartTime: 0,
-          // Ensure active workflow is cleared to enable record button
-          activeWorkflow: null
+          overlay: clearingOverlay ? 'none' : state.ui.overlay,
+          mode: shouldTransitionToReview ? 'reviewing' : state.ui.mode,
+          modeContext: shouldTransitionToReview
+            ? { sessionId: action.payload.sessionId, origin: 'auto' }
+            : state.ui.modeContext
         }
       };
     }
@@ -629,6 +702,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'RECOVER_STUCK_STATE':
       // Enhanced recovery from stuck processing states
       console.log('🔄 RECOVERING FROM STUCK STATE');
+      const stuckOverlayActive = ['processing-phase', 'field-ingestion'].includes(state.ui.overlay);
+      const stuckModeWasProcessing = state.ui.mode === 'processing';
       return {
         ...state,
         // Reset all processing states
@@ -650,15 +725,18 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         // Comprehensive UI reset
         ui: {
           ...state.ui,
-          showProcessingPhase: false,
-          showFieldIngestionOverlay: false,
           isCancelling: false,
           processingProgress: 0,
           processingStartTime: 0,
           activeWorkflow: null,
           // Clear error states that might block UI
           warnings: [],
-          errors: []
+          errors: [],
+          overlay: stuckOverlayActive ? 'none' : state.ui.overlay,
+          mode: stuckModeWasProcessing ? 'idle' : state.ui.mode,
+          modeContext: stuckModeWasProcessing
+            ? { sessionId: null, origin: 'auto' }
+            : state.ui.modeContext
         }
       };
 
@@ -713,10 +791,15 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           ...state.ui,
           activeWorkflow: null,
           isCancelling: false,
-          showProcessingPhase: false,
-          showFieldIngestionOverlay: false,
           processingProgress: 0,
-          processingStartTime: 0
+          processingStartTime: 0,
+          overlay: ['processing-phase', 'field-ingestion'].includes(state.ui.overlay)
+            ? 'none'
+            : state.ui.overlay,
+          mode: state.ui.mode === 'processing' ? 'idle' : state.ui.mode,
+          modeContext: state.ui.mode === 'processing'
+            ? { sessionId: null, origin: 'auto' }
+            : state.ui.modeContext
         }
       };
 
@@ -777,6 +860,10 @@ export function useAppState() {
     setProcessingStatus: useCallback((status: ProcessingStatus) => {
       dispatch({ type: 'SET_PROCESSING_STATUS', payload: status });
     }, []),
+
+    setProcessingPhase: useCallback((phase: string, stepProgress: Record<string, number>, globalProgress: number) => {
+      dispatch({ type: 'SET_PROCESSING_PHASE', payload: { phase, stepProgress, globalProgress } });
+    }, []),
     
     setVoiceActivity: useCallback((level: number, frequencyData: number[]) => {
       const now = Date.now();
@@ -833,37 +920,29 @@ export function useAppState() {
     setResultSummary: useCallback((summary: string) => {
       dispatch({ type: 'SET_RESULT_SUMMARY', payload: summary });
     }, []),
-    
-    setPatientModal: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_PATIENT_MODAL', payload: show });
-    }, []),
-    
-    setScreenshotAnnotationModal: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_SCREENSHOT_ANNOTATION_MODAL', payload: show });
-    }, []),
-    
-    setPatientEducationConfig: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_PATIENT_EDUCATION_CONFIG', payload: show });
+
+    setUIMode: useCallback((mode: AppUIMode, context?: Partial<ModeContext>) => {
+      dispatch({ type: 'SET_UI_MODE', payload: { mode, context } });
     }, []),
 
-    setPatientMismatchModal: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_PATIENT_MISMATCH_MODAL', payload: show });
+    openOverlay: useCallback((overlay: UIOverlay) => {
+      dispatch({ type: 'SET_UI_OVERLAY', payload: overlay });
+    }, []),
+
+    closeOverlay: useCallback((overlay?: UIOverlay) => {
+      dispatch({ type: 'CLEAR_UI_OVERLAY', payload: overlay });
+    }, []),
+
+    setSidePanel: useCallback((panel: UISidePanel) => {
+      dispatch({ type: 'SET_UI_SIDE_PANEL', payload: panel });
+    }, []),
+
+    clearSidePanel: useCallback(() => {
+      dispatch({ type: 'SET_UI_SIDE_PANEL', payload: 'none' });
     }, []),
 
     setPatientMismatchData: useCallback((data: CombinedAppState['patientMismatchData']) => {
       dispatch({ type: 'SET_PATIENT_MISMATCH_DATA', payload: data });
-    }, []),
-    
-    setMainMenu: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_MAIN_MENU', payload: show });
-    }, []),
-    
-    setRecordingPrompts: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_RECORDING_PROMPTS', payload: show });
-    }, []),
-    
-    setMetricsDashboard: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_METRICS_DASHBOARD', payload: show });
     }, []),
     
     setCalendarData: useCallback((data: UIState['calendarData']) => {
@@ -925,15 +1004,6 @@ export function useAppState() {
     
     setSelectedSessionId: useCallback((sessionId: string | null) => {
       dispatch({ type: 'SET_SELECTED_SESSION_ID', payload: sessionId });
-    }, []),
-    
-    // AI Medical Review overlay actions
-    setFieldIngestionOverlay: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_FIELD_INGESTION_OVERLAY', payload: show });
-    }, []),
-    
-    setProcessingPhase: useCallback((show: boolean) => {
-      dispatch({ type: 'SET_PROCESSING_PHASE', payload: show });
     }, []),
     
     setProcessingProgress: useCallback((progress: number) => {
@@ -1008,8 +1078,19 @@ export function useAppState() {
     }, [])
   };
 
+  const selectors = useMemo(
+    () => ({
+      isMode: (mode: AppUIMode) => state.ui.mode === mode,
+      isOverlayActive: (overlay: UIOverlay) => state.ui.overlay === overlay,
+      isSidePanelOpen: (panel: UISidePanel) => state.ui.sidePanel === panel,
+      activeModeContext: state.ui.modeContext
+    }),
+    [state.ui.mode, state.ui.overlay, state.ui.sidePanel, state.ui.modeContext]
+  );
+
   return {
     state,
-    actions
+    actions,
+    selectors
   };
 }
