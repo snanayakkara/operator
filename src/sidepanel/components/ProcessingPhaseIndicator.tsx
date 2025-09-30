@@ -168,6 +168,16 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
     }
   }, [isActive, agentType, transcriptionLength, showTimeEstimate, prediction, currentProgress, elapsedTime, onProcessingComplete, predictor]);
 
+  // Helper function to calculate phase progress
+  const getPhaseProgress = (phase: ProcessingPhase) => {
+    const [start, end] = phase.progressRange;
+    if (currentProgress <= start) return 0;
+    if (currentProgress >= end) return 100;
+
+    // Calculate progress within this phase
+    return ((currentProgress - start) / (end - start)) * 100;
+  };
+
   // Convert PROCESSING_PHASES to Step[] for VerticalStepper
   const steps: Step[] = useMemo(() => {
     return PROCESSING_PHASES.map(phase => {
@@ -189,15 +199,6 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
       };
     });
   }, [completedPhases, activePhaseId, currentProgress]);
-
-  const getPhaseProgress = (phase: ProcessingPhase) => {
-    const [start, end] = phase.progressRange;
-    if (currentProgress <= start) return 0;
-    if (currentProgress >= end) return 100;
-
-    // Calculate progress within this phase
-    return ((currentProgress - start) / (end - start)) * 100;
-  };
 
   // Calculate remaining time based on prediction and current progress
   const getRemainingTime = (): { timeMs: number; isEstimate: boolean } => {
