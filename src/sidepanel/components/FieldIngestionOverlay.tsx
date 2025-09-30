@@ -1,12 +1,13 @@
 /**
  * Field Ingestion Overlay Component
- * 
+ *
  * Provides visual feedback showing which EMR fields are being discovered,
  * extracted, and processed during AI Review workflow.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Search, FileText, Pill, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { useFocusTrap, useScrollLock, useEscapeKey, useRestoreFocus } from '@/utils/modalHelpers';
 
 interface FieldStatus {
   name: string;
@@ -49,6 +50,13 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
   const [fields, setFields] = useState<FieldStatus[]>([]);
   const [currentPhase, setCurrentPhase] = useState<string>('Initializing...');
   const [progress, setProgress] = useState(0);
+
+  // Modal behavior hooks
+  const modalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(modalRef, isActive);
+  useScrollLock(isActive);
+  useEscapeKey(isActive, onComplete);
+  useRestoreFocus(isActive, modalRef);
 
   // Initialize fields when overlay becomes active
   useEffect(() => {
@@ -200,14 +208,28 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
   }
 
   return (
-    <div 
-      className={`absolute inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center ${className}`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="field-ingestion-title"
-      aria-describedby="field-ingestion-description"
+    <div
+      className={`fixed inset-0 flex items-center justify-center ${className}`}
+      style={{
+        zIndex: 'var(--z-modal)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        pointerEvents: 'auto'
+      }}
+      onClick={onComplete}
     >
-      <div className="bg-white rounded-2xl shadow-2xl p-6 m-4 max-w-md w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-reduce:transition-none">
+      <div
+        ref={modalRef}
+        className="bg-white rounded-2xl p-6 m-4 max-w-md w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-reduce:transition-none"
+        style={{
+          boxShadow: '0 8px 24px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.04)'
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="field-ingestion-title"
+        aria-describedby="field-ingestion-description"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="text-center mb-6">
           <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -222,17 +244,24 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-6">
+        <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-700" aria-live="polite">
               {currentPhase}
             </span>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-gray-500 tabular-nums">
               {Math.round(progress)}%
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-            <div 
+          <div
+            className="w-full bg-gray-200 rounded-full h-2"
+            role="progressbar"
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-describedby="field-ingestion-description"
+          >
+            <div
               className="bg-indigo-600 h-2 rounded-full motion-safe:transition-all motion-safe:duration-500 motion-safe:ease-out motion-reduce:transition-none"
               style={{ width: `${progress}%` }}
             />
@@ -240,13 +269,14 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
         </div>
 
         {/* Field Status List */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {fields.map((field, _index) => (
             <div
               key={field.name}
-              className={`flex items-center space-x-3 p-3 rounded-lg border motion-safe:transition-all motion-safe:duration-300 motion-reduce:transition-none ${getStatusColor(field.status)}`}
+              className={`flex items-center space-x-3 p-4 rounded-2xl border motion-safe:transition-all motion-safe:duration-300 motion-reduce:transition-none ${getStatusColor(field.status)}`}
               role="status"
               aria-label={`${field.displayName}: ${getStatusText(field.status)}`}
+              aria-live="polite"
             >
               <field.icon className="w-5 h-5 text-gray-600 flex-shrink-0" />
               
@@ -268,8 +298,8 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <p className="text-xs text-gray-500 text-center">
             Processing EMR data locally with MedGemma-27b
           </p>
         </div>
