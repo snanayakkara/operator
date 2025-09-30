@@ -12,6 +12,7 @@ import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
 import { EyeOff, Eye, Download, Users } from 'lucide-react';
+import { calculateWordCount, calculateReadTime, formatReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
   staggerContainer, 
   cardVariants, 
@@ -189,11 +190,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
-    if (!results || results.trim().length === 0) {
-      return { wordCount: 0, readingTime: 0 };
-    }
-    const wordCount = results.split(/\s+/).filter(word => word.length > 0).length;
-    const readingTime = Math.ceil(wordCount / 200);
+    const wordCount = calculateWordCount(results);
+    const readingTime = calculateReadTime(wordCount);
     return { wordCount, readingTime };
   }, [results]);
 
@@ -426,11 +424,21 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           </div>
         ) : (
           <div className="text-emerald-600 flex items-center space-x-2">
-            <span>{reportMetrics.wordCount} words</span>
-            <span>•</span>
-            <span>{reportMetrics.readingTime} min read</span>
-            <span>•</span>
-            <span>{new Date().toLocaleTimeString()}</span>
+            {reportMetrics.wordCount > 0 && (
+              <>
+                <span>{reportMetrics.wordCount} words</span>
+                {reportMetrics.readingTime && (
+                  <>
+                    <span>•</span>
+                    <span>{formatReadTime(reportMetrics.readingTime)}</span>
+                  </>
+                )}
+                <span>•</span>
+              </>
+            )}
+            <span title={`Generated at ${formatAbsoluteTime(Date.now())}`}>
+              {new Date().toLocaleTimeString()}
+            </span>
             {warnings.length > 0 && <span>•</span>}
           </div>
         )}
