@@ -27,6 +27,7 @@ import { MetricsDashboard } from './components/MetricsDashboard';
 import { LiveAudioVisualizer } from './components/LiveAudioVisualizer';
 import { ScreenshotAnnotationModal } from './components/ScreenshotAnnotationModal';
 import { PatientMismatchConfirmationModal } from './components/PatientMismatchConfirmationModal';
+import { BPDiaryImporter } from './components/BPDiaryImporter';
 import { OptimizationPanel } from '../components/settings/OptimizationPanel';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
@@ -57,8 +58,18 @@ const OptimizedApp: React.FC = memo(() => {
 
 const OptimizedAppContent: React.FC = memo(() => {
   // Use optimized state management
-  const { state, actions } = useAppState();
+  const { state, actions, selectors } = useAppState();
   const audioDeviceContext = useAudioDeviceContext();
+  const overlayState = {
+    patientEducation: selectors.isOverlayActive('patient-education'),
+    patientSelection: selectors.isOverlayActive('patient-selection'),
+    screenshotAnnotation: selectors.isOverlayActive('screenshot-annotation'),
+    bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
+    patientMismatch: selectors.isOverlayActive('patient-mismatch'),
+    fieldIngestion: selectors.isOverlayActive('field-ingestion'),
+    processingPhase: selectors.isOverlayActive('processing-phase')
+  };
+  const metricsDashboardOpen = selectors.isSidePanelOpen('metrics-dashboard');
   const activeWorkflowRef = useRef<AgentType | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
   
@@ -69,6 +80,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   // AbortController refs for cancellation
   const transcriptionAbortRef = useRef<AbortController | null>(null);
   const processingAbortRef = useRef<AbortController | null>(null);
+
+  // Timeout ref for progress indicator cleanup
+  const progressCleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Stable service instances using useRef to prevent re-creation on renders
   const lmStudioService = useRef(LMStudioService.getInstance()).current;
@@ -324,8 +338,26 @@ const OptimizedAppContent: React.FC = memo(() => {
           summary: extractedSummary, // Store summary separately
           status: 'completed',
           completed: true,
-          completedTime: Date.now()
+          completedTime: Date.now(),
+          // Set progress to 100% briefly for smooth completion transition
+          processingProgress: {
+            phase: 'Complete',
+            progress: 100,
+            details: 'Streaming finished'
+          }
         });
+
+        // Clear progress indicator after fade-out animation (300ms)
+        // Clear any existing timeout to prevent race conditions
+        if (progressCleanupTimeoutRef.current) {
+          clearTimeout(progressCleanupTimeoutRef.current);
+        }
+        progressCleanupTimeoutRef.current = setTimeout(() => {
+          actions.updatePatientSession(sessionId, {
+            processingProgress: undefined
+          });
+          progressCleanupTimeoutRef.current = null;
+        }, 300);
       },
       onError: (err) => {
         if (err.name === 'AbortError') {
@@ -412,7 +444,8 @@ const OptimizedAppContent: React.FC = memo(() => {
     
     // Create dedicated AbortControllers for this session
     const sessionProcessingAbort = new AbortController();
-    
+    actions.setUIMode('processing', { sessionId, origin: 'auto' });
+
     try {
       // Update session with transcription start time (status already set to transcribing in handleRecordingComplete)
       actions.updatePatientSession(sessionId, {
@@ -443,7 +476,8 @@ const OptimizedAppContent: React.FC = memo(() => {
               actions.updatePatientSession(sessionId, {
                 status: 'error',
                 errors: [error || 'Transcription failed'],
-                completedTime: Date.now()
+                completedTime: Date.now(),
+                processingProgress: undefined // Clear progress immediately on error
               });
             }
           },
@@ -592,6 +626,17 @@ const OptimizedAppContent: React.FC = memo(() => {
       const processingStartTime = Date.now();
       const { AgentFactory } = await import('@/services/AgentFactory');
 
+      // Initialize progress at 0% when entering processing state
+      actions.updatePatientSession(sessionId, {
+        status: 'processing',
+        processingStartTime: Date.now(),
+        processingProgress: {
+          phase: 'Starting',
+          progress: 0,
+          details: 'Initializing agent'
+        }
+      });
+
       // Special handling for TAVI workup with progress tracking
       const processOptions: any = {
         skipNotification: true,
@@ -602,12 +647,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         processOptions.onProgress = (phase: string, progress: number, details?: string) => {
           console.log(`🫀 TAVI Progress: ${phase} (${progress}%) - ${details || ''}`);
 
-          // Update session with progress information
+          // Update session with progress information (defensive: ensure progress never negative)
           actions.updatePatientSession(sessionId, {
             status: 'processing',
             processingProgress: {
-              phase,
-              progress,
+              phase: phase || 'Processing',
+              progress: Math.max(0, Math.min(100, progress)), // Clamp to 0-100
               details
             }
           });
@@ -639,7 +684,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         completedTime: Date.now(),
         processingTime: result.processingTime,
         warnings: result.warnings,
-        errors: result.errors
+        errors: result.errors,
+        // Set progress to 100% briefly for smooth completion transition
+        processingProgress: {
+          phase: 'Complete',
+          progress: 100,
+          details: 'Processing finished'
+        }
       };
 
       // Add TAVI structured sections if available
@@ -648,6 +699,18 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       actions.updatePatientSession(sessionId, sessionUpdate);
+
+      // Clear progress indicator after fade-out animation (300ms)
+      // Clear any existing timeout to prevent race conditions
+      if (progressCleanupTimeoutRef.current) {
+        clearTimeout(progressCleanupTimeoutRef.current);
+      }
+      progressCleanupTimeoutRef.current = setTimeout(() => {
+        actions.updatePatientSession(sessionId, {
+          processingProgress: undefined
+        });
+        progressCleanupTimeoutRef.current = null;
+      }, 300);
 
       // Record completion metrics
       performanceMonitor.recordMetrics('complete', Date.now() - transcriptionStartTime, {
@@ -830,17 +893,19 @@ const OptimizedAppContent: React.FC = memo(() => {
         if (error.name === 'AbortError') {
           actions.updatePatientSession(sessionId, {
             status: 'cancelled',
-            errors: ['Processing was cancelled']
+            errors: ['Processing was cancelled'],
+            processingProgress: undefined // Clear progress immediately on cancel
           });
         } else {
           const currentSession = state.patientSessions.find(s => s.id === sessionId);
           const patientName = currentSession?.patient.name || 'Unknown Patient';
-          
+
           actions.updatePatientSession(sessionId, {
             status: 'error',
-            errors: [error.message || 'Processing failed']
+            errors: [error.message || 'Processing failed'],
+            processingProgress: undefined // Clear progress immediately on error
           });
-          
+
           // Show simplified toast notification for background processing error
           RecordingToasts.processingFailed(patientName);
         }
@@ -954,6 +1019,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       // Use new isolated session display action
       actions.setDisplaySession(session);
+      actions.setUIMode('reviewing', { sessionId: session.id, origin: 'user' });
 
       console.log('✅ 📋 SESSION SELECT COMPLETE - Session loaded in isolated display (will show even during active work):', {
         patientName: session.patient.name,
@@ -978,6 +1044,26 @@ const OptimizedAppContent: React.FC = memo(() => {
       }, 100);
     });
   }, [actions, state.displaySession, state.results, state.transcription, state.currentSessionId, recorder.isRecording]);
+
+  const handleResumeRecording = useCallback((session: PatientSession) => {
+    actions.setSelectedSessionId(session.id);
+    actions.setUIMode('recording', { sessionId: session.id, origin: 'user' });
+  }, [actions]);
+
+  const handleMarkSessionComplete = useCallback((session: PatientSession) => {
+    const timestamp = Date.now();
+    actions.updatePatientSession(session.id, {
+      reviewedAt: timestamp,
+      finalizedAt: timestamp,
+      completed: true,
+      status: 'completed'
+    });
+
+    if (state.selectedSessionId === session.id) {
+      actions.clearDisplaySession();
+      actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+    }
+  }, [actions, state.selectedSessionId]);
 
   // Memoized smart summary generation for performance
   const generateSmartSummary = useCallback((content: string): string => {
@@ -1208,6 +1294,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     if (state.displaySession.isDisplayingSession) {
       console.log('🔄 Clearing display session view for new recording');
       actions.clearDisplaySession();
+      actions.setUIMode('idle', { sessionId: null, origin: 'user' });
     }
     
     // Count active sessions to check limits
@@ -1325,6 +1412,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('✅ Whisper server is running, starting recording...');
       actions.setActiveWorkflow(workflowId);
       activeWorkflowRef.current = workflowId;
+      actions.setUIMode('recording', { sessionId, origin: 'user' });
       recorder.startRecording();
       actions.setProcessingStartTime(Date.now());
     }
@@ -1370,7 +1458,8 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.setResults('');
     actions.setResultsSummary(''); // Clear summary when cancelling
     activeWorkflowRef.current = null;
-    
+    actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+
     setTimeout(() => actions.setCancelling(false), 1000);
   }, [recorder, actions]);
 
@@ -1758,7 +1847,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           textToInsert: text,
           onConfirm: () => {
             console.log('✅ User confirmed insertion despite mismatch');
-            actions.setPatientMismatchModal(false);
+            actions.closeOverlay('patient-mismatch');
             actions.setPatientMismatchData({
               comparison: null,
               textToInsert: null,
@@ -1769,7 +1858,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           },
           onCancel: () => {
             console.log('❌ User cancelled insertion due to mismatch');
-            actions.setPatientMismatchModal(false);
+            actions.closeOverlay('patient-mismatch');
             actions.setPatientMismatchData({
               comparison: null,
               textToInsert: null,
@@ -1781,7 +1870,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
 
         // Show modal
-        actions.setPatientMismatchModal(true);
+        actions.openOverlay('patient-mismatch');
+        actions.setUIMode('reviewing', { sessionId: state.selectedSessionId || null, origin: 'auto' });
       });
 
     } catch (error) {
@@ -2003,14 +2093,15 @@ const OptimizedAppContent: React.FC = memo(() => {
     return () => clearInterval(validationInterval);
   }, [state.processingStatus, state.isProcessing, state.streaming, state.currentSessionId, state.results, recorder.isRecording, actions]);
 
-  // Recording state monitoring for prompt card
+  // Cleanup progress indicator timeout on unmount
   useEffect(() => {
-    if (recorder.isRecording && state.ui.activeWorkflow && hasRecordingPrompt(state.ui.activeWorkflow)) {
-      actions.setRecordingPrompts(true);
-    } else if (!recorder.isRecording) {
-      actions.setRecordingPrompts(false);
-    }
-  }, [recorder.isRecording, state.ui.activeWorkflow]);
+    return () => {
+      if (progressCleanupTimeoutRef.current) {
+        clearTimeout(progressCleanupTimeoutRef.current);
+        progressCleanupTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Agent preloading and memory management
   useEffect(() => {
@@ -2098,7 +2189,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           onRemoveSession={actions.removePatientSession}
           onClearAllSessions={actions.clearPatientSessions}
           onSessionSelect={handleSessionSelect}
-          onShowMetrics={() => actions.setMetricsDashboard(true)}
+          onShowMetrics={() => actions.setSidePanel('metrics-dashboard')}
           onNewRecording={actions.clearRecording}
           showNewRecording={state.results?.trim().length > 0 || state.patientSessions.some(s => s.status === 'completed')}
         />
@@ -2110,6 +2201,21 @@ const OptimizedAppContent: React.FC = memo(() => {
         
         {/* Main Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
+          {state.patientSessions.length > 0 && (
+            <div className="px-4 pt-4">
+              <_SessionsPanel
+                sessions={state.patientSessions}
+                onRemoveSession={actions.removePatientSession}
+                onClearAllSessions={actions.clearPatientSessions}
+                onSessionSelect={handleSessionSelect}
+                onResumeRecording={handleResumeRecording}
+                onMarkSessionComplete={handleMarkSessionComplete}
+                selectedSessionId={stableSelectedSessionId}
+                isCollapsible={false}
+              />
+            </div>
+          )}
+          
           
           {/* Unified Recording Interface - Show both LiveAudioVisualizer and RecordingPromptCard together */}
           {recorder.isRecording && (
@@ -2208,11 +2314,14 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Patient Education Config Card - Show in main content area */}
-          {state.ui.showPatientEducationConfig && (
+          {overlayState.patientEducation && (
             <div className="flex-1 min-h-0 overflow-y-auto p-4">
               <PatientEducationConfigCard
-                isVisible={state.ui.showPatientEducationConfig}
-                onClose={() => actions.setPatientEducationConfig(false)}
+                isVisible={overlayState.patientEducation}
+                onClose={() => {
+                  actions.closeOverlay('patient-education');
+                  actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+                }}
                 isGenerating={state.isProcessing && state.currentAgent === 'patient-education'}
                 onGenerate={async (input) => {
                   try {
@@ -2228,7 +2337,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     console.log('🎓 Processing Patient Education with input:', input);
                     const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
                     
-                    actions.setPatientEducationConfig(false);
+                    actions.closeOverlay('patient-education');
                     // Use atomic completion to ensure consistent state management
                     actions.completeProcessingAtomic(state.currentSessionId || 'patient-education-session', result.content);
                     console.log('✅ Patient Education generation completed');
@@ -2353,7 +2462,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !state.ui.showPatientEducationConfig && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
+          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
@@ -2401,7 +2510,16 @@ const OptimizedAppContent: React.FC = memo(() => {
                 // Handle screenshot annotation action
                 if (actionId === 'annotate-screenshots') {
                   console.log('📸 Opening screenshot annotation modal');
-                  actions.setScreenshotAnnotationModal(true);
+                  actions.openOverlay('screenshot-annotation');
+                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+                  return;
+                }
+
+                // Handle BP Diary Importer action
+                if (actionId === 'bp-diary-importer') {
+                  console.log('🩺 Opening BP Diary Importer');
+                  actions.openOverlay('bp-diary-importer');
+                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                   return;
                 }
                 
@@ -2409,7 +2527,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                 if (actionId === 'patient-education') {
                   if (data?.type === 'show-config') {
                     console.log('🎓 Showing Patient Education configuration card');
-                    actions.setPatientEducationConfig(true);
+                    actions.openOverlay('patient-education');
+                    actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                     return;
                   }
                 }
@@ -2433,7 +2552,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                   // Show field ingestion overlay for data extraction actions
                   if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId) && data?.type !== 'manual') {
                     console.log(`🔧 TAVI Ingestion: Showing field ingestion overlay for ${actionId}`);
-                    actions.setFieldIngestionOverlay(true);
+                    actions.openOverlay('field-ingestion');
+                    actions.setUIMode('processing', { sessionId: state.selectedSessionId, origin: 'auto' });
                   }
 
                   // If we have results and it's not a manual type request, include the content
@@ -2454,7 +2574,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                   if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId)) {
                     console.log(`🔧 TAVI Ingestion: Clearing field ingestion overlay after ${actionId}`);
                     setTimeout(() => {
-                      actions.setFieldIngestionOverlay(false);
+                      actions.closeOverlay('field-ingestion');
                     }, 1500); // Give time for the extraction to complete
                   }
 
@@ -2499,7 +2619,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                 } else if (actionId === 'batch-ai-review' && data?.type === 'show-modal') {
                   // Handle batch AI review modal trigger
                   console.log('👥 Batch AI Review: Triggering patient selection modal');
-                  actions.setPatientModal(true);
+                  actions.openOverlay('patient-selection');
+                  actions.setUIMode('batch', { sessionId: null, origin: 'user' });
                 } else {
                   console.log('ℹ️ Unhandled quick action:', actionId);
                 }
@@ -2518,10 +2639,13 @@ const OptimizedAppContent: React.FC = memo(() => {
       {/* Overlay Modals and Components */}
       
       {/* Patient Selection Modal for batch processing */}
-      {state.ui.showPatientSelectionModal && (
+      {overlayState.patientSelection && (
         <PatientSelectionModal
-          isOpen={state.ui.showPatientSelectionModal}
-          onClose={() => actions.setPatientModal(false)}
+          isOpen={overlayState.patientSelection}
+          onClose={() => {
+            actions.closeOverlay('patient-selection');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
           onStartReview={() => {
             console.log('🔄 Starting patient review');
           }}
@@ -2532,17 +2656,31 @@ const OptimizedAppContent: React.FC = memo(() => {
       )}
 
       {/* Screenshot Annotation Modal */}
-      {state.ui.showScreenshotAnnotationModal && (
+      {overlayState.screenshotAnnotation && (
         <ScreenshotAnnotationModal
-          isOpen={state.ui.showScreenshotAnnotationModal}
-          onClose={() => actions.setScreenshotAnnotationModal(false)}
+          isOpen={overlayState.screenshotAnnotation}
+          onClose={() => {
+            actions.closeOverlay('screenshot-annotation');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
+        />
+      )}
+
+      {/* BP Diary Importer Modal */}
+      {overlayState.bpDiaryImporter && (
+        <BPDiaryImporter
+          isOpen={overlayState.bpDiaryImporter}
+          onClose={() => {
+            actions.closeOverlay('bp-diary-importer');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
         />
       )}
 
       {/* Patient Mismatch Confirmation Modal */}
-      {state.ui.showPatientMismatchModal && (
+      {overlayState.patientMismatch && (
         <PatientMismatchConfirmationModal
-          isOpen={state.ui.showPatientMismatchModal}
+          isOpen={overlayState.patientMismatch}
           comparison={state.patientMismatchData.comparison}
           textToInsert={state.patientMismatchData.textToInsert}
           onConfirm={state.patientMismatchData.onConfirm || (() => {})}
@@ -2571,16 +2709,16 @@ const OptimizedAppContent: React.FC = memo(() => {
       
       {/* AI Medical Review Overlays - positioned relative to side panel */}
       <FieldIngestionOverlay
-        isActive={state.ui.showFieldIngestionOverlay}
-        onComplete={() => actions.setFieldIngestionOverlay(false)}
+        isActive={overlayState.fieldIngestion}
+        onComplete={() => actions.closeOverlay('field-ingestion')}
       />
 
       {/* Processing Phase Indicator - shown during AI processing */}
-      {state.ui.showProcessingPhase && (
+      {overlayState.processingPhase && (
         <div className="absolute top-4 left-4 right-4 z-40">
           <ProcessingPhaseIndicator
             currentProgress={state.ui.processingProgress}
-            isActive={state.ui.showProcessingPhase}
+            isActive={overlayState.processingPhase}
             startTime={state.ui.processingStartTime}
             agentType={state.currentAgent || undefined}
             transcriptionLength={state.transcription ? state.transcription.length : undefined}
@@ -2595,8 +2733,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       
       {/* Metrics Dashboard */}
       <MetricsDashboard 
-        isOpen={state.ui.showMetricsDashboard}
-        onClose={() => actions.setMetricsDashboard(false)}
+        isOpen={metricsDashboardOpen}
+        onClose={() => actions.clearSidePanel()}
       />
       
       {/* Optimization Panel */}
