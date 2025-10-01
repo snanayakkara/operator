@@ -6,7 +6,7 @@
 - **Transcription**: MLX Whisper (`whisper-large-v3-turbo`) at `http://localhost:8001`
 - **Generation**: LM Studio at `http://localhost:1234` (MedGemma‑27B for complex; Gemma‑3n‑e4b for simple)
 - **DSPy/GEPA** optimisation server at `http://localhost:8002`
-- **Phase 4 intelligence**: lazy loading, cross‑agent knowledge, smart recommendations, real‑time progress
+- **Intelligent Features**: lazy agent loading, cross‑agent knowledge sharing, smart recommendations, real‑time progress tracking
 - Australian spelling & guideline framing; privacy‑first (no cloud calls)
 
 ---
@@ -44,11 +44,11 @@ Each agent has dedicated SystemPrompts, validation patterns, template structure,
 
 ---
 
-## 3) Phase 4 Intelligence
-- **LazyAgentLoader**: dynamic agent chunks (~7–38 KB); 0 ms cached, ~2 s first load; cache stats; preloads popular agents
-- **CrossAgentIntelligence**: builds patient profile; shares insights (drug interactions, correlations) between agents
-- **SmartRecommendationEngine**: complexity assessment + agent suggestions (confidence & ETA)
-- **UnifiedPipelineProgress**: single segmented progress bar with live pipeline tracking (Audio → Transcription → AI → Generation); real-time updates, elapsed time, ETA with adaptive adjustment, model identification
+## 3) Intelligent Features
+- **Dynamic Agent Loading**: agent chunks (~7–38 KB) loaded on demand; 0 ms cached, ~2 s first load; preloads popular agents for instant access
+- **Cross-Agent Intelligence**: builds patient profile across sessions; shares insights (drug interactions, clinical correlations) between agents
+- **Smart Recommendations**: complexity assessment with agent suggestions including confidence scores and estimated completion times
+- **Real-Time Progress**: single segmented progress bar with live pipeline tracking (Audio → Transcription → AI → Generation); shows elapsed time, ETA with adaptive adjustment, and model identification
 
 ---
 
@@ -204,7 +204,7 @@ npm run optim:quick-letter
 - **Design system**: monochrome, responsive
 
 **v3.2.0 (Sep 2025)**
-- **Phase 4**: LazyAgentLoader, CrossAgentIntelligence, SmartRecommendationEngine, ProcessingIndicator, bundle splitting
+- **Intelligent Features**: Dynamic agent loading, cross-agent intelligence, smart recommendations, real-time progress, bundle splitting
 - **DSPy/GEPA**: production‑ready, rubric, versioning, audit trails
 
 **Earlier highlights**
@@ -222,4 +222,4 @@ abstract class MedicalAgent {
 }
 ```
 
-**Focus**: local‑first medical AI with intelligent queuing, dynamic agent loading, DSPy‑optimised prompts, human‑in‑the‑loop QA, and cross‑agent intelligence.
+**Focus**: local‑first medical AI with intelligent queuing, dynamic agent loading, DSPy‑optimised prompts, human‑in‑the‑loop QA, cross‑agent intelligence, and real-time progress tracking.
