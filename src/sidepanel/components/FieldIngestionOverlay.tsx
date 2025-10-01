@@ -5,9 +5,10 @@
  * extracted, and processed during AI Review workflow.
  */
 
-import React, { useEffect, useState, useRef } from 'react';
-import { Search, FileText, Pill, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { Search, FileText, Pill } from 'lucide-react';
 import { useFocusTrap, useScrollLock, useEscapeKey, useRestoreFocus } from '@/utils/modalHelpers';
+import { VerticalStepper, type Step, type StepStatus } from './VerticalStepper';
 
 interface FieldStatus {
   name: string;
@@ -154,54 +155,27 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  const getStatusIcon = (status: FieldStatus['status']) => {
-    switch (status) {
-      case 'discovering':
-        return <Search className="w-4 h-4 text-blue-500 animate-pulse" />;
-      case 'extracting':
-        return <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />;
-      case 'complete':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'not-found':
-      case 'error':
-        return <XCircle className="w-4 h-4 text-red-500" />;
-      default:
-        return <Search className="w-4 h-4 text-gray-400" />;
-    }
-  };
+  // Convert FieldStatus to Step[] for VerticalStepper
+  const steps: Step[] = useMemo(() => {
+    return fields.map((field, index) => {
+      // Map field status to StepStatus
+      let stepStatus: StepStatus = 'queued';
+      if (field.status === 'complete') {
+        stepStatus = 'done';
+      } else if (field.status === 'extracting') {
+        stepStatus = 'running';
+      } else if (field.status === 'error' || field.status === 'not-found') {
+        stepStatus = 'failed';
+      }
 
-  const getStatusText = (status: FieldStatus['status']) => {
-    switch (status) {
-      case 'discovering':
-        return 'Scanning...';
-      case 'extracting':
-        return 'Extracting...';
-      case 'complete':
-        return 'Complete';
-      case 'not-found':
-        return 'Not found';
-      case 'error':
-        return 'Error';
-      default:
-        return 'Pending';
-    }
-  };
-
-  const getStatusColor = (status: FieldStatus['status']) => {
-    switch (status) {
-      case 'discovering':
-        return 'border-blue-200 bg-blue-50';
-      case 'extracting':
-        return 'border-amber-200 bg-amber-50';
-      case 'complete':
-        return 'border-green-200 bg-green-50';
-      case 'not-found':
-      case 'error':
-        return 'border-red-200 bg-red-50';
-      default:
-        return 'border-gray-200 bg-gray-50';
-    }
-  };
+      return {
+        id: field.name,
+        label: field.displayName,
+        icon: field.icon,
+        status: stepStatus
+      };
+    });
+  }, [fields]);
 
   if (!isActive) {
     return null;
@@ -268,34 +242,8 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
           </div>
         </div>
 
-        {/* Field Status List */}
-        <div className="space-y-4">
-          {fields.map((field, _index) => (
-            <div
-              key={field.name}
-              className={`flex items-center space-x-3 p-4 rounded-2xl border motion-safe:transition-all motion-safe:duration-300 motion-reduce:transition-none ${getStatusColor(field.status)}`}
-              role="status"
-              aria-label={`${field.displayName}: ${getStatusText(field.status)}`}
-              aria-live="polite"
-            >
-              <field.icon className="w-5 h-5 text-gray-600 flex-shrink-0" />
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-900 truncate">
-                    {field.displayName}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    {getStatusIcon(field.status)}
-                    <span className="text-xs text-gray-600">
-                      {getStatusText(field.status)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Field Status List - Using Vertical Stepper */}
+        <VerticalStepper steps={steps} />
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-gray-200">
