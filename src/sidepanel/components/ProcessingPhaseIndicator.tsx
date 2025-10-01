@@ -80,7 +80,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
   currentProgress,
   isActive,
   className = '',
-  startTime = Date.now(),
+  startTime,
   agentType,
   transcriptionLength,
   showTimeEstimate = true,
@@ -93,14 +93,22 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [prediction, setPrediction] = useState<ProcessingTimeEstimate | null>(null);
   const [predictor] = useState(() => ProcessingTimePredictor.getInstance());
+  const [internalStartTime] = useState(() => Date.now());
+
+  // Use provided startTime or fallback to component mount time
+  const effectiveStartTime = startTime || internalStartTime;
 
   // Update elapsed time every second
   useEffect(() => {
     let intervalId: number;
 
-    if (isActive) {
+    if (isActive && effectiveStartTime) {
       intervalId = window.setInterval(() => {
-        setElapsedTime(Date.now() - startTime);
+        const elapsed = Date.now() - effectiveStartTime;
+        // Sanity check: elapsed time should be reasonable
+        if (elapsed >= 0 && elapsed < 86400000) { // Less than 24 hours
+          setElapsedTime(elapsed);
+        }
       }, 100); // Update every 100ms for smooth countdown
     } else {
       setElapsedTime(0);
@@ -111,7 +119,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
         clearInterval(intervalId);
       }
     };
-  }, [isActive, startTime]);
+  }, [isActive, effectiveStartTime]);
 
   useEffect(() => {
     if (!isActive) {
