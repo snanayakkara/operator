@@ -466,15 +466,23 @@ export const SessionsPanel: React.FC<SessionsPanelProps> = ({
     return () => clearTimeout(timeout);
   }, [copiedSessionId]);
 
-  // Auto-collapse when all active work completes (only completed sessions remain)
+  // Auto-collapse behavior:
+  // - Collapse when recording to avoid overlap with recording UI
+  // - Collapse when all work completes (after a delay)
+  // - Expand for transcribing/processing to show progress
   useEffect(() => {
+    const hasRecording = sessions.some(s => s.status === 'recording');
     const hasActiveWork = sessions.some(s => ['recording', 'transcribing', 'processing'].includes(s.status));
-    if (!hasActiveWork && sessions.length > 0) {
+
+    if (hasRecording) {
+      // Immediately collapse when recording to prevent overlap with recording interface
+      setIsCollapsed(true);
+    } else if (!hasActiveWork && sessions.length > 0) {
       // All sessions completed - auto-collapse after a short delay to let user see completion
       const collapseTimeout = setTimeout(() => setIsCollapsed(true), 1000);
       return () => clearTimeout(collapseTimeout);
     } else if (hasActiveWork) {
-      // Expand when there's active work
+      // Expand when there's transcribing/processing work to show progress
       setIsCollapsed(false);
     }
   }, [sessions]);
