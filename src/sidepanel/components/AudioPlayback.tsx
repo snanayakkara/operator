@@ -207,7 +207,8 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
       if (isFinite(audioDuration) && audioDuration > 0) {
         setDuration(audioDuration);
       } else {
-        console.warn('Invalid audio duration detected:', audioDuration);
+        // Duration may be Infinity or NaN while metadata is still loading - this is normal
+        // Only set to 0 as fallback, no need to warn
         setDuration(0);
       }
     }
