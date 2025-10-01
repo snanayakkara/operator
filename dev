@@ -156,12 +156,12 @@ ensure_dual_models_loaded() {
     fi
 
     # Find reasoning model (medgemma variants)
-    local reasoning_model=$(echo "$available_models" | grep -i "medgemma" | head -1)
-    local quick_model=$(echo "$available_models" | grep -i "gemma.*3n" | head -1)
+    local reasoning_model=$(echo "$available_models" | grep -i "medgemma" | head -1 | awk '{print $1}')
+    local quick_model=$(echo "$available_models" | grep -i "gemma.*3n" | head -1 | awk '{print $1}')
 
     if [ -z "$reasoning_model" ] && [ -z "$quick_model" ]; then
         # Fallback: try broader gemma search
-        quick_model=$(echo "$available_models" | grep -i "gemma" | grep -v "medgemma" | head -1)
+        quick_model=$(echo "$available_models" | grep -i "gemma" | grep -v "medgemma" | head -1 | awk '{print $1}')
     fi
 
     log "📋 Available models found:"
@@ -195,6 +195,7 @@ ensure_dual_models_loaded() {
     if [ $reasoning_loaded -eq 0 ] && [ ! -z "$reasoning_model" ]; then
         info "Loading reasoning model: $reasoning_model"
         info "This may take several minutes for large models (timeout: 10 minutes)..."
+        info "You can also load it manually in LM Studio - we'll detect it automatically"
 
         # Show progress with elapsed time
         local start_time=$(date +%s)
@@ -210,20 +211,38 @@ ensure_dual_models_loaded() {
         ) &
         progress_pid=$!
 
-        # Use longer timeout and better error handling for large models
-        local load_output
-        local load_success=0
+        # Background job to load model
+        (
+            run_with_timeout 600 lms load "$reasoning_model" 2>&1
+        ) > /dev/null 2>&1 &
+        load_pid=$!
 
-        # Try loading with the actual model name (no identifier flag)
-        if load_output=$(run_with_timeout 600 lms load "$reasoning_model" 2>&1); then
-            load_success=1
-        else
-            # Check if the model is actually loaded despite timeout
+        # Poll for model loading (either via CLI or manual)
+        local load_success=0
+        local poll_count=0
+        while [ $poll_count -lt 200 ]; do  # 200 * 3s = 10 minutes
+            sleep 3
+            ((poll_count++))
+
+            # Check if model is now loaded (either by CLI or manually)
             if lms ps 2>/dev/null | grep -q "medgemma" 2>/dev/null; then
                 load_success=1
+                break
             fi
-        fi
 
+            # Check if load process finished
+            if ! kill -0 $load_pid 2>/dev/null; then
+                # Process finished, do final check
+                if lms ps 2>/dev/null | grep -q "medgemma" 2>/dev/null; then
+                    load_success=1
+                fi
+                break
+            fi
+        done
+
+        # Clean up
+        kill $load_pid 2>/dev/null
+        wait $load_pid 2>/dev/null
         kill $progress_pid 2>/dev/null
         wait $progress_pid 2>/dev/null
         echo ""
@@ -233,10 +252,7 @@ ensure_dual_models_loaded() {
             log "✅ Reasoning model loaded successfully (took ${total_time}s)"
             reasoning_loaded=1
         else
-            warn "⏰ Failed to load reasoning model (timeout after 10 minutes)"
-            if [ ! -z "$load_output" ]; then
-                warn "CLI output: $load_output"
-            fi
+            warn "⏰ Model not detected after 10 minutes"
             warn "Trying alternative loading method..."
 
             # Try with shorter model name
@@ -258,8 +274,9 @@ ensure_dual_models_loaded() {
     if [ $quick_loaded -eq 0 ] && [ ! -z "$quick_model" ]; then
         info "Loading quick model: $quick_model"
         info "This should be faster than the reasoning model (timeout: 5 minutes)..."
+        info "You can also load it manually in LM Studio - we'll detect it automatically"
 
-        # Show progress with elapsed time
+        # Show progress with elapsed time and poll for manual loading
         local start_time=$(date +%s)
         (
             echo -n "   Loading"
@@ -273,20 +290,38 @@ ensure_dual_models_loaded() {
         ) &
         progress_pid=$!
 
-        # Use reasonable timeout and better error handling
-        local load_output
-        local load_success=0
+        # Background job to load model
+        (
+            run_with_timeout 300 lms load "$quick_model" 2>&1
+        ) > /dev/null 2>&1 &
+        load_pid=$!
 
-        # Try loading with the actual model name
-        if load_output=$(run_with_timeout 300 lms load "$quick_model" 2>&1); then
-            load_success=1
-        else
-            # Check if the model is actually loaded despite timeout
+        # Poll for model loading (either via CLI or manual)
+        local load_success=0
+        local poll_count=0
+        while [ $poll_count -lt 150 ]; do  # 150 * 2s = 5 minutes
+            sleep 2
+            ((poll_count++))
+
+            # Check if model is now loaded (either by CLI or manually)
             if lms ps 2>/dev/null | grep -q "gemma.*3n\|gemma-3n" 2>/dev/null; then
                 load_success=1
+                break
             fi
-        fi
 
+            # Check if load process finished
+            if ! kill -0 $load_pid 2>/dev/null; then
+                # Process finished, do final check
+                if lms ps 2>/dev/null | grep -q "gemma.*3n\|gemma-3n" 2>/dev/null; then
+                    load_success=1
+                fi
+                break
+            fi
+        done
+
+        # Clean up
+        kill $load_pid 2>/dev/null
+        wait $load_pid 2>/dev/null
         kill $progress_pid 2>/dev/null
         wait $progress_pid 2>/dev/null
         echo ""
@@ -296,12 +331,9 @@ ensure_dual_models_loaded() {
             log "✅ Quick model loaded successfully (took ${total_time}s)"
             quick_loaded=1
         else
-            warn "⏰ Failed to load quick model (timeout after 5 minutes)"
-            if [ ! -z "$load_output" ]; then
-                warn "CLI output: $load_output"
-            fi
+            warn "⏰ Model not detected after 5 minutes"
 
-            # Try with shorter model name
+            # Try with shorter model name as fallback
             local short_name=$(echo "$quick_model" | cut -d'/' -f2)
             if [ ! -z "$short_name" ] && [ "$short_name" != "$quick_model" ]; then
                 info "Attempting load with short name: $short_name"
@@ -357,12 +389,17 @@ ensure_whisper_server() {
         local whisper_log="/tmp/whisper-startup-$$.log"
 
         # Start the server and capture output
-        ./start-whisper-server.sh > "$whisper_log" 2>&1 &
+        # Show dependency installation but hide routine startup messages
+        info "Installing/verifying Python dependencies..."
+        (
+            # Run startup script, show pip output but hide other noise
+            ./start-whisper-server.sh 2>&1 | tee "$whisper_log" | grep -E "(Installing|Collecting|Successfully|Failed|ERROR|✅|❌|📦|🌐)" || true
+        ) &
         local whisper_pid=$!
 
-        # Wait for server to start
+        # Wait for server to start (longer timeout to allow for dependency installation)
         local retries=0
-        while [ $retries -lt 30 ]; do
+        while [ $retries -lt 60 ]; do
             if check_service_health "http://localhost:8001/v1/health"; then
                 log "MLX Whisper server started successfully"
                 rm -f "$whisper_log"
@@ -373,10 +410,15 @@ ensure_whisper_server() {
             if ! kill -0 $whisper_pid 2>/dev/null; then
                 error "Failed to start MLX Whisper server - process died"
                 if [ -f "$whisper_log" ]; then
-                    error "Startup log:"
-                    tail -20 "$whisper_log" | while IFS= read -r line; do
+                    error "Startup log (last 30 lines):"
+                    tail -30 "$whisper_log" | while IFS= read -r line; do
                         error "  $line"
                     done
+                    error ""
+                    error "Common fixes:"
+                    error "  1. Install dependencies manually: source venv-whisper/bin/activate && pip install -r requirements-whisper.txt"
+                    error "  2. Check Python version: python3 --version (requires 3.8+)"
+                    error "  3. Try recreating venv: rm -rf venv-whisper && ./start-whisper-server.sh"
                     rm -f "$whisper_log"
                 fi
                 return 1
@@ -386,10 +428,10 @@ ensure_whisper_server() {
             ((retries++))
         done
 
-        error "Failed to start MLX Whisper server - timeout after 30 seconds"
+        error "Failed to start MLX Whisper server - timeout after 60 seconds"
         if [ -f "$whisper_log" ]; then
-            warn "Check startup log for details:"
-            tail -20 "$whisper_log" | while IFS= read -r line; do
+            warn "Check startup log for details (last 30 lines):"
+            tail -30 "$whisper_log" | while IFS= read -r line; do
                 warn "  $line"
             done
             rm -f "$whisper_log"

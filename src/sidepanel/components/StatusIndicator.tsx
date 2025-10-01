@@ -56,6 +56,10 @@ interface StatusIndicatorProps {
   onRemoveSession?: (sessionId: string) => void;
   onClearAllSessions?: () => void;
   onSessionSelect?: (session: PatientSession) => void;
+  onResumeRecording?: (session: PatientSession) => void;
+  onMarkSessionComplete?: (session: PatientSession) => void;
+  selectedSessionId?: string | null;
+  currentSessionId?: string | null;
   // Metrics dashboard
   onShowMetrics?: () => void;
   // New recording functionality
@@ -168,8 +172,8 @@ const AGENT_DISPLAY_NAMES = {
   'ai-medical-review': 'AI Medical Review'
 } as const;
 
-export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ 
-  status, 
+export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
+  status,
   currentAgent,
   onCompleteRecording: _onCompleteRecording,
   onCancelProcessing,
@@ -185,6 +189,10 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   onRemoveSession,
   onClearAllSessions,
   onSessionSelect,
+  onResumeRecording,
+  onMarkSessionComplete,
+  selectedSessionId,
+  currentSessionId,
   onShowMetrics,
   onNewRecording,
   showNewRecording = false
@@ -525,6 +533,11 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   onRemoveSession={onRemoveSession || (() => {})}
                   onClearAllSessions={onClearAllSessions || (() => {})}
                   onSessionSelect={onSessionSelect}
+                  onResumeRecording={onResumeRecording}
+                  onStopRecording={_onCompleteRecording}
+                  onMarkSessionComplete={onMarkSessionComplete}
+                  selectedSessionId={selectedSessionId}
+                  activeRecordingSessionId={currentSessionId}
                   isOpen={showSessionDropdown}
                   onClose={() => setShowSessionDropdown(false)}
                   triggerRef={bellButtonRef}

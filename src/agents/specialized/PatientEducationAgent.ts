@@ -75,7 +75,15 @@ export class PatientEducationAgent extends MedicalAgent {
       const messages = this.buildMessages(input, context);
       
       // Get the model response
-      const userPrompt = messages.find(m => m.role === 'user')?.content || input;
+      const userMessage = messages.find(m => m.role === 'user');
+      const userPrompt = typeof userMessage?.content === 'string'
+        ? userMessage.content
+        : Array.isArray(userMessage?.content)
+          ? userMessage.content
+              .map(part => (part.type === 'text' ? part.text : ''))
+              .join('\n')
+              .trim() || input
+          : input;
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         userPrompt,

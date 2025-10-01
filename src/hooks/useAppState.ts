@@ -14,7 +14,9 @@ import type {
   PatientAppointment,
   BatchAIReviewReport,
   PatientSession,
-  PatientInfo
+  PatientInfo,
+  PipelineProgress,
+  PipelineStage
 } from '@/types/medical.types';
 import type { TranscriptionApprovalState } from '@/types/optimization';
 import type { PatientNameComparison } from '@/utils/PatientNameValidator';
@@ -110,6 +112,9 @@ interface CombinedAppState extends AppState {
   processingStepProgress?: Record<string, number>; // Per-step progress: { extraction: 100, analysis: 45, generation: 0 }
   processingGlobalProgress?: number; // Global progress 0-100
 
+  // Unified pipeline progress (new system)
+  pipelineProgress: PipelineProgress | null;
+
   // Transcription approval tracking
   transcriptionApproval: TranscriptionApprovalState;
 
@@ -182,6 +187,10 @@ type AppAction =
   | { type: 'RESULTS_STREAMING'; payload: boolean }
   | { type: 'RESULTS_CLEAR_STREAM' }
   | { type: 'SET_TRANSCRIPTION_APPROVAL'; payload: TranscriptionApprovalState }
+  // Unified pipeline progress actions
+  | { type: 'SET_PIPELINE_PROGRESS'; payload: PipelineProgress }
+  | { type: 'UPDATE_PIPELINE_PROGRESS'; payload: Partial<PipelineProgress> }
+  | { type: 'CLEAR_PIPELINE_PROGRESS' }
   // Atomic completion action to prevent race conditions
   | { type: 'COMPLETE_PROCESSING_ATOMIC'; payload: { sessionId: string; results: string; summary?: string } }
   // State validation and recovery actions
@@ -235,6 +244,9 @@ const initialState: CombinedAppState = {
   processingPhase: undefined,
   processingStepProgress: {},
   processingGlobalProgress: 0,
+
+  // Unified pipeline progress
+  pipelineProgress: null,
 
   // Transcription approval tracking
   transcriptionApproval: {
@@ -503,6 +515,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         hadStreamBuffer: !!state.streamBuffer,
         currentSessionId: state.currentSessionId
       });
+      console.trace('🔍 CLEAR_RECORDING called from:');
       return {
         ...state,
         transcription: '',
@@ -528,6 +541,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         processingPhase: undefined,
         processingStepProgress: {},
         processingGlobalProgress: 0,
+        // Clear unified pipeline progress
+        pipelineProgress: null,
         // Clear session IDs to reset "actively working" state
         currentSessionId: null,
         selectedSessionId: null,
@@ -639,6 +654,23 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     
     case 'SET_TRANSCRIPTION_APPROVAL':
       return { ...state, transcriptionApproval: action.payload };
+
+    // Unified pipeline progress reducer cases
+    case 'SET_PIPELINE_PROGRESS':
+      return { ...state, pipelineProgress: action.payload };
+
+    case 'UPDATE_PIPELINE_PROGRESS':
+      if (!state.pipelineProgress) return state;
+      return {
+        ...state,
+        pipelineProgress: {
+          ...state.pipelineProgress,
+          ...action.payload
+        }
+      };
+
+    case 'CLEAR_PIPELINE_PROGRESS':
+      return { ...state, pipelineProgress: null };
 
     case 'COMPLETE_PROCESSING_ATOMIC': {
       // Atomic completion to prevent UI state inconsistencies
@@ -1048,6 +1080,19 @@ export function useAppState() {
     // Transcription approval action
     setTranscriptionApproval: useCallback((approval: TranscriptionApprovalState) => {
       dispatch({ type: 'SET_TRANSCRIPTION_APPROVAL', payload: approval });
+    }, []),
+
+    // Unified pipeline progress actions
+    setPipelineProgress: useCallback((progress: PipelineProgress) => {
+      dispatch({ type: 'SET_PIPELINE_PROGRESS', payload: progress });
+    }, []),
+
+    updatePipelineProgress: useCallback((updates: Partial<PipelineProgress>) => {
+      dispatch({ type: 'UPDATE_PIPELINE_PROGRESS', payload: updates });
+    }, []),
+
+    clearPipelineProgress: useCallback(() => {
+      dispatch({ type: 'CLEAR_PIPELINE_PROGRESS' });
     }, []),
 
     // Atomic completion action to prevent race conditions

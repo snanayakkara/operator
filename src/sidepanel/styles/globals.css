@@ -1,6 +1,7 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+@import './fluent-tokens.css';
 @import './utilities.css';
 
 /* Z-Index Layering Hierarchy */
@@ -14,86 +15,87 @@
   }
 }
 
-/* Monochrome-First Components */
+/* Fluent Design Components */
 @layer components {
-  /* Base surfaces with soft depth */
+  /* Base surfaces - stroke separation only */
   .surface-primary {
     @apply bg-surface-primary border border-line-primary;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   }
-  
+
   /* Pill-shaped interactive elements */
   .pill-button {
-    @apply surface-primary rounded-full px-4 py-2 text-ink-primary;
-    @apply hover:shadow-sm focus:ring-2 focus:ring-accent-violet/20;
+    @apply surface-primary rounded-fluent-sm px-4 py-2 text-ink-primary;
+    @apply focus:ring-2 focus:ring-accent-violet/20;
     @apply transition-all duration-150 cursor-pointer select-none;
     border: 1px solid theme('colors.line.primary');
   }
-  
+
   .pill-button:hover {
-    transform: translateY(-0.5px);
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+    @apply bg-surface-tertiary;
+    border-color: theme('colors.line.secondary');
   }
-  
+
   .pill-button:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    @apply bg-surface-subtle;
   }
-  
+
   /* Pill inputs */
   .pill-input {
-    @apply surface-primary rounded-full px-4 py-2 text-ink-primary;
+    @apply surface-primary rounded-fluent-sm px-4 py-2 text-ink-primary;
     @apply border border-line-primary placeholder-ink-tertiary;
     @apply focus:ring-2 focus:ring-accent-violet/20 focus:border-accent-violet/30;
     @apply transition-all duration-150;
   }
-  
-  /* Cards with soft depth */
+
+  /* Cards with Fluent stroke separation */
   .card-primary {
-    @apply surface-primary rounded-2xl p-4;
+    @apply surface-primary rounded-fluent-sm p-4;
     border: 1px solid theme('colors.line.primary');
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
   }
-  
+
   .card-primary:hover {
-    box-shadow: 0 2px 6px 0 rgb(0 0 0 / 0.06);
+    border-color: theme('colors.line.secondary');
   }
-  
-  /* Monochrome Components - Replacing Glass System */
+
+  /* Fluent button patterns */
   .mono-button {
-    @apply bg-white border-2 border-gray-300 text-gray-900 
-           hover:border-gray-400 hover:shadow-sm 
+    @apply bg-surface-primary border border-line-primary text-ink-primary
+           hover:bg-surface-tertiary hover:border-line-secondary
            transition-all duration-200 ease-out
-           font-medium rounded-lg px-4 py-2 cursor-pointer select-none;
+           font-medium rounded-fluent-sm px-4 py-2 cursor-pointer select-none;
   }
 
   .mono-button-secondary {
-    @apply bg-transparent border border-gray-200 text-gray-700
-           hover:bg-gray-50 hover:border-gray-300
+    @apply bg-transparent border border-line-primary text-ink-secondary
+           hover:bg-surface-tertiary hover:border-line-secondary
            transition-all duration-200 ease-out
-           rounded-lg px-3 py-1.5 cursor-pointer select-none;
+           rounded-fluent-sm px-3 py-1.5 cursor-pointer select-none;
   }
 
   .mono-button-icon {
-    @apply bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50
+    @apply bg-transparent text-ink-secondary hover:text-ink-primary hover:bg-surface-tertiary
            transition-all duration-200 ease-out
-           rounded-md p-2 cursor-pointer select-none;
+           rounded-fluent-sm p-2 cursor-pointer select-none;
   }
 
   .mono-input {
-    @apply bg-white border border-gray-300 text-gray-900
-           placeholder-gray-500 rounded-lg px-3 py-2
-           focus:border-gray-400 focus:ring-1 focus:ring-gray-400
+    @apply bg-surface-primary border border-line-primary text-ink-primary
+           placeholder-ink-disabled rounded-fluent-sm px-3 py-2
+           focus:border-2 focus:border-accent-violet
            transition-all duration-200 ease-out;
   }
 
   .mono-card {
-    @apply bg-white border border-gray-200 rounded-xl shadow-sm
-           hover:shadow-md transition-all duration-300 ease-out
+    @apply bg-surface-primary border border-line-primary rounded-fluent-sm
+           transition-all duration-300 ease-out
            p-4;
   }
 
-  /* Legacy class mapping to new monochrome system */
+  .mono-card:hover {
+    border-color: theme('colors.line.secondary');
+  }
+
+  /* Legacy class mapping - point to Fluent components */
   .glass-button {
     @apply mono-button-icon;
   }
@@ -103,7 +105,7 @@
   }
 
   .glass-card {
-    @apply mono-card;
+    @apply fluent-card;
   }
 
   /* Dropdown and Portal Components */
@@ -125,113 +127,100 @@
     max-height: calc(100vh - 32px) !important;
   }
   
-  /* Workflow Type Cards - Monochrome with accent tokens */
+  /* Fluent Workflow Cards - Stroke-based separation */
   .workflow-card {
-    @apply surface-primary text-ink-primary rounded-2xl;
+    @apply surface-primary text-ink-primary rounded-fluent-sm;
     border: 1px solid theme('colors.line.primary');
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   }
-  
+
   .workflow-card:hover {
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
-    transform: translateY(-0.5px);
+    border-color: theme('colors.line.secondary');
   }
-  
+
   .workflow-card.active {
-    border: 1px solid theme('colors.accent.violet');
-    box-shadow: 0 0 0 1px theme('colors.accent.violet / 0.1');
+    border: 2px solid theme('colors.accent.violet');
   }
-  
+
   /* Legacy cards for gradual migration */
   .procedure-card {
     @apply workflow-card;
   }
-  
+
   .documentation-card {
     @apply workflow-card;
   }
-  
+
   .investigation-card {
     @apply workflow-card;
   }
-  
-  /* Primary Action Buttons - Monochrome with minimal accent */
+
+  /* Fluent Primary Action Buttons - Stroke-based */
   .btn-primary {
-    @apply bg-ink-primary text-surface-primary rounded-full px-4 py-2;
+    @apply bg-ink-primary text-surface-primary rounded-fluent-sm px-4 py-2;
     @apply hover:bg-ink-secondary focus:ring-2 focus:ring-ink-primary/20;
     @apply transition-all duration-150;
     border: 1px solid theme('colors.ink.primary');
   }
-  
-  .btn-primary:hover {
-    transform: translateY(-0.5px);
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.1);
-  }
-  
-  /* Secondary buttons */
+
+  /* Secondary buttons - Fluent pattern */
   .btn-secondary {
-    @apply surface-primary text-ink-primary rounded-full px-4 py-2;
+    @apply surface-primary text-ink-primary rounded-fluent-sm px-4 py-2;
     @apply hover:bg-surface-tertiary focus:ring-2 focus:ring-accent-violet/20;
     @apply transition-all duration-150;
     border: 1px solid theme('colors.line.primary');
   }
-  
+
   .btn-secondary:hover {
-    transform: translateY(-0.5px);
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+    border-color: theme('colors.line.secondary');
   }
-  
+
   /* Legacy buttons for gradual migration */
   .btn-procedure {
     @apply btn-primary;
   }
-  
+
   .btn-documentation {
     @apply btn-primary;
   }
-  
+
   .btn-investigation {
     @apply btn-primary;
   }
-  
-  /* Outline Buttons - Monochrome with subtle accent on interaction */
+
+  /* Fluent Outline Buttons - Accent on interaction */
   .btn-outline {
-    @apply surface-primary text-ink-secondary rounded-full px-4 py-2;
+    @apply surface-primary text-ink-secondary rounded-fluent-sm px-4 py-2;
     @apply hover:text-ink-primary hover:bg-surface-tertiary;
     @apply focus:ring-2 focus:ring-accent-violet/20;
     @apply transition-all duration-150;
     border: 1px solid theme('colors.line.primary');
   }
-  
+
   .btn-outline:hover {
-    transform: translateY(-0.5px);
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.06);
+    border-color: theme('colors.line.secondary');
   }
-  
+
   .btn-outline.accent-emerald:hover {
     border-color: theme('colors.accent.emerald');
-    box-shadow: 0 0 0 1px theme('colors.accent.emerald / 0.1');
   }
-  
+
   .btn-outline.accent-violet:hover {
     border-color: theme('colors.accent.violet');
-    box-shadow: 0 0 0 1px theme('colors.accent.violet / 0.1');
   }
-  
+
   .btn-outline.accent-amber:hover {
     border-color: theme('colors.accent.amber');
-    box-shadow: 0 0 0 1px theme('colors.accent.amber / 0.1');
   }
-  
+
   /* Legacy outline buttons */
   .btn-procedure-outline {
     @apply btn-outline accent-amber;
   }
-  
+
   .btn-documentation-outline {
     @apply btn-outline accent-violet;
   }
-  
+
   .btn-investigation-outline {
     @apply btn-outline accent-emerald;
   }
@@ -300,51 +289,73 @@
     transform: translate3d(0, 0, 0);
   }
 
-  /* Button interaction micro-animations with GPU acceleration */
+  /* Fluent Button Interactions - Minimal, stroke-based */
   .btn-micro-press:active {
-    transform: translate3d(0, 0, 0) scale(0.98);
+    transform: scale(0.98);
     transition: transform 0.1s ease-out;
-    will-change: transform;
   }
 
   .btn-micro-hover {
-    transition: all 0.2s ease-out;
-    will-change: transform, box-shadow;
-    transform: translate3d(0, 0, 0);
+    transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
   }
 
   .btn-micro-hover:hover {
-    transform: translate3d(0, -0.5px, 0);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background-color: var(--fluent-surface-tertiary);
   }
 
-  /* Recording glow effect with GPU acceleration */
+  /* Fluent Recording State - Accent stroke instead of glow */
   .recording-glow {
-    @apply shadow-lg;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-    animation: recording-pulse 2s infinite;
-    will-change: transform, box-shadow;
-    transform: translate3d(0, 0, 0);
+    border: 2px solid theme('colors.accent.red');
+    animation: recording-pulse-fluent 2s infinite;
   }
 
-  /* Record Panel Animations */
+  /* Fluent Record Panel Animations - Minimal motion */
   .record-button-idle {
-    animation: record-breathing 3s ease-in-out infinite;
-    will-change: transform;
-    transform: translate3d(0, 0, 0);
+    animation: record-breathing-fluent 3s ease-in-out infinite;
   }
 
   .record-button-recording {
-    animation: record-recording-pulse 2s ease-in-out infinite;
-    will-change: transform, box-shadow;
-    transform: translate3d(0, 0, 0);
+    animation: record-recording-pulse-fluent 2s ease-in-out infinite;
   }
 
   .record-card {
-    animation: record-card-appear 200ms ease-out;
-    will-change: transform, opacity;
-    transform: translate3d(0, 0, 0);
+    animation: record-card-appear-fluent 200ms ease-out;
     transform-origin: top center;
+  }
+}
+
+@layer utilities {
+  .icon-compact {
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+}
+
+@keyframes complete-pop {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.6;
+  }
+  60% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-complete-pop {
+  animation: complete-pop 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-complete-pop {
+    animation: none;
   }
 }
 
@@ -588,13 +599,56 @@ body {
 }
 
 @keyframes record-card-appear {
-  0% { 
+  0% {
     opacity: 0;
     transform: translate3d(0, 0, 0) scale(0.9) translateY(-10px);
   }
-  100% { 
+  100% {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1) translateY(0);
+  }
+}
+
+/* Fluent Design Keyframes - Minimal, stroke-based */
+@keyframes recording-pulse-fluent {
+  0%, 100% {
+    border-color: theme('colors.accent.red');
+    opacity: 1;
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 0.6);
+    opacity: 0.8;
+  }
+}
+
+@keyframes record-breathing-fluent {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes record-recording-pulse-fluent {
+  0%, 100% {
+    transform: scale(1);
+    border-width: 2px;
+  }
+  50% {
+    transform: scale(1.03);
+    border-width: 3px;
+  }
+}
+
+@keyframes record-card-appear-fluent {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }
 
@@ -610,19 +664,18 @@ body {
   animation: typewriter 2s steps(40, end);
 }
 
-/* Status Indicators */
+/* Fluent Status Indicators - No glows, just solid colors */
 .status-online {
-  @apply bg-emerald-500 shadow-emerald-500/50;
-  box-shadow: 0 0 10px currentColor;
+  @apply bg-accent-emerald;
 }
 
 .status-offline {
-  @apply bg-red-500 shadow-red-500/50;
+  @apply bg-accent-red;
   animation: pulse 2s infinite;
 }
 
 .status-processing {
-  @apply bg-amber-500 shadow-amber-500/50;
+  @apply bg-accent-amber;
   animation: pulse 1s infinite;
 }
 
@@ -683,13 +736,12 @@ body {
   /* Already optimized for dark theme */
 }
 
-/* Focus Styles - Two-layer ring system */
+/* Fluent Focus Styles - Clean ring system */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  @apply outline-none ring-2 ring-accent-violet/20 ring-offset-2;
+  @apply outline-none ring-2 ring-accent-violet ring-offset-2;
   ring-offset-color: theme('colors.surface.secondary');
-  box-shadow: 0 0 0 2px theme('colors.surface.secondary'), 0 0 0 4px theme('colors.accent.violet / 0.2');
 }
 
 /* Selection Styles */
@@ -703,32 +755,42 @@ textarea:focus-visible {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-/* Monochrome Solid Backgrounds - Replacing Backdrop Blur */
+/* Fluent Overlays - Solid surfaces, no blur */
+.fluent-overlay-light {
+  @apply bg-surface-primary border border-line-primary;
+}
+
+.fluent-overlay-medium {
+  @apply bg-surface-secondary border border-line-primary;
+}
+
+.fluent-overlay-strong {
+  @apply fluent-overlay;
+}
+
+/* Legacy mapping - removed backdrop blur */
 .mono-overlay-light {
-  @apply bg-white border border-gray-200;
-  background-color: rgba(255, 255, 255, 0.95);
+  @apply fluent-overlay-light;
 }
 
 .mono-overlay-medium {
-  @apply bg-gray-50 border border-gray-200;
-  background-color: rgba(249, 250, 251, 0.98);
+  @apply fluent-overlay-medium;
 }
 
 .mono-overlay-strong {
-  @apply bg-white border border-gray-300 shadow-lg;
+  @apply fluent-overlay-strong;
 }
 
-/* Legacy mapping */
 .backdrop-blur-sm {
-  @apply mono-overlay-light;
+  @apply fluent-overlay-light;
 }
 
 .backdrop-blur-md {
-  @apply mono-overlay-medium;
+  @apply fluent-overlay-medium;
 }
 
 .backdrop-blur-lg {
-  @apply mono-overlay-strong;
+  @apply fluent-overlay-strong;
 }
 
 /* Dropdown Z-Index Fix - Enhanced */
@@ -741,9 +803,8 @@ textarea:focus-visible {
 .dropdown-menu {
   position: fixed;
   z-index: 999999;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--fluent-elevation-flyout);
   transform: translateZ(0);
-  will-change: transform;
 }
 
 .dropdown-backdrop {

@@ -24,8 +24,8 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
   onRemove 
 }) => {
   const getToastStyles = () => {
-    // Standardized monochrome design with semantic color accents
-    const baseStyles = "bg-white border rounded-lg p-3 shadow-lg backdrop-blur-sm";
+    // Fluent design with semantic color accents
+    const baseStyles = "bg-white border rounded-fluent-sm p-3 shadow-fluent-flyout";
     
     switch (toast.type) {
       case 'success':

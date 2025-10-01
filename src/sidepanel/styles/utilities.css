@@ -290,39 +290,33 @@
   @apply micro-lift;
 }
 
-/* Layout Utilities */
+/* Fluent Layout Utilities */
 .medical-layout-sidebar {
   @apply flex-shrink-0 w-80 overflow-y-auto;
-  background-color: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(8px);
-  border-right: 1px solid rgba(16, 185, 129, 0.1);
+  @apply bg-surface-primary border-r border-line-primary;
 }
 
 .medical-layout-main {
   @apply flex-1 min-h-0 overflow-hidden;
 }
 
-/* Medical Content Cards - Monochrome with accent halos */
+/* Fluent Content Cards - Stroke-based separation */
 .content-card {
-  @apply rounded-2xl;
+  @apply rounded-fluent-sm;
   background-color: var(--surface-primary);
   border: 1px solid var(--line-primary);
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
 }
 
 .content-card.selected {
-  border-color: var(--accent-violet);
-  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  border: 2px solid var(--accent-violet);
 }
 
 .content-card.accent-emerald.selected {
-  border-color: var(--accent-emerald);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  border: 2px solid var(--accent-emerald);
 }
 
 .content-card.accent-amber.selected {
-  border-color: var(--accent-amber);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+  border: 2px solid var(--accent-amber);
 }
 
 /* Legacy letter cards */

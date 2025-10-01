@@ -455,8 +455,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   );
 
   return (
-    <motion.div 
-      className="letter-card rounded-2xl overflow-hidden shadow-lg border"
+    <motion.div
+      className="letter-card rounded-lg overflow-hidden border-2 border-emerald-200"
       initial="hidden"
       animate="visible"
       variants={withReducedMotion(cardVariants)}

@@ -20,7 +20,7 @@ import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
 import { FieldIngestionOverlay } from './components/FieldIngestionOverlay';
 import { ProcessingPhaseIndicator } from './components/ProcessingPhaseIndicator';
-import { SessionsPanel as _SessionsPanel } from './components/SessionsPanel';
+import { UnifiedPipelineProgress } from './components/UnifiedPipelineProgress';
 import { RecordingPromptCard } from './components/RecordingPromptCard';
 import { hasRecordingPrompt } from '@/config/recordingPrompts';
 import { MetricsDashboard } from './components/MetricsDashboard';
@@ -109,6 +109,34 @@ const OptimizedAppContent: React.FC = memo(() => {
     onRecordingTimeUpdate: useCallback((time: number) => {
       currentRecordingTimeRef.current = time;
     }, []),
+    onError: useCallback((error: Error) => {
+      console.error('🎤 Recording error:', error);
+
+      // Clean up the failed session
+      const currentSessionId = currentSessionIdRef.current || state.currentSessionId;
+      if (currentSessionId) {
+        console.log('🧹 Cleaning up failed recording session:', currentSessionId);
+        actions.removePatientSession(currentSessionId);
+        actions.setCurrentSessionId(null);
+        currentSessionIdRef.current = null;
+      }
+
+      // Reset workflow state
+      actions.setActiveWorkflow(null);
+      activeWorkflowRef.current = null;
+      actions.setUIMode('idle', { sessionId: null, origin: 'auto' });
+
+      // Show user-friendly error message
+      const errorMessage = error.name === 'NotAllowedError'
+        ? 'Microphone permission denied. Please allow microphone access to record.'
+        : `Recording failed: ${error.message}`;
+
+      actions.setErrors([errorMessage]);
+
+      // Clear any processing state
+      actions.setProcessing(false);
+      actions.setProcessingStatus('idle');
+    }, [actions, state.currentSessionId]),
     getMicrophoneId: () => audioDeviceContext.selectedMicrophoneId
   });
 
@@ -313,12 +341,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         // Use atomic completion to prevent UI state race conditions
-        console.log('🏁 TAVI Completion: Using atomic completion for streaming results');
-        console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
+        console.log('🏁 Workflow Completion: Using atomic completion for streaming results');
+        console.log('🏁 State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
 
         try {
           actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
-          console.log('🏁 TAVI Completion: Atomic completion done for streaming workflow');
+          console.log('🏁 Workflow Completion: Atomic completion done for streaming workflow');
 
           // Defensive check: ensure UI is actually ready after completion
           setTimeout(() => {
@@ -441,17 +469,35 @@ const OptimizedAppContent: React.FC = memo(() => {
   const processSessionInBackground = useCallback(async (sessionId: string, audioBlob: Blob, workflowId: AgentType) => {
     console.log('🔄 Starting background processing for session:', sessionId);
     console.log('🎯 Current selectedSessionId at start:', state.selectedSessionId);
-    
+
     // Create dedicated AbortControllers for this session
     const sessionProcessingAbort = new AbortController();
-    actions.setUIMode('processing', { sessionId, origin: 'auto' });
+    // NOTE: No longer setting UI mode to 'processing' here - unified pipeline progress handles display
 
     try {
       // Update session with transcription start time (status already set to transcribing in handleRecordingComplete)
       actions.updatePatientSession(sessionId, {
         transcriptionStartTime: Date.now()
       });
-      
+
+      // Update pipeline progress - Transcription queued
+      actions.setPipelineProgress({
+        stage: 'transcribing',
+        progress: 15,
+        stageProgress: 10,
+        details: 'Queued for transcription',
+        modelName: 'MLX Whisper v3-turbo'
+      });
+      actions.updatePatientSession(sessionId, {
+        pipelineProgress: {
+          stage: 'transcribing',
+          progress: 15,
+          stageProgress: 10,
+          details: 'Queued for transcription',
+          modelName: 'MLX Whisper v3-turbo'
+        }
+      });
+
       // Use Audio Processing Queue for transcription with performance monitoring
       console.log('🔄 Queuing transcription for session:', sessionId);
       const transcriptionStartTime = Date.now();
@@ -466,18 +512,35 @@ const OptimizedAppContent: React.FC = memo(() => {
         audioQueue.addJob(sessionId, audioBlob, workflowId, {
           onProgress: (status, error) => {
             console.log(`📊 Session ${sessionId} transcription status:`, status, error || '');
-            
+
             // Update session status based on queue progress
             if (status === 'processing') {
+              // Update pipeline progress - Transcription in progress
+              actions.setPipelineProgress({
+                stage: 'transcribing',
+                progress: 30,
+                stageProgress: 60,
+                details: 'Transcribing with Whisper',
+                modelName: 'MLX Whisper v3-turbo'
+              });
               actions.updatePatientSession(sessionId, {
-                status: 'transcribing'
+                status: 'transcribing',
+                pipelineProgress: {
+                  stage: 'transcribing',
+                  progress: 30,
+                  stageProgress: 60,
+                  details: 'Transcribing with Whisper',
+                  modelName: 'MLX Whisper v3-turbo'
+                }
               });
             } else if (status === 'failed' || status === 'cancelled') {
+              actions.clearPipelineProgress();
               actions.updatePatientSession(sessionId, {
                 status: 'error',
                 errors: [error || 'Transcription failed'],
                 completedTime: Date.now(),
-                processingProgress: undefined // Clear progress immediately on error
+                processingProgress: undefined, // Clear progress immediately on error
+                pipelineProgress: undefined
               });
             }
           },
@@ -593,13 +656,29 @@ const OptimizedAppContent: React.FC = memo(() => {
       
       // Transcription is valid - proceed with processing
       console.log('✅ Transcription validation passed, proceeding with agent processing');
-      
+
+      // Update pipeline progress - Transcription complete, entering AI analysis
+      actions.setPipelineProgress({
+        stage: 'ai-analysis',
+        progress: 45,
+        stageProgress: 10,
+        details: 'Loading AI agent',
+        modelName: 'MedGemma-27B'
+      });
+
       // Update session with corrected transcription and move to processing
       const startTime = Date.now();
       actions.updatePatientSession(sessionId, {
         transcription: correctedTranscription,
         status: 'processing',
-        processingStartTime: startTime
+        processingStartTime: startTime,
+        pipelineProgress: {
+          stage: 'ai-analysis',
+          progress: 45,
+          stageProgress: 10,
+          details: 'Loading AI agent',
+          modelName: 'MedGemma-27B'
+        }
       });
 
       // Update main UI to show processing phase
@@ -637,27 +716,55 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
       });
 
+      // Also initialize UI processing progress for ProcessingPhaseIndicator
+      actions.setProcessingProgress(0);
+
       // Special handling for TAVI workup with progress tracking
       const processOptions: any = {
         skipNotification: true,
         sessionId
       };
 
-      if (workflowId === 'tavi-workup') {
-        processOptions.onProgress = (phase: string, progress: number, details?: string) => {
-          console.log(`🫀 TAVI Progress: ${phase} (${progress}%) - ${details || ''}`);
+      // Add progress callback for all agent types
+      processOptions.onProgress = (phase: string, progress: number, details?: string) => {
+        const agentPrefix = workflowId === 'tavi-workup' ? '🫀 TAVI' : '🤖';
+        console.log(`${agentPrefix} Progress: ${phase} (${progress}%) - ${details || ''}`);
 
-          // Update session with progress information (defensive: ensure progress never negative)
-          actions.updatePatientSession(sessionId, {
-            status: 'processing',
-            processingProgress: {
-              phase: phase || 'Processing',
-              progress: Math.max(0, Math.min(100, progress)), // Clamp to 0-100
-              details
-            }
-          });
-        };
-      }
+        // Clamp progress to valid range
+        const clampedProgress = Math.max(0, Math.min(100, progress));
+
+        // Map agent progress (0-100%) to pipeline AI analysis range (40-90%)
+        const pipelineProgress = 40 + (clampedProgress * 0.5); // 0% → 40%, 100% → 90%
+
+        // Update unified pipeline progress
+        actions.setPipelineProgress({
+          stage: 'ai-analysis',
+          progress: pipelineProgress,
+          stageProgress: clampedProgress,
+          details: details || phase || 'Processing with AI',
+          modelName: 'MedGemma-27B'
+        });
+
+        // Update session with progress information (both old and new systems)
+        actions.updatePatientSession(sessionId, {
+          status: 'processing',
+          processingProgress: {
+            phase: phase || 'Processing',
+            progress: clampedProgress,
+            details
+          },
+          pipelineProgress: {
+            stage: 'ai-analysis',
+            progress: pipelineProgress,
+            stageProgress: clampedProgress,
+            details: details || phase || 'Processing with AI',
+            modelName: 'MedGemma-27B'
+          }
+        });
+
+        // Also update UI processing progress for ProcessingPhaseIndicator
+        actions.setProcessingProgress(clampedProgress);
+      };
 
       const result = await AgentFactory.processWithAgent(
         workflowId,
@@ -673,7 +780,16 @@ const OptimizedAppContent: React.FC = memo(() => {
       });
       
       console.log('✅ Agent processing complete for session:', sessionId);
-      
+
+      // Update pipeline progress - Generation/completion phase
+      actions.setPipelineProgress({
+        stage: 'generation',
+        progress: 95,
+        stageProgress: 50,
+        details: 'Formatting output',
+        modelName: 'MedGemma-27B'
+      });
+
       // Complete the session with results
       const sessionUpdate: any = {
         results: result.content,
@@ -690,6 +806,12 @@ const OptimizedAppContent: React.FC = memo(() => {
           phase: 'Complete',
           progress: 100,
           details: 'Processing finished'
+        },
+        pipelineProgress: {
+          stage: 'generation',
+          progress: 100,
+          stageProgress: 100,
+          details: 'Complete'
         }
       };
 
@@ -700,6 +822,9 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       actions.updatePatientSession(sessionId, sessionUpdate);
 
+      // Set UI progress to 100% for completion
+      actions.setProcessingProgress(100);
+
       // Clear progress indicator after fade-out animation (300ms)
       // Clear any existing timeout to prevent race conditions
       if (progressCleanupTimeoutRef.current) {
@@ -707,8 +832,12 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
       progressCleanupTimeoutRef.current = setTimeout(() => {
         actions.updatePatientSession(sessionId, {
-          processingProgress: undefined
+          processingProgress: undefined,
+          pipelineProgress: undefined
         });
+        // Reset UI progress as well
+        actions.setProcessingProgress(0);
+        actions.clearPipelineProgress();
         progressCleanupTimeoutRef.current = null;
       }, 300);
 
@@ -757,6 +886,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
       }
       
+      // Always preserve agent type for field-specific EMR insertion (Quick Actions)
+      // This ensures "Insert to EMR" button can map to the correct field dialog
+      console.log('🔧 PRESERVING AGENT TYPE:', workflowId, 'for session:', sessionId);
+      actions.setCurrentAgent(workflowId);
+      console.log('✅ Agent type preserved:', workflowId);
+
       // Extract and set AI-generated summary only if this session is currently selected
       if (isCurrentlySelectedAtCompletion) {
         if (result.summary && result.summary.trim()) {
@@ -766,8 +901,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           // Clear any previous AI-generated summary
           actions.setAiGeneratedSummary(undefined);
         }
-        
-        actions.setCurrentAgent(workflowId);
+
         console.log('🎯 Updated agent and summary for currently selected session:', sessionId);
       }
       
@@ -793,12 +927,12 @@ const OptimizedAppContent: React.FC = memo(() => {
           totalProcessingTime: recordingDuration + transcriptionDuration + processingDuration,
           processingStartTime: transcriptionStartTime // for consistency
         });
-        
-        console.log('🏁 TAVI Completion: Using atomic completion for background session');
-        console.log('🏁 TAVI State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
+
+        console.log('🏁 Background Workflow Completion: Using atomic completion for background session');
+        console.log('🏁 State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
 
         // Handle both successful and error reports - error reports may not have summary property
-        const summaryText = result.summary || result.content || 'TAVI workup completed';
+        const summaryText = result.summary || result.content || 'Workflow completed';
 
         try {
           actions.completeProcessingAtomic(sessionId, result.content, summaryText);
@@ -816,17 +950,17 @@ const OptimizedAppContent: React.FC = memo(() => {
           actions.forceUIReadyState(); // Fallback to ensure UI is ready
         }
 
-        // Set missing info separately for TAVI workups
+        // Set missing info if provided by the agent
         if (result.missingInfo) {
           actions.setMissingInfo(result.missingInfo);
         }
 
-        // Set TAVI structured sections if available
+        // Set TAVI structured sections if available (TAVI-specific)
         if (result.taviStructuredSections) {
           actions.setTaviStructuredSections(result.taviStructuredSections);
         }
 
-        console.log('🏁 TAVI Completion: Atomic completion done for background workflow');
+        console.log('🏁 Background Workflow Completion: Atomic completion done for background workflow');
         console.log('🎯 Updated global UI state for currently selected session:', sessionId);
       } else {
         console.log('🔕 Background session completed, skipping global UI state updates for:', sessionId);
@@ -954,10 +1088,24 @@ const OptimizedAppContent: React.FC = memo(() => {
     
     console.log('🎤 Recording completed, starting background processing for session:', currentSessionId);
 
+    // Initialize unified pipeline progress - Audio Processing phase
+    actions.setPipelineProgress({
+      stage: 'audio-processing',
+      progress: 5,
+      stageProgress: 50,
+      details: 'Validating recording format'
+    });
+
     // Update session status to transcribing immediately when recording stops
     actions.updatePatientSession(currentSessionId, {
       status: 'transcribing',
-      audioBlob: audioBlob
+      audioBlob: audioBlob,
+      pipelineProgress: {
+        stage: 'audio-processing',
+        progress: 5,
+        stageProgress: 50,
+        details: 'Validating recording format'
+      }
     });
 
     // Clear recording-specific state and make interface ready for next recording
@@ -1020,6 +1168,12 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Use new isolated session display action
       actions.setDisplaySession(session);
       actions.setUIMode('reviewing', { sessionId: session.id, origin: 'user' });
+
+      // Show progress overlay if session is currently processing
+      if (session.status === 'processing' || session.status === 'transcribing') {
+        actions.openOverlay('field-ingestion');
+        console.log('📊 Opened field-ingestion overlay for processing session:', session.id);
+      }
 
       console.log('✅ 📋 SESSION SELECT COMPLETE - Session loaded in isolated display (will show even during active work):', {
         patientName: session.patient.name,
@@ -1272,8 +1426,8 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, []);
 
   // Handle workflow selection with optimized state updates
-  const handleWorkflowSelect = useCallback(async (workflowId: AgentType) => {
-    console.log('🎯 Workflow selected:', workflowId);
+  const handleWorkflowSelect = useCallback(async (workflowId: AgentType, quickActionField?: string) => {
+    console.log('🎯 Workflow selected:', workflowId, quickActionField ? `(Quick Action field: ${quickActionField})` : '');
     
     // Auto-reset from error state when user attempts new recording
     if (state.processingStatus === 'error') {
@@ -1399,7 +1553,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         timestamp: Date.now(),
         status: 'recording',
         completed: false,
-        recordingStartTime: Date.now()
+        recordingStartTime: Date.now(),
+        ...(quickActionField && { quickActionField }) // Store Quick Action field ID if provided
       };
       
       // Add the session and set as current
@@ -1898,8 +2053,14 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Determine target field from agent type if not explicitly provided
       // For display sessions, use the display session agent
       const displayData = getCurrentDisplayData();
+
+      // PRIORITY: Check if there's a Quick Action field directly stored in the session
+      const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId) ||
+                            state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
+      const quickActionField = currentSession?.quickActionField;
+
       const currentAgentType = targetField ? null : (agentContext || displayData.agent || state.currentAgent || state.ui.activeWorkflow);
-      const field = targetField || getTargetField(currentAgentType);
+      const field = targetField || quickActionField || getTargetField(currentAgentType);
 
       console.log('🔍 EMR insertion debug:');
       console.log('  - agentContext:', agentContext);
@@ -1908,46 +2069,85 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('  - displayData.agent:', displayData.agent);
       console.log('  - currentAgentType:', currentAgentType);
       console.log('  - targetField:', targetField);
-      console.log('  - field:', field);
+      console.log('  - quickActionField (from session):', quickActionField);
+      console.log('  - field (final):', field);
       console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
       console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
 
-      if (field && supportsFieldSpecificInsertion(currentAgentType)) {
-        // Field-specific insertion: first open field, then insert text
-        console.log(`📝 Opening specific EMR field: ${field} (${getFieldDisplayName(field)})`);
+      if (field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
+        // Field-specific insertion: open field dialog and append content at the end
+        console.log(`📝 Opening ${getFieldDisplayName(field)} field and appending content`);
 
-        // Step 1: Open the specific field (same as Type action)
+        // Use insertMode: 'append' pattern - this will:
+        // 1. Open the field dialog
+        // 2. Navigate to the end of the existing content
+        // 3. Insert a newline and the new content
         await chrome.runtime.sendMessage({
           type: 'EXECUTE_ACTION',
           action: field, // Use the field name as the action (e.g., 'investigation-summary')
-          data: {} // Empty data, same as Type Quick Action
+          data: {
+            insertMode: 'append',
+            content: text
+          }
         });
 
-        // Step 2: Wait for field to be ready, then insert text
-        console.log(`📝 Inserting text to ${getFieldDisplayName(field)} field`);
-        const waitTime = field === 'investigation-summary' ? 1000 : 500; // Extra time for Investigation Summary dialog
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
+      } else if (text && text.trim().length > 0) {
+        // Smart fallback: If we have text to insert but no agent type, try Quick Action fields
+        // This handles cases where agent type tracking failed but we know we have processed content
+        console.log('🔍 No agent type but have text to insert - trying Quick Action field detection');
 
-        // For investigation-summary, prepend a newline to create separation from existing content
-        const textToInsert = field === 'investigation-summary' ? `\n${text}` : text;
+        // Try each Quick Action field in sequence until one succeeds
+        const quickActionFields = [
+          { action: 'medications', displayName: 'Medications (Problem List for Phil)' },
+          { action: 'investigation-summary', displayName: 'Investigation Summary' },
+          { action: 'background', displayName: 'Background' }
+        ];
 
-        await chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: 'insertText',
-          data: { text: textToInsert, fieldType: field }
-        });
+        let inserted = false;
+        for (const fieldConfig of quickActionFields) {
+          try {
+            console.log(`🔍 Attempting ${fieldConfig.displayName}...`);
+            const response = await chrome.runtime.sendMessage({
+              type: 'EXECUTE_ACTION',
+              action: fieldConfig.action,
+              data: {
+                insertMode: 'append',
+                content: text
+              }
+            });
 
-        console.log(`✅ Text inserted to ${getFieldDisplayName(field)} field after opening`);
+            // Check if the insertion was successful
+            if (response && response.success !== false) {
+              console.log(`✅ Successfully inserted to ${fieldConfig.displayName}`);
+              inserted = true;
+              break;
+            }
+          } catch (error) {
+            console.log(`⚠️ ${fieldConfig.displayName} attempt failed, trying next...`);
+            continue;
+          }
+        }
+
+        if (!inserted) {
+          // All Quick Action attempts failed, fall back to generic insertion
+          console.log('📝 All Quick Action fields failed - using generic insertion');
+          await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'insertText',
+            data: { text }
+          });
+        }
       } else {
-        // Fallback to current generic insertion
+        // No results or no agent type - use generic insertion
         console.log('📝 Using generic EMR text insertion (no specific field mapping)');
-        
+
         await chrome.runtime.sendMessage({
           type: 'EXECUTE_ACTION',
           action: 'insertText',
           data: { text }
         });
-        
+
         console.log('📝 Text inserted to EMR (generic)');
       }
     } catch (error) {
@@ -2093,6 +2293,19 @@ const OptimizedAppContent: React.FC = memo(() => {
     return () => clearInterval(validationInterval);
   }, [state.processingStatus, state.isProcessing, state.streaming, state.currentSessionId, state.results, recorder.isRecording, actions]);
 
+  // Auto-close field-ingestion overlay when displayed session completes processing
+  useEffect(() => {
+    if (overlayState.fieldIngestion && state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
+      const displayedSession = state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
+
+      // Close overlay if session is no longer processing
+      if (displayedSession && displayedSession.status !== 'processing' && displayedSession.status !== 'transcribing') {
+        console.log('📊 Session finished processing, closing field-ingestion overlay');
+        actions.closeOverlay('field-ingestion');
+      }
+    }
+  }, [overlayState.fieldIngestion, state.displaySession.isDisplayingSession, state.displaySession.displaySessionId, state.patientSessions, actions]);
+
   // Cleanup progress indicator timeout on unmount
   useEffect(() => {
     return () => {
@@ -2189,6 +2402,10 @@ const OptimizedAppContent: React.FC = memo(() => {
           onRemoveSession={actions.removePatientSession}
           onClearAllSessions={actions.clearPatientSessions}
           onSessionSelect={handleSessionSelect}
+          onResumeRecording={handleResumeRecording}
+          onMarkSessionComplete={handleMarkSessionComplete}
+          selectedSessionId={stableSelectedSessionId}
+          currentSessionId={state.currentSessionId}
           onShowMetrics={() => actions.setSidePanel('metrics-dashboard')}
           onNewRecording={actions.clearRecording}
           showNewRecording={state.results?.trim().length > 0 || state.patientSessions.some(s => s.status === 'completed')}
@@ -2201,20 +2418,6 @@ const OptimizedAppContent: React.FC = memo(() => {
         
         {/* Main Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
-          {state.patientSessions.length > 0 && (
-            <div className="px-4 pt-4">
-              <_SessionsPanel
-                sessions={state.patientSessions}
-                onRemoveSession={actions.removePatientSession}
-                onClearAllSessions={actions.clearPatientSessions}
-                onSessionSelect={handleSessionSelect}
-                onResumeRecording={handleResumeRecording}
-                onMarkSessionComplete={handleMarkSessionComplete}
-                selectedSessionId={stableSelectedSessionId}
-                isCollapsible={false}
-              />
-            </div>
-          )}
           
           
           {/* Unified Recording Interface - Show both LiveAudioVisualizer and RecordingPromptCard together */}
@@ -2462,7 +2665,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
+          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !overlayState.fieldIngestion && !overlayState.processingPhase && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
@@ -2706,27 +2909,16 @@ const OptimizedAppContent: React.FC = memo(() => {
       
       {/* Recording Prompts are now integrated into the unified recording interface above */}
       
-      
-      {/* AI Medical Review Overlays - positioned relative to side panel */}
-      <FieldIngestionOverlay
-        isActive={overlayState.fieldIngestion}
-        onComplete={() => actions.closeOverlay('field-ingestion')}
-      />
 
-      {/* Processing Phase Indicator - shown during AI processing */}
-      {overlayState.processingPhase && (
-        <div className="absolute top-4 left-4 right-4 z-40">
-          <ProcessingPhaseIndicator
-            currentProgress={state.ui.processingProgress}
-            isActive={overlayState.processingPhase}
-            startTime={state.ui.processingStartTime}
+      {/* Unified Pipeline Progress - shown during all processing stages */}
+      {state.pipelineProgress && (
+        <div className="absolute top-4 left-4 right-4 z-40 pointer-events-none">
+          <UnifiedPipelineProgress
+            progress={state.pipelineProgress}
+            startTime={state.processingStartTime || undefined}
             agentType={state.currentAgent || undefined}
             transcriptionLength={state.transcription ? state.transcription.length : undefined}
             showTimeEstimate={true}
-            onProcessingComplete={(actualTimeMs) => {
-              // This will be called when processing completes
-              console.log(`⏱️ Processing completed in ${actualTimeMs}ms`);
-            }}
           />
         </div>
       )}

@@ -12,7 +12,7 @@ export interface ExpandableActionConfig {
 
 interface ExpandableActionButtonProps {
   config: ExpandableActionConfig;
-  onStartWorkflow?: (workflowId: AgentType) => void;
+  onStartWorkflow?: (workflowId: AgentType, quickActionField?: string) => void;
   onQuickAction: (actionId: string, data?: any) => Promise<void>;
   processingAction: string | null;
   isFooter?: boolean;
@@ -44,9 +44,10 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
     if (config.actionId === 'bloods' && onQuickAction) {
       await onQuickAction(config.actionId, { type: 'prepare-modal' });
     }
-    
+
     if (onStartWorkflow) {
-      onStartWorkflow(config.workflowId);
+      // Pass the actionId as the second parameter for Quick Action field tracking
+      onStartWorkflow(config.workflowId, config.actionId);
     }
     setIsHovered(false);
   }, [onStartWorkflow, onQuickAction, config.workflowId, config.actionId]);

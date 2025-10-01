@@ -157,9 +157,23 @@ export interface LMStudioRequest {
   stream?: boolean;
 }
 
+export type ChatMessageContentBlock =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'image_url';
+      image_url: {
+        url: string;
+      };
+    };
+
+export type ChatMessageContent = string | ChatMessageContentBlock[];
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'model';
-  content: string;
+  content: ChatMessageContent;
 }
 
 export interface LMStudioResponse {
@@ -696,10 +710,27 @@ export interface PatientInfo {
   extractedAt: number;
 }
 
+// Unified pipeline progress tracking
+export type PipelineStage =
+  | 'audio-processing'
+  | 'transcribing'
+  | 'ai-analysis'
+  | 'generation';
+
+export interface PipelineProgress {
+  stage: PipelineStage;
+  progress: number; // 0-100 for entire pipeline
+  stageProgress: number; // 0-100 for current stage
+  details?: string;
+  modelName?: string;
+  tokenCount?: number;
+  queuePosition?: number;
+}
+
 // Patient session for multi-patient workflow management
-export type SessionStatus = 
+export type SessionStatus =
   | 'recording'
-  | 'transcribing' 
+  | 'transcribing'
   | 'processing'
   | 'completed'
   | 'error'
@@ -720,6 +751,8 @@ export interface PatientSession {
   processingTime?: number;
   warnings?: string[];
   errors?: string[];
+  // Quick Action field tracking for EMR insertion
+  quickActionField?: string; // For Quick Actions: stores the EMR field action ID ('medications', 'background', 'investigation-summary')
   // Additional fields for parallel processing
   recordingStartTime?: number;
   transcriptionStartTime?: number;
@@ -732,6 +765,10 @@ export interface PatientSession {
     progress: number;
     details?: string;
   };
+  // Unified pipeline progress (new system)
+  pipelineProgress?: PipelineProgress;
+  reviewedAt?: number;
+  finalizedAt?: number;
 }
 
 export interface LetterTemplate {

@@ -1,11 +1,11 @@
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FileText, 
-  User, 
-  Pill, 
-  CheckSquare, 
-  Calendar, 
+import {
+  FileText,
+  User,
+  Pill,
+  CheckSquare,
+  Calendar,
   Search,
   ChevronRight,
   ExternalLink,
@@ -21,7 +21,8 @@ import {
   Combine,
   GraduationCap,
   TestTube,
-  Scan
+  Scan,
+  Activity
 } from 'lucide-react';
 import { SmallTrophySpin, MediumTrophySpin } from './TrophySpinLoader';
 import { ExpandableActionButton, ExpandableActionConfig } from './ExpandableActionButton';
@@ -202,6 +203,13 @@ const QUICK_ACTIONS: QuickAction[] = [
     icon: GraduationCap,
     description: 'Generate lifestyle advice and education',
     category: 'documentation'
+  },
+  {
+    id: 'bp-diary-importer',
+    label: 'BP Diary',
+    icon: Activity,
+    description: 'Import and analyze blood pressure diary images',
+    category: 'analysis'
   }
 ];
 

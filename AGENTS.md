@@ -29,6 +29,7 @@
 - Indentation 2 spaces; single quotes preferred; semicolons used
 - File naming: React components `PascalCase.tsx` (e.g., `AgentSelector.tsx`), hooks `camelCase.ts`, workers `*.worker.ts`, types `*.types.ts`
 - Use path aliases: `@/agents`, `@/services`, `@/types`, `@/components` (maps to `src/sidepanel/components`)
+- `ChatMessage.content` is a union (`string | ChatMessageContentBlock[]`); when you require plain text, flatten via existing helpers (`normalizeMessageContent`, Gemma formatter) instead of calling string methods directly.
 
 ## Testing Guidelines
 - Framework: Playwright (`@playwright/test`); tests live under `tests/e2e/*.spec.ts`
@@ -46,4 +47,9 @@
 - Local services: LM Studio `http://localhost:1234`, Whisper `http://localhost:8001`
 - If endpoints change, update `manifest.json` CSP `connect-src` and `rules/` allowlist
 - Minimize permissions; keep host scopes narrow; avoid logging PHI—prefer `src/utils/Logger.ts` with production level
+- When constructing LM Studio requests, wrap vision inputs as `{ type: 'image_url', image_url: { url } }` blocks alongside `{ type: 'text', text }`; avoid raw base64 strings in plain content fields.
 
+## UI Implementation Notes
+- Reuse the shared `.icon-compact` utility when placing icons alongside labels to keep glyphs aligned to the 16px baseline.
+- Timeline/state visuals follow the monochrome + accent palette defined in `globals.css`; copy existing gradient/shadow tokens when adding new states.
+- Micro-interactions (e.g., `animate-complete-pop`) are defined globally and already respect `prefers-reduced-motion`; reuse those classes instead of introducing bespoke animations.

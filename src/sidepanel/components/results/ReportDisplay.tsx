@@ -115,7 +115,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
   }
   
   return (
-    <div className={`glass rounded-2xl overflow-hidden ${className}`}>
+    <div className={`bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
       {/* Header with report info */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
@@ -137,10 +137,6 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                 {getAgentDisplayName(agentType)}
               </h3>
               <div className="text-gray-600 text-xs mt-1">
-                <span>{reportMetrics.wordCount} words</span>
-                <span className="mx-2">•</span>
-                <span>{reportMetrics.readingTime} min read</span>
-                <span className="mx-2">•</span>
                 <span>{new Date().toLocaleTimeString()}</span>
               </div>
             </div>

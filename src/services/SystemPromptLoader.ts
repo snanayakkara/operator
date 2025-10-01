@@ -235,7 +235,8 @@ export class SystemPromptLoader {
   private async dynamicImportSystemPrompts(fileName: string): Promise<any> {
     try {
       // Dynamic import for code splitting
-      const module = await import(`@/agents/specialized/${fileName}`);
+      // Note: Vite requires file extension in static part of import path
+      const module = await import(`@/agents/specialized/${fileName}.ts`);
 
       // Handle different export patterns
       if (module.default) {

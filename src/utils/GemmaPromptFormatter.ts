@@ -28,12 +28,13 @@ export class GemmaPromptFormatter {
     let userContent = '';
 
     for (const message of messages) {
+      const renderedContent = this.renderContent(message.content);
       if (message.role === 'system') {
-        systemPrompt = message.content;
+        systemPrompt = renderedContent;
       } else if (message.role === 'user') {
-        userContent = message.content;
+        userContent = renderedContent;
       } else if (message.role === 'assistant' || message.role === 'model') {
-        gemmaPrompt += `<start_of_turn>model\n${message.content}<end_of_turn>\n`;
+        gemmaPrompt += `<start_of_turn>model\n${renderedContent}<end_of_turn>\n`;
       }
     }
 
@@ -85,5 +86,20 @@ export class GemmaPromptFormatter {
       messages,
       ...options
     };
+  }
+
+  private static renderContent(content: ChatMessage['content']): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    return content
+      .map(part => {
+        if (part.type === 'text') {
+          return part.text;
+        }
+        return `[image:${part.image_url.url}]`;
+      })
+      .join('\n');
   }
 }

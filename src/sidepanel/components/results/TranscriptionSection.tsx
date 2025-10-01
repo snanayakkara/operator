@@ -139,30 +139,30 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
       <button
         onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
         className={`w-full p-4 text-left transition-colors flex items-center justify-between ${
-          isProcessing 
-            ? 'hover:bg-blue-50/60' 
+          isProcessing
+            ? 'hover:bg-blue-50/60'
             : 'hover:bg-gray-50/50'
         }`}
       >
-        <div className="flex items-center space-x-2">
-          <FileTextIcon className={`w-4 h-4 ${isProcessing ? 'text-blue-600' : 'text-gray-600'}`} />
-          <span className={`font-medium text-sm ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
+        <div className="flex items-center gap-2">
+          <FileTextIcon className={`w-4 h-4 flex-shrink-0 ${isProcessing ? 'text-blue-600' : 'text-gray-600'}`} />
+          <span className={`font-medium text-sm leading-none ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
             Original Transcription
           </span>
           {isProcessing && (
-            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+            <span className="inline-flex items-center h-6 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium leading-none">
               Processing...
             </span>
           )}
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 leading-none">
             {(editedTranscription || '').split(' ').filter(w => w.trim()).length} words
             {editedTranscription !== originalTranscription && (
               <span className="text-blue-600 ml-1">(edited)</span>
             )}
           </span>
         </div>
-        
-        <div className="flex items-center space-x-2">
+
+        <div className="flex items-center gap-2">
           {/* Transcription Actions - Enhanced during processing */}
           {onTranscriptionCopy && (
             <button
@@ -170,20 +170,20 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                 e.stopPropagation();
                 handleTranscriptionCopy();
               }}
-              className={`px-2 py-1.5 rounded transition-all duration-200 flex items-center space-x-1 ${
-                isProcessing 
-                  ? 'bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-sm' 
-                  : 'p-1.5 hover:bg-gray-100'
+              className={`inline-flex items-center gap-1.5 h-6 rounded transition-all duration-200 ${
+                isProcessing
+                  ? 'px-2 py-1 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-sm'
+                  : 'px-1.5 py-1 hover:bg-gray-100'
               }`}
               title={isProcessing ? "Copy raw transcription" : "Copy transcription"}
             >
               {transcriptionCopied ? (
-                <CheckIcon className="w-3.5 h-3.5 text-green-600" />
+                <CheckIcon className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
               ) : (
-                <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />
+                <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" title="Copy transcription" />
               )}
               {isProcessing && (
-                <span className="text-xs text-blue-700 font-medium">Copy Raw</span>
+                <span className="text-xs text-blue-700 font-medium leading-none whitespace-nowrap">Copy Raw</span>
               )}
             </button>
           )}

@@ -8,20 +8,41 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Monochrome-first neutrals
+        // Fluent Design System - Neutral Palette
+        fluent: {
+          neutral: {
+            0: '#ffffff',
+            4: '#fafafa',
+            8: '#f5f5f5',
+            12: '#f0f0f0',
+            16: '#e0e0e0',
+            20: '#d1d1d1',
+            24: '#c7c7c7',
+            32: '#b3b3b3',
+            40: '#a3a3a3',
+            60: '#757575',
+            80: '#525252',
+            120: '#292929',
+            160: '#1a1a1a',
+          },
+        },
+        // Semantic tokens (maps to Fluent neutrals)
         ink: {
-          primary: '#1a1a1a',     // Near-black text
-          secondary: '#525252',    // Muted text
-          tertiary: '#a3a3a3',    // Disabled text
+          primary: '#1a1a1a',      // fluent-neutral-160
+          secondary: '#525252',    // fluent-neutral-80
+          tertiary: '#757575',     // fluent-neutral-60
+          disabled: '#a3a3a3',     // fluent-neutral-40
         },
         surface: {
-          primary: '#ffffff',      // White surfaces
-          secondary: '#f8fafc',    // Light canvas background
-          tertiary: '#f1f5f9',     // Subtle backgrounds
+          primary: '#ffffff',      // fluent-neutral-0
+          secondary: '#fafafa',    // fluent-neutral-4
+          tertiary: '#f5f5f5',     // fluent-neutral-8
+          subtle: '#f0f0f0',       // fluent-neutral-12
         },
         line: {
-          primary: '#e5e7eb',      // Hairline borders
-          secondary: '#f3f4f6',    // Subtle dividers
+          primary: '#e0e0e0',      // fluent-neutral-16 (1px strokes)
+          secondary: '#f0f0f0',    // fluent-neutral-12 (subtle dividers)
+          subtle: '#f5f5f5',       // fluent-neutral-8
         },
         // Meaningful accent colors (used sparingly)
         accent: {
@@ -41,11 +62,6 @@ export default {
           text: '#1f2937',
           muted: '#6b7280',
         },
-        glass: {
-          light: 'rgba(255, 255, 255, 0.1)',
-          medium: 'rgba(255, 255, 255, 0.2)',
-          dark: 'rgba(0, 0, 0, 0.1)',
-        }
       },
       fontFamily: {
         medical: ['Inter', 'system-ui', 'sans-serif'],
@@ -70,12 +86,16 @@ export default {
           '100%': { transform: 'scale(1.05)', opacity: '1' },
         },
       },
-      backdropBlur: {
-        xs: '2px',
+      borderRadius: {
+        'fluent-sm': '4px',    // Default for cards, buttons, inputs
+        'fluent-md': '8px',    // Overlays, dialogs, flyouts
+      },
+      borderWidth: {
+        'fluent': '1px',       // Stroke-based layer separation
       },
       boxShadow: {
-        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-        'glass-inset': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.05)',
+        'fluent-card': '0 0 2px rgba(0, 0, 0, 0.12)',          // Subtle card elevation (use sparingly)
+        'fluent-flyout': '0 8px 16px rgba(0, 0, 0, 0.14)',     // Dialogs, menus, tooltips only
       },
     },
   },

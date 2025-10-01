@@ -60,7 +60,12 @@ export const FIELD_DISPLAY_NAMES: Record<string, string> = {
  */
 export function getTargetField(agentType: AgentType | null): string | null {
   if (!agentType) return null;
-  return AGENT_TO_FIELD_MAPPING[agentType] || null;
+
+  // Direct mapping from AGENT_TO_FIELD_MAPPING
+  const directField = AGENT_TO_FIELD_MAPPING[agentType];
+
+  // Return the field (which might be the action ID we need)
+  return directField || null;
 }
 
 /**

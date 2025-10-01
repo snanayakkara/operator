@@ -1,0 +1,239 @@
+/**
+ * Fluent Design System Tokens
+ *
+ * Microsoft Fluent 2 design language for medical extension
+ * - Neutral color palette for all surfaces
+ * - Stroke-based layer separation (no shadows except elevation)
+ * - 4px default corners, 8px for overlays
+ * - Semantic tokens that respect platform conventions
+ */
+
+:root {
+  /* ===== Fluent Neutral Palette ===== */
+  /* Base neutrals from Fluent 2 specification */
+  --fluent-neutral-0: #ffffff;
+  --fluent-neutral-4: #fafafa;
+  --fluent-neutral-8: #f5f5f5;
+  --fluent-neutral-12: #f0f0f0;
+  --fluent-neutral-16: #e0e0e0;
+  --fluent-neutral-20: #d1d1d1;
+  --fluent-neutral-24: #c7c7c7;
+  --fluent-neutral-32: #b3b3b3;
+  --fluent-neutral-40: #a3a3a3;
+  --fluent-neutral-60: #757575;
+  --fluent-neutral-80: #525252;
+  --fluent-neutral-120: #292929;
+  --fluent-neutral-160: #1a1a1a;
+
+  /* ===== Semantic Surface Tokens ===== */
+  --fluent-surface-primary: var(--fluent-neutral-0);
+  --fluent-surface-secondary: var(--fluent-neutral-4);
+  --fluent-surface-tertiary: var(--fluent-neutral-8);
+  --fluent-surface-subtle: var(--fluent-neutral-12);
+
+  /* ===== Semantic Text Tokens ===== */
+  --fluent-text-primary: var(--fluent-neutral-160);
+  --fluent-text-secondary: var(--fluent-neutral-80);
+  --fluent-text-tertiary: var(--fluent-neutral-60);
+  --fluent-text-disabled: var(--fluent-neutral-40);
+
+  /* ===== Stroke Tokens (1px borders) ===== */
+  --fluent-stroke-primary: var(--fluent-neutral-16);
+  --fluent-stroke-secondary: var(--fluent-neutral-12);
+  --fluent-stroke-subtle: var(--fluent-neutral-8);
+
+  /* ===== Corner Radius Tokens ===== */
+  --fluent-corner-radius-sm: 4px;   /* Default for cards, buttons, inputs */
+  --fluent-corner-radius-md: 8px;   /* Overlays, dialogs, flyouts */
+
+  /* ===== Elevation Tokens (minimal shadow use) ===== */
+  /* Only use shadows for true elevation - dialogs, menus, tooltips */
+  --fluent-elevation-none: none;
+  --fluent-elevation-card: 0 0 2px rgba(0, 0, 0, 0.12);  /* Subtle, only when needed */
+  --fluent-elevation-flyout: 0 8px 16px rgba(0, 0, 0, 0.14);  /* Dialogs, menus */
+
+  /* ===== Accent Colors (semantic, not decorative) ===== */
+  --fluent-accent-emerald: #10b981;    /* Success states */
+  --fluent-accent-violet: #8b5cf6;     /* Processing/active */
+  --fluent-accent-amber: #f59e0b;      /* Warnings */
+  --fluent-accent-red: #ef4444;        /* Errors */
+
+  /* Accent tints (very subtle, 2-3% opacity for backgrounds) */
+  --fluent-accent-emerald-tint: rgba(16, 185, 129, 0.03);
+  --fluent-accent-violet-tint: rgba(139, 92, 246, 0.03);
+  --fluent-accent-amber-tint: rgba(245, 158, 11, 0.03);
+  --fluent-accent-red-tint: rgba(239, 68, 68, 0.03);
+}
+
+/* ===== Fluent Component Classes ===== */
+
+/* Base surface - no decoration */
+.fluent-surface {
+  background-color: var(--fluent-surface-primary);
+  color: var(--fluent-text-primary);
+}
+
+/* Card - primary content container */
+.fluent-card {
+  background-color: var(--fluent-surface-primary);
+  border: 1px solid var(--fluent-stroke-primary);
+  border-radius: var(--fluent-corner-radius-sm);
+  color: var(--fluent-text-primary);
+}
+
+/* Card with subtle elevation (use sparingly) */
+.fluent-card-elevated {
+  background-color: var(--fluent-surface-primary);
+  border: 1px solid var(--fluent-stroke-secondary);
+  border-radius: var(--fluent-corner-radius-sm);
+  box-shadow: var(--fluent-elevation-card);
+  color: var(--fluent-text-primary);
+}
+
+/* Overlay - for dialogs, flyouts, dropdowns */
+.fluent-overlay {
+  background-color: var(--fluent-surface-primary);
+  border: 1px solid var(--fluent-stroke-primary);
+  border-radius: var(--fluent-corner-radius-md);
+  box-shadow: var(--fluent-elevation-flyout);
+  color: var(--fluent-text-primary);
+}
+
+/* Stroke utilities - for layer separation */
+.fluent-stroke {
+  border: 1px solid var(--fluent-stroke-primary);
+}
+
+.fluent-stroke-secondary {
+  border: 1px solid var(--fluent-stroke-secondary);
+}
+
+.fluent-stroke-subtle {
+  border: 1px solid var(--fluent-stroke-subtle);
+}
+
+/* Stroke for interactive states */
+.fluent-stroke-accent {
+  border: 2px solid var(--fluent-accent-violet);
+}
+
+.fluent-stroke-accent-emerald {
+  border: 2px solid var(--fluent-accent-emerald);
+}
+
+.fluent-stroke-accent-amber {
+  border: 2px solid var(--fluent-accent-amber);
+}
+
+/* Panel - section container */
+.fluent-panel {
+  background-color: var(--fluent-surface-secondary);
+  border: 1px solid var(--fluent-stroke-secondary);
+  border-radius: var(--fluent-corner-radius-sm);
+  color: var(--fluent-text-primary);
+}
+
+/* Subtle background for grouped content */
+.fluent-subtle-background {
+  background-color: var(--fluent-surface-tertiary);
+}
+
+/* Button base (will be extended) */
+.fluent-button {
+  background-color: var(--fluent-surface-primary);
+  border: 1px solid var(--fluent-stroke-primary);
+  border-radius: var(--fluent-corner-radius-sm);
+  color: var(--fluent-text-primary);
+  padding: 8px 16px;
+  font-weight: 500;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.fluent-button:hover {
+  background-color: var(--fluent-surface-tertiary);
+  border-color: var(--fluent-stroke-secondary);
+}
+
+.fluent-button:active {
+  background-color: var(--fluent-surface-subtle);
+}
+
+.fluent-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Primary action button */
+.fluent-button-primary {
+  background-color: var(--fluent-text-primary);
+  border: 1px solid var(--fluent-text-primary);
+  color: var(--fluent-surface-primary);
+}
+
+.fluent-button-primary:hover {
+  background-color: var(--fluent-neutral-120);
+  border-color: var(--fluent-neutral-120);
+}
+
+/* Input base */
+.fluent-input {
+  background-color: var(--fluent-surface-primary);
+  border: 1px solid var(--fluent-stroke-primary);
+  border-radius: var(--fluent-corner-radius-sm);
+  color: var(--fluent-text-primary);
+  padding: 8px 12px;
+  transition: border-color 150ms ease;
+}
+
+.fluent-input:hover {
+  border-color: var(--fluent-stroke-secondary);
+}
+
+.fluent-input:focus {
+  outline: none;
+  border: 2px solid var(--fluent-accent-violet);
+  padding: 7px 11px; /* Compensate for thicker border */
+}
+
+.fluent-input::placeholder {
+  color: var(--fluent-text-disabled);
+}
+
+/* Divider - horizontal rule */
+.fluent-divider {
+  border: none;
+  border-top: 1px solid var(--fluent-stroke-secondary);
+  margin: 16px 0;
+}
+
+/* Status dot indicators */
+.fluent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.fluent-status-dot.success {
+  background-color: var(--fluent-accent-emerald);
+}
+
+.fluent-status-dot.processing {
+  background-color: var(--fluent-accent-violet);
+}
+
+.fluent-status-dot.warning {
+  background-color: var(--fluent-accent-amber);
+}
+
+.fluent-status-dot.error {
+  background-color: var(--fluent-accent-red);
+}
+
+/* Accessibility - respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .fluent-button,
+  .fluent-input {
+    transition: none;
+  }
+}

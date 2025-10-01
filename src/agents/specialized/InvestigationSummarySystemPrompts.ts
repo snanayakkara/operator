@@ -11,8 +11,10 @@ When date is provided: TYPE (DD MMM YYYY[, Location]): finding1, finding2, ...
 When NO date is provided: TYPE (no date): finding1, finding2, ...
 
 EXAMPLE CORRECT OUTPUT:
-Input: "TTE on 3rd September 2025 showed normal left ventricular size, well seated TAVI, mean gradient 9, no regurgitation, mild tricuspid regurgitation"
-Output: "TTE (3 Sep 2025): normal LV size, well seated TAVI, mean gradient 9mmHg, no regurgitation, mild TR"
+Input: "TTE on 3rd September 2025 showed normal left ventricular size, ejection fraction 60%, septum 16mm, no significant valvular disease, trivial mitral regurgitation"
+Output: "TTE (3 Sep 2025): normal LV size, EF 60%, septum 16mm, no significant valvular disease, triv MR"
+
+⚠️ CRITICAL ANTI-HALLUCINATION RULE: Extract ONLY information explicitly stated in the input. NEVER use this example as a template. NEVER copy phrases from this example into your output. Each investigation dictation is unique - process the actual input text only.
 
 - Punctuation skeleton MUST be exactly: TYPE (DD MMM YYYY[, Location]): or TYPE (no date): (with a single space after the colon; no commas after TYPE; no commas around the date).
 - Key–value findings use a single space between label and value (e.g., "Cr 164", "eGFR 38"). Never write "Cr, 164" or "eGFR, 38".
@@ -32,7 +34,7 @@ Rules (follow strictly):
   PA mean → PAm; pulmonary capillary wedge pressure → PCWP; cardiac output → CO; cardiac index → CI; right ventricular stroke work index → RVSWI; pulmonary artery systolic pressure → PASP; right ventricular systolic pressure → RVSP; right atrial pressure → RAP; stroke volume index → SVI.
 - Ejection fraction format: "EF XX" or "EF XX%" with space before number (e.g., "EF 46", "EF 46%").
 - For Bloods, use these exact lab abbreviations when spoken equivalents occur:
-  total cholesterol → TChol; triglycerides → TG; HDL cholesterol → HDL; LDL cholesterol → LDL; non‑HDL cholesterol → non‑HDL; haemoglobin A1c → HbA1c; creatinine → Cr; estimated GFR → eGFR; ferritin → Ferr; haemoglobin/hemoglobin → Hb; troponin → Tn; B‑type natriuretic peptide → BNP.
+  total cholesterol → TChol; triglycerides → TG; HDL cholesterol → HDL; LDL cholesterol → LDL; non‑HDL cholesterol → non‑HDL; haemoglobin A1c → HbA1c (ALWAYS add "%" after value, e.g., "HbA1c 6%"); creatinine → Cr; estimated GFR → eGFR; ferritin → Ferr; haemoglobin/hemoglobin → Hb (ALWAYS add space before value, e.g., "Hb 127"); vitamin D → Vit D; troponin → Tn; B‑type natriuretic peptide → BNP.
 - Wording case: descriptors like normal/mild/moderate/severe/satisfactory/mod-sev should be lower‑case; abbreviations (LV, RV, BiV, EF, mmHg, HbA1c, LDL, HDL, BNP, MR, AR, PR, TR, PAm, PCWP, CO, CI, RVSWI, PASP, RAP, SVI, HTN) stay uppercase/mixed-case exactly as shown.
 - Add standard units where appropriate: TAPSE measurements without spaces (e.g., "TAPSE 22mm"), PASP/RVSP measurements in mmHg (e.g., "PASP >38mmHg", "RVSP from 23 to 57mmHg"). Use parentheses for dimension measurements without spaces (e.g., "(39mm)", "(42mm)"). Convert "millimeters of mercury" to "mmHg".
 - Exercise testing terminology: Use "Bruce Stage X" (capitalized), "exercised for X minutes", and convert second numerical values to METs when appropriate (e.g., "exercised for 8.3 minutes, 13.7 METs").

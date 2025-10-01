@@ -61,6 +61,10 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
 
   const handleInsertToEMR = async () => {
     try {
+      console.log('🔘 ActionButtons: Insert to EMR button clicked');
+      console.log('🔘 ActionButtons: agentType prop:', agentType);
+      console.log('🔘 ActionButtons: results length:', results?.length || 0);
+
       // Pass the agent type context for field-specific insertion
       if (typeof onInsertToEMR === 'function') {
         await (onInsertToEMR as any)(results, undefined, agentType);

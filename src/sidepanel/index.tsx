@@ -96,11 +96,11 @@ function initializeApp() {
   if (!rootElement) {
     console.error('❌ Root element not found!');
     document.body.innerHTML = `
-      <div style="padding: 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-        <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-          <h1 style="color: white; margin-bottom: 1rem;">Mount Error</h1>
-          <p style="color: rgba(255,255,255,0.8);">Could not find root element</p>
-          <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 0.5rem; cursor: pointer;">
+      <div style="padding: 20px; text-align: center; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 2rem; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <h1 style="color: #1a1a1a; margin-bottom: 1rem;">Mount Error</h1>
+          <p style="color: #525252;">Could not find root element</p>
+          <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a1a1a; color: white; border: none; border-radius: 4px; cursor: pointer;">
             Reload
           </button>
         </div>
@@ -130,11 +130,11 @@ function initializeApp() {
     console.error('❌ Failed to render React app:', error);
     // Fallback UI
     rootElement.innerHTML = `
-      <div style="padding: 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
-        <div style="background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; backdrop-filter: blur(10px);">
-          <h1 style="color: white; margin-bottom: 1rem;">Render Error</h1>
-          <p style="color: rgba(255,255,255,0.8);">${error instanceof Error ? error.message : 'Unknown error'}</p>
-          <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 0.5rem; cursor: pointer;">
+      <div style="padding: 20px; text-align: center; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 2rem; border-radius: 8px; border: 1px solid #e0e0e0;">
+          <h1 style="color: #1a1a1a; margin-bottom: 1rem;">Render Error</h1>
+          <p style="color: #525252;">${error instanceof Error ? error.message : 'Unknown error'}</p>
+          <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #1a1a1a; color: white; border: none; border-radius: 4px; cursor: pointer;">
             Reload
           </button>
         </div>

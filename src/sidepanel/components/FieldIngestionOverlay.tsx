@@ -23,6 +23,8 @@ interface FieldIngestionOverlayProps {
   isActive: boolean;
   onComplete: () => void;
   className?: string;
+  progress?: number; // 0-100, actual progress from parent
+  currentPhase?: string; // Current phase description from parent
 }
 
 const EMR_FIELDS: Omit<FieldStatus, 'status' | 'timestamp'>[] = [
@@ -46,11 +48,15 @@ const EMR_FIELDS: Omit<FieldStatus, 'status' | 'timestamp'>[] = [
 export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
   isActive,
   onComplete,
-  className = ''
+  className = '',
+  progress: externalProgress,
+  currentPhase: externalPhase
 }) => {
   const [fields, setFields] = useState<FieldStatus[]>([]);
-  const [currentPhase, setCurrentPhase] = useState<string>('Initializing...');
-  const [progress, setProgress] = useState(0);
+
+  // Use external progress/phase if provided, otherwise use internal state
+  const progress = externalProgress ?? 0;
+  const currentPhase = externalPhase ?? 'Discovering EMR fields...';
 
   // Modal behavior hooks
   const modalRef = useRef<HTMLDivElement>(null);
@@ -68,92 +74,37 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
         timestamp: Date.now()
       }));
       setFields(initialFields);
-      setCurrentPhase('Discovering EMR fields...');
-      setProgress(10);
-      
-      // Simulate field discovery and extraction process
-      simulateFieldProcessing();
     } else {
       // Reset state when overlay is hidden
       setFields([]);
-      setCurrentPhase('');
-      setProgress(0);
     }
   }, [isActive]);
 
-  const simulateFieldProcessing = async () => {
-    // Phase 1: Field Discovery (10-25%)
-    setCurrentPhase('Locating EMR sections...');
-    await updateFieldsSequentially('extracting', 200, 10, 25);
-    
-    // Phase 2: Individual Field Extraction (25-85%) - Show each field being processed
-    setCurrentPhase('Extracting Background section...');
-    await updateSpecificField(0, 'complete', 300, 35);
-    
-    setCurrentPhase('Extracting Investigations section...');
-    await updateSpecificField(1, 'complete', 400, 55);
-    
-    setCurrentPhase('Extracting Medications section...');
-    await updateSpecificField(2, 'complete', 350, 75);
-    
-    // Phase 3: Data Validation (75-90%)
-    setCurrentPhase('Validating extracted data...');
-    setProgress(85);
-    await wait(600);
-    
-    // Phase 4: AI Processing Preparation (90-100%)
-    setCurrentPhase('Preparing data for AI analysis...');
-    setProgress(95);
-    await wait(500);
-    setProgress(100);
-    
-    setCurrentPhase('Complete! Starting AI medical review...');
-    
-    // Auto-hide overlay after completion
-    setTimeout(() => {
-      onComplete();
-    }, 1000);
-  };
+  // Update field status based on progress from parent
+  useEffect(() => {
+    if (!isActive || fields.length === 0) return;
 
-  const updateFieldsSequentially = async (
-    status: FieldStatus['status'],
-    delayMs: number,
-    startProgress: number,
-    endProgress: number
-  ) => {
-    const progressStep = (endProgress - startProgress) / EMR_FIELDS.length;
-    
-    for (let i = 0; i < EMR_FIELDS.length; i++) {
-      await wait(delayMs);
-      
-      setFields(prev => prev.map((field, index) => 
-        index === i 
-          ? { ...field, status, timestamp: Date.now() }
-          : field
-      ));
-      
-      setProgress(startProgress + (progressStep * (i + 1)));
+    // Map progress to field status:
+    // 0-30%: Field Discovery/Extraction
+    // 30-90%: AI Analysis (fields complete)
+    // 90-100%: Advisory Generation (all done)
+
+    if (progress >= 30) {
+      // Mark all fields as complete when we move to AI Analysis phase
+      setFields(prev => prev.map(field => ({
+        ...field,
+        status: 'complete' as const,
+        timestamp: Date.now()
+      })));
+    } else if (progress > 0) {
+      // During extraction, show fields as extracting
+      setFields(prev => prev.map(field => ({
+        ...field,
+        status: 'extracting' as const,
+        timestamp: Date.now()
+      })));
     }
-  };
-
-  const updateSpecificField = async (
-    fieldIndex: number,
-    status: FieldStatus['status'],
-    delayMs: number,
-    progressValue: number
-  ) => {
-    await wait(delayMs);
-    
-    setFields(prev => prev.map((field, index) => 
-      index === fieldIndex 
-        ? { ...field, status, timestamp: Date.now() }
-        : field
-    ));
-    
-    setProgress(progressValue);
-  };
-
-  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  }, [progress, isActive, fields.length]);
 
   // Convert FieldStatus to Step[] for VerticalStepper
   const steps: Step[] = useMemo(() => {
@@ -183,60 +134,47 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center ${className}`}
+      ref={modalRef}
+      className={`bg-white rounded-lg border border-gray-200 p-4 pointer-events-auto ${className}`}
       style={{
-        zIndex: 'var(--z-modal)',
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        pointerEvents: 'auto'
+        boxShadow: '0 8px 24px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.04)'
       }}
-      onClick={onComplete}
+      role="status"
+      aria-labelledby="field-ingestion-title"
+      aria-describedby="field-ingestion-description"
     >
-      <div
-        ref={modalRef}
-        className="bg-white rounded-2xl p-6 m-4 max-w-md w-full motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-reduce:transition-none"
-        style={{
-          boxShadow: '0 8px 24px -4px rgb(0 0 0 / 0.08), 0 4px 8px -2px rgb(0 0 0 / 0.04)'
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="field-ingestion-title"
-        aria-describedby="field-ingestion-description"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
-        <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Search className="w-6 h-6 text-indigo-600" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
+              <Search className="w-4 h-4 text-indigo-600" />
+            </div>
+            <h3 id="field-ingestion-title" className="text-sm font-medium text-gray-900">
+              Field Extraction
+            </h3>
           </div>
-          <h3 id="field-ingestion-title" className="text-lg font-semibold text-gray-900 mb-2">
-            AI Medical Review
-          </h3>
-          <p id="field-ingestion-description" className="text-sm text-gray-600">
-            Analyzing EMR data for clinical insights
+          <p id="field-ingestion-description" className="text-xs text-gray-500">
+            {Math.round(progress)}%
           </p>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700" aria-live="polite">
+          <div className="mb-2">
+            <span className="text-xs text-gray-600" aria-live="polite">
               {currentPhase}
-            </span>
-            <span className="text-sm text-gray-500 tabular-nums">
-              {Math.round(progress)}%
             </span>
           </div>
           <div
-            className="w-full bg-gray-200 rounded-full h-2"
+            className="w-full bg-gray-200 rounded-full h-1.5"
             role="progressbar"
             aria-valuenow={progress}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-describedby="field-ingestion-description"
+            aria-label="Field extraction progress"
           >
             <div
-              className="bg-indigo-600 h-2 rounded-full motion-safe:transition-all motion-safe:duration-500 motion-safe:ease-out motion-reduce:transition-none"
+              className="bg-indigo-600 h-1.5 rounded-full motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-out motion-reduce:transition-none"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -246,12 +184,11 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
         <VerticalStepper steps={steps} />
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
+        <div className="mt-4 pt-3 border-t border-gray-200">
           <p className="text-xs text-gray-500 text-center">
-            Processing EMR data locally with MedGemma-27b
+            Local processing with MedGemma-27b model
           </p>
         </div>
-      </div>
     </div>
   );
 };

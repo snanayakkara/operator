@@ -90,6 +90,8 @@ export class LMStudioService {
         'background': MODEL_CONFIG.QUICK_MODEL, // Simple medical background/history formatting with ↪ arrows
         'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
 
+        // Vision tasks - Use vision-capable model (gemma-3n-e4b supports vision)
+        'bp-diary-extraction': MODEL_CONFIG.QUICK_MODEL, // BP diary image OCR/extraction
 
         // All workflow buttons use default REASONING_MODEL for comprehensive medical analysis:
         // - 'quick-letter': Uses REASONING_MODEL for proper medical dictation processing
@@ -104,7 +106,7 @@ export class LMStudioService {
       agentTokenLimits: {
         // AI Medical Review requires extensive output for comprehensive clinical analysis
         'ai-medical-review': 10000, // Increased to 10k tokens to prevent truncation
-        
+
         // Complex procedure agents need detailed reports
         'tavi': 8000,
         'tavi-workup': 6000,
@@ -112,15 +114,18 @@ export class LMStudioService {
         'mteer': 7000,
         'pfo-closure': 7000,
         'right-heart-cath': 7000,
-        
+
         // Standard agents
         'consultation': 6000,
         'quick-letter': 5000,
-        
+
         // Simple formatting tasks
         'investigation-summary': 2000,
         'medication': 3000, // Medication lists can be longer than investigation summaries
-        
+
+        // Vision tasks
+        'bp-diary-extraction': 2000, // Structured JSON output for BP readings
+
         // Default for unlisted agents
         'default': 4000
       },
@@ -128,23 +133,26 @@ export class LMStudioService {
       agentTimeouts: {
         // AI Medical Review needs extended time for comprehensive analysis
         'ai-medical-review': 600000, // 10 minutes
-        
+
         // Complex procedure agents need extended processing time
         'tavi': 480000,              // 8 minutes
         'tavi-workup': 360000,
-        'angiogram-pci': 480000,     // 8 minutes  
+        'angiogram-pci': 480000,     // 8 minutes
         'mteer': 420000,             // 7 minutes
         'pfo-closure': 360000,       // 6 minutes
         'right-heart-cath': 360000,  // 6 minutes
-        
+
         // Standard agents
         'consultation': 240000,      // 4 minutes
         'quick-letter': 180000,      // 3 minutes
-        
+
         // Simple formatting tasks
         'investigation-summary': 60000, // 1 minute
         'medication': 90000, // 1.5 minutes (medication lists can be complex)
-        
+
+        // Vision tasks - may take longer due to image processing
+        'bp-diary-extraction': 120000, // 2 minutes for vision processing
+
         // Default for unlisted agents
         'default': 300000           // 5 minutes (existing default)
       },
@@ -161,6 +169,25 @@ export class LMStudioService {
 
     this.whisperServerService = WhisperServerService.getInstance();
     this.startHealthCheck();
+  }
+
+  private normalizeMessageContent(content?: ChatMessage['content']): string {
+    if (!content) {
+      return '';
+    }
+
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    return content
+      .map(part => {
+        if (part.type === 'text') {
+          return part.text;
+        }
+        return `[image:${part.image_url.url}]`;
+      })
+      .join('\n');
   }
 
   public static getInstance(config?: Partial<LMStudioConfig>): LMStudioService {
@@ -440,8 +467,85 @@ export class LMStudioService {
     }
   }
 
+  /**
+   * Process with vision-enabled agent that can accept both text and images
+   * Uses OpenAI-compatible vision API format
+   */
+  public async processWithVisionAgent(
+    systemPrompt: string,
+    textPrompt: string,
+    imageDataUrl: string,
+    agentType?: string,
+    signal?: AbortSignal
+  ): Promise<string> {
+    const startTime = Date.now();
+
+    logger.info('Processing with vision agent', {
+      component: 'lm-studio',
+      operation: 'vision-agent-start',
+      agentType,
+      imageSize: imageDataUrl.length
+    });
+
+    // Determine which model to use based on agent type
+    const modelToUse = (agentType && this.config.agentModels?.[agentType])
+      ? this.config.agentModels[agentType]
+      : this.config.processorModel;
+
+    // Determine agent-specific token limit
+    const tokenLimit = (agentType && this.config.agentTokenLimits?.[agentType])
+      ? this.config.agentTokenLimits[agentType]
+      : this.config.agentTokenLimits?.['default'] || 4000;
+
+    console.log(`🤖 Using vision model: ${modelToUse} for agent: ${agentType || 'default'}`);
+    console.log(`🎯 Token limit: ${tokenLimit} tokens for optimal response length`);
+
+    // Build OpenAI-compatible vision request
+    // Format: https://platform.openai.com/docs/guides/vision
+    const request: LMStudioRequest = {
+      model: modelToUse,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: textPrompt
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageDataUrl // Should be in format: data:image/jpeg;base64,...
+              }
+            }
+          ]
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: tokenLimit
+    };
+
+    console.log('🖼️ Vision request prepared with image and text prompt');
+
+    const result = await this.makeRequest(request, signal, agentType);
+
+    const processingTime = Date.now() - startTime;
+    logger.info('Vision agent processing complete', {
+      component: 'lm-studio',
+      operation: 'vision-agent-complete',
+      agentType,
+      processingTime
+    });
+
+    return result;
+  }
+
   public async processWithAgent(
-    agentPrompt: string, 
+    agentPrompt: string,
     userInput: string,
     agentType?: string,
     signal?: AbortSignal
@@ -449,21 +553,21 @@ export class LMStudioService {
     // DSPy integration with feature flag
     if (agentType) {
       const dspyService = DSPyService.getInstance();
-      
+
       try {
         const isDSPyEnabled = await dspyService.isDSPyEnabled(agentType);
-        
+
         if (isDSPyEnabled) {
-          logger.info('Routing through DSPy layer', { 
+          logger.info('Routing through DSPy layer', {
             component: 'LMStudioService',
             agent_type: agentType,
             fallback_available: true
           });
 
           const dspyResult = await dspyService.processWithDSPy(agentType, userInput, { signal });
-          
+
           if (dspyResult.success && dspyResult.result) {
-            logger.info('DSPy processing successful', { 
+            logger.info('DSPy processing successful', {
               component: 'LMStudioService',
               agent_type: agentType,
               processing_time: dspyResult.processing_time,
@@ -471,7 +575,7 @@ export class LMStudioService {
             });
             return dspyResult.result;
           } else {
-            logger.warn('DSPy processing failed, falling back to direct LLM', { 
+            logger.warn('DSPy processing failed, falling back to direct LLM', {
               component: 'LMStudioService',
               agent_type: agentType,
               error: dspyResult.error
@@ -480,7 +584,7 @@ export class LMStudioService {
           }
         }
       } catch (error) {
-        logger.warn('DSPy integration error, falling back to direct LLM', { 
+        logger.warn('DSPy integration error, falling back to direct LLM', {
           component: 'LMStudioService',
           agent_type: agentType,
           error: error instanceof Error ? error.message : 'Unknown error'
@@ -496,7 +600,7 @@ export class LMStudioService {
     ];
 
     // Determine which model to use based on agent type
-    const modelToUse = (agentType && this.config.agentModels?.[agentType]) 
+    const modelToUse = (agentType && this.config.agentModels?.[agentType])
       ? this.config.agentModels[agentType]
       : this.config.processorModel;
 
@@ -721,14 +825,17 @@ export class LMStudioService {
 
     // TEMP DEBUG: Log TAVI requests to identify Gemma formatting issue
     if (agentType === 'tavi-workup') {
+      const firstMessageContent = request.messages?.[0]?.content;
+      const firstMessageText = this.normalizeMessageContent(firstMessageContent);
+
       console.log('🔍 TAVI REQUEST DEBUG:', {
         model: request.model,
         messagesCount: request.messages?.length,
         firstMessageRole: request.messages?.[0]?.role,
-        firstMessageContentLength: request.messages?.[0]?.content?.length,
-        firstMessagePreview: request.messages?.[0]?.content?.substring(0, 200) + '...',
+        firstMessageContentLength: firstMessageText.length,
+        firstMessagePreview: firstMessageText.substring(0, 200) + '...',
         requestBodyLength: requestBody.length,
-        hasGemmaTokens: request.messages?.[0]?.content?.includes('<start_of_turn>')
+        hasGemmaTokens: firstMessageText.includes('<start_of_turn>')
       });
     }
 
@@ -768,17 +875,19 @@ export class LMStudioService {
         const data: LMStudioResponse = await response.json();
         
         // Debug logging for LMStudio response
+        const responseContent = this.normalizeMessageContent(data.choices?.[0]?.message?.content);
+
         console.log('🤖 LMStudio Response Details:', {
           status: response.status,
           model: (data as any).model, // Model field may vary by implementation
           choices: data.choices?.length,
           finishReason: data.choices?.[0]?.finish_reason,
           usage: data.usage,
-          contentLength: data.choices?.[0]?.message?.content?.length || 0,
-          contentPreview: data.choices?.[0]?.message?.content?.substring(0, 100) + '...'
+          contentLength: responseContent.length,
+          contentPreview: responseContent.substring(0, 100) + '...'
         });
         
-        const content = data.choices?.[0]?.message?.content;
+        const content = responseContent;
 
         if (!content) {
           console.error('❌ No content in LMStudio response:', data);

@@ -31,20 +31,44 @@ fi
 echo "🔧 Activating virtual environment..."
 source venv-whisper/bin/activate
 
+# Verify we're using venv Python
+VENV_PYTHON=$(which python)
+echo "   Using Python: $VENV_PYTHON"
+
 # Install/upgrade dependencies based on mode
 if [ "$OFFLINE_MODE" = "1" ]; then
     echo "🔒 OFFLINE MODE: Skipping dependency installation"
     echo "   Dependencies must already be installed locally"
 else
     echo "📦 Installing dependencies..."
-    
+
     # Check for local wheelhouse
     if [ -d "$LOCAL_WHEELHOUSE" ]; then
         echo "🏠 Using local wheelhouse: $LOCAL_WHEELHOUSE"
-        pip install --no-index --find-links "$LOCAL_WHEELHOUSE" -r requirements-whisper.txt
+        python -m pip install --no-index --find-links "$LOCAL_WHEELHOUSE" -r requirements-whisper.txt
     else
-        echo "🌐 Installing from PyPI"
-        pip install -r requirements-whisper.txt
+        echo "🌐 Installing from PyPI (with upgrade)"
+        # Force upgrade to ensure all dependencies are properly installed
+        # Use 'python -m pip' to ensure we install to the active venv
+        if ! python -m pip install --upgrade -r requirements-whisper.txt; then
+            echo "❌ Failed to install dependencies"
+            echo "   Try manually: source venv-whisper/bin/activate && python -m pip install -r requirements-whisper.txt"
+            exit 1
+        fi
+        echo "✅ Dependencies installed successfully"
+
+        # Verify critical dependencies
+        echo "🔍 Verifying installation..."
+        if ! python -c "import soundfile" 2>/dev/null; then
+            echo "❌ soundfile not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install soundfile
+        fi
+        if ! python -c "import mlx_whisper" 2>/dev/null; then
+            echo "❌ mlx-whisper not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install "mlx-whisper>=0.4.2"
+        fi
     fi
 fi
 
@@ -82,5 +106,6 @@ echo "   - Temperature: $WHISPER_TEMPERATURE"
 echo "   - Press Ctrl+C to stop"
 echo ""
 
-# Start the server
-python3 whisper-server.py
+# Start the server using venv Python (not system python3)
+# After activating venv, use 'python' which correctly points to venv/bin/python
+python whisper-server.py

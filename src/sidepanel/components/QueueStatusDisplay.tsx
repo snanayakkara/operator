@@ -10,7 +10,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Clock, Zap, BarChart3, AlertCircle } from 'lucide-react';
-import { AudioProcessingQueueService, QueueStats } from '@/services/AudioProcessingQueueService';
+import type { QueueStats } from '@/services/AudioProcessingQueueService';
 
 interface QueueStatusDisplayProps {
   isCompact?: boolean;
@@ -25,24 +25,36 @@ export const QueueStatusDisplay: React.FC<QueueStatusDisplayProps> = ({
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    const audioQueue = AudioProcessingQueueService.getInstance();
-    
-    const updateStats = () => {
-      const stats = audioQueue.getQueueStats();
-      setQueueStats(stats);
-      
-      // Show display when there are jobs in queue or processing
-      const hasActivity = stats.queuedJobs > 0 || stats.processingJobs > 0;
-      setIsVisible(hasActivity);
+    let interval: NodeJS.Timeout | undefined;
+
+    // Dynamic import to avoid static import conflicts with OptimizedApp.tsx
+    const initQueue = async () => {
+      const { AudioProcessingQueueService } = await import('@/services/AudioProcessingQueueService');
+      const audioQueue = AudioProcessingQueueService.getInstance();
+
+      const updateStats = () => {
+        const stats = audioQueue.getQueueStats();
+        setQueueStats(stats);
+
+        // Show display when there are jobs in queue or processing
+        const hasActivity = stats.queuedJobs > 0 || stats.processingJobs > 0;
+        setIsVisible(hasActivity);
+      };
+
+      // Initial update
+      updateStats();
+
+      // Update every 2 seconds when visible
+      interval = setInterval(updateStats, 2000);
     };
 
-    // Initial update
-    updateStats();
+    initQueue();
 
-    // Update every 2 seconds when visible
-    const interval = setInterval(updateStats, 2000);
-
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, []);
 
   if (!isVisible || !queueStats) {
