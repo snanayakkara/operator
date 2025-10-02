@@ -2910,9 +2910,9 @@ const OptimizedAppContent: React.FC = memo(() => {
       {/* Recording Prompts are now integrated into the unified recording interface above */}
       
 
-      {/* Unified Pipeline Progress - shown during all processing stages */}
+      {/* Unified Pipeline Progress - shown during all processing stages, positioned below header */}
       {state.pipelineProgress && (
-        <div className="absolute top-4 left-4 right-4 z-40 pointer-events-none">
+        <div className="absolute top-20 left-4 right-4 z-40 pointer-events-none">
           <UnifiedPipelineProgress
             progress={state.pipelineProgress}
             startTime={state.processingStartTime || undefined}

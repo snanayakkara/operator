@@ -85,12 +85,12 @@ export const DashboardSettings: React.FC = () => {
 
       {/* Grid of quick-view cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Phase 4 Intelligence */}
+        {/* Intelligent Features */}
         <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              <span className="font-medium text-ink-primary">Phase 4 Intelligence</span>
+              <span className="font-medium text-ink-primary">Intelligent Features</span>
             </div>
             <span className="text-xs text-ink-secondary">{phase4Stats ? 'Active' : 'Loading'}</span>
           </div>

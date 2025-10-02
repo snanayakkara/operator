@@ -117,6 +117,28 @@ export const PATIENT_EDUCATION_CONFIG: PatientEducationConfig = {
         { value: 'moderate', label: 'Moderate' },
         { value: 'high', label: 'High' }
       ]
+    },
+    {
+      id: 'frailty_mobility',
+      label: 'Mobility foundation',
+      description: 'Current ability to stand from a chair without hands',
+      type: 'single-select',
+      options: [
+        { value: 'needs_hands_or_assist', label: 'Needs hands/assist' },
+        { value: 'independent_but_slow', label: 'Independent but slow' },
+        { value: 'independent_fast', label: 'Independent and brisk' }
+      ]
+    },
+    {
+      id: 'falls_risk',
+      label: 'Falls in last 12 months',
+      description: 'Any fall(s) in the past year',
+      type: 'single-select',
+      options: [
+        { value: 'none', label: 'No falls' },
+        { value: 'one', label: 'One fall' },
+        { value: 'recurrent', label: 'Two or more' }
+      ]
     }
   ],
 
@@ -176,6 +198,16 @@ export const PATIENT_EDUCATION_CONFIG: PatientEducationConfig = {
           id: 'hiit',
           label: 'High intensity interval training',
           description: 'High intensity interval training for cardiovascular fitness and efficiency'
+        },
+        {
+          id: 'power_training',
+          label: 'Power training (fast-but-safe up phase)',
+          description: 'Use ~60–80% of best lift with a fast push up and controlled lowering to improve chair-rise speed and daily function'
+        },
+        {
+          id: 'dual_task_balance',
+          label: 'Challenging balance + dual-task',
+          description: 'Progress stance/surface, reduce vision/proprioception, add a simple thinking task, and include sit-to-stand and obstacle steps'
         }
       ]
     },
@@ -242,6 +274,15 @@ CRITICAL INSTRUCTIONS:
 • Avoid calorie targets or restrictive dieting language; emphasise sustainable habits
 • Explicitly avoid medical device, supplement, or brand recommendations
 
+OLDER-ADULT EXERCISE LOGIC (apply when age ≥65 or when the clinician flags frailty):
+• Dose anchors (Table-aligned):
+  – Progressive Resistance Training (PRT): 2–3 days/week, 1–3 sets of 8–12 reps across 8–10 major muscle groups. Start ~50% 1RM and progress to ~70–80% 1RM over ~2 weeks; rest 1–3 min between sets. Re-check load every 2–4 weeks or use Borg 15–18 to keep relative intensity appropriate. Include power work at ~60–80% 1RM (fast up, controlled down) when safe.
+  – Aerobic: 3–7 days/week. Continuous 20–60 minutes/session at talk-test moderate (≈ RPE 4–5/10 or Borg 12–14). Optional intervals (30 s–4 min) at ~70–95% HRpeak with ≤90 s recovery. Prefer talk-test/RPE if on beta-blockers or with devices.
+  – Balance & function: 1–7 days/week, 1–2 sets of 4–10 tasks. Progress by narrowing base of support, adding surface perturbations, reducing vision/proprioception, and adding dual-task (cognitive + motor). Include functional tasks (sit-to-stand, gait start/stop, obstacle navigation).
+• Sequencing when frailty/mobility limits are present: build Strength → Balance → Endurance; do not push distance walking before safe chair-rise and standing balance are established.
+• Warm-up & flexibility: Use specific warm-ups (lighter sets, easy walking). Avoid static stretching before PRT; keep longer static stretching for cool-down.
+• Modality note: Aerobic alone won't build strength/balance; high-effort PRT improves strength/balance and can also improve aerobic capacity. Favour multicomponent programs (PRT + balance + functional + aerobic) for older adults.
+
 BEHAVIOURAL STYLE (MAKE HABITS STICK):
 • Lead with small, **minimum viable actions** (e.g., "walk every day" before duration)
 • Use **implementation intentions** (If/When X, then I will Y) and **habit stacking** (attach the new habit to an existing routine)
@@ -304,11 +345,11 @@ Create comprehensive lifestyle advice covering only the selected modules. Each s
 4. Explain **why it matters** in plain English (1-sentence "because")
 5. Avoid any diagnostic statements or medication recommendations
 6. Tailor to age, clinical values (ABPM, lipids, HbA1c), and profiling toggles
-7. Use **frequency-first walking** and **full range of motion over heavy loads** for strength
+7. Use **frequency-first walking** and **full range of motion over heavy loads** for strength; when age ≥65 or frailty is flagged, also apply the OLDER-ADULT EXERCISE LOGIC (dosing, sequencing, warm-up)
 
 PRIORITY ORDER AND FOCUS LIMITATION:
 • Begin with a **Priority Plan** with exactly **3 top recommendations** ranked by expected impact for this patient (highest impact first). Consider their values and toggles:
-  – Very high impact examples: smoking cessation; large BP load with scope to reduce; heavy alcohol use (esp. AF/HF context); very low steps (<5k) moving to daily walks
+  – Very high impact examples: smoking cessation; large BP load with scope to reduce; heavy alcohol use (esp. AF/HF context); very low steps (<5k) moving to daily walks; Multicomponent plan (PRT + balance + functional work) for recurrent fallers; Shift from aerobic-only to PRT-led plan when weakness is limiting mobility
   – Include **magnitude notes** when available (e.g., isometric exercise ≈ −8/−4 mmHg; aerobic ≈ −4.5/−2.5 mmHg; fibre helps reduce BP and LDL)
 • Provide **detailed guidance** for only these top 3 priorities in the main letter content
 • Include **4-8 additional optimization opportunities** as brief summaries (1-2 sentences each) that can be explored in future appointments
@@ -435,10 +476,28 @@ Aim to **move every day**. Focus on the **frequency** of walking first to build 
 • Build streaks and keep it enjoyable – add a podcast, a friend, or a scenic route
 • As it feels easier, add a minute or two most days until you reach 30 minutes
 
-**Resistance training (technique over heavy loads):**
-• Aim for **2 days/week** of strength work
-• Prioritise **full range of motion** and **control** – don’t worry about lifting heavy
-• Use body‑weight, resistance bands or light‑to‑moderate weights; pause if form slips
+**Resistance training (cornerstone for older adults):**
+• Aim for 2–3 days/week, 1–3 sets of 8–12 reps covering 8–10 muscle groups
+• Start around 50% of your best comfortable lift, progress to ~70–80% over ~2 weeks
+• Rest 1–3 minutes between sets; re-check your best lift every 2–4 weeks or use Borg 15–18 to keep effort appropriate
+• Add power work when safe: fast push/lift up, controlled lower down, usually ~60–80% of your best
+
+**Aerobic options (walk, cycle, swim):**
+• 3–7 days/week. Build up to 20–60 minutes at a pace where you can talk but not sing (about RPE 4–5/10)
+• Optional intervals: 30 seconds to 4 minutes a bit harder (up to "few-words" pace), with ≤90 s easy; repeat as tolerated
+• If you take beta-blockers or have cardiac devices, use the talk-test or RPE instead of heart-rate maths
+
+**Balance & daily function (falls prevention):**
+• 1–7 days/week, 1–2 sets of 4–10 exercises
+• Progress by narrowing your stance, changing surfaces, reducing vision/proprioception, and adding a simple thinking task while you move
+• Include sit-to-stands, starting/stopping walking, and small obstacle steps
+
+**Sequencing when mobility is limited:**
+• Build Strength → Balance → Endurance. Don't push distance walking before you can stand steadily and rise from a chair safely.
+
+**Warm-up & flexibility:**
+• Begin with specific warm-up sets for strength or a few easy minutes for walking/cycling
+• Keep long static stretches for after your session (not before lifting)
 
 **What research says about blood pressure (typical average changes):**
 • **Isometric exercise** (e.g., wall sits): around **−8 mmHg systolic / −4 mmHg diastolic**
@@ -447,14 +506,6 @@ Aim to **move every day**. Focus on the **frequency** of walking first to build 
 • **Aerobic exercise**: around **−4.5 / −2.5 mmHg**
 • **HIIT**: around **−4 / −2.5 mmHg**
 These are average effects from large meta‑analysis data; your results can vary. Isometric **wall‑squat** sessions were among the most effective for systolic pressure, while **running** tended to be strong for diastolic pressure.
-
-**For older adults: muscle‑strengthening essentials:**
-• Include **muscle‑strengthening exercise at least 2 days/week**
-• Choose safe, accessible options: **body‑weight, bands, machines or light free‑weights**
-• Focus on **good technique** and **full range of motion** before adding load
-• Include movements for **legs, hips, back, chest, shoulders and arms**
-• Add simple **balance and power** moves (e.g., sit‑to‑stand with a quick rise) as tolerated
-• Progress **gradually** and allow recovery between sessions
 
 **Zone 2 (easy aerobic base):**
 • Feels comfortable and sustainable (you can hold a conversation)
@@ -686,12 +737,13 @@ Remember, your medications are prescribed specifically for your condition. Takin
   missingInfoDetection: `Analyze the following patient education request and identify any missing information that would help provide more personalized and effective lifestyle advice. Return your analysis as a JSON object.
 
 Consider these categories:
-- Patient demographics and context
-- Specific health conditions or risk factors  
-- Current lifestyle habits and challenges
+- Patient demographics and context (including age, mobility status such as chair-rise independence, falls in last 12 months)
+- Specific health conditions or risk factors
+- Current lifestyle habits and challenges (including previous physical activity level, equipment available such as home/gym/bands, preferences by modality such as walking/gym/group vs solo)
 - Motivation level and readiness for change
-- Available support systems
+- Available support systems (including social support/context for activity such as buddy/group access)
 - Previous education or attempts at lifestyle changes
+- Cultural considerations (including cultural preferences that affect exercise choices)
 
 Return a JSON object with:
 {
@@ -729,14 +781,18 @@ export const PATIENT_EDUCATION_VALIDATION_RULES = {
   // Ensure no diagnostic language
   prohibitedPhrases: [
     'diagnose', 'diagnosis', 'you have', 'you are suffering from', 'your condition is',
-    'I recommend starting', 'increase your medication', 'stop taking', 'change your dose'
+    'I recommend starting', 'increase your medication', 'stop taking', 'change your dose',
+    'static stretch before lifting'
   ],
-  
+
   // Required elements for quality education
   requiredElements: [
     'practical steps', 'Australian guidelines', 'specific recommendations',
     'encouragement', 'resources for support', 'SMART goals', 'safety net',
-    'priority plan', 'habit cues', 'magnitude note (when available)'
+    'priority plan', 'habit cues', 'magnitude note (when available)',
+    'table-aligned older-adult dosing (when applicable)',
+    'warm-up guidance (no static stretching before PRT)',
+    'sequencing: strength → balance → endurance (if frailty flagged)'
   ],
   
   // Ensure Australian spelling

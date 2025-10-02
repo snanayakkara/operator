@@ -204,7 +204,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const [showServicesDetails, setShowServicesDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Phase 4 Intelligence State
+  // Intelligent Features State
   const [phase4Stats, setPhase4Stats] = useState<any>(null);
   
   // Session notification state
@@ -624,12 +624,12 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               </div>
             </div>
 
-            {/* Phase 4 Intelligence Quick View */}
+            {/* Intelligent Features Quick View */}
             <div className="border border-gray-100 rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Sparkles className="w-4 h-4 text-purple-600" />
-                  <span className="text-ink-primary text-sm font-medium">Phase 4 Intelligence</span>
+                  <span className="text-ink-primary text-sm font-medium">Intelligent Features</span>
                 </div>
                 <div className="text-xs text-ink-secondary">
                   {phase4Stats ? 'Active' : 'Loading...'}
