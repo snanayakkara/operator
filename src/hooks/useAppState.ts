@@ -85,6 +85,7 @@ interface DisplaySessionState {
   displayResults: string;
   displaySummary?: string;
   displayTaviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
+  displayEducationData?: any; // Patient Education structured data
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
@@ -698,6 +699,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         streamBuffer: '',
         ttftMs: null,
         processingStartTime: null,
+        pipelineProgress: null, // Clear pipeline progress to hide progress card
         ui: {
           ...state.ui,
           activeWorkflow: null,
@@ -784,6 +786,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayResults: session.results || '',
           displaySummary: session.summary,
           displayTaviStructuredSections: session.taviStructuredSections,
+          displayEducationData: session.educationData,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null

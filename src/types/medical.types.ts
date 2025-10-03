@@ -743,6 +743,7 @@ export interface PatientSession {
   results: string;
   summary?: string; // Summary for dual card display (especially for QuickLetter)
   taviStructuredSections?: TAVIWorkupStructuredSections; // TAVI structured data for specialized display
+  educationData?: any; // Patient Education structured data (JSON metadata + letter content)
   agentType: AgentType;
   agentName: string;
   timestamp: number;
@@ -1131,6 +1132,8 @@ export interface PatientEducationReport extends MedicalReport {
     completenessScore?: string;
     australianGuidelines: string[];
     patientResources: string[];
+    jsonMetadata?: any; // Structured JSON metadata from the LLM
+    letterContent?: string; // Plain text patient letter
   };
 }
 

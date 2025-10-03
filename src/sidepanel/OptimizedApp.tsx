@@ -341,6 +341,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         console.log('🏁 State Check: Before atomic completion - Processing:', state.isProcessing, 'Status:', state.processingStatus, 'Streaming:', state.streaming);
 
         try {
+          // Preserve agent type for field-specific EMR insertion before atomic completion
+          console.log('🔧 PRESERVING AGENT TYPE (streaming path):', agent, 'for session:', sessionId);
+          actions.setCurrentAgent(agent);
+
           actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
           console.log('🏁 Workflow Completion: Atomic completion done for streaming workflow');
 
@@ -1265,6 +1269,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         results: state.displaySession.displayResults,
         summary: state.displaySession.displaySummary,
         taviStructuredSections: state.displaySession.displayTaviStructuredSections,
+        educationData: state.displaySession.displayEducationData,
         agent: state.displaySession.displayAgent,
         agentName: state.displaySession.displayAgentName,
         patientInfo: state.displaySession.displayPatientInfo,
@@ -2554,10 +2559,11 @@ const OptimizedAppContent: React.FC = memo(() => {
                     console.log('🎓 Processing Patient Education with input:', input);
                     const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
 
-                    // Update the session with results
+                    // Update the session with results and education data
                     const processingTime = Date.now() - (patientSession.processingStartTime || Date.now());
                     actions.updatePatientSession(sessionId, {
                       results: result.content,
+                      educationData: result.educationData, // Store structured JSON metadata and letter
                       status: 'completed',
                       completed: true,
                       processingTime,
@@ -2692,6 +2698,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     : state.ui.processingProgress
                 )}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
+                educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 pipelineProgress={displayData.isDisplayingSession ? null : state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                   />
@@ -2944,20 +2951,9 @@ const OptimizedAppContent: React.FC = memo(() => {
       )}
       
       {/* Recording Prompts are now integrated into the unified recording interface above */}
-      
 
-      {/* Unified Pipeline Progress - shown during all processing stages, positioned below header */}
-      {state.pipelineProgress && (
-        <div className="absolute top-20 left-4 right-4 z-40 pointer-events-none">
-          <UnifiedPipelineProgress
-            progress={state.pipelineProgress}
-            startTime={state.processingStartTime || undefined}
-            agentType={state.currentAgent || undefined}
-            transcriptionLength={state.transcription ? state.transcription.length : undefined}
-            showTimeEstimate={true}
-          />
-        </div>
-      )}
+
+      {/* Unified Pipeline Progress is now shown within OptimizedResultsPanel to prevent UI overlap */}
       
       {/* Metrics Dashboard */}
       <MetricsDashboard 

@@ -36,7 +36,7 @@ export class AgentFactory {
       usePhase4Enhancement?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any }> {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any }> {
     const startTime = Date.now();
     
     try {
@@ -49,8 +49,13 @@ export class AgentFactory {
       // Enhance context with user phrasebook terminology preferences
       const enhancedContext = await this.enhanceWithPhrasebook(context, workflowId);
 
+      // Merge onProgress callback into context for agent progress reporting
+      const contextWithProgress = options?.onProgress
+        ? { ...enhancedContext, onProgress: options.onProgress }
+        : enhancedContext;
+
       // Use lazy loading for dramatic bundle size reduction
-      const report = await this.lazyFactory.processWithAgent(workflowId, input, enhancedContext);
+      const report = await this.lazyFactory.processWithAgent(workflowId, input, contextWithProgress);
       
       const totalTime = Date.now() - startTime;
       
@@ -80,6 +85,17 @@ export class AgentFactory {
           component: 'agent-factory',
           operation: 'tavi-workup',
           sectionsFound: Object.keys(taviStructuredSections).length
+        });
+      }
+
+      // Check if this is a PatientEducationAgent with education data
+      const educationData = (report as any).educationData;
+      if (workflowId === 'patient-education' && educationData) {
+        logger.info(`Patient Education found structured data`, {
+          component: 'agent-factory',
+          operation: 'patient-education',
+          modules: educationData.modules?.length || 0,
+          hasJsonMetadata: !!educationData.jsonMetadata
         });
       }
       
@@ -121,7 +137,8 @@ export class AgentFactory {
         agentName: report.agentName,
         reviewData: batchPatientReviewData, // Include structured data for Batch Patient Review
         missingInfo: report.metadata?.missingInformation,
-        taviStructuredSections: taviStructuredSections // Include structured data for TAVI Workup
+        taviStructuredSections: taviStructuredSections, // Include structured data for TAVI Workup
+        educationData: educationData // Include structured data for Patient Education
       };
       
     } catch (error) {

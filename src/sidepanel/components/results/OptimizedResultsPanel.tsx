@@ -36,9 +36,10 @@ import {
   TAVIWorkupDisplay,
   RightHeartCathDisplay
 } from './index';
-import type { AgentType, FailedAudioRecording } from '@/types/medical.types';
+import { PatientEducationOutputCard } from '../PatientEducationOutputCard';
+import type { AgentType, FailedAudioRecording, PipelineProgress } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
-import { ProcessingIndicator } from '../../../components/ProcessingIndicator';
+import { UnifiedPipelineProgress } from '../UnifiedPipelineProgress';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
 
 interface OptimizedResultsPanelProps {
@@ -103,6 +104,11 @@ interface OptimizedResultsPanelProps {
   };
   // TAVI Workup structured data
   taviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
+  // Patient Education structured data
+  educationData?: any; // Patient Education JSON metadata and letter content
+  // Pipeline progress for unified progress bar
+  pipelineProgress?: PipelineProgress | null;
+  processingStartTime?: number | null;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -157,7 +163,12 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Progress tracking
   processingProgress,
   // TAVI structured data
-  taviStructuredSections
+  taviStructuredSections,
+  // Patient Education structured data
+  educationData,
+  // Pipeline progress
+  pipelineProgress,
+  processingStartTime
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -304,6 +315,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Check if this is a Right Heart Cath with structured display
   const isRightHeartCath = agentType === 'right-heart-cath' && results;
 
+  // Check if this is a Patient Education with structured display
+  const isPatientEducation = agentType === 'patient-education' && results;
+
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
     console.log('🔍 TAVI Detection Debug:', {
@@ -369,9 +383,19 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   {reviewData.isBatchReview ? 'Batch AI Medical Review' : 'AI Medical Review'}
                 </h3>
                 <p className="text-blue-700 text-xs">
-                  {reviewData.isBatchReview 
-                    ? 'Multi-patient clinical oversight recommendations' 
+                  {reviewData.isBatchReview
+                    ? 'Multi-patient clinical oversight recommendations'
                     : 'Australian clinical oversight recommendations'}
+                </p>
+              </div>
+            </>
+          ) : isProcessing ? (
+            <>
+              <FileTextIcon className="w-4 h-4 text-blue-600 animate-pulse" />
+              <div>
+                <h3 className="text-gray-900 font-medium text-sm">Processing</h3>
+                <p className="text-blue-700 text-xs">
+                  Extracting patient data from EMR...
                 </p>
               </div>
             </>
@@ -463,9 +487,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     >
       {renderHeader()}
 
-      {/* TAVI Workup Progress Indicator */}
+      {/* TAVI Workup Progress - Uses unified progress for consistency */}
       <AnimatePresence>
-        {agentType === 'tavi-workup' && processingProgress && (
+        {agentType === 'tavi-workup' && pipelineProgress && isProcessing && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -473,19 +497,29 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             transition={{ duration: ANIMATION_DURATIONS.normal }}
             className="p-4 border-b border-gray-200"
           >
-            <ProcessingIndicator
+            <UnifiedPipelineProgress
+              progress={pipelineProgress}
+              startTime={processingStartTime || undefined}
               agentType={agentType}
-              isProcessing={true}
-              processingStatus={{
-                agentType,
-                isEnhanced: true,
-                currentPhase: processingProgress.phase,
-                overallProgress: processingProgress.progress,
-                phases: [],
-                estimatedTimeRemaining: 0,
-                warnings: [],
-                insights: processingProgress.details ? [processingProgress.details] : []
-              }}
+              showTimeEstimate={true}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Unified Pipeline Progress for all agents during processing */}
+      <AnimatePresence>
+        {isProcessing && pipelineProgress && agentType !== 'tavi-workup' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: ANIMATION_DURATIONS.normal }}
+            className="p-4 border-b border-gray-200"
+          >
+            <UnifiedPipelineProgress
+              progress={pipelineProgress}
+              startTime={processingStartTime || undefined}
             />
           </motion.div>
         )}
@@ -946,6 +980,33 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               approvalState={approvalState}
               onTranscriptionApprove={onTranscriptionApprove}
             />
+          ) : isPatientEducation ? (
+            // Patient Education with structured JSON metadata + letter display
+            <PatientEducationOutputCard
+              report={{
+                content: results,
+                agentName: currentAgentName || 'Patient Education & Lifestyle Medicine',
+                metadata: {
+                  processingTime: totalProcessingTime || 0,
+                  confidence: 0.9,
+                  modelUsed: 'medgemma-27b'
+                },
+                sections: [],
+                warnings: warnings || [],
+                errors: errors || [],
+                educationData: educationData || {
+                  priority: 'medium',
+                  modules: [],
+                  australianGuidelines: [],
+                  patientResources: [],
+                  jsonMetadata: null,
+                  letterContent: results
+                }
+              }}
+              onCopy={onCopy}
+              onInsert={onInsertToEMR}
+              isVisible={true}
+            />
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary
             <ReportDisplay
@@ -957,9 +1018,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
         )}
       </AnimatePresence>
 
-      {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, or TAVI workup */}
+      {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, or TAVI workup, and NOT while processing */}
       <AnimatePresence>
-        {!isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && !isRightHeartCath && (
+        {!isProcessing && !isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && !isRightHeartCath && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
