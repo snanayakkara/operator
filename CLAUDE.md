@@ -31,6 +31,7 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 - **DSPy + GEPA**: prompt optimisation with 30‑point medical rubric (local eval; versioning; audit trails)
 - **Side panel UX**: LiveAudioVisualizer + compact RecordingPromptCard; Sessions timeline is a chronological queue with state-themed cards, inline progress chips, and quick actions; OptimizedResultsPanel shows progress & results; Options page for management
 - **Unified Pipeline Progress**: Single segmented progress bar (`UnifiedPipelineProgress`) showing live updates through 4 pipeline stages: Audio Processing (0-10%) → Transcribing (10-40%) → AI Analysis (40-90%) → Generation (90-100%); replaces old fragmented overlays with real-time progress tracking, elapsed time, ETA, and model identification
+- **Consistent UI/UX**: Shared state color system (`stateColors.ts`) ensures visual consistency across progress bars, session timeline, and status indicators; `ResultsContainer` provides standardized layout with agent-specific content slots; `ActionButtons` with extensible custom actions support
 
 ---
 
@@ -112,9 +113,55 @@ npm run optim:quick-letter
 
 ---
 
-## 10) UI Design (Monochrome)
-- Clean, clinical, minimal; colour reserved for success/warn/error/active. Sessions timeline cards use state-specific tints, gradient edge accents, and the shared `.icon-compact` utility to align glyphs.
-- Components: primary/secondary/icon buttons; stat/content/blueprint cards; clear typography; motion kept subtle (`animate-complete-pop` for completion, honors `prefers-reduced-motion`).
+## 10) UI Design & Consistency
+
+### 10.1 Visual Language (Monochrome + State Colors)
+- **Base**: Clean, clinical, minimal; colour reserved for success/warn/error/active
+- **State Colors**: Unified color system in `utils/stateColors.ts` ensures consistent visual language across all components
+  - 🔴 Red gradients: Recording/active states
+  - 🔵 Blue gradients: Transcription states
+  - 🟣 Purple gradients: AI processing/intelligence
+  - 🟢 Emerald gradients: Generation/success
+  - 🔴 Rose gradients: Error/warning
+  - 🟦 Teal gradients: Completed states
+- **Typography**: Clear hierarchy; motion kept subtle (`animate-complete-pop` for completion, honors `prefers-reduced-motion`)
+
+### 10.2 Component Consistency
+- **Progress Indicators**: Single `UnifiedPipelineProgress` component used by ALL agents (TAVI, QuickLetter, AI Review, etc.)
+  - Segmented bar with 4 stages: Audio (0-10%) → Transcribing (10-40%) → AI Analysis (40-90%) → Generation (90-100%)
+  - Live elapsed time, adaptive ETA, model identification
+  - Consistent colors derived from shared state definitions
+- **Results Display**: `ResultsContainer` wrapper provides standardized layout:
+  - Header (title, metadata, status) - consistent across all agents
+  - Transcription section (always visible when available)
+  - Agent-specific content area (flexible slot for specialized displays)
+  - Action buttons footer (Copy, Insert, Download + optional custom actions)
+- **Action Buttons**: Standardized `ActionButtons` component with extensible custom actions
+  - Core actions: Copy, Insert to EMR, Download
+  - Optional: AI Reasoning viewer (when artifacts available)
+  - Agent-specific custom actions (e.g., "Generate Patient Version" for QuickLetter)
+  - Consistent visual feedback (checkmark animation, success states)
+- **Session Timeline**: State-themed cards with gradient backgrounds and accent edges using shared colors
+- **Transcription Section**: Identical appearance and behavior across all agents
+  - Expandable/collapsible with audio playback
+  - Copy/Insert/Edit actions
+  - Transcription approval controls (Perfect/Edit/Skip) for training data quality
+
+### 10.3 Theme System
+- **Light & Dark Modes**: Full theme support with system preference detection
+- **Theme Manager** (`utils/themeSystem.ts`): Centralized theme management with CSS variable injection
+- **Modes**: Light, Dark, System (auto-detects OS preference)
+- **Persistence**: User preference saved to localStorage
+- **ThemeToggle**: Compact toggle in header (Sun/Moon/Monitor icons)
+- **Clinical Dark Mode**: Optimized for low-light environments while maintaining medical clarity
+
+**Theme Colors**:
+- All colors defined as CSS variables (e.g., `--color-bg-primary`, `--color-text-primary`)
+- Tailwind classes use `var()` references for automatic theme switching
+- State colors adapt across themes while maintaining visual hierarchy
+
+### 10.4 Design Principle
+**"Same task = Same UI"** - If two agents perform the same underlying action (progress tracking, copying text, displaying results), they use the **same component** with the **same visual design**. Agent-specific complexity lives in designated content areas, not in chrome/buttons/status displays.
 
 ---
 
@@ -129,9 +176,22 @@ src/
              Metrics, ProcessingTimePredictor, AudioOptimization, ASRCorrectionsLog,
              ScreenshotCombiner, Notification, Toast)
   content/ (content-script.ts)
-  sidepanel/ (OptimizedApp + components/results/*)
+  sidepanel/
+    OptimizedApp.tsx (main app)
+    components/
+      UnifiedPipelineProgress.tsx (single progress bar for all agents)
+      SessionDropdown.tsx (state-themed timeline)
+      results/
+        ResultsContainer.tsx (standardized layout wrapper)
+        ActionButtons.tsx (extensible actions)
+        TranscriptionSection.tsx (consistent transcription UI)
+        ReportDisplay.tsx, TAVIWorkupDisplay.tsx, RightHeartCathDisplay.tsx, etc.
   hooks/ (useRecorder, useModelStatus, useAIProcessing, useAppState)
   config/ (workflowConfig, appointmentPresets, recordingPrompts)
+  utils/
+    stateColors.ts (shared color definitions for consistency)
+    themeSystem.ts (light/dark theme manager with CSS variables)
+    formatting.ts, animations.ts, etc.
   types/ (medical.types.ts, optimization.ts, BatchProcessingTypes.ts)
 llm/ (DSPy server + prompts); eval/ (datasets + feedback); tests/e2e/*; whisper-server.py
 ```
@@ -177,12 +237,18 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.0**
+**Current Version**: **3.6.2**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.2 (Jan 2025)**
+- **Patient Education JSON Parsing**: Fixed two-part response parsing to properly strip markdown code fences and separate JSON metadata from patient letter content
+
+**v3.6.1 (Jan 2025)**
+- (Previous patch release)
 
 **v3.6.0 (Jan 2025)**
 - **Unified Pipeline Progress**: Single segmented progress bar showing live updates through Audio Processing → Transcribing → AI Analysis → Generation; replaces `FieldIngestionOverlay` and `ProcessingPhaseIndicator` with real-time tracking, no more 0% stuck screens

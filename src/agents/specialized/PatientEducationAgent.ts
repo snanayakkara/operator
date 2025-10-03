@@ -37,6 +37,8 @@ export interface PatientEducationReport extends MedicalReport {
     completenessScore?: string;
     australianGuidelines: string[];
     patientResources: string[];
+    jsonMetadata?: any; // Structured JSON metadata from the LLM
+    letterContent?: string; // Plain text patient letter
   };
 }
 
@@ -90,9 +92,12 @@ export class PatientEducationAgent extends MedicalAgent {
         this.agentType
       );
 
+      // Parse the two-part response: JSON metadata + plain text letter
+      const { jsonMetadata, letterContent } = this.parseTwoPartResponse(response);
+
       // Parse and validate the response
-      const sections = this.parseResponse(response, context);
-      const cleanedContent = this.cleanAndValidateEducationContent(response, educationInput);
+      const sections = this.parseResponse(letterContent, context);
+      const cleanedContent = this.cleanAndValidateEducationContent(letterContent, educationInput);
       
       // Extract Australian guidelines and resources mentioned
       const australianGuidelines = this.extractAustralianGuidelines(cleanedContent);
@@ -139,7 +144,9 @@ export class PatientEducationAgent extends MedicalAgent {
         modules: educationInput.selectedModules,
         completenessScore: missingInfo.completeness_score,
         australianGuidelines,
-        patientResources
+        patientResources,
+        jsonMetadata, // Store the parsed JSON metadata
+        letterContent: cleanedContent // Store the plain text letter separately
       };
 
       // Add missing information to metadata
@@ -264,6 +271,71 @@ ${patientInfo.medicare ? `Medicare: ${patientInfo.medicare}` : ''}` : 'No patien
     }
 
     return sections;
+  }
+
+  /**
+   * Parse the two-part response format: JSON metadata + letter
+   */
+  private parseTwoPartResponse(response: string): { jsonMetadata: any; letterContent: string } {
+    try {
+      // Split by the delimiter ---
+      const parts = response.split(/^---$/m);
+
+      if (parts.length >= 2) {
+        // First part should be JSON
+        let jsonPart = parts[0].trim();
+        // Rest is the letter
+        const letterPart = parts.slice(1).join('---').trim();
+
+        try {
+          // Strip markdown code fences (```json, ```, or just leading/trailing backticks)
+          jsonPart = jsonPart.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim();
+
+          const jsonMetadata = JSON.parse(jsonPart);
+          return {
+            jsonMetadata,
+            letterContent: letterPart
+          };
+        } catch (jsonError) {
+          console.warn('Failed to parse JSON metadata, using fallback:', jsonError);
+          console.warn('JSON part was:', jsonPart.substring(0, 200));
+          // Fallback: treat entire response as letter
+          return {
+            jsonMetadata: this.createFallbackMetadata(),
+            letterContent: response
+          };
+        }
+      } else {
+        // No delimiter found, treat entire response as letter
+        console.warn('No delimiter found in response, treating as plain letter');
+        return {
+          jsonMetadata: this.createFallbackMetadata(),
+          letterContent: response
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing two-part response:', error);
+      return {
+        jsonMetadata: this.createFallbackMetadata(),
+        letterContent: response
+      };
+    }
+  }
+
+  /**
+   * Create fallback metadata when JSON parsing fails
+   */
+  private createFallbackMetadata(): any {
+    return {
+      sections: [],
+      priority_plan: [],
+      additional_optimizations: [],
+      smart_goals: [],
+      habit_plan: [],
+      resources: [],
+      safety_net: 'If you experience concerning symptoms, contact your healthcare team or call 000 in an emergency.',
+      reading_level: 'Year 7–8'
+    };
   }
 
   /**
