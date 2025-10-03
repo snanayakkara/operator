@@ -237,12 +237,15 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.2**
+**Current Version**: **3.6.3**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.3 (Jan 2025)**
+- **Patient Education Session Tracking**: Patient Education generations now create proper sessions in the timeline, enabling review, history tracking, and consistent UX with all other agents
 
 **v3.6.2 (Jan 2025)**
 - **Patient Education JSON Parsing**: Fixed two-part response parsing to properly strip markdown code fences and separate JSON metadata from patient letter content

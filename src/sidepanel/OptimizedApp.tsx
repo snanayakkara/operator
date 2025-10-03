@@ -18,8 +18,6 @@ import { StatusIndicator } from './components/StatusIndicator';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
-import { FieldIngestionOverlay } from './components/FieldIngestionOverlay';
-import { ProcessingPhaseIndicator } from './components/ProcessingPhaseIndicator';
 import { UnifiedPipelineProgress } from './components/UnifiedPipelineProgress';
 import { RecordingPromptCard } from './components/RecordingPromptCard';
 import { hasRecordingPrompt } from '@/config/recordingPrompts';
@@ -65,9 +63,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     patientSelection: selectors.isOverlayActive('patient-selection'),
     screenshotAnnotation: selectors.isOverlayActive('screenshot-annotation'),
     bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
-    patientMismatch: selectors.isOverlayActive('patient-mismatch'),
-    fieldIngestion: selectors.isOverlayActive('field-ingestion'),
-    processingPhase: selectors.isOverlayActive('processing-phase')
+    patientMismatch: selectors.isOverlayActive('patient-mismatch')
   };
   const metricsDashboardOpen = selectors.isSidePanelOpen('metrics-dashboard');
   const activeWorkflowRef = useRef<AgentType | null>(null);
@@ -716,7 +712,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
       });
 
-      // Also initialize UI processing progress for ProcessingPhaseIndicator
+      // Initialize processing progress
       actions.setProcessingProgress(0);
 
       // Special handling for TAVI workup with progress tracking
@@ -762,7 +758,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           }
         });
 
-        // Also update UI processing progress for ProcessingPhaseIndicator
+        // Update processing progress
         actions.setProcessingProgress(clampedProgress);
       };
 
@@ -2293,18 +2289,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     return () => clearInterval(validationInterval);
   }, [state.processingStatus, state.isProcessing, state.streaming, state.currentSessionId, state.results, recorder.isRecording, actions]);
 
-  // Auto-close field-ingestion overlay when displayed session completes processing
-  useEffect(() => {
-    if (overlayState.fieldIngestion && state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
-      const displayedSession = state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
-
-      // Close overlay if session is no longer processing
-      if (displayedSession && displayedSession.status !== 'processing' && displayedSession.status !== 'transcribing') {
-        console.log('📊 Session finished processing, closing field-ingestion overlay');
-        actions.closeOverlay('field-ingestion');
-      }
-    }
-  }, [overlayState.fieldIngestion, state.displaySession.isDisplayingSession, state.displaySession.displaySessionId, state.patientSessions, actions]);
+  // Note: Field ingestion overlay has been removed in favor of UnifiedPipelineProgress
 
   // Cleanup progress indicator timeout on unmount
   useEffect(() => {
@@ -2526,27 +2511,76 @@ const OptimizedAppContent: React.FC = memo(() => {
                   actions.setUIMode('idle', { sessionId: null, origin: 'user' });
                 }}
                 isGenerating={state.isProcessing && state.currentAgent === 'patient-education'}
+                pipelineProgress={state.pipelineProgress}
+                processingStartTime={state.processingStartTime}
                 onGenerate={async (input) => {
                   try {
+                    // Create a session for this Patient Education generation
+                    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+                    const patientInfo = input.patientData || state.currentPatientInfo || {
+                      name: 'Patient Education Session',
+                      id: `PE-${Date.now()}`,
+                      dob: '',
+                      age: '',
+                      extractedAt: Date.now()
+                    };
+
+                    const patientSession: PatientSession = {
+                      id: sessionId,
+                      patient: patientInfo,
+                      transcription: '', // No audio transcription for Patient Education
+                      results: '',
+                      agentType: 'patient-education',
+                      agentName: 'Patient Education & Lifestyle Medicine',
+                      timestamp: Date.now(),
+                      status: 'processing',
+                      completed: false,
+                      processingStartTime: Date.now()
+                    };
+
+                    // Add the session to the timeline
+                    actions.addPatientSession(patientSession);
+                    actions.setCurrentSessionId(sessionId);
+
                     actions.setProcessing(true);
                     actions.setCurrentAgent('patient-education');
                     actions.setResults('');
                     actions.setErrors([]);
-                    
+
                     // Import AgentFactory dynamically
                     const { AgentFactory } = await import('@/services/AgentFactory');
-                    
+
                     // Process with the Patient Education agent
                     console.log('🎓 Processing Patient Education with input:', input);
                     const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
-                    
+
+                    // Update the session with results
+                    const processingTime = Date.now() - (patientSession.processingStartTime || Date.now());
+                    actions.updatePatientSession(sessionId, {
+                      results: result.content,
+                      status: 'completed',
+                      completed: true,
+                      processingTime,
+                      completedTime: Date.now()
+                    });
+
                     actions.closeOverlay('patient-education');
                     // Use atomic completion to ensure consistent state management
-                    actions.completeProcessingAtomic(state.currentSessionId || 'patient-education-session', result.content);
+                    actions.completeProcessingAtomic(sessionId, result.content);
                     console.log('✅ Patient Education generation completed');
                   } catch (error) {
                     console.error('❌ Patient Education generation failed:', error);
                     const errorMessage = error instanceof Error ? error.message : String(error);
+
+                    // Update session status to error if we have a sessionId
+                    if (state.currentSessionId) {
+                      actions.updatePatientSession(state.currentSessionId, {
+                        status: 'error',
+                        completed: true,
+                        errors: [errorMessage]
+                      });
+                    }
+
                     actions.setErrors([`Patient Education generation failed: ${errorMessage}`]);
                     actions.setProcessingStatus('idle');
                     actions.setProcessing(false);
@@ -2658,6 +2692,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                     : state.ui.processingProgress
                 )}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
+                pipelineProgress={displayData.isDisplayingSession ? null : state.pipelineProgress}
+                processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                   />
                 );
               })()}
@@ -2665,7 +2701,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
           
           {/* Default State - Ready for Recording */}
-          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !overlayState.fieldIngestion && !overlayState.processingPhase && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
+          {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-6">
                 <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
