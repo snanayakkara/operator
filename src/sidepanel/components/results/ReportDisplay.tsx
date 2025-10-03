@@ -7,8 +7,8 @@
  * - Memoization to prevent unnecessary re-renders
  */
 
-import React, { memo, useState, useMemo } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React, { memo, useState, useMemo, useRef } from 'react';
+import { ChevronDown, ChevronUp, FileText, BookOpen, Copy, Download, CheckCircle } from 'lucide-react';
 import type { AgentType } from '@/types/medical.types';
 
 interface ReportDisplayProps {
@@ -17,13 +17,57 @@ interface ReportDisplayProps {
   className?: string;
 }
 
-const ReportDisplay: React.FC<ReportDisplayProps> = memo(({ 
-  results, 
-  agentType, 
-  className = '' 
+const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
+  results,
+  agentType,
+  className = ''
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showFullContent, setShowFullContent] = useState(false);
+  const [copiedContent, setCopiedContent] = useState<string | null>(null);
+  const jsonBoxRef = useRef<HTMLDivElement>(null);
+
+  // Parse two-part response for patient-education agent
+  const parsedPatientEducation = useMemo(() => {
+    if (agentType !== 'patient-education') return null;
+
+    try {
+      // Look for the --- delimiter (may have surrounding whitespace)
+      const delimiterMatch = results.match(/\n---\n/);
+
+      if (delimiterMatch && delimiterMatch.index !== undefined) {
+        const jsonPart = results.substring(0, delimiterMatch.index).trim();
+        const letterPart = results.substring(delimiterMatch.index + delimiterMatch[0].length).trim();
+
+        try {
+          const jsonMetadata = JSON.parse(jsonPart);
+          return {
+            jsonMetadata,
+            letterContent: letterPart
+          };
+        } catch (parseError) {
+          console.warn('Failed to parse JSON metadata:', parseError);
+          // If JSON parse fails, treat entire content as letter
+          return {
+            jsonMetadata: null,
+            letterContent: results
+          };
+        }
+      } else {
+        // No delimiter found, treat as single letter
+        console.warn('No delimiter found in patient education output');
+        return {
+          jsonMetadata: null,
+          letterContent: results
+        };
+      }
+    } catch (error) {
+      console.error('Error parsing patient education response:', error);
+      // On any error, return null to use default rendering
+    }
+
+    return null;
+  }, [results, agentType]);
   
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
@@ -109,11 +153,134 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
     };
     return type ? names[type] || type.toUpperCase() : 'Medical Report';
   };
-  
+
+  const handleCopy = async (content: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedContent(type);
+      setTimeout(() => setCopiedContent(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
+  const handlePrintPDF = () => {
+    if (jsonBoxRef.current && parsedPatientEducation?.jsonMetadata) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        const jsonContent = JSON.stringify(parsedPatientEducation.jsonMetadata, null, 2);
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Patient Education Plan - Structured Data</title>
+              <style>
+                body { font-family: monospace; padding: 20px; }
+                pre { white-space: pre-wrap; word-wrap: break-word; }
+                h1 { font-size: 18px; margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+              <h1>Patient Education Plan - Structured Data</h1>
+              <pre>${jsonContent}</pre>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
   if (!results) {
     return null;
   }
-  
+
+  // Patient Education: Two-box layout (Letter + JSON)
+  if (agentType === 'patient-education' && parsedPatientEducation) {
+    const { letterContent, jsonMetadata } = parsedPatientEducation;
+
+    return (
+      <div className={`bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
+        <div className="p-4 space-y-4">
+          {/* Patient Letter Box */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-sm font-semibold text-gray-900">Patient Letter</h4>
+              </div>
+              <button
+                onClick={() => handleCopy(letterContent, 'letter')}
+                className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+              >
+                {copiedContent === 'letter' ? (
+                  <>
+                    <CheckCircle className="w-3 h-3 text-green-600" />
+                    <span className="text-green-600">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
+                {letterContent}
+              </div>
+            </div>
+          </div>
+
+          {/* JSON Metadata Box */}
+          {jsonMetadata && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                  <h4 className="text-sm font-semibold text-gray-900">Action Plan (Structured Data)</h4>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleCopy(JSON.stringify(jsonMetadata, null, 2), 'json')}
+                    className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+                  >
+                    {copiedContent === 'json' ? (
+                      <>
+                        <CheckCircle className="w-3 h-3 text-green-600" />
+                        <span className="text-green-600">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy JSON</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handlePrintPDF}
+                    className="flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Export PDF</span>
+                  </button>
+                </div>
+              </div>
+              <div ref={jsonBoxRef} className="bg-gray-900 rounded-lg p-4 border border-gray-700 overflow-x-auto">
+                <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
+                  {JSON.stringify(jsonMetadata, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Default rendering for other agents
   return (
     <div className={`bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
       {/* Header with report info */}
@@ -131,7 +298,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                 <ChevronDown className="w-5 h-5 text-gray-600" />
               )}
             </button>
-            
+
             <div>
               <h3 className="text-gray-900 font-semibold text-sm">
                 {getAgentDisplayName(agentType)}
@@ -141,7 +308,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
               </div>
             </div>
           </div>
-          
+
           {/* Expand/Collapse indicator */}
           {shouldTruncate && (
             <button
@@ -153,7 +320,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
           )}
         </div>
       </div>
-      
+
       {/* Report content */}
       {isExpanded && (
         <div className="report-content">
@@ -181,7 +348,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
               </div>
             </div>
           )}
-          
+
           {/* Truncation indicator */}
           {shouldTruncate && !showFullContent && (
             <div className="px-4 pb-4">

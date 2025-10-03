@@ -5,9 +5,47 @@ export default {
     "./src/sidepanel/**/*.{js,ts,jsx,tsx}",
     "./src/popup/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class', // Enable dark mode via class strategy
   theme: {
     extend: {
       colors: {
+        // Theme-aware colors (use CSS variables from themeSystem.ts)
+        'bg-primary': 'var(--color-bg-primary)',
+        'bg-secondary': 'var(--color-bg-secondary)',
+        'bg-tertiary': 'var(--color-bg-tertiary)',
+        'bg-elevated': 'var(--color-bg-elevated)',
+        'bg-overlay': 'var(--color-bg-overlay)',
+
+        'text-primary': 'var(--color-text-primary)',
+        'text-secondary': 'var(--color-text-secondary)',
+        'text-tertiary': 'var(--color-text-tertiary)',
+        'text-inverse': 'var(--color-text-inverse)',
+        'text-link': 'var(--color-text-link)',
+
+        'border-primary': 'var(--color-border-primary)',
+        'border-secondary': 'var(--color-border-secondary)',
+        'border-focus': 'var(--color-border-focus)',
+
+        'surface-primary': 'var(--color-surface-primary)',
+        'surface-secondary': 'var(--color-surface-secondary)',
+        'surface-tertiary': 'var(--color-surface-tertiary)',
+        'surface-elevated': 'var(--color-surface-elevated)',
+
+        'accent-emerald': 'var(--color-accent-emerald)',
+        'accent-blue': 'var(--color-accent-blue)',
+        'accent-purple': 'var(--color-accent-purple)',
+        'accent-rose': 'var(--color-accent-rose)',
+        'accent-amber': 'var(--color-accent-amber)',
+
+        'state-recording': 'var(--color-state-recording)',
+        'state-transcribing': 'var(--color-state-transcribing)',
+        'state-ai-analysis': 'var(--color-state-ai-analysis)',
+        'state-generation': 'var(--color-state-generation)',
+        'state-completed': 'var(--color-state-completed)',
+        'state-needs-review': 'var(--color-state-needs-review)',
+        'state-error': 'var(--color-state-error)',
+
+
         // Fluent Design System - Neutral Palette
         fluent: {
           neutral: {
@@ -44,12 +82,13 @@ export default {
           secondary: '#f0f0f0',    // fluent-neutral-12 (subtle dividers)
           subtle: '#f5f5f5',       // fluent-neutral-8
         },
-        // Meaningful accent colors (used sparingly)
+        // Meaningful accent colors (used sparingly) - enriched with more vibrant tones
         accent: {
           emerald: '#10b981',      // Success/health states
-          violet: '#8b5cf6',       // Processing/active states
+          teal: '#14b8a6',         // Analogous to emerald for gradients
+          violet: '#a855f7',       // Processing/active states (enriched from #8b5cf6)
           amber: '#f59e0b',        // Warnings/caution
-          red: '#ef4444',          // Errors/critical states
+          red: '#f43f5e',          // Errors/critical states (enriched rose from #ef4444)
         },
         // Legacy medical colors (deprecated - for gradual migration)
         medical: {
@@ -87,8 +126,9 @@ export default {
         },
       },
       borderRadius: {
-        'fluent-sm': '4px',    // Default for cards, buttons, inputs
+        'fluent-sm': '6px',    // Default for cards, buttons, inputs (softened from 4px)
         'fluent-md': '8px',    // Overlays, dialogs, flyouts
+        'fluent-lg': '12px',   // Major containers, session cards
       },
       borderWidth: {
         'fluent': '1px',       // Stroke-based layer separation

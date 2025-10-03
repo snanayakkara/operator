@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import type { PatientEducationInput } from '@/agents/specialized/PatientEducationAgent';
 import type { PatientEducationModule } from '@/agents/specialized/PatientEducationSystemPrompts';
-import type { PatientInfo as _PatientInfo } from '@/types/medical.types';
+import type { PatientInfo as _PatientInfo, PipelineProgress } from '@/types/medical.types';
+import { UnifiedPipelineProgress } from './UnifiedPipelineProgress';
 
 // Dynamic import types
 type _PatientEducationAgent = any;
@@ -28,6 +29,8 @@ interface PatientEducationConfigCardProps {
   onClose: () => void;
   emrExtractionError?: string;
   onRetryExtraction?: () => Promise<void>;
+  pipelineProgress?: PipelineProgress | null;
+  processingStartTime?: number | null;
 }
 
 export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProps> = ({
@@ -36,7 +39,9 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
   isVisible,
   onClose,
   emrExtractionError,
-  onRetryExtraction
+  onRetryExtraction,
+  pipelineProgress,
+  processingStartTime
 }) => {
   const [patientPriority, setPatientPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [selectedModules, setSelectedModules] = useState<string[]>(['diet_nutrition', 'physical_activity']);
@@ -488,7 +493,18 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
           </div>
 
           {/* Progress indicator */}
-          {(isGenerating || isExtracting) && (
+          {(isGenerating || isExtracting) && pipelineProgress && (
+            <div className="mt-4">
+              <UnifiedPipelineProgress
+                progress={pipelineProgress}
+                startTime={processingStartTime || undefined}
+                agentType="patient-education"
+              />
+            </div>
+          )}
+
+          {/* Fallback progress indicator if pipeline progress not available */}
+          {(isGenerating || isExtracting) && !pipelineProgress && (
             <div className="mt-4 text-center">
               <div className="text-xs text-gray-600">
                 {isExtracting ? 'Extracting patient data from EMR...' : 'Generating personalized lifestyle advice...'}

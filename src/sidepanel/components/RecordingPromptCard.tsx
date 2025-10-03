@@ -50,7 +50,7 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
     const isExpanded = expandedSections[section.title] ?? (compactMode ? false : index === 0); // In compact mode, sections collapsed by default
     
     return (
-      <div key={section.title} className={`border border-gray-200 rounded-lg overflow-hidden ${compactMode ? 'mb-2' : 'mb-3'}`}>
+      <div key={section.title} className={`border border-gray-200 rounded-xl overflow-hidden ${compactMode ? 'mb-2' : 'mb-3'}`}>
         <button
           onClick={() => toggleSection(section.title)}
           className={`w-full bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-left transition-colors ${
@@ -85,10 +85,10 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
   };
 
   return (
-    <div className={`w-full bg-white border border-gray-200 ${compactMode ? 'rounded-lg shadow-md' : 'max-w-none mx-2 rounded-xl shadow-lg mb-4'}`}>
-      <div className={`bg-white w-full overflow-hidden ${compactMode ? 'rounded-lg max-h-[40vh]' : 'rounded-xl max-h-[70vh]'}`}>
+    <div className={`w-full bg-gradient-to-br from-white to-slate-50/50 border border-gray-200 ${compactMode ? 'rounded-xl shadow-md' : 'max-w-none mx-2 rounded-xl shadow-lg mb-4'}`}>
+      <div className={`bg-gradient-to-br from-white to-slate-50/50 w-full overflow-hidden ${compactMode ? 'rounded-xl max-h-[40vh]' : 'rounded-xl max-h-[70vh]'}`}>
         {/* Header */}
-        <div className={`bg-gradient-to-r from-red-600 to-red-700 text-white ${compactMode ? 'px-3 py-2' : 'px-4 py-3'}`}>
+        <div className={`bg-gradient-to-r from-red-500 to-rose-600 text-white ${compactMode ? 'px-3 py-2' : 'px-4 py-3'}`}>
           <div className="flex items-center space-x-2">
             {!compactMode && (
               <div className="flex items-center space-x-2">

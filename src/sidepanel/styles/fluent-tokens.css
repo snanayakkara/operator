@@ -43,8 +43,9 @@
   --fluent-stroke-subtle: var(--fluent-neutral-8);
 
   /* ===== Corner Radius Tokens ===== */
-  --fluent-corner-radius-sm: 4px;   /* Default for cards, buttons, inputs */
+  --fluent-corner-radius-sm: 6px;   /* Default for cards, buttons, inputs (softened from 4px) */
   --fluent-corner-radius-md: 8px;   /* Overlays, dialogs, flyouts */
+  --fluent-corner-radius-lg: 12px;  /* Major containers, session cards */
 
   /* ===== Elevation Tokens (minimal shadow use) ===== */
   /* Only use shadows for true elevation - dialogs, menus, tooltips */
@@ -52,17 +53,19 @@
   --fluent-elevation-card: 0 0 2px rgba(0, 0, 0, 0.12);  /* Subtle, only when needed */
   --fluent-elevation-flyout: 0 8px 16px rgba(0, 0, 0, 0.14);  /* Dialogs, menus */
 
-  /* ===== Accent Colors (semantic, not decorative) ===== */
+  /* ===== Accent Colors (semantic, not decorative) - enriched vibrant tones ===== */
   --fluent-accent-emerald: #10b981;    /* Success states */
-  --fluent-accent-violet: #8b5cf6;     /* Processing/active */
+  --fluent-accent-teal: #14b8a6;       /* Analogous to emerald for gradients */
+  --fluent-accent-violet: #a855f7;     /* Processing/active (enriched from #8b5cf6) */
   --fluent-accent-amber: #f59e0b;      /* Warnings */
-  --fluent-accent-red: #ef4444;        /* Errors */
+  --fluent-accent-red: #f43f5e;        /* Errors (enriched rose from #ef4444) */
 
   /* Accent tints (very subtle, 2-3% opacity for backgrounds) */
   --fluent-accent-emerald-tint: rgba(16, 185, 129, 0.03);
-  --fluent-accent-violet-tint: rgba(139, 92, 246, 0.03);
+  --fluent-accent-teal-tint: rgba(20, 184, 166, 0.03);
+  --fluent-accent-violet-tint: rgba(168, 85, 247, 0.03);
   --fluent-accent-amber-tint: rgba(245, 158, 11, 0.03);
-  --fluent-accent-red-tint: rgba(239, 68, 68, 0.03);
+  --fluent-accent-red-tint: rgba(244, 63, 94, 0.03);
 }
 
 /* ===== Fluent Component Classes ===== */

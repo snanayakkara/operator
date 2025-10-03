@@ -88,13 +88,13 @@ export const QueueStatusDisplay: React.FC<QueueStatusDisplayProps> = ({
   }
 
   return (
-    <div className={`bg-white border border-gray-200 rounded-lg p-3 shadow-sm ${className}`}>
+    <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-gray-200 rounded-xl p-3 shadow-sm ${className}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
           <BarChart3 className="w-4 h-4 text-blue-600" />
           <span className="text-sm font-medium text-gray-900">Audio Queue</span>
         </div>
-        
+
         {queueStats.currentConcurrency > 0 && (
           <div className="flex items-center space-x-1 text-xs text-green-600">
             <Zap className="w-3 h-3" />

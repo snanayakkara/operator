@@ -16,6 +16,7 @@ import { Mic, FileText, Brain, Sparkles, Clock, TrendingUp } from 'lucide-react'
 import { formatElapsedTime } from '@/utils/formatting';
 import { ProcessingTimePredictor, type ProcessingTimeEstimate } from '@/services/ProcessingTimePredictor';
 import type { PipelineProgress, PipelineStage, AgentType } from '@/types/medical.types';
+import { getStateColors, pipelineStageToState } from '@/utils/stateColors';
 
 interface UnifiedPipelineProgressProps {
   progress: PipelineProgress;
@@ -38,50 +39,35 @@ interface PipelineSegment {
   };
 }
 
+// Generate pipeline segments with consistent colors from shared state definitions
 const PIPELINE_SEGMENTS: PipelineSegment[] = [
   {
     id: 'audio-processing',
     label: 'Processing Audio',
     icon: Mic,
     range: [0, 10],
-    color: {
-      inactive: 'bg-gray-200',
-      active: 'bg-purple-500',
-      complete: 'bg-purple-600'
-    }
+    color: getStateColors(pipelineStageToState('audio-processing')).progressGradient
   },
   {
     id: 'transcribing',
     label: 'Transcribing',
     icon: FileText,
     range: [10, 40],
-    color: {
-      inactive: 'bg-gray-200',
-      active: 'bg-blue-500',
-      complete: 'bg-blue-600'
-    }
+    color: getStateColors(pipelineStageToState('transcribing')).progressGradient
   },
   {
     id: 'ai-analysis',
     label: 'AI Analysis',
     icon: Brain,
     range: [40, 90],
-    color: {
-      inactive: 'bg-gray-200',
-      active: 'bg-indigo-500',
-      complete: 'bg-indigo-600'
-    }
+    color: getStateColors(pipelineStageToState('ai-analysis')).progressGradient
   },
   {
     id: 'generation',
     label: 'Generating',
     icon: Sparkles,
     range: [90, 100],
-    color: {
-      inactive: 'bg-gray-200',
-      active: 'bg-emerald-500',
-      complete: 'bg-emerald-600'
-    }
+    color: getStateColors(pipelineStageToState('generation')).progressGradient
   }
 ];
 

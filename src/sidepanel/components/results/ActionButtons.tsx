@@ -21,6 +21,14 @@ import type { AgentType, ReportMetadata } from '@/types/medical.types';
 // Lazy load the AI Reasoning Modal for better performance
 const AIReasoningModal = React.lazy(() => import('../../components/AIReasoningModal'));
 
+export interface CustomAction {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary';
+}
+
 interface ActionButtonsProps {
   results: string;
   agentType: AgentType | null;
@@ -30,6 +38,8 @@ interface ActionButtonsProps {
   // AI Reasoning viewer props
   reportMetadata?: ReportMetadata;
   agentName?: string;
+  // Agent-specific custom actions
+  customActions?: CustomAction[];
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = memo(({
@@ -39,7 +49,8 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   onInsertToEMR,
   className = '',
   reportMetadata,
-  agentName
+  agentName,
+  customActions = []
 }) => {
   const [copiedRecently, setCopiedRecently] = useState(false);
   const [insertedRecently, setInsertedRecently] = useState(false);
@@ -88,9 +99,13 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
     URL.revokeObjectURL(url);
   };
 
+  // Calculate grid columns based on available actions
+  const totalActions = 3 + (hasReasoningArtifacts ? 1 : 0) + customActions.length;
+  const gridCols = totalActions <= 4 ? `grid-cols-${totalActions}` : 'grid-cols-4';
+
   return (
     <div className={`p-4 border-t border-emerald-200/50 ${className}`}>
-      <div className={`grid gap-2 ${hasReasoningArtifacts ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      <div className={`grid gap-2 ${gridCols}`}>
         {/* Copy Button */}
         <button
           onClick={handleCopy}
@@ -154,6 +169,30 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
             <span className="text-xs text-gray-700 font-medium">Reasoning</span>
           </button>
         )}
+
+        {/* Agent-Specific Custom Actions */}
+        {customActions.map((action) => {
+          const Icon = action.icon;
+          const isPrimary = action.variant === 'primary';
+
+          return (
+            <button
+              key={action.id}
+              onClick={action.onClick}
+              className={`
+                p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+                ${isPrimary
+                  ? 'bg-blue-50 border-blue-300 hover:bg-blue-100 text-blue-700'
+                  : 'bg-white/60 border-gray-300 hover:bg-gray-50 text-gray-700'
+                }
+              `}
+              title={action.label}
+            >
+              <Icon className="w-4 h-4" />
+              <span className="text-xs">{action.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Quality Indicator */}

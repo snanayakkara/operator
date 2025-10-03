@@ -169,6 +169,36 @@ export const PATIENT_EDUCATION_CONFIG: PatientEducationConfig = {
           id: 'reduce_simple_carbs',
           label: 'Reducing simple carbohydrates',
           description: 'Minimize simple carbohydrate intake and focus on complex carbs'
+        },
+        {
+          id: 'ultra_processed_reduction',
+          label: 'Cut back ultra-processed foods',
+          description: 'Swap packaged snacks, sugary drinks and take-away for minimally processed options most of the time'
+        },
+        {
+          id: 'berries_leafy_greens',
+          label: 'Berries and leafy-greens',
+          description: 'Add berries most weeks and a daily serve of leafy-green veg for healthy-ageing benefits'
+        },
+        {
+          id: 'nuts_legumes_daily',
+          label: 'Nuts and legumes habit',
+          description: 'Include a handful of nuts most days and legumes several times per week'
+        },
+        {
+          id: 'olive_oil_unsat_fats',
+          label: 'Olive oil & unsaturated fats',
+          description: 'Prefer olive/vegetable oils and other unsaturated fats in cooking and dressings'
+        },
+        {
+          id: 'low_fat_dairy_include',
+          label: 'Include low-fat dairy',
+          description: 'Use low-fat yoghurt or milk regularly if tolerated as part of a heart-healthy pattern'
+        },
+        {
+          id: 'reduce_sugary_drinks',
+          label: 'Reduce sugary drinks',
+          description: 'Keep soft drinks and fruit juice as occasional only; choose water or sparkling water'
         }
       ]
     },
@@ -282,6 +312,13 @@ OLDER-ADULT EXERCISE LOGIC (apply when age ≥65 or when the clinician flags fra
 • Sequencing when frailty/mobility limits are present: build Strength → Balance → Endurance; do not push distance walking before safe chair-rise and standing balance are established.
 • Warm-up & flexibility: Use specific warm-ups (lighter sets, easy walking). Avoid static stretching before PRT; keep longer static stretching for cool-down.
 • Modality note: Aerobic alone won't build strength/balance; high-effort PRT improves strength/balance and can also improve aerobic capacity. Favour multicomponent programs (PRT + balance + functional + aerobic) for older adults.
+
+HEALTHY-AGEING DIET LOGIC (pattern-first; map to AU guidelines):
+• Pattern anchors: Adherence to healthy dietary patterns such as **AHEI/Mediterranean/DASH/MIND/PHDI** is associated with **better odds of healthy ageing** across physical, cognitive and mental health. Use **pattern-level coaching** rather than single-nutrient fixes.
+• What to include more often: **fruits (esp. berries), vegetables (esp. leafy-greens and dark-yellow), whole grains, nuts, legumes, olive/vegetable oils and other unsaturated fats**, and **low-fat dairy** if tolerated.
+• What to limit: **trans fats**, **sodium**, **sugary drinks/fruit juices**, and **red/processed meats**. Prefer fish/seafood and plant proteins.
+• Ultra-processed foods (UPF): Give simple swaps to **choose minimally processed foods** most of the time.
+• Messaging: Keep it **plant-forward with moderate healthy animal foods**; align with **Australian Dietary Guidelines** and Heart Foundation resources; tailor to culture and preferences.
 
 BEHAVIOURAL STYLE (MAKE HABITS STICK):
 • Lead with small, **minimum viable actions** (e.g., "walk every day" before duration)
@@ -451,12 +488,13 @@ A Mediterranean-style eating pattern supports heart health. Focus on vegetables,
 • **Snacks:** Choose **fruit + nuts**, **Greek yoghurt**, **hummus + veggie sticks**, or **boiled eggs** instead of biscuits or lollies
 • **Dessert:** Try **fruit with yoghurt** or **chia pudding** instead of ice‑cream
 
-**Healthy ageing diet tips (from 30‑year evidence):**
-• Aim for a **plant‑forward pattern** (fruits, vegetables, whole grains, legumes, nuts) with **unsaturated fats** (e.g., olive oil)
-• Include **some low‑fat dairy** (e.g., milk or yoghurt) and **regular fish/seafood**
-• **Limit**: **ultra‑processed foods**, **trans fats**, **sugary drinks**, **high‑sodium foods**, and **red/processed meats**
-• Berry intake and leafy‑green veg are especially helpful patterns seen in healthy‑ageing diets; keep salt low as per **DASH‑style** guidance
-• There’s no single perfect diet; **consistent adherence** to healthy patterns over years is what counts
+**Healthy ageing diet tips (pattern-first):**
+• Choose a **pattern** you like and can keep: **Mediterranean-style** or **DASH-style** are good options
+• **Eat more of**: fruit (include **berries** most weeks), vegetables (especially **leafy-greens** and **dark-yellow** veg), **whole grains**, **nuts and legumes**, **olive oil/other vegetable oils**, and **low-fat yoghurt or milk** if tolerated
+• **Limit**: **red and processed meats** (keep processed to rare treats), **salty foods** (check sodium per 100 g), **sugary drinks/fruit juice**, **trans-fat rich foods**, and deep-fried take-away
+• **Ultra-processed foods (UPF):** Favour **minimally processed** choices most of the time; easy swaps: water/sparkling water → soft drink; **oats** → sweet cereal; **nuts/fruit** → biscuits
+• **Simple swaps that help stick with it**: butter → **olive oil**; white bread/rice → **wholegrain**; deli meats → **beans, hummus, eggs, fish**; sweet snacks → **yoghurt + fruit + nuts**
+• There's no single perfect diet; what counts is a **consistent, plant-forward pattern** over years with **sodium kept low** (DASH-style)
 
 **Why fibre matters for your heart (plain English):**
 • **Blood pressure:** Higher fibre intakes help support **lower BP**; increasing fibre can reduce systolic and diastolic numbers
@@ -739,7 +777,7 @@ Remember, your medications are prescribed specifically for your condition. Takin
 Consider these categories:
 - Patient demographics and context (including age, mobility status such as chair-rise independence, falls in last 12 months)
 - Specific health conditions or risk factors
-- Current lifestyle habits and challenges (including previous physical activity level, equipment available such as home/gym/bands, preferences by modality such as walking/gym/group vs solo)
+- Current lifestyle habits and challenges (including previous physical activity level, equipment available such as home/gym/bands, preferences by modality such as walking/gym/group vs solo, typical ultra-processed food intake such as packaged snacks/soft drinks/take-away frequency)
 - Motivation level and readiness for change
 - Available support systems (including social support/context for activity such as buddy/group access)
 - Previous education or attempts at lifestyle changes
@@ -792,7 +830,9 @@ export const PATIENT_EDUCATION_VALIDATION_RULES = {
     'priority plan', 'habit cues', 'magnitude note (when available)',
     'table-aligned older-adult dosing (when applicable)',
     'warm-up guidance (no static stretching before PRT)',
-    'sequencing: strength → balance → endurance (if frailty flagged)'
+    'sequencing: strength → balance → endurance (if frailty flagged)',
+    'dietary pattern guidance (Mediterranean/DASH/AHEI-like) when diet module selected',
+    'ultra-processed foods (UPF) reduction tip'
   ],
   
   // Ensure Australian spelling

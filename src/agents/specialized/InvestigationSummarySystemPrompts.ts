@@ -18,11 +18,14 @@ Output: "TTE (3 Sep 2025): normal LV size, EF 60%, septum 16mm, no significant v
 
 - Punctuation skeleton MUST be exactly: TYPE (DD MMM YYYY[, Location]): or TYPE (no date): (with a single space after the colon; no commas after TYPE; no commas around the date).
 - Key–value findings use a single space between label and value (e.g., "Cr 164", "eGFR 38"). Never write "Cr, 164" or "eGFR, 38".
+- CRITICAL MEASUREMENT SPACING: All measurements MUST have a space before the number. Examples: "LVEDD 59" NOT "LVEDD-59", "EF 43" NOT "EF43", "GLS -16" NOT "GLS-16", "LAVI 45" NOT "LAVI-45". NEVER use hyphens between measurement labels and values.
+- CRITICAL PARENTHESES USAGE: Put measurements in parentheses when they quantify a finding. Example: "dilated LV (LVEDD 59), mild systolic dysfunction (EF 43)" NOT "dilated LV, LVEDD-59, mild systolic dysfunction, EF43".
 - If the input uses commas or periods between the type and the date (e.g., "Bloods, 24th August, 2025."), standardise to the skeleton above.
 - CRITICAL: If NO date is mentioned in the input, you MUST use "(no date)" - NEVER invent, guess, or fabricate dates.
 
 Rules (follow strictly):
 - The output MUST begin with one of these types exactly: TTE, TOE, Stress TTE, CTCA, CMRI, Coronary Angiogram, RHC, ExRHC, Holter Monitor, Event Monitor, Loop Recorder, ABPM, Bloods. Never print the word "INVESTIGATION".
+- CRITICAL: If the input already contains TTE, TOE, CTCA, or other investigation abbreviations, KEEP them exactly as they are - DO NOT expand to full names like "Trans thoracic echocardiogram" or "Transthoracic echocardiogram". Use the abbreviation.
 - Preserve all numbers and units exactly; do NOT invent, convert, or average values. You may standardise wording only by applying the canonical abbreviation list below.
 - CRITICAL: Use canonical cardiology abbreviations ALWAYS - DO NOT write the full form:
   biventricular → BiV; left atrium/atrial → LA; right atrium/atrial → RA; left ventricle/ventricular → LV; right ventricle/ventricular → RV; left ventricular size → LV size; left ventricular function → LV function; proximal → prox; ostial → ostial; pulmonary hypertension → pulm HTN.
@@ -30,6 +33,8 @@ Rules (follow strictly):
   aortic valve → AV; mitral valve → MV; tricuspid valve → TV; pulmonary valve → PV; mean pressure gradient → MPG; peak pressure gradient → PPG; mean gradient → mean gradient (keep as is but add mmHg unit).
 - CRITICAL: Use regurgitation abbreviations ALWAYS - NEVER write full words:
   mitral regurgitation → MR; aortic regurgitation → AR; pulmonary regurgitation → PR; tricuspid regurgitation → TR; moderate to severe → mod-sev.
+- CRITICAL: Use severity abbreviations ALWAYS:
+  moderate → mod (when standalone); moderately → mod; moderately dilated → mod dil; mildly dilated → mild dil; severely dilated → sev dil.
 - Use hemodynamic and RHC abbreviations:
   PA mean → PAm; pulmonary capillary wedge pressure → PCWP; cardiac output → CO; cardiac index → CI; right ventricular stroke work index → RVSWI; pulmonary artery systolic pressure → PASP; right ventricular systolic pressure → RVSP; right atrial pressure → RAP; stroke volume index → SVI.
 - Ejection fraction format: "EF XX" or "EF XX%" with space before number (e.g., "EF 46", "EF 46%").
@@ -53,7 +58,10 @@ FINAL REMINDER - CRITICAL ABBREVIATIONS (apply these ALWAYS):
 - "mitral regurgitation" → "MR"
 - "aortic regurgitation" → "AR"
 - "pulmonary regurgitation" → "PR"
+- "moderate" (standalone) → "mod"
+- "moderately dilated" → "mod dil"
 - Add "mmHg" to gradients without units (e.g., "mean gradient 9" → "mean gradient 9mmHg")
+- ALWAYS use spaces before measurement values: "LVEDD 59", "EF 43", "GLS -16", "LAVI 45" (NEVER use hyphens)
 
 - If you cannot safely format without inventing information (including dates), output exactly:
 ERROR – investigation dictation could not be parsed coherently.`

@@ -1,0 +1,45 @@
+{
+  "id": "ex002_tte_format",
+  "task": "investigation-summary",
+  "complexity": "simple",
+  "transcript": "Trans thoracic echocardiogram, 8 September 2025. Dilated left ventricle, LVEDD 59. Mild systolic dysfunction, EF 43, GLS -16. Bicuspid aortic valve, moderate aortic regurgitation. Mild mitral regurgitation. Moderately dilated left atrium, LAVI 45.",
+  "expected_output": "TTE (8 Sep 2025): dilated LV (LVEDD 59), mild systolic dysfunction (EF 43), GLS -16, bicuspid aortic valve, mod AR, mild MR, mod dil LA (LAVI 45)",
+  "expected_elements": [
+    "TTE abbreviation",
+    "Date format: (8 Sep 2025)",
+    "Measurement spacing with spaces not hyphens",
+    "Parentheses around measurements: (LVEDD 59), (EF 43), (LAVI 45)",
+    "Severity abbreviations: mod AR, mod dil LA",
+    "Regurgitation abbreviations: MR, AR",
+    "Chamber abbreviations: LV, LA",
+    "GLS with negative sign and space: GLS -16"
+  ],
+  "rubric_criteria": {
+    "correct_investigation_type": true,
+    "correct_date_format": true,
+    "measurement_spacing_correct": true,
+    "parentheses_placement_correct": true,
+    "severity_abbreviations_correct": true,
+    "regurgitation_abbreviations_correct": true,
+    "chamber_abbreviations_correct": true,
+    "structured_format": true,
+    "min_score": 85
+  },
+  "formatting_rules": {
+    "measurement_spacing": "LVEDD 59 NOT LVEDD-59",
+    "ef_spacing": "EF 43 NOT EF43",
+    "gls_spacing": "GLS -16 NOT GLS-16",
+    "lavi_spacing": "LAVI 45 NOT LAVI-45",
+    "parentheses": "Measurements quantifying findings go in parentheses: dilated LV (LVEDD 59)",
+    "severity": "moderate → mod when standalone",
+    "moderately_dilated": "moderately dilated → mod dil",
+    "regurgitation": "mitral regurgitation → MR, aortic regurgitation → AR"
+  },
+  "metadata": {
+    "investigation_types": ["TTE"],
+    "complexity": "echo_measurements",
+    "source": "User-reported formatting example",
+    "golden_standard": true,
+    "critical_for_training": true
+  }
+}

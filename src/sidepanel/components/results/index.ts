@@ -4,6 +4,7 @@
  * Exports all focused result components for clean imports
  */
 
+export { ResultsContainer } from './ResultsContainer';
 export { ReportDisplay } from './ReportDisplay';
 export { TranscriptionSection } from './TranscriptionSection';
 export { AIReviewCards } from './AIReviewCards';

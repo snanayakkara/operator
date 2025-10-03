@@ -250,7 +250,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
 
   return (
     <motion.div
-      className={`bg-white rounded-lg border border-gray-200 p-4 pointer-events-auto ${className}`}
+      className={`bg-gradient-to-br from-white to-slate-50/50 rounded-xl border border-gray-200 p-4 pointer-events-auto ${className}`}
       role="status"
       aria-labelledby="processing-status-title"
       aria-describedby="processing-status-description"
@@ -271,7 +271,7 @@ export const ProcessingPhaseIndicator: React.FC<ProcessingPhaseIndicatorProps> =
             {agentType ? agentType.charAt(0).toUpperCase() + agentType.slice(1).replace('-', ' ') : 'AI Medical Review'}
           </h4>
           {streaming && (
-            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Generating (streaming…){typeof tokenCount === 'number' ? ` • ${tokenCount}` : ''}</span>
+            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-200/60">Generating (streaming…){typeof tokenCount === 'number' ? ` • ${tokenCount}` : ''}</span>
           )}
           <div className="flex items-center space-x-1 text-indigo-600">
             <Clock className="w-3 h-3" />

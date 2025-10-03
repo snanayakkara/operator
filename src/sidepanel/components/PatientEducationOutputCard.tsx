@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { 
+import React, { useState, useRef } from 'react';
+import {
   GraduationCap,
   Copy,
   ExternalLink,
@@ -9,7 +9,9 @@ import {
   RefreshCw,
   Heart,
   BookOpen,
-  Globe
+  Globe,
+  FileText,
+  Download
 } from 'lucide-react';
 import type { PatientEducationReport } from '@/types/medical.types';
 
@@ -225,45 +227,135 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
     );
   };
 
-  const renderActionButtons = () => {
-    const isCopied = copiedContent === 'full';
-    const isInserted = insertedContent === 'full';
+  const jsonBoxRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintPDF = () => {
+    if (jsonBoxRef.current) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        const jsonContent = report.educationData.jsonMetadata
+          ? JSON.stringify(report.educationData.jsonMetadata, null, 2)
+          : 'No structured data available';
+
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Patient Education Plan - Structured Data</title>
+              <style>
+                body { font-family: monospace; padding: 20px; }
+                pre { white-space: pre-wrap; word-wrap: break-word; }
+                h1 { font-size: 18px; margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+              <h1>Patient Education Plan - Structured Data</h1>
+              <pre>${jsonContent}</pre>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
+  const renderLetterBox = () => {
+    const letterContent = report.educationData.letterContent || report.content;
+    const isCopied = copiedContent === 'letter';
 
     return (
-      <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200">
-        <button
-          onClick={() => handleCopy(report.content, 'full')}
-          className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-        >
-          {isCopied ? (
-            <>
-              <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-green-600">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-4 h-4" />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-emerald-600" />
+            <h4 className="text-sm font-semibold text-gray-900">Patient Letter</h4>
+          </div>
+          <button
+            onClick={() => handleCopy(letterContent, 'letter')}
+            className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+          >
+            {isCopied ? (
+              <>
+                <CheckCircle className="w-3 h-3 text-green-600" />
+                <span className="text-green-600">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="prose prose-sm max-w-none">
+            <div
+              className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed font-sans"
+              dangerouslySetInnerHTML={{
+                __html: letterContent
+                  .replace(/\n\n/g, '</p><p class="mt-4">')
+                  .replace(/^/, '<p>')
+                  .replace(/$/, '</p>')
+                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/## (.*?)(?=\n|$)/g, '<h3 class="text-base font-bold text-gray-900 mt-6 mb-3 border-b border-gray-200 pb-1">$1</h3>')
+                  .replace(/• (.*?)(?=\n|$)/g, '<li class="ml-4">$1</li>')
+                  .replace(/(<li.*?<\/li>)/g, '<ul class="list-disc list-inside space-y-1 mb-3">$1</ul>')
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-        <button
-          onClick={() => handleInsert(report.content, 'full')}
-          className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          {isInserted ? (
-            <>
-              <CheckCircle className="w-4 h-4" />
-              <span>Inserted!</span>
-            </>
-          ) : (
-            <>
-              <ExternalLink className="w-4 h-4" />
-              <span>Insert</span>
-            </>
-          )}
-        </button>
+  const renderJsonBox = () => {
+    const jsonMetadata = report.educationData.jsonMetadata;
+
+    if (!jsonMetadata) {
+      return null;
+    }
+
+    const isCopied = copiedContent === 'json';
+
+    return (
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            <h4 className="text-sm font-semibold text-gray-900">Action Plan (Structured Data)</h4>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleCopy(JSON.stringify(jsonMetadata, null, 2), 'json')}
+              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+            >
+              {isCopied ? (
+                <>
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                  <span className="text-green-600">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy JSON</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handlePrintPDF}
+              className="flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+            >
+              <Download className="w-3 h-3" />
+              <span>Export PDF</span>
+            </button>
+          </div>
+        </div>
+        <div ref={jsonBoxRef} className="bg-gray-900 rounded-lg p-4 border border-gray-700 overflow-x-auto">
+          <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
+            {JSON.stringify(jsonMetadata, null, 2)}
+          </pre>
+        </div>
       </div>
     );
   };
@@ -293,24 +385,9 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
           {/* Education Metadata */}
           {renderEducationMetadata()}
 
-          {/* Main Content */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <div className="prose prose-sm max-w-none">
-              <div 
-                className="text-gray-800 whitespace-pre-wrap text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{
-                  __html: report.content
-                    .replace(/\n\n/g, '</p><p class="mt-4">')
-                    .replace(/^/, '<p>')
-                    .replace(/$/, '</p>')
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/## (.*?)(?=\n|$)/g, '<h3 class="text-base font-bold text-gray-900 mt-6 mb-3 border-b border-gray-200 pb-1">$1</h3>')
-                    .replace(/• (.*?)(?=\n|$)/g, '<li class="ml-4">$1</li>')
-                    .replace(/(<li.*?<\/li>)/g, '<ul class="list-disc list-inside space-y-1 mb-3">$1</ul>')
-                }}
-              />
-            </div>
-          </div>
+          {/* Two-Box Output: Letter and JSON */}
+          {renderLetterBox()}
+          {renderJsonBox()}
 
           {/* Important Disclaimer */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -319,15 +396,12 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
               <div className="text-xs text-blue-800">
                 <p className="font-medium">Important Disclaimer</p>
                 <p className="mt-1">
-                  This information is for educational purposes only and should not replace professional medical advice. 
+                  This information is for educational purposes only and should not replace professional medical advice.
                   Always consult with your healthcare team before making significant lifestyle changes.
                 </p>
               </div>
             </div>
           </div>
-
-          {/* Action Buttons */}
-          {renderActionButtons()}
         </div>
       </div>
     </div>

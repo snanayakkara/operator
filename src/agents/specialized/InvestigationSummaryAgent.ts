@@ -106,11 +106,17 @@ export class InvestigationSummaryAgent extends MedicalAgent {
     try {
       console.log('🧠 Starting enhanced investigation processing');
 
+      // Report progress: Starting processing (50%)
+      _context?.onProgress?.('Starting investigation analysis', 50, 'Analyzing dictation');
+
       // Step 1: Enhanced normalization using Phase 2 + legacy
       const normalizedInput = await this.enhancedNormalization(input);
 
       // Step 2: Extract clinical findings using enhanced system
       const summaryResult = await this.extractInvestigationFindings(normalizedInput, _context);
+
+      // Report progress: Clinical analysis (65%)
+      _context?.onProgress?.('Extracting clinical findings', 65, 'Processing medical terminology');
 
       // Step 3: Generate structured investigation format
       const structuredFormat = await this.generateStructuredInvestigationFormat(normalizedInput, summaryResult, _context);
@@ -293,12 +299,22 @@ export class InvestigationSummaryAgent extends MedicalAgent {
 
     console.log('🤖 Generating structured investigation format with enhanced context');
 
+    // Report progress: Generating format (75%)
+    if (_context?.onProgress) {
+      _context.onProgress('Generating investigation format', 75, 'Formatting results');
+    }
+
     // Generate structured format using enhanced prompt
     const response = await this.lmStudioService.processWithAgent(
       enhancedPrompt,
       normalizedInput,
       'investigation-summary'
     );
+
+    // Report progress: Post-processing (90%)
+    if (_context?.onProgress) {
+      _context.onProgress('Finalizing investigation summary', 90, 'Applying medical abbreviations');
+    }
 
     // Apply post-processing abbreviation enforcement
     const abbreviationEnforcedResponse = this.enforceAbbreviations(response);
@@ -333,6 +349,14 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       { pattern: /\bpulmonary regurgitation\b/gi, replacement: 'PR' },
       { pattern: /\bmoderate to severe\b/gi, replacement: 'mod-sev' },
 
+      // Severity abbreviations - Apply BEFORE chamber/valve abbreviations
+      { pattern: /\bmoderately dilated (left atrium|left ventricle|right atrium|right ventricle)\b/gi, replacement: 'mod dil $1' },
+      { pattern: /\bmildly dilated (left atrium|left ventricle|right atrium|right ventricle)\b/gi, replacement: 'mild dil $1' },
+      { pattern: /\bseverely dilated (left atrium|left ventricle|right atrium|right ventricle)\b/gi, replacement: 'sev dil $1' },
+
+      // Standalone moderate (when not followed by specific terms)
+      { pattern: /\bmoderate(?!\s+(to|stenosis|regurgitation|AR|MR|TR|PR))\b/gi, replacement: 'mod' },
+
       // Valves
       { pattern: /\baortic valve\b/gi, replacement: 'AV' },
       { pattern: /\bmitral valve\b/gi, replacement: 'MV' },
@@ -358,6 +382,23 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       { pattern: /\bpeak gradient (\d+)(?!\s*(mmHg|mm Hg|mmhg))/gi, replacement: 'peak gradient $1mmHg' },
       { pattern: /\bMPG (\d+)(?!\s*(mmHg|mm Hg|mmhg))/gi, replacement: 'MPG $1mmHg' },
       { pattern: /\bPPG (\d+)(?!\s*(mmHg|mm Hg|mmhg))/gi, replacement: 'PPG $1mmHg' },
+
+      // CRITICAL: Fix measurement spacing - Remove hyphens, ensure spaces
+      // Echo measurements
+      { pattern: /\bLVEDD-(\d+)/gi, replacement: 'LVEDD $1' },
+      { pattern: /\bLVESD-(\d+)/gi, replacement: 'LVESD $1' },
+      { pattern: /\bLVEDD(\d+)/gi, replacement: 'LVEDD $1' },
+      { pattern: /\bLVESD(\d+)/gi, replacement: 'LVESD $1' },
+      { pattern: /\bEF-(\d+)/gi, replacement: 'EF $1' },
+      { pattern: /\bEF(\d{2})/g, replacement: 'EF $1' }, // Match EF followed by 2 digits
+      { pattern: /\bGLS-(-?\d+)/gi, replacement: 'GLS $1' },
+      { pattern: /\bGLS(-?\d+)/gi, replacement: 'GLS $1' },
+      { pattern: /\bLAVI-(\d+)/gi, replacement: 'LAVI $1' },
+      { pattern: /\bLAVI(\d+)/gi, replacement: 'LAVI $1' },
+      { pattern: /\bRAVI-(\d+)/gi, replacement: 'RAVI $1' },
+      { pattern: /\bRAVI(\d+)/gi, replacement: 'RAVI $1' },
+      { pattern: /\bTAPSE-(\d+)/gi, replacement: 'TAPSE $1' },
+      { pattern: /\bTAPSE(\d+)/gi, replacement: 'TAPSE $1' },
     ];
 
     // Apply each rule

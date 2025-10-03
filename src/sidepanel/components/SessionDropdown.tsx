@@ -20,6 +20,7 @@ import {
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
 import type { PatientSession, SessionStatus } from '@/types/medical.types';
+import { getStateColors, sessionStatusToState, type ProcessingState } from '@/utils/stateColors';
 
 interface SessionDropdownProps {
   sessions: PatientSession[];
@@ -60,67 +61,71 @@ type TimelineMeta = {
   accentEdgeClass: string;
 };
 
+// Helper to generate timeline metadata from shared state colors
+const getTimelineMetaFromState = (timelineState: TimelineState): TimelineMeta => {
+  // Map timeline states to processing states
+  const stateMapping: Record<TimelineState, ProcessingState> = {
+    'recording': 'recording',
+    'transcribing': 'transcribing',
+    'processing': 'ai-analysis',
+    'needs_review': 'needs_review',
+    'completed': 'completed',
+    'error': 'error'
+  };
+
+  const processingState = stateMapping[timelineState];
+  const colors = getStateColors(processingState);
+
+  // Icon mapping
+  const iconMapping: Record<TimelineState, React.ReactNode> = {
+    'recording': <Mic className="w-3 h-3" style={{ color: `var(--color-${colors.indicator})` }} />,
+    'transcribing': <Loader2 className="w-3 h-3 animate-spin" style={{ color: `var(--color-${colors.indicator})` }} />,
+    'processing': <Cpu className="w-3 h-3" style={{ color: `var(--color-${colors.indicator})` }} />,
+    'needs_review': <ClipboardList className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />,
+    'completed': <CheckCircle2 className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />,
+    'error': <AlertTriangle className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />
+  };
+
+  // Description mapping
+  const descriptionMapping: Record<TimelineState, string> = {
+    'recording': 'Audio capture in progress',
+    'transcribing': 'Converting speech to clinical text',
+    'processing': 'AI drafting the note',
+    'needs_review': 'Ready for clinician polish',
+    'completed': 'Finalized and ready to send',
+    'error': 'Resolve to keep queue moving'
+  };
+
+  // Label mapping
+  const labelMapping: Record<TimelineState, string> = {
+    'recording': 'Recording',
+    'transcribing': 'Transcribing',
+    'processing': 'Processing',
+    'needs_review': 'Needs Review',
+    'completed': 'Completed',
+    'error': 'Attention Needed'
+  };
+
+  return {
+    label: labelMapping[timelineState],
+    badgeClass: `bg-gradient-to-br from-${colors.gradient.from} to-${colors.gradient.to} text-${colors.text} border border-${colors.border}/70`,
+    dotClass: `bg-${colors.indicator} border-${colors.border}/60`,
+    icon: iconMapping[timelineState],
+    description: descriptionMapping[timelineState],
+    cardClass: colors.bgGradient + ` border-${colors.border}/60`,
+    chipClass: `text-${colors.text}`,
+    accentEdgeClass: `before:bg-gradient-to-br before:from-${colors.gradient.from.replace('-50', '-300')}/40 before:via-${colors.gradient.to.replace('-50', '-200')}/30 before:to-transparent`
+  };
+};
+
+// Generate timeline state metadata using shared colors
 const timelineStateMeta: Record<TimelineState, TimelineMeta> = {
-  recording: {
-    label: 'Recording',
-    badgeClass: 'bg-red-50/80 text-red-600 border border-red-200/70',
-    dotClass: 'bg-red-500 border-red-200/60',
-    icon: <Mic className="w-3 h-3 text-red-500" />,
-    description: 'Audio capture in progress',
-    cardClass: 'bg-white/95 border-red-100/60',
-    chipClass: 'text-red-600',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-red-200/60 before:to-red-100/20'
-  },
-  transcribing: {
-    label: 'Transcribing',
-    badgeClass: 'bg-blue-50/80 text-blue-600 border border-blue-200/70',
-    dotClass: 'bg-blue-500 border-blue-200/60',
-    icon: <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />,
-    description: 'Converting speech to clinical text',
-    cardClass: 'bg-blue-50/30 border-blue-100/60',
-    chipClass: 'text-blue-600',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-blue-200/60 before:to-blue-100/20'
-  },
-  processing: {
-    label: 'Processing',
-    badgeClass: 'bg-purple-50/80 text-purple-600 border border-purple-200/70',
-    dotClass: 'bg-purple-500 border-purple-200/60',
-    icon: <Cpu className="w-3 h-3 text-purple-500" />,
-    description: 'AI drafting the note',
-    cardClass: 'bg-purple-50/40 border-purple-100/60',
-    chipClass: 'text-purple-600',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-purple-200/70 before:to-purple-100/20'
-  },
-  needs_review: {
-    label: 'Needs Review',
-    badgeClass: 'bg-amber-50/80 text-amber-700 border border-amber-200/70',
-    dotClass: 'bg-amber-500 border-amber-200/60',
-    icon: <ClipboardList className="w-3 h-3 text-amber-600" />,
-    description: 'Ready for clinician polish',
-    cardClass: 'bg-amber-50/35 border-amber-100/60',
-    chipClass: 'text-amber-700',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-amber-200/60 before:to-amber-100/20'
-  },
-  completed: {
-    label: 'Completed',
-    badgeClass: 'bg-emerald-50/90 text-emerald-600 border border-emerald-200/70',
-    dotClass: 'bg-emerald-500 border-emerald-200/60',
-    icon: <CheckCircle2 className="w-3 h-3 text-emerald-600" />,
-    description: 'Finalized and ready to send',
-    cardClass: 'bg-emerald-50/45 border-emerald-100/60',
-    chipClass: 'text-emerald-600',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-emerald-200/70 before:to-emerald-100/20'
-  },
-  error: {
-    label: 'Attention Needed',
-    badgeClass: 'bg-rose-50/85 text-rose-600 border border-rose-200/70',
-    dotClass: 'bg-rose-500 border-rose-200/60',
-    icon: <AlertTriangle className="w-3 h-3 text-rose-600" />,
-    description: 'Resolve to keep queue moving',
-    cardClass: 'bg-rose-50/40 border-rose-100/60',
-    chipClass: 'text-rose-600',
-    accentEdgeClass: 'before:bg-gradient-to-br before:from-rose-200/70 before:to-rose-100/25'
-  }
+  recording: getTimelineMetaFromState('recording'),
+  transcribing: getTimelineMetaFromState('transcribing'),
+  processing: getTimelineMetaFromState('processing'),
+  needs_review: getTimelineMetaFromState('needs_review'),
+  completed: getTimelineMetaFromState('completed'),
+  error: getTimelineMetaFromState('error')
 };
 
 const formatDuration = (ms?: number | null) => {
@@ -244,7 +249,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
   return (
     <div
-      className={`relative rounded-lg border px-3 py-2 transition-all ${meta.cardClass} ${
+      className={`relative rounded-xl border px-3 py-2 transition-all ${meta.cardClass} ${
         isSelected ? 'border-accent-violet/70' : ''
       }`}
     >

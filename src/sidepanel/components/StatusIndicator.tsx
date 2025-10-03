@@ -28,6 +28,7 @@ import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus as _
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
 import { RecordPanel } from './RecordPanel';
+import { ThemeToggle } from './ThemeToggle';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { ToastService } from '@/services/ToastService';
@@ -546,6 +547,9 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             )}
 
 
+            {/* Theme Toggle */}
+            <ThemeToggle compact className="mr-1" />
+
             {/* Settings quick view trigger */}
             <button
               ref={triggerRef}
@@ -580,9 +584,9 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         isOpen={showServicesDetails}
         onClickOutside={() => setShowServicesDetails(false)}
       >
-        <div 
+        <div
           data-dropdown-menu
-          className="glass rounded-lg border border-white/20 p-4"
+          className="glass rounded-xl border border-white/20 p-4"
           style={{
             position: 'fixed',
             top: position.top,
@@ -625,7 +629,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             </div>
 
             {/* Intelligent Features Quick View */}
-            <div className="border border-gray-100 rounded-lg p-3 space-y-2">
+            <div className="bg-gradient-to-br from-purple-50/50 to-violet-50/40 border border-purple-100/60 rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Sparkles className="w-4 h-4 text-purple-600" />
@@ -668,7 +672,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             </div>
 
             {/* LMStudio Status Section */}
-            <div className="border border-gray-100 rounded-lg p-3 space-y-2">
+            <div className="bg-gradient-to-br from-blue-50/40 to-indigo-50/30 border border-blue-100/60 rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Server className="w-4 h-4 text-ink-primary" />
@@ -693,7 +697,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             </div>
 
             {/* Whisper Server Status Section */}
-            <div className="border border-gray-100 rounded-lg p-3 space-y-2">
+            <div className="bg-gradient-to-br from-emerald-50/40 to-teal-50/30 border border-emerald-100/60 rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Mic className="w-4 h-4 text-ink-primary" />

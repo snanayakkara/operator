@@ -1402,26 +1402,45 @@ export class ASRCorrectionEngine {
       // Lab value formatting
       [/\b(TChol|TG|HDL|LDL|non-HDL|HbA1c|Cr|eGFR|Ferr|Tn|BNP)\s*,\s*(\d+(?:\.\d+)?)/g, '$1 $2'],
       [/\bHbA1c\s*(\d+(?:\.\d+)?)(?!%)/gi, 'HbA1c $1%'],
-      
+
       // Valve gradient patterns
       [/\b(AV|MV|TV|PV)\s+gradient\b/gi, '$1 MPG'],
       [/\biotic\s+valve\s+gradient\b/gi, 'AV MPG'],
       [/\biotic\s+valve\b/gi, 'AV'],
-      
+
       // Lab abbreviations
       [/\bHemoglobin\b/gi, 'Hb'],
       [/\bHaemoglobin\b/gi, 'Hb'],
-      
-      // Severity combinations
+
+      // Severity combinations and standalone
       [/\bmoderate\s+to\s+severe\b/gi, 'mod-sev'],
       [/\bmild\s+to\s+moderate\b/gi, 'mild-mod'],
-      
+      [/\bmoderately dilated\b/gi, 'mod dil'],
+      [/\bmildly dilated\b/gi, 'mild dil'],
+      [/\bseverely dilated\b/gi, 'sev dil'],
+
       // PASP formatting
       [/\bPASP\s+(\d+)\b/gi, 'PASP >$1'],
-      
+
       // RVSP with units
       [/\bRVSP\s+(?:from\s+)?(\d+)\s+to\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP from $1 to $2mmHg'],
-      [/\bRVSP\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP $1mmHg']
+      [/\bRVSP\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP $1mmHg'],
+
+      // CRITICAL: Echo measurement spacing - Remove hyphens, ensure spaces
+      [/\bLVEDD-(\d+)/gi, 'LVEDD $1'],
+      [/\bLVESD-(\d+)/gi, 'LVESD $1'],
+      [/\bLVEDD(\d+)(?!\s)/gi, 'LVEDD $1'],
+      [/\bLVESD(\d+)(?!\s)/gi, 'LVESD $1'],
+      [/\bEF-(\d+)/gi, 'EF $1'],
+      [/\bEF(\d{2})(?!\s)/g, 'EF $1'], // EF followed by 2 digits without space
+      [/\bGLS-(-?\d+)/gi, 'GLS $1'],
+      [/\bGLS(-?\d+)(?!\s)/gi, 'GLS $1'],
+      [/\bLAVI-(\d+)/gi, 'LAVI $1'],
+      [/\bLAVI(\d+)(?!\s)/gi, 'LAVI $1'],
+      [/\bRAVI-(\d+)/gi, 'RAVI $1'],
+      [/\bRAVI(\d+)(?!\s)/gi, 'RAVI $1'],
+      [/\bTAPSE-(\d+)/gi, 'TAPSE $1'],
+      [/\bTAPSE(\d+)(?!\s)/gi, 'TAPSE $1']
     ];
 
     for (const [pattern, replacement] of remainingPatterns) {

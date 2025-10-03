@@ -237,12 +237,20 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.3**
+**Current Version**: **3.6.4**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.4 (Jan 2025)**
+- **Investigation Summary Formatting Improvements**: Enhanced system prompts, ASR corrections, and post-processing to ensure precise medical formatting
+  - Fixed measurement spacing: `LVEDD 59` not `LVEDD-59`, `EF 43` not `EF43`, `GLS -16` not `GLS-16`
+  - Added severity abbreviations: `moderate` → `mod`, `moderately dilated` → `mod dil`
+  - Improved parentheses placement: `dilated LV (LVEDD 59)` for measurements quantifying findings
+  - Enhanced LLM instruction to preserve abbreviations (TTE, TOE, CTCA) without expansion
+  - Added golden standard training example (ex002_tte_format.json) for DSPy optimization
 
 **v3.6.3 (Jan 2025)**
 - **Patient Education Session Tracking**: Patient Education generations now create proper sessions in the timeline, enabling review, history tracking, and consistent UX with all other agents

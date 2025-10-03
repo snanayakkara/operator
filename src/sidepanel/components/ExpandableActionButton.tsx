@@ -93,25 +93,26 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
           </button>
         </div>
 
-        {/* Expanded state - split buttons */}
+        {/* Expanded state - split buttons (icon + compact text) */}
         <div className={`
           absolute inset-0 transition-all duration-200 ease-out
           ${isHovered && !isProcessing ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
         `}>
-          <div className="grid grid-cols-2 gap-1 h-full">
+          <div className="grid grid-cols-2 gap-0.5 h-full">
             {/* Dictate Button */}
             <button
               onClick={handleDictate}
               disabled={isProcessing}
               className={`
-                bg-transparent hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg 
-                relative flex items-center justify-center p-1 text-left
+                bg-transparent hover:bg-${config.color}-50 transition-all duration-200 ease-out rounded-l-lg border-r border-gray-200
+                relative flex flex-col items-center justify-center p-1
                 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
               `}
+              title="Dictate with voice"
             >
-              <Mic className={`w-2.5 h-2.5 text-${config.color}-600 flex-shrink-0 mr-1`} />
-              <div className="text-gray-900 text-[10px] font-medium leading-tight min-w-0 flex-1">
-                Dictate
+              <Mic className={`w-3 h-3 text-${config.color}-600 flex-shrink-0`} />
+              <div className={`text-${config.color}-700 text-[9px] font-medium leading-none mt-0.5`}>
+                Dict
               </div>
             </button>
 
@@ -120,13 +121,14 @@ export const ExpandableActionButton: React.FC<ExpandableActionButtonProps> = ({
               onClick={handleType}
               disabled={isProcessing}
               className={`
-                bg-transparent hover:bg-gray-50 transition-all duration-200 ease-out rounded-lg 
-                relative flex items-center justify-center p-1 text-left
+                bg-transparent hover:bg-${config.color}-50 transition-all duration-200 ease-out rounded-r-lg
+                relative flex flex-col items-center justify-center p-1
                 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
               `}
+              title="Type manually"
             >
-              <Keyboard className={`w-2.5 h-2.5 text-${config.color}-600 flex-shrink-0 mr-1`} />
-              <div className="text-gray-900 text-[10px] font-medium leading-tight min-w-0 flex-1">
+              <Keyboard className={`w-3 h-3 text-${config.color}-600 flex-shrink-0`} />
+              <div className={`text-${config.color}-700 text-[9px] font-medium leading-none mt-0.5`}>
                 Type
               </div>
             </button>

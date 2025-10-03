@@ -53,3 +53,22 @@
 - Reuse the shared `.icon-compact` utility when placing icons alongside labels to keep glyphs aligned to the 16px baseline.
 - Timeline/state visuals follow the monochrome + accent palette defined in `globals.css`; copy existing gradient/shadow tokens when adding new states.
 - Micro-interactions (e.g., `animate-complete-pop`) are defined globally and already respect `prefers-reduced-motion`; reuse those classes instead of introducing bespoke animations.
+
+## Agent-Specific Implementation Notes
+
+### Investigation Summary Agent
+The Investigation Summary agent formats voice-dictated medical investigation results into standardized summaries with precise medical abbreviations and formatting:
+
+**Key Formatting Rules**:
+- **Measurement Spacing**: Always use spaces before values: `LVEDD 59`, `EF 43`, `GLS -16`, `LAVI 45` (never hyphens)
+- **Parentheses Placement**: Measurements quantifying findings go in parentheses: `dilated LV (LVEDD 59)`
+- **Severity Abbreviations**: `moderate` → `mod`, `moderately dilated` → `mod dil`
+- **Investigation Types**: Pre-normalized via ASR corrections before LLM processing (e.g., "Trans thoracic echocardiogram" → "TTE")
+- **LLM Instruction**: System prompt explicitly prevents abbreviation expansion to preserve normalized input
+
+**Processing Pipeline**:
+1. **Pre-normalization** (ASRCorrectionEngine): Converts investigation types to abbreviations, fixes common ASR errors
+2. **LLM Generation**: Receives normalized input with explicit instructions to preserve abbreviations
+3. **Post-processing** (enforceAbbreviations): Final safety net to fix measurement spacing and enforce critical abbreviations
+
+**Training Data**: Golden standard examples in `eval/devset/investigation-summary/` including ex002_tte_format.json for precise formatting guidance
