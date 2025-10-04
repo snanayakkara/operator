@@ -263,10 +263,10 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
               {meta.icon}
               <span>{meta.label}</span>
             </span>
-            {state === 'processing' && session.processingProgress && (
+            {state === 'processing' && session.pipelineProgress && (
               <SessionProgressIndicator
-                phase={session.processingProgress.phase || 'Processing'}
-                progress={session.processingProgress.progress}
+                phase={session.pipelineProgress.details || session.pipelineProgress.stage || 'Processing'}
+                progress={session.pipelineProgress.stageProgress || session.pipelineProgress.progress}
                 compact={true}
               />
             )}
