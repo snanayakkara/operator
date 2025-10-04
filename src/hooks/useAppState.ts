@@ -149,6 +149,7 @@ type AppAction =
   | { type: 'SET_FAILED_RECORDINGS'; payload: FailedAudioRecording[] }
   | { type: 'SET_REVIEW_DATA'; payload: BatchAIReviewReport | null }
   | { type: 'SET_TAVI_STRUCTURED_SECTIONS'; payload: any }
+  | { type: 'SET_EDUCATION_DATA'; payload: any }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
   | { type: 'SET_CANCELLING'; payload: boolean }
   | { type: 'SET_WARNINGS'; payload: string[] }
@@ -234,6 +235,7 @@ const initialState: CombinedAppState = {
   failedAudioRecordings: [],
   reviewData: null,
   taviStructuredSections: undefined,
+  educationData: undefined,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -393,7 +395,11 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_TAVI_STRUCTURED_SECTIONS':
       if (state.taviStructuredSections === action.payload) return state;
       return { ...state, taviStructuredSections: action.payload };
-      
+
+    case 'SET_EDUCATION_DATA':
+      if (state.educationData === action.payload) return state;
+      return { ...state, educationData: action.payload };
+
     case 'SET_ACTIVE_WORKFLOW':
       if (state.ui.activeWorkflow === action.payload) return state;
       return { ...state, ui: { ...state.ui, activeWorkflow: action.payload } };
@@ -931,7 +937,11 @@ export function useAppState() {
     setTaviStructuredSections: useCallback((sections: any) => {
       dispatch({ type: 'SET_TAVI_STRUCTURED_SECTIONS', payload: sections });
     }, []),
-    
+
+    setEducationData: useCallback((data: any) => {
+      dispatch({ type: 'SET_EDUCATION_DATA', payload: data });
+    }, []),
+
     setActiveWorkflow: useCallback((workflow: AgentType | null) => {
       dispatch({ type: 'SET_ACTIVE_WORKFLOW', payload: workflow });
     }, []),

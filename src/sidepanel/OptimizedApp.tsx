@@ -2611,6 +2611,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                       }
                     });
 
+                    // Store education data in state for immediate display (not just session)
+                    actions.setEducationData(result.educationData);
+
                     // Overlay already closed at start of processing
                     // Use atomic completion to ensure consistent state management
                     actions.completeProcessingAtomic(sessionId, result.content);

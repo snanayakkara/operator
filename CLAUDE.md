@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.6**
+**Current Version**: **3.6.7**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.7 (Jan 2025)**
+- **Patient Education JSON Output Fix**: Fixed missing JSON metadata card in Patient Education results by adding `educationData` field to `AppState` interface and proper state management in useAppState/OptimizedApp
+- **Two-Part Display**: Patient Education now correctly displays both the patient letter AND the structured JSON metadata with Export PDF functionality
+- **State Flow**: `educationData` now properly flows from agent → AgentFactory → session → state → display, ensuring JSON box renders consistently
 
 **v3.6.6 (Jan 2025)**
 - **Session Timeline Progress Fix**: Updated SessionDropdown to use new `pipelineProgress` instead of old `processingProgress` system, eliminating redundant/misleading progress text in session timeline cards

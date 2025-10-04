@@ -243,6 +243,8 @@ export interface AppState {
   reviewData?: any;
   // TAVI Workup structured data
   taviStructuredSections?: TAVIWorkupStructuredSections;
+  // Patient Education structured data
+  educationData?: any;
   // Patient version generation
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
