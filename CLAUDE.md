@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.9**
+**Current Version**: **3.7.0**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.7.0 (Jan 2025)**
+- **Visual Action Plan Display**: Replaced unreadable raw JSON with beautiful color-coded priority cards showing numbered action items with impact levels (high=emerald, medium=blue), reasons, next actions, and habit cues
+- **Fixed Processing Time Display**: Added `displayProcessingTime` to session state so "Generated in Xs" shows actual time instead of 0s for viewed sessions
+- **Collapsible Raw JSON**: Moved technical JSON data behind expandable `<details>` section for developers while showing human-friendly UI by default
 
 **v3.6.9 (Jan 2025)**
 - **Fixed Elapsed Timer**: Added `setProcessingStartTime()` call when Patient Education starts so elapsed time counter runs properly instead of staying at 0s

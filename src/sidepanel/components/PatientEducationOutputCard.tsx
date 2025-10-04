@@ -317,18 +317,21 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
     }
 
     const isCopied = copiedContent === 'json';
+    const priorityPlan = jsonMetadata.priority_plan || [];
+    const sections = jsonMetadata.sections || [];
 
     return (
       <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <BookOpen className="w-4 h-4 text-blue-600" />
-            <h4 className="text-sm font-semibold text-gray-900">Action Plan (Structured Data)</h4>
+            <h4 className="text-sm font-semibold text-gray-900">Quick Action Plan</h4>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={() => handleCopy(JSON.stringify(jsonMetadata, null, 2), 'json')}
-              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+              title="Copy structured data as JSON"
             >
               {isCopied ? (
                 <>
@@ -344,18 +347,73 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
             </button>
             <button
               onClick={handlePrintPDF}
-              className="flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
             >
               <Download className="w-3 h-3" />
               <span>Export PDF</span>
             </button>
           </div>
         </div>
-        <div ref={jsonBoxRef} className="bg-gray-900 rounded-lg p-4 border border-gray-700 overflow-x-auto">
-          <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
-            {JSON.stringify(jsonMetadata, null, 2)}
-          </pre>
-        </div>
+
+        {/* Priority Action Items */}
+        {priorityPlan.length > 0 && (
+          <div className="space-y-3">
+            {priorityPlan.map((item: any, index: number) => {
+              const impactColor = item.expected_impact === 'very_high' || item.expected_impact === 'high'
+                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                : item.expected_impact === 'medium'
+                ? 'text-blue-700 bg-blue-50 border-blue-200'
+                : 'text-gray-700 bg-gray-50 border-gray-200';
+
+              return (
+                <div key={index} className={`border rounded-lg p-3 ${impactColor}`}>
+                  <div className="flex items-start space-x-2">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-white flex items-center justify-center text-xs font-bold mt-0.5">
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h5 className="font-semibold text-sm mb-1">{item.title}</h5>
+                      {item.magnitude_note && (
+                        <p className="text-xs mb-2 opacity-90">{item.magnitude_note}</p>
+                      )}
+                      {item.reason && (
+                        <p className="text-xs mb-2 italic opacity-80">
+                          <strong>Why:</strong> {item.reason}
+                        </p>
+                      )}
+                      {item.next_action && (
+                        <div className="bg-white bg-opacity-50 rounded px-2 py-1 mt-2">
+                          <p className="text-xs font-medium">
+                            <strong>Start here:</strong> {item.next_action}
+                          </p>
+                        </div>
+                      )}
+                      {item.habit_cue && (
+                        <div className="bg-white bg-opacity-50 rounded px-2 py-1 mt-1">
+                          <p className="text-xs">
+                            <strong>Habit cue:</strong> {item.habit_cue}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Collapsible Raw JSON for developers */}
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700 font-medium">
+            View structured data (JSON)
+          </summary>
+          <div ref={jsonBoxRef} className="mt-2 bg-gray-900 rounded-lg p-3 border border-gray-700 overflow-x-auto">
+            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
+              {JSON.stringify(jsonMetadata, null, 2)}
+            </pre>
+          </div>
+        </details>
       </div>
     );
   };

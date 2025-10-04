@@ -1261,6 +1261,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         agent: state.displaySession.displayAgent,
         agentName: state.displaySession.displayAgentName,
         patientInfo: state.displaySession.displayPatientInfo,
+        processingTime: state.displaySession.displayProcessingTime,
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
         isDisplayingSession: true
       };
@@ -2713,7 +2714,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 audioBlob={displayData.isDisplayingSession ? null : currentAudioBlobRef.current}
                 transcriptionTime={displayData.isDisplayingSession ? null : state.transcriptionTime}
                 agentProcessingTime={displayData.isDisplayingSession ? null : state.agentProcessingTime}
-                totalProcessingTime={displayData.isDisplayingSession ? null : state.totalProcessingTime}
+                totalProcessingTime={displayData.isDisplayingSession ? (displayData.processingTime || null) : state.totalProcessingTime}
                 processingStatus={displayData.processingStatus}
                 currentAgentName={displayData.agentName}
                 selectedSessionId={displayData.isDisplayingSession ? displayData.patientInfo?.name || 'Unknown' : stableSelectedSessionId}

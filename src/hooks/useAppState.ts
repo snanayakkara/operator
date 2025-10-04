@@ -89,6 +89,7 @@ interface DisplaySessionState {
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
+  displayProcessingTime?: number; // Processing time in milliseconds
 }
 
 // Combined app state
@@ -795,7 +796,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayEducationData: session.educationData,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
-          displayPatientInfo: session.patient || null
+          displayPatientInfo: session.patient || null,
+          displayProcessingTime: session.processingTime
         }
       };
     }
