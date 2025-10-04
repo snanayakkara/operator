@@ -2525,6 +2525,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     actions.setCurrentAgent('patient-education');
                     actions.setResults('');
                     actions.setErrors([]);
+                    actions.setProcessingStartTime(Date.now());
 
                     // Close the config overlay immediately to show progress in session timeline only
                     actions.closeOverlay('patient-education');

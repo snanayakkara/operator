@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.8**
+**Current Version**: **3.6.9**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.9 (Jan 2025)**
+- **Fixed Elapsed Timer**: Added `setProcessingStartTime()` call when Patient Education starts so elapsed time counter runs properly instead of staying at 0s
+- **Dynamic Progress Text**: Processing header now shows live pipeline progress details (e.g., "Generating education plan") instead of generic "Extracting patient data from EMR..." text
+- **Realistic Progress Mapping**: Adjusted progress percentages (5% → 10% → 20% → 80% → 90% → 98% → 100%) to better reflect that LLM generation takes ~80% of total time, reducing perceived "stuck" time at 53%
 
 **v3.6.8 (Jan 2025)**
 - **Patient Education Live Progress Tracking**: Added simulated progress updates throughout agent processing (5%, 15%, 25%, 75%, 85%, 95%, 100%) with descriptive phase messages

@@ -82,7 +82,7 @@ export class PatientEducationAgent extends MedicalAgent {
       const messages = this.buildMessages(input, context);
 
       if (onProgress) {
-        onProgress('Preparing recommendations', 15, 'Selecting appropriate education modules');
+        onProgress('Preparing recommendations', 10, 'Selecting appropriate education modules');
       }
 
       // Get the model response
@@ -97,9 +97,11 @@ export class PatientEducationAgent extends MedicalAgent {
           : input;
 
       if (onProgress) {
-        onProgress('Generating education plan', 25, 'Creating personalized lifestyle advice');
+        onProgress('Generating education plan', 20, 'AI creating personalized lifestyle recommendations');
       }
 
+      // This LLM call takes ~80% of total processing time but is synchronous
+      // Progress will stay at 20% until the LLM responds
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         userPrompt,
@@ -107,14 +109,14 @@ export class PatientEducationAgent extends MedicalAgent {
       );
 
       if (onProgress) {
-        onProgress('Processing response', 75, 'Parsing AI-generated recommendations');
+        onProgress('Processing response', 80, 'Parsing AI-generated recommendations');
       }
 
       // Parse the two-part response: JSON metadata + plain text letter
       const { jsonMetadata, letterContent } = this.parseTwoPartResponse(response);
 
       if (onProgress) {
-        onProgress('Validating content', 85, 'Checking safety guidelines and quality standards');
+        onProgress('Validating content', 90, 'Checking safety guidelines and quality standards');
       }
 
       // Parse and validate the response
@@ -139,7 +141,7 @@ export class PatientEducationAgent extends MedicalAgent {
       }
 
       if (onProgress) {
-        onProgress('Finalizing recommendations', 95, 'Preparing patient education materials');
+        onProgress('Finalizing recommendations', 98, 'Preparing patient education materials');
       }
 
       // Detect missing information that could improve personalization

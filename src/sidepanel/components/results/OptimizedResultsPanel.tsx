@@ -395,7 +395,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               <div>
                 <h3 className="text-gray-900 font-medium text-sm">Processing</h3>
                 <p className="text-blue-700 text-xs">
-                  Extracting patient data from EMR...
+                  {pipelineProgress?.details || 'Processing medical information...'}
                 </p>
               </div>
             </>
