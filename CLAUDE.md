@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.7.1**
+**Current Version**: **3.8.0**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.8.0 (Jan 2025)**
+- **Beautiful PDF Export**: Replaced raw JSON PDF export with color-coded HTML cards categorized by topic (Exercise=Blue, Diet=Green, Alcohol=Purple, Weight=Orange, Smoking=Red, Mental Health=Teal) with numbered action items, reasons, and habit cues - matching inline display
+- **Category Legend**: PDF includes visual legend for easy scanning of different recommendation types
+- **Print-Optimized**: Page-break-aware styling ensures cards don't split across pages
 
 **v3.7.1 (Jan 2025)**
 - **Fixed "our" vs "or" Typo**: Added post-processing regex to fix common LLM error where "our" is used instead of "or" in conjunctions (e.g., "Monday our Thursday" → "Monday or Thursday")

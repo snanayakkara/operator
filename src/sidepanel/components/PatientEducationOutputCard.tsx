@@ -230,34 +230,193 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
   const jsonBoxRef = useRef<HTMLDivElement>(null);
 
   const handlePrintPDF = () => {
-    if (jsonBoxRef.current) {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        const jsonContent = report.educationData.jsonMetadata
-          ? JSON.stringify(report.educationData.jsonMetadata, null, 2)
-          : 'No structured data available';
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Patient Education Plan - Structured Data</title>
-              <style>
-                body { font-family: monospace; padding: 20px; }
-                pre { white-space: pre-wrap; word-wrap: break-word; }
-                h1 { font-size: 18px; margin-bottom: 20px; }
-              </style>
-            </head>
-            <body>
-              <h1>Patient Education Plan - Structured Data</h1>
-              <pre>${jsonContent}</pre>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.print();
-      }
+    const jsonMetadata = report.educationData.jsonMetadata;
+    if (!jsonMetadata) {
+      alert('No structured data available to export');
+      return;
     }
+
+    const priorityPlan = jsonMetadata.priority_plan || [];
+
+    // Categorize actions by module type for color coding
+    const categorizeAction = (action: any): string => {
+      const title = action.title?.toLowerCase() || '';
+      const id = action.id?.toLowerCase() || '';
+
+      if (title.includes('exercise') || title.includes('physical') || title.includes('activity') ||
+          id.includes('physical_activity')) {
+        return 'exercise'; // Blue
+      } else if (title.includes('diet') || title.includes('nutrition') || title.includes('food') ||
+                 title.includes('fibre') || title.includes('salt') || id.includes('diet_nutrition')) {
+        return 'diet'; // Green
+      } else if (title.includes('alcohol') || id.includes('alcohol')) {
+        return 'alcohol'; // Purple
+      } else if (title.includes('weight') || title.includes('bmi') || id.includes('weight')) {
+        return 'weight'; // Orange
+      } else if (title.includes('smoking') || title.includes('tobacco') || id.includes('smoking')) {
+        return 'smoking'; // Red
+      } else if (title.includes('stress') || title.includes('mental') || id.includes('stress')) {
+        return 'mental'; // Teal
+      }
+      return 'other'; // Gray
+    };
+
+    // Generate HTML cards
+    const cardsHTML = priorityPlan.map((action: any, index: number) => {
+      const category = categorizeAction(action);
+      const impactLevel = action.expected_impact || 'medium';
+
+      // Color schemes by category
+      const colorSchemes: Record<string, { bg: string; border: string; text: string }> = {
+        exercise: { bg: '#EFF6FF', border: '#3B82F6', text: '#1E40AF' },      // Blue
+        diet: { bg: '#ECFDF5', border: '#10B981', text: '#065F46' },          // Emerald
+        alcohol: { bg: '#F3E8FF', border: '#A855F7', text: '#6B21A8' },       // Purple
+        weight: { bg: '#FFF7ED', border: '#F97316', text: '#9A3412' },        // Orange
+        smoking: { bg: '#FEF2F2', border: '#EF4444', text: '#991B1B' },       // Red
+        mental: { bg: '#F0FDFA', border: '#14B8A6', text: '#115E59' },        // Teal
+        other: { bg: '#F9FAFB', border: '#6B7280', text: '#374151' }          // Gray
+      };
+
+      const colors = colorSchemes[category];
+
+      return `
+        <div style="background: ${colors.bg}; border-left: 4px solid ${colors.border};
+                    padding: 16px; margin-bottom: 16px; border-radius: 8px; page-break-inside: avoid;">
+          <div style="display: flex; align-items: start; gap: 12px;">
+            <div style="background: white; width: 28px; height: 28px; border-radius: 50%;
+                        display: flex; align-items: center; justify-content: center;
+                        font-weight: bold; font-size: 14px; color: ${colors.text}; flex-shrink: 0;">
+              ${index + 1}
+            </div>
+            <div style="flex: 1;">
+              <h3 style="margin: 0 0 8px 0; color: ${colors.text}; font-size: 16px; font-weight: 600;">
+                ${action.title}
+              </h3>
+              ${action.magnitude_note ? `
+                <p style="margin: 0 0 8px 0; color: ${colors.text}; opacity: 0.9; font-size: 14px;">
+                  ${action.magnitude_note}
+                </p>
+              ` : ''}
+              ${action.reason ? `
+                <p style="margin: 0 0 8px 0; color: ${colors.text}; opacity: 0.8; font-size: 13px; font-style: italic;">
+                  <strong>Why:</strong> ${action.reason}
+                </p>
+              ` : ''}
+              ${action.next_action ? `
+                <div style="background: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px; margin-top: 8px;">
+                  <p style="margin: 0; font-size: 13px; color: ${colors.text};">
+                    <strong>Start here:</strong> ${action.next_action}
+                  </p>
+                </div>
+              ` : ''}
+              ${action.habit_cue ? `
+                <div style="background: rgba(255,255,255,0.6); padding: 8px; border-radius: 6px; margin-top: 6px;">
+                  <p style="margin: 0; font-size: 13px; color: ${colors.text};">
+                    <strong>Habit cue:</strong> ${action.habit_cue}
+                  </p>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Patient Education Action Plan</title>
+          <style>
+            @media print {
+              body { margin: 0; }
+              @page { margin: 1cm; }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+              padding: 20px;
+              max-width: 800px;
+              margin: 0 auto;
+              line-height: 1.6;
+            }
+            h1 {
+              font-size: 24px;
+              margin-bottom: 8px;
+              color: #111827;
+            }
+            .subtitle {
+              color: #6B7280;
+              font-size: 14px;
+              margin-bottom: 24px;
+            }
+            .legend {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+              margin-bottom: 24px;
+              padding: 16px;
+              background: #F9FAFB;
+              border-radius: 8px;
+            }
+            .legend-item {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 12px;
+            }
+            .legend-color {
+              width: 16px;
+              height: 16px;
+              border-radius: 3px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Patient Education Action Plan</h1>
+          <p class="subtitle">Personalized lifestyle and wellness recommendations</p>
+
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-color" style="background: #3B82F6;"></div>
+              <span>Exercise</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background: #10B981;"></div>
+              <span>Diet & Nutrition</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background: #A855F7;"></div>
+              <span>Alcohol</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background: #F97316;"></div>
+              <span>Weight Management</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background: #EF4444;"></div>
+              <span>Smoking Cessation</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color" style="background: #14B8A6;"></div>
+              <span>Mental Health</span>
+            </div>
+          </div>
+
+          ${cardsHTML}
+
+          <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #E5E7EB;
+                      font-size: 12px; color: #6B7280; text-align: center;">
+            <p style="margin: 0;">Generated by Operator - Patient Education & Lifestyle Medicine</p>
+            <p style="margin: 4px 0 0 0;">This information is for general education only. Always follow your healthcare team's specific advice.</p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const renderLetterBox = () => {
