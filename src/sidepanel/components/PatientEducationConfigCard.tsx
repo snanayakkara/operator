@@ -481,7 +481,7 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
               {isGenerating || isExtracting ? (
                 <>
                   <Loader className="w-4 h-4 animate-spin" />
-                  <span>{isExtracting ? 'Extracting Data...' : 'Generating Advice...'}</span>
+                  <span>Generating Advice...</span>
                 </>
               ) : (
                 <>
@@ -507,7 +507,7 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
           {(isGenerating || isExtracting) && !pipelineProgress && (
             <div className="mt-4 text-center">
               <div className="text-xs text-gray-600">
-                {isExtracting ? 'Extracting patient data from EMR...' : 'Generating personalized lifestyle advice...'}
+                Generating personalized lifestyle advice...
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div className="bg-emerald-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>

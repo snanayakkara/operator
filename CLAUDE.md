@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.4**
+**Current Version**: **3.6.5**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.5 (Jan 2025)**
+- **Patient Education Unified Progress**: Added UnifiedPipelineProgress bar to Patient Education agent for consistent live progress tracking through AI Analysis → Generation phases
+- **Fixed Redundant Progress Displays**: Removed misleading "Extracting patient data from EMR..." text during processing (EMR extraction happens before config modal)
+- **Progress Callbacks**: Added onProgress callback to Patient Education agent processing for real-time pipeline updates
 
 **v3.6.4 (Jan 2025)**
 - **Investigation Summary Formatting Improvements**: Enhanced system prompts, ASR corrections, and post-processing to ensure precise medical formatting

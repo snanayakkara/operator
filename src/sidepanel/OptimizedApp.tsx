@@ -1252,18 +1252,6 @@ const OptimizedAppContent: React.FC = memo(() => {
   const getCurrentDisplayData = useCallback(() => {
     // PRIORITY 1: If user explicitly selected a completed session, ALWAYS show it (even during active work)
     if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
-      console.log('📋 🥇 PRIORITY 1: Showing DISPLAY session data (user explicitly selected)', {
-        displaySessionId: state.displaySession.displaySessionId,
-        hasDisplayResults: !!state.displaySession.displayResults,
-        hasDisplayTranscription: !!state.displaySession.displayTranscription,
-        backgroundActiveWork: {
-          isRecording: recorder.isRecording,
-          isProcessing: state.isProcessing,
-          streaming: state.streaming,
-          currentSessionId: state.currentSessionId
-        }
-      });
-
       return {
         transcription: state.displaySession.displayTranscription,
         results: state.displaySession.displayResults,
@@ -1285,15 +1273,6 @@ const OptimizedAppContent: React.FC = memo(() => {
                              state.currentSessionId !== null;
 
     if (isActivelyWorking) {
-      console.log('🎯 🥈 PRIORITY 2: Showing ACTIVE recording data (no explicit selection)', {
-        isRecording: recorder.isRecording,
-        isProcessing: state.isProcessing,
-        streaming: state.streaming,
-        currentSessionId: state.currentSessionId,
-        processingStatus: state.processingStatus,
-        streamBuffer: state.streamBuffer?.length || 0
-      });
-
       // Safety check: If we have results but are still streaming, this might be a stuck state
       if (state.streaming && state.results && state.processingStatus === 'complete') {
         console.warn('🚨 POTENTIAL STUCK STREAMING STATE DETECTED:', {
@@ -1318,11 +1297,6 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
 
     // PRIORITY 3: Default - show active recording data (even if empty)
-    console.log('🔧 🥉 PRIORITY 3: Showing default ACTIVE recording data (empty state)', {
-      noExplicitSelection: !state.displaySession.isDisplayingSession,
-      noActiveWork: true,
-      defaultFallback: true
-    });
     return {
       transcription: state.transcription,
       results: state.results,
@@ -2552,12 +2526,70 @@ const OptimizedAppContent: React.FC = memo(() => {
                     actions.setResults('');
                     actions.setErrors([]);
 
+                    // Initialize pipeline progress at AI Analysis stage (skip audio/transcription for Patient Education)
+                    actions.setPipelineProgress({
+                      stage: 'ai-analysis',
+                      progress: 45,
+                      stageProgress: 10,
+                      details: 'Loading Patient Education agent',
+                      modelName: 'MedGemma-27B'
+                    });
+                    actions.updatePatientSession(sessionId, {
+                      pipelineProgress: {
+                        stage: 'ai-analysis',
+                        progress: 45,
+                        stageProgress: 10,
+                        details: 'Loading Patient Education agent',
+                        modelName: 'MedGemma-27B'
+                      }
+                    });
+
                     // Import AgentFactory dynamically
                     const { AgentFactory } = await import('@/services/AgentFactory');
 
-                    // Process with the Patient Education agent
+                    // Process with the Patient Education agent with progress tracking
                     console.log('🎓 Processing Patient Education with input:', input);
-                    const result = await AgentFactory.processWithAgent('patient-education', JSON.stringify(input));
+                    const result = await AgentFactory.processWithAgent(
+                      'patient-education',
+                      JSON.stringify(input),
+                      undefined,
+                      undefined,
+                      {
+                        sessionId,
+                        onProgress: (phase: string, progress: number, details?: string) => {
+                          console.log(`🎓 Patient Education Progress: ${phase} (${progress}%) - ${details || ''}`);
+
+                          const clampedProgress = Math.max(0, Math.min(100, progress));
+                          const pipelineProgress = 40 + (clampedProgress * 0.5); // Map 0-100% to 40-90% range
+
+                          actions.updatePipelineProgress({
+                            stage: 'ai-analysis',
+                            progress: pipelineProgress,
+                            stageProgress: clampedProgress,
+                            details: details || phase || 'Generating lifestyle advice',
+                            modelName: 'MedGemma-27B'
+                          });
+
+                          actions.updatePatientSession(sessionId, {
+                            pipelineProgress: {
+                              stage: 'ai-analysis',
+                              progress: pipelineProgress,
+                              stageProgress: clampedProgress,
+                              details: details || phase || 'Generating lifestyle advice',
+                              modelName: 'MedGemma-27B'
+                            }
+                          });
+                        }
+                      }
+                    );
+
+                    // Update pipeline progress - Generation/completion phase
+                    actions.updatePipelineProgress({
+                      stage: 'generation',
+                      progress: 95,
+                      stageProgress: 50,
+                      details: 'Formatting education plan'
+                    });
 
                     // Update the session with results and education data
                     const processingTime = Date.now() - (patientSession.processingStartTime || Date.now());
@@ -2567,7 +2599,13 @@ const OptimizedAppContent: React.FC = memo(() => {
                       status: 'completed',
                       completed: true,
                       processingTime,
-                      completedTime: Date.now()
+                      completedTime: Date.now(),
+                      pipelineProgress: {
+                        stage: 'generation',
+                        progress: 100,
+                        stageProgress: 100,
+                        details: 'Complete'
+                      }
                     });
 
                     actions.closeOverlay('patient-education');
@@ -2622,19 +2660,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
 
           {/* Main Results Panel - Show when session selected, streaming, processing, or completed with results */}
-          {(stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (() => {
-            console.log('🎯 RESULTS PANEL RENDERING:', {
-              selectedSessionId: stableSelectedSessionId,
-              streaming: state.streaming,
-              isProcessing: state.isProcessing,
-              hasResults: !!state.results,
-              hasTranscription: !!state.transcription,
-              resultsLength: state.results?.length || 0,
-              transcriptionLength: state.transcription?.length || 0,
-              shouldRender: true
-            });
-            return true;
-          })() && (
+          {(stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (
             <div className="flex-1 min-h-0 overflow-y-auto">
               {(() => {
                 const displayData = getCurrentDisplayData();
