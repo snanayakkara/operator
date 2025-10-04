@@ -499,6 +499,7 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
                 progress={pipelineProgress}
                 startTime={processingStartTime || undefined}
                 agentType="patient-education"
+                showTimeEstimate={true}
               />
             </div>
           )}

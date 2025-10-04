@@ -520,6 +520,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             <UnifiedPipelineProgress
               progress={pipelineProgress}
               startTime={processingStartTime || undefined}
+              agentType={agentType || undefined}
+              transcriptionLength={originalTranscription?.length}
+              showTimeEstimate={true}
             />
           </motion.div>
         )}

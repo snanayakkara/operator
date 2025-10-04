@@ -237,12 +237,17 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.6.7**
+**Current Version**: **3.6.8**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.6.8 (Jan 2025)**
+- **Patient Education Live Progress Tracking**: Added simulated progress updates throughout agent processing (5%, 15%, 25%, 75%, 85%, 95%, 100%) with descriptive phase messages
+- **ETA Calculation**: Added `agentType` and `transcriptionLength` props to UnifiedPipelineProgress for accurate time estimates based on historical performance data
+- **Progress Bar Now Updates**: Fixed stuck 0% progress by implementing onProgress callbacks in PatientEducationAgent that report progress at key processing stages
 
 **v3.6.7 (Jan 2025)**
 - **Patient Education JSON Output Fix**: Fixed missing JSON metadata card in Patient Education results by adding `educationData` field to `AppState` interface and proper state management in useAppState/OptimizedApp

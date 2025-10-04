@@ -68,14 +68,23 @@ export class PatientEducationAgent extends MedicalAgent {
 
   async process(input: string, context?: MedicalContext): Promise<PatientEducationReport> {
     const startTime = Date.now();
-    
+    const onProgress = (context as any)?.onProgress;
+
     try {
       // Parse the input - could be direct PatientEducationInput or text to parse
       const educationInput = this.parseInput(input);
-      
+
+      if (onProgress) {
+        onProgress('Analyzing patient data', 5, 'Reviewing medical history and lifestyle factors');
+      }
+
       // Build the contextual prompt
       const messages = this.buildMessages(input, context);
-      
+
+      if (onProgress) {
+        onProgress('Preparing recommendations', 15, 'Selecting appropriate education modules');
+      }
+
       // Get the model response
       const userMessage = messages.find(m => m.role === 'user');
       const userPrompt = typeof userMessage?.content === 'string'
@@ -86,36 +95,53 @@ export class PatientEducationAgent extends MedicalAgent {
               .join('\n')
               .trim() || input
           : input;
+
+      if (onProgress) {
+        onProgress('Generating education plan', 25, 'Creating personalized lifestyle advice');
+      }
+
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
         userPrompt,
         this.agentType
       );
 
+      if (onProgress) {
+        onProgress('Processing response', 75, 'Parsing AI-generated recommendations');
+      }
+
       // Parse the two-part response: JSON metadata + plain text letter
       const { jsonMetadata, letterContent } = this.parseTwoPartResponse(response);
+
+      if (onProgress) {
+        onProgress('Validating content', 85, 'Checking safety guidelines and quality standards');
+      }
 
       // Parse and validate the response
       const sections = this.parseResponse(letterContent, context);
       const cleanedContent = this.cleanAndValidateEducationContent(letterContent, educationInput);
-      
+
       // Extract Australian guidelines and resources mentioned
       const australianGuidelines = this.extractAustralianGuidelines(cleanedContent);
       const patientResources = this.extractPatientResources(cleanedContent);
-      
+
       // Validate content for safety and quality
       const validation = this.validateEducationContent(cleanedContent, educationInput);
       const warnings: string[] = [];
       const errors: string[] = [];
-      
+
       if (validation.hasProhibitedContent) {
         errors.push('Generated content contained prohibited medical advice and has been filtered');
       }
-      
+
       if (validation.missingRequiredElements.length > 0) {
         warnings.push(`Content may benefit from including: ${validation.missingRequiredElements.join(', ')}`);
       }
-      
+
+      if (onProgress) {
+        onProgress('Finalizing recommendations', 95, 'Preparing patient education materials');
+      }
+
       // Detect missing information that could improve personalization
       let missingInfo: MissingInformationDetection;
       try {
@@ -127,7 +153,7 @@ export class PatientEducationAgent extends MedicalAgent {
 
       const processingTime = Date.now() - startTime;
       const confidence = this.calculateConfidence(cleanedContent, educationInput);
-      
+
       const report = this.createReport(
         cleanedContent,
         sections,
@@ -137,6 +163,10 @@ export class PatientEducationAgent extends MedicalAgent {
         warnings,
         errors
       ) as PatientEducationReport;
+
+      if (onProgress) {
+        onProgress('Complete', 100, 'Education plan ready');
+      }
 
       // Add patient education specific data
       report.educationData = {
