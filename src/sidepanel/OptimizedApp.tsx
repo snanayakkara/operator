@@ -2526,6 +2526,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                     actions.setResults('');
                     actions.setErrors([]);
 
+                    // Close the config overlay immediately to show progress in session timeline only
+                    actions.closeOverlay('patient-education');
+
                     // Initialize pipeline progress at AI Analysis stage (skip audio/transcription for Patient Education)
                     actions.setPipelineProgress({
                       stage: 'ai-analysis',
@@ -2608,7 +2611,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                       }
                     });
 
-                    actions.closeOverlay('patient-education');
+                    // Overlay already closed at start of processing
                     // Use atomic completion to ensure consistent state management
                     actions.completeProcessingAtomic(sessionId, result.content);
                     console.log('✅ Patient Education generation completed');
