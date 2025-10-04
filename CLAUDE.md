@@ -237,12 +237,15 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.7.0**
+**Current Version**: **3.7.1**
 **Last Updated**: January 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.7.1 (Jan 2025)**
+- **Fixed "our" vs "or" Typo**: Added post-processing regex to fix common LLM error where "our" is used instead of "or" in conjunctions (e.g., "Monday our Thursday" → "Monday or Thursday")
 
 **v3.7.0 (Jan 2025)**
 - **Visual Action Plan Display**: Replaced unreadable raw JSON with beautiful color-coded priority cards showing numbered action items with impact levels (high=emerald, medium=blue), reasons, next actions, and habit cues

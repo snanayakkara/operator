@@ -441,27 +441,34 @@ ${patientInfo.medicare ? `Medicare: ${patientInfo.medicare}` : ''}` : 'No patien
    */
   private cleanAndValidateEducationContent(content: string, _input: PatientEducationInput): string {
     let cleaned = content;
-    
+
+    // Fix common LLM error: "our" instead of "or" in conjunctions
+    // Examples: "Monday our Thursday" → "Monday or Thursday"
+    //           "online our from your GP" → "online or from your GP"
+    //           "mat our weights" → "mat or weights"
+    // Pattern: word boundary + "our" + space + (lowercase word OR "from")
+    cleaned = cleaned.replace(/\b(our)\s+(?=[a-z]|from\b)/g, 'or ');
+
     // Apply Australian spelling corrections
     Object.entries(PATIENT_EDUCATION_VALIDATION_RULES.australianSpelling).forEach(([american, australian]) => {
       const regex = new RegExp(`\\b${american}\\b`, 'gi');
       cleaned = cleaned.replace(regex, australian);
     });
-    
+
     // Remove any prohibited diagnostic language
     PATIENT_EDUCATION_VALIDATION_RULES.prohibitedPhrases.forEach(phrase => {
       const regex = new RegExp(phrase, 'gi');
       cleaned = cleaned.replace(regex, '[CONTENT FILTERED FOR SAFETY]');
     });
-    
+
     // Ensure proper paragraph structure
     cleaned = this.formatParagraphsForReadability(cleaned);
-    
+
     // Add disclaimer if high priority
     if (_input.patientPriority === 'high') {
       cleaned += '\n\n**Important:** This information is for general education only. Always follow your healthcare team\'s specific advice and contact them with any concerns.';
     }
-    
+
     return cleaned.trim();
   }
 
