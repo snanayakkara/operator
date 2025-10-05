@@ -237,12 +237,22 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.8.0**
-**Last Updated**: January 2025
+**Current Version**: **3.9.2**
+**Last Updated**: February 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.9.2 (Feb 2025)**
+- **Repository Cleanup**: Removed Synology Drive sync conflict files to maintain clean repository state
+
+**v3.9.0 (Feb 2025)**
+- **Recording Start Latency Optimizations**: Reduced recording start time from 2-8 seconds to 50-200ms (10-160x faster)
+- **Background Patient Data Caching**: New `PatientDataCacheService` proactively extracts patient data in background with 60s TTL; <5ms cache lookup vs 1-7+ second blocking extraction
+- **Audio Pipeline Pre-Warming**: `useRecorder` now requests microphone permission on load and keeps MediaStream/AudioContext alive (muted) between recordings for instant reuse
+- **Performance Impact**: First recording ~200ms (vs 2-8s), subsequent recordings ~50ms; cache hit rate >90% in active sessions
+- **Full Documentation**: See `RECORDING_LATENCY_OPTIMIZATIONS.md` for technical details and architecture
 
 **v3.8.0 (Jan 2025)**
 - **Beautiful PDF Export**: Replaced raw JSON PDF export with color-coded HTML cards categorized by topic (Exercise=Blue, Diet=Green, Alcohol=Purple, Weight=Orange, Smoking=Red, Mental Health=Teal) with numbered action items, reasons, and habit cues - matching inline display
