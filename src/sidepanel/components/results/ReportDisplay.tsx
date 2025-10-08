@@ -7,7 +7,7 @@
  * - Memoization to prevent unnecessary re-renders
  */
 
-import React, { memo, useState, useMemo, useRef } from 'react';
+import React, { memo, useState, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, FileText, BookOpen, Copy, Download, CheckCircle } from 'lucide-react';
 import type { AgentType } from '@/types/medical.types';
 
@@ -80,7 +80,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
   }, [results]);
   
   // Progressive disclosure - show first 500 characters by default for long reports
-  const shouldTruncate = results.length > 1000;
+  const shouldTruncate = agentType !== 'angiogram-pci' && results.length > 1000;
   const displayContent = useMemo(() => {
     if (!shouldTruncate || showFullContent) {
       return results;
@@ -88,40 +88,75 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
     return results.substring(0, 500) + '...';
   }, [results, shouldTruncate, showFullContent]);
   
-  // Split content into sections for better readability
-  const reportSections = useMemo(() => {
+  const parseSections = useCallback((content: string) => {
     const sections: { title: string; content: string }[] = [];
-    const lines = displayContent.split('\n');
-    let currentSection = { title: '', content: '' };
-    
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      
-      // Check if line looks like a section header (ALL CAPS or Title Case with colon)
-      if (trimmedLine.match(/^[A-Z][A-Z\s]+:?$/) || trimmedLine.match(/^[A-Z][a-z\s]+:$/)) {
-        // Save previous section if it has content
-        if (currentSection.content.trim()) {
-          sections.push({ ...currentSection });
+    const lines = content.split('\n');
+    let currentSection: { title: string; content: string } | null = null;
+
+    const commitSection = () => {
+      if (currentSection && currentSection.content.trim().length > 0) {
+        sections.push({
+          title: currentSection.title || 'Medical Report',
+          content: currentSection.content.trim()
+        });
+      }
+    };
+
+    for (const rawLine of lines) {
+      const trimmedLine = rawLine.trim();
+      if (!trimmedLine) continue;
+
+      const normalizedHeading = trimmedLine
+        .replace(/^[#>*\s]+/, '')
+        .replace(/\*+$/g, '')
+        .replace(/:$/, '')
+        .trim();
+
+      const isHeading = (() => {
+        if (!normalizedHeading) return false;
+        const upper = normalizedHeading.toUpperCase();
+        const known = [
+          'PREAMBLE',
+          'FINDINGS',
+          'FINDINGS/PROCEDURE',
+          'PROCEDURE',
+          'CONCLUSION',
+          'ADDITIONAL NOTES',
+          'LEFT MAIN',
+          'LEFT ANTERIOR DESCENDING (LAD)',
+          'LEFT CIRCUMFLEX (LCX)',
+          'RIGHT CORONARY ARTERY (RCA)',
+          'LEFT VENTRICLE'
+        ];
+        if (known.includes(upper)) return true;
+        const isAllCaps = normalizedHeading === upper && upper.length <= 60 && !upper.includes('.');
+        const isTitleStyle = /^[A-Z][A-Za-z\s()\/-]{2,40}$/.test(normalizedHeading);
+        return isAllCaps || isTitleStyle;
+      })();
+
+      if (isHeading) {
+        commitSection();
+        currentSection = { title: normalizedHeading, content: '' };
+      } else {
+        if (!currentSection) {
+          currentSection = { title: 'Medical Report', content: rawLine };
+        } else {
+          currentSection.content += (currentSection.content ? '\n' : '') + rawLine;
         }
-        // Start new section
-        currentSection = { title: trimmedLine.replace(':', ''), content: '' };
-      } else if (trimmedLine) {
-        currentSection.content += line + '\n';
       }
     }
-    
-    // Add final section
-    if (currentSection.content.trim()) {
-      sections.push(currentSection);
-    }
-    
-    // If no sections found, return the whole content as one section
+
+    commitSection();
+
     if (sections.length === 0) {
-      sections.push({ title: 'Medical Report', content: displayContent });
+      return [{ title: 'Medical Report', content: content }];
     }
-    
+
     return sections;
-  }, [displayContent]);
+  }, []);
+
+  const fullReportSections = useMemo(() => parseSections(results), [results, parseSections]);
+  const displaySections = useMemo(() => parseSections(displayContent), [displayContent, parseSections]);
   
   const getAgentDisplayName = (type: AgentType | null): string => {
     const names: Record<AgentType, string> = {
@@ -324,26 +359,56 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       {/* Report content */}
       {isExpanded && (
         <div className="report-content">
-          {reportSections.length > 1 ? (
-            // Structured sections display
-            <div className="space-y-4 p-4">
-              {reportSections.map((section, index) => (
-                <div key={index} className="section">
-                  {section.title && (
-                    <h4 className="font-semibold text-gray-900 border-b border-gray-200 pb-1 mb-2 text-sm">
-                      {section.title}
+          <div className="space-y-4 p-4">
+            {displaySections.map((section, index) => {
+              const copyContent = fullReportSections[index]?.content || section.content;
+              const title = section.title || `Section ${index + 1}`;
+              const copyKey = `section-${index}`;
+
+              return (
+                <div
+                  key={`${title}-${index}`}
+                  className="bg-gray-50 border border-gray-200 rounded-lg shadow-sm p-4"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-gray-900 text-sm">
+                      {title}
                     </h4>
-                  )}
+                    <button
+                      onClick={() => handleCopy(copyContent, copyKey)}
+                      className={`
+                        flex items-center space-x-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors
+                        ${copiedContent === copyKey
+                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                        }
+                      `}
+                    >
+                      {copiedContent === copyKey ? (
+                        <>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
                   <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                     {section.content}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            // Single block content
+              );
+            })}
+          </div>
+
+          {displaySections.length === 0 && (
             <div className="p-4">
-              <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap font-mono">
+              <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                 {displayContent}
               </div>
             </div>

@@ -37,12 +37,14 @@ import { patientNameValidator } from '@/utils/PatientNameValidator';
 import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput as _BatchAIReviewInput, ProcessingStatus } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
+import { MetricsService } from '@/services/MetricsService';
 import { useRecorder } from '@/hooks/useRecorder';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
 import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
+import { PatientDataCacheService } from '@/services/PatientDataCacheService';
 
 const OptimizedApp: React.FC = memo(() => {
   return (
@@ -83,6 +85,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Stable service instances using useRef to prevent re-creation on renders
   const lmStudioService = useRef(LMStudioService.getInstance()).current;
   const whisperServerService = useRef(WhisperServerService.getInstance()).current;
+  const patientCacheService = useRef(PatientDataCacheService.getInstance()).current;
   const batchOrchestrator = useRef<BatchAIReviewOrchestrator | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
@@ -226,10 +229,21 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   };
 
-  const startStreamingGeneration = useCallback(async (sessionId: string, agent: AgentType, input: string) => {
+  interface StreamingGenerationOutcome {
+    handled: boolean;
+    success: boolean;
+    processingDuration?: number;
+    modelUsed?: string;
+  }
+
+  const startStreamingGeneration = useCallback(async (
+    sessionId: string,
+    agent: AgentType,
+    input: string
+  ): Promise<StreamingGenerationOutcome> => {
     const systemPrompt = await getSystemPromptForAgent(agent);
     if (!systemPrompt) {
-      return false;
+      return { handled: false, success: false };
     }
     actions.clearStream();
     actions.setStreaming(true);
@@ -237,8 +251,12 @@ const OptimizedAppContent: React.FC = memo(() => {
     const controller = new AbortController();
     processingAbortRef.current = controller;
     const { model, maxTokens } = getModelAndTokens(agent);
+    const streamingStartTime = Date.now();
+    let processingDuration = 0;
+    let streamingSucceeded = false;
     let ttftMs: number | null = null;
     const t0 = performance.now();
+    const performanceMonitor = PerformanceMonitoringService.getInstance();
     await streamChatCompletion({
       model,
       messages: [
@@ -258,6 +276,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.appendStreamChunk(t);
       },
       onEnd: (final, usage) => {
+        streamingSucceeded = true;
+        processingDuration = Date.now() - streamingStartTime;
         // Extract summary and letter content for QuickLetter agents to enable dual-card display
         let extractedSummary: string | undefined = undefined;
         let letterContent: string = final; // Default to full content for non-QuickLetter agents
@@ -399,7 +419,20 @@ const OptimizedAppContent: React.FC = memo(() => {
         processingAbortRef.current = null;
       }
     });
-    return true;
+    if (!streamingSucceeded) {
+      return { handled: false, success: false };
+    }
+
+    performanceMonitor.recordMetrics('agent-processing', processingDuration, {
+      agentType: agent
+    });
+
+    return {
+      handled: true,
+      success: true,
+      processingDuration,
+      modelUsed: model
+    };
   }, [actions, getSystemPromptForAgent]);
   
   // Optimization panel state
@@ -695,8 +728,29 @@ const OptimizedAppContent: React.FC = memo(() => {
       });
       
       // Try streaming generation first for supported agents
-      const didStream = await startStreamingGeneration(sessionId, workflowId, transcriptionResult);
-      if (didStream) {
+      const streamingResult = await startStreamingGeneration(sessionId, workflowId, transcriptionResult);
+      if (streamingResult.handled) {
+        if (streamingResult.success) {
+          const totalDuration = Date.now() - transcriptionStartTime;
+
+          performanceMonitor.recordMetrics('complete', totalDuration, {
+            agentType: workflowId
+          });
+
+          try {
+            const metricsService = MetricsService.getInstance();
+            await metricsService.storeMetric({
+              agentType: workflowId,
+              transcriptionTime: transcriptionDuration,
+              processingTime: streamingResult.processingDuration ?? 0,
+              totalDuration,
+              modelUsed: streamingResult.modelUsed || 'Unknown',
+              success: true
+            });
+          } catch (error) {
+            console.error('Failed to store performance metrics (streaming):', error);
+          }
+        }
         return;
       }
 
@@ -795,6 +849,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         results: result.content,
         summary: result.summary || '', // Store summary for dual card display
         agentName: result.agentName,
+        modelUsed: result.modelUsed, // Store the actual model used for display
         status: 'completed',
         completed: true,
         completedTime: Date.now(),
@@ -845,7 +900,22 @@ const OptimizedAppContent: React.FC = memo(() => {
       performanceMonitor.recordMetrics('complete', Date.now() - transcriptionStartTime, {
         agentType: workflowId
       });
-      
+
+      // Store metrics to persistent storage for Performance Metrics UI
+      try {
+        const metricsService = MetricsService.getInstance();
+        await metricsService.storeMetric({
+          agentType: workflowId,
+          transcriptionTime: transcriptionDuration,
+          processingTime: processingDuration,
+          totalDuration: Date.now() - transcriptionStartTime,
+          modelUsed: result.agentName || 'Unknown',
+          success: true
+        });
+      } catch (error) {
+        console.error('Failed to store performance metrics:', error);
+      }
+
       // Surface output to main results panel only if this session is currently selected at completion time
       const isCurrentlySelectedAtCompletion = sessionId === state.selectedSessionId;
       if (isCurrentlySelectedAtCompletion) {
@@ -1258,10 +1328,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         summary: state.displaySession.displaySummary,
         taviStructuredSections: state.displaySession.displayTaviStructuredSections,
         educationData: state.displaySession.displayEducationData,
+        reviewData: state.displaySession.displayReviewData,
         agent: state.displaySession.displayAgent,
         agentName: state.displaySession.displayAgentName,
         patientInfo: state.displaySession.displayPatientInfo,
         processingTime: state.displaySession.displayProcessingTime,
+        modelUsed: state.displaySession.displayModelUsed,
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
         isDisplayingSession: true
       };
@@ -1404,7 +1476,13 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Handle workflow selection with optimized state updates
   const handleWorkflowSelect = useCallback(async (workflowId: AgentType, quickActionField?: string) => {
     console.log('🎯 Workflow selected:', workflowId, quickActionField ? `(Quick Action field: ${quickActionField})` : '');
-    
+    console.log('🔍 handleWorkflowSelect state:', {
+      isRecording: recorder.isRecording,
+      activeWorkflow: state.ui.activeWorkflow,
+      workflowId,
+      willStop: recorder.isRecording && state.ui.activeWorkflow === workflowId
+    });
+
     // Auto-reset from error state when user attempts new recording
     if (state.processingStatus === 'error') {
       console.log('🔄 Auto-recovering from error state - resetting to idle for new recording');
@@ -1433,10 +1511,13 @@ const OptimizedAppContent: React.FC = memo(() => {
     );
 
     if (recorder.isRecording && state.ui.activeWorkflow === workflowId) {
-      // Stop recording for active workflow
+      // Already recording for this workflow - clicking again means stop
       console.log('🛑 Stopping current recording for:', workflowId);
       recorder.stopRecording();
-    } else if (!recorder.isRecording) {
+      return; // Exit early to prevent immediate restart
+    }
+
+    if (!recorder.isRecording) {
       // Check if we have too many active sessions (max 3 concurrent processing)
       if (activeSessions.length >= 3) {
         actions.setErrors([`Too many active sessions (${activeSessions.length}). Please wait for some to complete before starting new recordings.`]);
@@ -1454,67 +1535,49 @@ const OptimizedAppContent: React.FC = memo(() => {
         return;
       }
       
-      // Extract patient data before starting workflow with loading feedback
+      // Extract fresh patient data for accurate recording (always invalidate cache to avoid reusing old patient data)
       console.log('📋 Extracting patient data for new recording...');
-      actions.setExtractingPatients(true);
+      actions.setProcessingStatus('extracting-patient');
+
+      const startTime = performance.now();
       let currentPatientInfo = null;
-      
+
       try {
-        const patientData = await extractPatientData();
-        if (patientData && (patientData.name || patientData.id)) {
-          currentPatientInfo = {
-            name: patientData.name || 'Patient',
-            id: patientData.id || 'No ID',
-            dob: patientData.dob || '',
-            age: patientData.age || '',
-            phone: patientData.phone,
-            email: patientData.email,
-            medicare: patientData.medicare,
-            insurance: patientData.insurance,
-            address: patientData.address,
-            extractedAt: patientData.extractedAt || Date.now()
-          };
-          
+        // Always invalidate cache before extraction to prevent reusing previous patient's data
+        patientCacheService.invalidateCache();
+        console.log('🗑️ Cache invalidated - extracting fresh patient data');
+
+        // Extract patient data with visual feedback
+        currentPatientInfo = await extractPatientData();
+
+        const extractionTime = Math.round(performance.now() - startTime);
+        console.log(`✅ Patient data extracted in ${extractionTime}ms:`, currentPatientInfo?.name || 'No name found');
+
+        if (currentPatientInfo) {
           actions.setCurrentPatientInfo(currentPatientInfo);
-          console.log('✅ Patient data extracted successfully:', patientData.name, '(ID:', patientData.id + ')');
         } else {
-          console.log('⚠️ No patient data extracted from EMR - generating fallback patient info');
-          
-          // Generate better fallback patient info with unique naming
-          const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const sessionNumber = (state.patientSessions?.length || 0) + 1;
-          
-          currentPatientInfo = { 
-            name: `Patient ${sessionNumber} (${timestamp})`, 
-            id: `Session-${Date.now()}`, 
-            dob: '', 
-            age: '',
-            extractedAt: Date.now() 
-          };
-          
-          actions.setCurrentPatientInfo(currentPatientInfo);
-          console.log('📝 Generated fallback patient info:', currentPatientInfo.name);
+          throw new Error('No patient data found');
         }
-      } catch (extractionError) {
-        console.error('❌ Patient extraction failed with error:', extractionError);
-        
-        // Generate fallback patient info even on extraction failure
+      } catch (error) {
+        console.error('❌ Patient data extraction failed:', error);
+
+        // Fallback to generic patient info only on error
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const sessionNumber = (state.patientSessions?.length || 0) + 1;
-        
-        currentPatientInfo = { 
-          name: `Patient ${sessionNumber} (${timestamp})`, 
-          id: `Session-${Date.now()}`, 
-          dob: '', 
+
+        currentPatientInfo = {
+          name: `Patient ${sessionNumber} (${timestamp})`,
+          id: `Session-${Date.now()}`,
+          dob: '',
           age: '',
-          extractedAt: Date.now() 
+          extractedAt: Date.now()
         };
-        
+
         actions.setCurrentPatientInfo(currentPatientInfo);
-        console.log('📝 Generated fallback patient info after extraction error:', currentPatientInfo.name);
+        console.log('📝 Using fallback patient info due to extraction error:', currentPatientInfo.name);
       } finally {
-        // Always clear the extracting state
-        actions.setExtractingPatients(false);
+        // Clear extraction status
+        actions.setProcessingStatus('idle');
       }
       
       // Create a new patient session when recording starts
@@ -2050,7 +2113,13 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
       console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
 
-      if (field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
+      const shouldForceGenericInsertion = currentAgentType === 'angiogram-pci';
+
+      if (shouldForceGenericInsertion) {
+        console.log('📝 Angiogram/PCI agent detected - using direct cursor insertion.');
+      }
+
+      if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
         // Field-specific insertion: open field dialog and append content at the end
         console.log(`📝 Opening ${getFieldDisplayName(field)} field and appending content`);
 
@@ -2068,7 +2137,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
 
         console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
-      } else if (text && text.trim().length > 0) {
+      } else if (!shouldForceGenericInsertion && text && text.trim().length > 0) {
         // Smart fallback: If we have text to insert but no agent type, try Quick Action fields
         // This handles cases where agent type tracking failed but we know we have processed content
         console.log('🔍 No agent type but have text to insert - trying Quick Action field detection');
@@ -2189,6 +2258,38 @@ const OptimizedAppContent: React.FC = memo(() => {
     console.log('🚀 Component mounted - performing initial model status check...');
     checkModelStatus();
   }, [checkModelStatus]);
+
+  // Background patient data extraction to eliminate recording start latency
+  useEffect(() => {
+    console.log('🏗️ Starting background patient data cache...');
+
+    // Initial extraction to warm cache
+    patientCacheService.extractAndCache();
+
+    // Re-extract when user navigates or page changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Page became visible - refreshing patient cache');
+        patientCacheService.refreshCache();
+      }
+    };
+
+    // Listen for page visibility changes (user switches tabs/windows)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Periodic cache refresh every 30 seconds if user is actively on the page
+    const cacheRefreshInterval = setInterval(() => {
+      if (document.visibilityState === 'visible' && !patientCacheService.isCacheValid()) {
+        console.log('🔄 Periodic patient cache refresh');
+        patientCacheService.extractAndCache();
+      }
+    }, 30000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(cacheRefreshInterval);
+    };
+  }, [patientCacheService]);
 
   // Recurring model status monitoring - DISABLED to prevent interference with UI interactions
   // The automatic status checking was causing delays when interacting with notification bell
@@ -2414,7 +2515,45 @@ const OptimizedAppContent: React.FC = memo(() => {
               )}
             </div>
           )}
-          
+
+          {/* Patient Data Extraction Display - Show when extracting patient data from EMR */}
+          {state.processingStatus === 'extracting-patient' && (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="max-w-md w-full bg-white rounded-lg border border-blue-200 shadow-sm p-8">
+                <div className="flex flex-col items-center space-y-4">
+                  {/* Animated icon */}
+                  <div className="relative">
+                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+                      <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    {/* Pulsing ring animation */}
+                    <div className="absolute inset-0 rounded-full border-4 border-blue-400 animate-ping opacity-30"></div>
+                  </div>
+
+                  {/* Text */}
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-semibold text-blue-900">
+                      Extracting Patient Data
+                    </h3>
+                    <p className="text-sm text-blue-600">
+                      Reading patient information from EMR...
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      This usually takes 2-5 seconds
+                    </p>
+                  </div>
+
+                  {/* Loading bar */}
+                  <div className="w-full bg-blue-100 rounded-full h-1.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Transcription Processing Display - Show when actively transcribing/processing (not completed, not viewing sessions) */}
           {!recorder.isRecording &&
            (state.processingStatus === 'transcribing' || state.processingStatus === 'processing') &&
@@ -2717,6 +2856,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 totalProcessingTime={displayData.isDisplayingSession ? (displayData.processingTime || null) : state.totalProcessingTime}
                 processingStatus={displayData.processingStatus}
                 currentAgentName={displayData.agentName}
+                modelUsed={displayData.modelUsed || null}
                 selectedSessionId={displayData.isDisplayingSession ? displayData.patientInfo?.name || 'Unknown' : stableSelectedSessionId}
                 selectedPatientName={displayData.patientInfo?.name || stableSelectedPatientName}
                 patientVersion={displayData.isDisplayingSession ? null : state.patientVersion}
@@ -2733,6 +2873,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 )}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
+                reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
                 pipelineProgress={displayData.isDisplayingSession ? null : state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                   />
@@ -2877,7 +3018,24 @@ const OptimizedAppContent: React.FC = memo(() => {
                       // Process with the AI Medical Review agent
                       console.log('🤖 Processing with BatchPatientReviewAgent...');
                       const result = await AgentFactory.processWithAgent('ai-medical-review', data.formattedInput);
-                      
+
+                      // Debug: Check what we got back
+                      console.log('🔍 AI Review Result:', {
+                        hasReviewData: !!result.reviewData,
+                        reviewDataKeys: result.reviewData ? Object.keys(result.reviewData) : null,
+                        findingsCount: result.reviewData?.findings?.length || 0,
+                        resultKeys: Object.keys(result),
+                        contentPreview: result.content?.substring(0, 200)
+                      });
+
+                      // Store structured review data in state for card display (like Patient Education)
+                      if (result.reviewData) {
+                        console.log('✅ Storing reviewData in state:', result.reviewData);
+                        actions.setReviewData(result.reviewData);
+                      } else {
+                        console.warn('⚠️ No reviewData found in result!');
+                      }
+
                       // Update state with results
                       actions.setMissingInfo(result.missingInfo || null);
                       // Use atomic completion to ensure consistent state management
@@ -2897,10 +3055,62 @@ const OptimizedAppContent: React.FC = memo(() => {
                     actions.setProcessing(false);
                   }
                 } else if (actionId === 'batch-ai-review' && data?.type === 'show-modal') {
-                  // Handle batch AI review modal trigger
-                  console.log('👥 Batch AI Review: Triggering patient selection modal');
-                  actions.openOverlay('patient-selection');
-                  actions.setUIMode('batch', { sessionId: null, origin: 'user' });
+                  // Handle batch AI review modal trigger - extract calendar patients first
+                  console.log('👥 Batch AI Review: Extracting calendar patients before opening modal...');
+
+                  // Set extracting state
+                  actions.setExtractingPatients(true);
+                  actions.setExtractError(null);
+
+                  try {
+                    // Get current tab
+                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (!tab?.id) {
+                      throw new Error('No active tab found. Please navigate to the EMR calendar page.');
+                    }
+
+                    console.log('📅 Requesting calendar extraction from tab:', tab.id);
+
+                    // Extract calendar patients from current page via content script
+                    const response = await new Promise<{ success: boolean; data?: any; error?: string }>((resolve) => {
+                      chrome.tabs.sendMessage(tab.id!, {
+                        type: 'extract-calendar-patients'
+                      }, (response) => {
+                        if (chrome.runtime.lastError) {
+                          console.error('📅 Chrome runtime error:', chrome.runtime.lastError);
+                          resolve({ success: false, error: chrome.runtime.lastError.message });
+                          return;
+                        }
+                        resolve(response || { success: false, error: 'No response from content script' });
+                      });
+                    });
+
+                    console.log('📅 Calendar extraction response:', response);
+
+                    if (response.success && response.data) {
+                      // Store calendar data in state
+                      actions.setCalendarData(response.data);
+                      actions.setExtractingPatients(false);
+
+                      console.log(`✅ Extracted ${response.data.totalCount} patients from calendar`);
+
+                      // Now open modal with populated data
+                      actions.openOverlay('patient-selection');
+                      actions.setUIMode('batch', { sessionId: null, origin: 'user' });
+                    } else {
+                      throw new Error(response.error || 'Failed to extract calendar patients. Make sure you are on the EMR appointment calendar page.');
+                    }
+                  } catch (error) {
+                    console.error('❌ Calendar extraction failed:', error);
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+                    actions.setExtractingPatients(false);
+                    actions.setExtractError(errorMessage);
+
+                    // Still open modal to show error message
+                    actions.openOverlay('patient-selection');
+                    actions.setUIMode('batch', { sessionId: null, origin: 'user' });
+                  }
                 } else {
                   console.log('ℹ️ Unhandled quick action:', actionId);
                 }

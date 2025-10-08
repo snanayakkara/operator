@@ -84,14 +84,15 @@ export class AngiogramPCIAgent extends MedicalAgent {
       
       // Generate structured report content based on procedure type
       const reportContent = await this.generateStructuredReport(correctedInput, procedureData, procedureType);
+      const normalizedReportContent = this.normalizeReportContent(reportContent, procedureData, procedureType);
 
       // Parse response into sections
-      const sections = this.parseResponse(reportContent, context);
+      const sections = this.parseResponse(normalizedReportContent, context);
 
       // Create comprehensive report
       const processingTime = Date.now() - startTime;
       const report = this.createReport(
-        reportContent, 
+        normalizedReportContent, 
         sections, 
         context, 
         processingTime, 
@@ -202,7 +203,7 @@ ${input}`;
     const procedureType: ProcedureType = this.getMemory().shortTerm['detectedProcedureType'] || 'DIAGNOSTIC_ANGIOGRAM';
     // Always use unified 3-section report format
     const contextualSystemPrompt = this.systemPrompt +
-      '\n\nFORMAT: Use the unified three-section format (PREAMBLE, FINDINGS/PROCEDURE, CONCLUSION) regardless of procedure type. Integrate PCI details within FINDINGS/PROCEDURE when applicable.';
+      '\n\nFORMAT: Output exactly three sections labelled PREAMBLE, FINDINGS, and CONCLUSION. Place procedural technique details in the PREAMBLE, structure FINDINGS with explicit subsections (Left Main, Left Anterior Descending (LAD), Left Circumflex (LCx), Right Coronary Artery (RCA)), and keep the CONCLUSION to two or three sentences totalling about 30 words.';
 
     const userPrompt = `Generate a ${procedureType.toLowerCase().replace('_', ' ')} report using the appropriate format.
 
@@ -317,7 +318,7 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     try {
       // Use processWithAgent with unified three-section format instruction
       const contextualSystemPrompt = this.systemPrompt +
-        '\n\nFORMAT: Use the unified three-section format (PREAMBLE, FINDINGS/PROCEDURE, CONCLUSION). Integrate any PCI details within FINDINGS/PROCEDURE.';
+        '\n\nFORMAT: Produce three sections titled PREAMBLE, FINDINGS, and CONCLUSION. PREAMBLE should cover patient context and procedural setup, FINDINGS must contain subsections for Left Main, Left Anterior Descending (LAD), Left Circumflex (LCx), and Right Coronary Artery (RCA), and CONCLUSION should be limited to two or three sentences (~30 words).';
       
       const report = await this.lmStudioService.processWithAgent(contextualSystemPrompt, input);
       
@@ -332,6 +333,254 @@ Use the clinician's exact terminology as provided. Include all relevant details 
       // Fallback to basic structured format
       return this.generateFallbackReport(input, procedureData, procedureType);
     }
+  }
+
+  private normalizeReportContent(
+    reportContent: string,
+    procedureData: any,
+    procedureType: ProcedureType
+  ): string {
+    if (!reportContent || !reportContent.trim()) {
+      return this.generateFallbackReport(reportContent, procedureData, procedureType);
+    }
+
+    const sections = this.extractSectionsFromContent(reportContent);
+
+    let preamble = (sections['PREAMBLE'] || '').trim();
+    let findings = (sections['FINDINGS'] || sections['FINDINGS/PROCEDURE'] || '').trim();
+    const procedureSection = (sections['PROCEDURE'] || '').trim();
+    let conclusion = (sections['CONCLUSION'] || '').trim();
+
+    if (procedureSection) {
+      preamble = [preamble, procedureSection].filter(Boolean).join('\n\n').trim();
+    }
+
+    if (!preamble) {
+      preamble = this.generateFallbackPreamble(procedureData);
+    }
+
+    const normalizedFindings = this.normalizeFindingsSection(findings, procedureData);
+
+    if (!conclusion) {
+      conclusion = this.buildFallbackConclusion(procedureData, procedureType);
+    }
+    const conciseConclusion = this.limitConclusionLength(conclusion);
+
+    const formattedSections = [
+      { title: 'PREAMBLE', content: preamble.trim() },
+      { title: 'FINDINGS', content: normalizedFindings.trim() },
+      { title: 'CONCLUSION', content: conciseConclusion.trim() }
+    ].filter(section => section.content.length > 0);
+
+    return formattedSections
+      .map(section => `**${section.title}**\n${section.content}`)
+      .join('\n\n');
+  }
+
+  private extractSectionsFromContent(content: string): Record<string, string> {
+    const sections: Record<string, string> = {};
+    const lines = content.split('\n');
+    const knownHeaders = new Set([
+      'PREAMBLE',
+      'FINDINGS',
+      'FINDINGS/PROCEDURE',
+      'PROCEDURE',
+      'CONCLUSION'
+    ]);
+
+    let currentHeader: string | null = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      const normalized = line.replace(/\*/g, '').replace(/:$/, '').trim().toUpperCase();
+
+      if (knownHeaders.has(normalized)) {
+        currentHeader = normalized;
+        if (!sections[currentHeader]) {
+          sections[currentHeader] = '';
+        }
+        continue;
+      }
+
+      if (currentHeader) {
+        sections[currentHeader] += (sections[currentHeader] ? '\n' : '') + rawLine.trimEnd();
+      }
+    }
+
+    return sections;
+  }
+
+  private normalizeFindingsSection(findingsContent: string, procedureData: any): string {
+    const baseContent = findingsContent || '';
+    let workingContent = baseContent;
+
+    let coronaryAnatomy = '';
+    const coronaryMatch = workingContent.match(/coronary anatomy[:\s-]*([^\n]+)/i);
+    if (coronaryMatch) {
+      coronaryAnatomy = coronaryMatch[1].trim();
+      workingContent = workingContent.replace(coronaryMatch[0], '');
+    }
+
+    const keywordGroups: Record<string, string[]> = {
+      lm: ['left main', ' lm ', '(lm)', 'lm '],
+      lad: ['left anterior descending', ' lad ', '(lad)', 'lad '],
+      lcx: ['left circumflex', 'lcx', '(lcx)'],
+      rca: ['right coronary artery', 'rca', '(rca)'],
+      lv: ['left ventricle', 'lvedp', 'lv '],
+    };
+
+    const { matches, remainder } = this.extractSentencesByKeywords(workingContent, keywordGroups);
+
+    const vesselSections = [
+      {
+        key: 'lm',
+        heading: 'Left Main',
+        fallback: this.describeLMFindings(procedureData)
+      },
+      {
+        key: 'lad',
+        heading: 'Left Anterior Descending (LAD)',
+        fallback: this.describeLADFindings(procedureData)
+      },
+      {
+        key: 'lcx',
+        heading: 'Left Circumflex (LCx)',
+        fallback: this.describeLCxFindings(procedureData)
+      },
+      {
+        key: 'rca',
+        heading: 'Right Coronary Artery (RCA)',
+        fallback: this.describeRCAFindings(procedureData)
+      }
+    ];
+
+    const sectionBlocks: string[] = [];
+
+    if (coronaryAnatomy) {
+      sectionBlocks.push(`Coronary Anatomy\n${coronaryAnatomy}`);
+    }
+
+    for (const section of vesselSections) {
+      const sentences = matches[section.key];
+      const content = sentences && sentences.length > 0
+        ? sentences.join(' ')
+        : section.fallback;
+
+      sectionBlocks.push(`${section.heading}\n${content.trim()}`);
+    }
+
+    const lvSentences = matches['lv'];
+    if (lvSentences && lvSentences.length > 0) {
+      sectionBlocks.push(`Left Ventricle\n${lvSentences.join(' ').trim()}`);
+    }
+
+    const additionalNotes = remainder
+      .filter(sentence => sentence && sentence.trim().length > 0)
+      .join(' ')
+      .trim();
+
+    if (additionalNotes) {
+      sectionBlocks.push(`Additional Notes\n${additionalNotes}`);
+    }
+
+    return sectionBlocks.join('\n\n').trim();
+  }
+
+  private extractSentencesByKeywords(
+    content: string,
+    keywordGroups: Record<string, string[]>
+  ): { matches: Record<string, string[]>; remainder: string[] } {
+    const sentences = content
+      .split(/(?<=[.!?])\s+/)
+      .map(sentence => sentence.trim())
+      .filter(sentence => sentence.length > 0);
+
+    const matches: Record<string, string[]> = {};
+    const remainder: string[] = [];
+
+    for (const sentence of sentences) {
+      const normalizedSentence = ` ${sentence.toLowerCase()} `;
+      let matchedKey: string | null = null;
+
+      for (const [key, keywords] of Object.entries(keywordGroups)) {
+        if (keywords.some(keyword => normalizedSentence.includes(keyword))) {
+          matchedKey = key;
+          break;
+        }
+      }
+
+      if (matchedKey) {
+        if (!matches[matchedKey]) {
+          matches[matchedKey] = [];
+        }
+        matches[matchedKey].push(sentence.trim());
+      } else {
+        remainder.push(sentence.trim());
+      }
+    }
+
+    return { matches, remainder };
+  }
+
+  private generateFallbackPreamble(procedureData: any): string {
+    const sentences: string[] = [];
+    const indication = procedureData.indication || 'coronary assessment';
+    sentences.push(`Cardiac catheterisation performed for ${indication}.`);
+
+    if (procedureData.accessSite) {
+      sentences.push(`${procedureData.accessSite}.`);
+    } else {
+      sentences.push('Arterial access site not specified in the dictation.');
+    }
+
+    const proceduralDetails: string[] = [];
+    if (procedureData.contrastVolume) {
+      proceduralDetails.push(procedureData.contrastVolume);
+    }
+    if (procedureData.fluoroscopyTime) {
+      proceduralDetails.push(procedureData.fluoroscopyTime);
+    }
+    if (proceduralDetails.length > 0) {
+      sentences.push(proceduralDetails.join(', ') + '.');
+    }
+
+    if (procedureData.proceduralOutcome) {
+      sentences.push(procedureData.proceduralOutcome + '.');
+    }
+
+    return sentences.join(' ');
+  }
+
+  private buildFallbackConclusion(procedureData: any, procedureType: ProcedureType): string {
+    const outcome = procedureData.proceduralOutcome || 'Procedure completed without complication';
+
+    if (procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED') {
+      return `${outcome}. Continue guideline-directed medical therapy and dual antiplatelet therapy per protocol.`;
+    }
+
+    return `${outcome}. Optimise medical management and correlate with clinical presentation.`;
+  }
+
+  private limitConclusionLength(conclusion: string): string {
+    const cleaned = conclusion.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return '';
+
+    const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+    const trimmedSentences = sentences.slice(0, 3);
+    let candidate = trimmedSentences.join(' ').trim();
+
+    const words = candidate.split(/\s+/);
+    if (words.length > 35) {
+      candidate = words.slice(0, 35).join(' ').replace(/[.,;:]?$/, '') + '.';
+    }
+
+    if (!/[.!?]$/.test(candidate)) {
+      candidate += '.';
+    }
+
+    return candidate;
   }
 
   private generateFallbackReport(_input: string, procedureData: any, procedureType: ProcedureType): string {

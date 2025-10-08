@@ -59,6 +59,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   // Check if reasoning artifacts are available
   const hasReasoningArtifacts = reportMetadata?.reasoningArtifacts?.hasReasoningContent || 
                                  (reportMetadata?.rawAIOutput && reportMetadata.rawAIOutput.trim().length > 0);
+  const showDownloadButton = agentType !== 'angiogram-pci';
 
   const handleCopy = async () => {
     try {
@@ -100,7 +101,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   };
 
   // Calculate grid columns based on available actions
-  const totalActions = 3 + (hasReasoningArtifacts ? 1 : 0) + customActions.length;
+  const totalActions = 2 + (showDownloadButton ? 1 : 0) + (hasReasoningArtifacts ? 1 : 0) + customActions.length;
   const gridCols = totalActions <= 4 ? `grid-cols-${totalActions}` : 'grid-cols-4';
 
   return (
@@ -150,13 +151,15 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
         </button>
 
         {/* Download Button */}
-        <button
-          onClick={handleDownload}
-          className="bg-white/60 border border-emerald-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-emerald-50/60 transition-colors btn-micro-press btn-micro-hover"
-        >
-          <Download className="w-4 h-4 text-gray-700" />
-          <span className="text-xs text-gray-700">Download</span>
-        </button>
+        {showDownloadButton && (
+          <button
+            onClick={handleDownload}
+            className="bg-white/60 border border-emerald-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-emerald-50/60 transition-colors btn-micro-press btn-micro-hover"
+          >
+            <Download className="w-4 h-4 text-gray-700" />
+            <span className="text-xs text-gray-700">Download</span>
+          </button>
+        )}
 
         {/* AI Reasoning Viewer Button - Only show if reasoning artifacts are available */}
         {hasReasoningArtifacts && (
