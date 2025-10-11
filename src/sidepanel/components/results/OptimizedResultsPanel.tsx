@@ -25,7 +25,6 @@ import {
 } from '@/utils/animations';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { ProcessingTimeDisplay } from '../ProcessingTimeDisplay';
-import { MetricsService } from '@/services/MetricsService';
 import {
   ReportDisplay,
   TranscriptionSection,
@@ -80,6 +79,7 @@ interface OptimizedResultsPanelProps {
   totalProcessingTime?: number | null;
   processingStatus?: string;
   currentAgentName?: string | null;
+  modelUsed?: string | null;
   // Patient version generation
   patientVersion?: string | null;
   isGeneratingPatientVersion?: boolean;
@@ -143,6 +143,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   totalProcessingTime = null,
   processingStatus = 'idle',
   currentAgentName = null,
+  modelUsed = null,
   // Patient version generation
   patientVersion = null,
   isGeneratingPatientVersion = false,
@@ -171,33 +172,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   processingStartTime
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-
-  // Store metrics when processing completes
-  useEffect(() => {
-    const storeMetrics = async () => {
-      if (
-        processingStatus === 'complete' && 
-        totalProcessingTime && 
-        transcriptionTime && 
-        agentProcessingTime && 
-        agentType
-      ) {
-        const metricsService = MetricsService.getInstance();
-        await metricsService.storeMetric({
-          agentType,
-          transcriptionTime,
-          processingTime: agentProcessingTime,
-          totalDuration: totalProcessingTime,
-          modelUsed: currentAgentName || 'Unknown',
-          success: true
-        });
-      }
-    };
-
-    storeMetrics().catch(error => {
-      console.error('Failed to store metrics:', error);
-    });
-  }, [processingStatus, totalProcessingTime, transcriptionTime, agentProcessingTime, agentType, currentAgentName]);
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
@@ -987,6 +961,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             // Patient Education with structured JSON metadata + letter display
             <PatientEducationOutputCard
               report={{
+                id: `report-${Date.now()}`,
+                timestamp: Date.now(),
                 content: results,
                 agentName: currentAgentName || 'Patient Education & Lifestyle Medicine',
                 metadata: {
@@ -1006,8 +982,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   letterContent: results
                 }
               }}
-              onCopy={onCopy}
-              onInsert={onInsertToEMR}
+              onCopy={async (text: string) => { await Promise.resolve(onCopy(text)); }}
+              onInsert={async (text: string) => { await Promise.resolve(onInsertToEMR(text)); }}
               isVisible={true}
             />
           ) : (
@@ -1063,6 +1039,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               isRecording={false}
               recordingTime={0}
               transcriptionLength={originalTranscription ? originalTranscription.length : 0}
+              modelUsed={modelUsed}
             />
           </motion.div>
         )}

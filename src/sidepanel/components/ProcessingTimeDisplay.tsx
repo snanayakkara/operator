@@ -8,11 +8,41 @@ interface ProcessingTimeDisplayProps {
   isRecording?: boolean;
   recordingTime?: number;
   transcriptionLength?: number; // optional: provide transcript length for predictions
+  modelUsed?: string | null; // optional: actual model used for this session
 }
 
 interface AgentExpectedTimes {
   [key: string]: { min: number; max: number; complexity: 'low' | 'medium' | 'high' };
 }
+
+/**
+ * Map model IDs to user-friendly display names
+ */
+const getModelDisplayName = (modelId: string | null | undefined): string => {
+  if (!modelId) return 'MedGemma-27B MLX';
+
+  // Model display name mappings
+  const modelMap: Record<string, string> = {
+    'medgemma-27b-text-it-mlx': 'MedGemma-27B MLX',
+    'qwen/qwen3-4b-2507': 'Qwen 3-4B',
+    'qwen3-4b': 'Qwen 3-4B',
+    'gemma-3n-e4b': 'Gemma 3N-E4B',
+  };
+
+  // Try exact match first
+  if (modelMap[modelId]) return modelMap[modelId];
+
+  // Try partial match for variations
+  const lowerModelId = modelId.toLowerCase();
+  for (const [key, value] of Object.entries(modelMap)) {
+    if (lowerModelId.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerModelId)) {
+      return value;
+    }
+  }
+
+  // Fallback: return original model ID if no mapping found
+  return modelId;
+};
 
 const AGENT_EXPECTED_TIMES: AgentExpectedTimes = {
   // Documentation agents - simpler tasks, some using lighter models
@@ -31,7 +61,7 @@ const AGENT_EXPECTED_TIMES: AgentExpectedTimes = {
   'ai-medical-review': { min: 180000, max: 240000, complexity: 'medium' } // 3-4min (user reported 3min actual)
 };
 
-export const ProcessingTimeDisplay: React.FC<ProcessingTimeDisplayProps> = ({ appState, isRecording = false, recordingTime = 0, transcriptionLength }) => {
+export const ProcessingTimeDisplay: React.FC<ProcessingTimeDisplayProps> = ({ appState, isRecording = false, recordingTime = 0, transcriptionLength, modelUsed = null }) => {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [prediction, setPrediction] = useState<ProcessingTimeEstimate | null>(null);
   const [predictor] = useState(() => ProcessingTimePredictor.getInstance());
@@ -239,12 +269,12 @@ export const ProcessingTimeDisplay: React.FC<ProcessingTimeDisplayProps> = ({ ap
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
                   <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
-                  <span className="text-gray-700">{appState.currentAgentName || 'Agent'} (MedGemma-27b MLX)</span>
+                  <span className="text-gray-700">{appState.currentAgentName || 'Agent'} ({getModelDisplayName(modelUsed)})</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                    <div 
-                      className="bg-purple-400 h-1.5 rounded-full" 
+                    <div
+                      className="bg-purple-400 h-1.5 rounded-full"
                       style={{ width: `${agentPercent}%` }}
                     ></div>
                   </div>

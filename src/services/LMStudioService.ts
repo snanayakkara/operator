@@ -2,6 +2,7 @@ import type {
   LMStudioRequest,
   LMStudioResponse,
   ChatMessage,
+  ChatMessageContentBlock,
   ModelStatus
 } from '@/types/medical.types';
 import { WhisperServerService } from './WhisperServerService';
@@ -21,7 +22,7 @@ import { StreamingParser } from '@/utils/StreamingParser';
  */
 export const MODEL_CONFIG = {
   REASONING_MODEL: 'medgemma-27b-text-it-mlx',
-  QUICK_MODEL: 'google/gemma-3n-e4b'
+  QUICK_MODEL: 'qwen/qwen3-4b-2507'
 } as const;
 
 export interface LMStudioConfig {
@@ -68,6 +69,13 @@ export interface LMStudioConfig {
 
 export class LMStudioService {
   private static instance: LMStudioService;
+  private static readonly QWEN_MODEL_PATTERN = /qwen/i;
+  private static readonly QUICK_AGENT_TYPES = new Set<string>([
+    'investigation-summary',
+    'medication',
+    'background',
+    'bloods'
+  ]);
   private config: LMStudioConfig;
   private modelStatus: ModelStatus;
   private retryDelays = [1000, 2000, 4000]; // Exponential backoff
@@ -652,6 +660,13 @@ export class LMStudioService {
       stream: true
     });
 
+    const preparedRequest = this.enforceModelSafety(request);
+    const guardApplied = preparedRequest !== request;
+
+    if (guardApplied) {
+      console.log('🛡️ Applied Qwen no_think guard with non-thinking sampling preset (streaming)');
+    }
+
     // Log format being used for debugging
     if (GemmaPromptFormatter.isGemmaModel(modelToUse)) {
       console.log('🔧 Using Gemma prompt format with control tokens for streaming');
@@ -669,7 +684,7 @@ export class LMStudioService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(preparedRequest),
         signal: combinedSignal
       });
 
@@ -748,13 +763,20 @@ export class LMStudioService {
       stream: true
     });
 
+    const preparedRequest = this.enforceModelSafety(request, agentType);
+    const guardApplied = preparedRequest !== request;
+
+    if (guardApplied) {
+      console.log('🛡️ Applied Qwen no_think guard with non-thinking sampling preset (stream response)');
+    }
+
     try {
       const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(preparedRequest),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.config.timeout)]) : AbortSignal.timeout(this.config.timeout)
       });
 
@@ -820,18 +842,25 @@ export class LMStudioService {
     console.log(`🚀 Starting LMStudio request for agent: ${agentType || 'default'}`);
     console.log(`⏰ Timeout: ${timeoutMinutes} minutes (${agentTimeout}ms) for this agent type`);
 
+    const preparedRequest = this.enforceModelSafety(request, agentType);
+    const guardApplied = preparedRequest !== request;
+
     // Create request body string once for reuse
-    const requestBody = JSON.stringify(request);
+    const requestBody = JSON.stringify(preparedRequest);
+
+    if (guardApplied) {
+      console.log('🛡️ Applied Qwen no_think guard with non-thinking sampling preset');
+    }
 
     // TEMP DEBUG: Log TAVI requests to identify Gemma formatting issue
     if (agentType === 'tavi-workup') {
-      const firstMessageContent = request.messages?.[0]?.content;
+      const firstMessageContent = preparedRequest.messages?.[0]?.content;
       const firstMessageText = this.normalizeMessageContent(firstMessageContent);
 
       console.log('🔍 TAVI REQUEST DEBUG:', {
-        model: request.model,
-        messagesCount: request.messages?.length,
-        firstMessageRole: request.messages?.[0]?.role,
+        model: preparedRequest.model,
+        messagesCount: preparedRequest.messages?.length,
+        firstMessageRole: preparedRequest.messages?.[0]?.role,
         firstMessageContentLength: firstMessageText.length,
         firstMessagePreview: firstMessageText.substring(0, 200) + '...',
         requestBodyLength: requestBody.length,
@@ -1149,6 +1178,99 @@ export class LMStudioService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private isQwenModel(model?: string): boolean {
+    return typeof model === 'string' && LMStudioService.QWEN_MODEL_PATTERN.test(model);
+  }
+
+  private appendNoThinkSuffix(text: string): string {
+    if (!text) {
+      return '/no_think';
+    }
+
+    const trimmed = text.trimEnd();
+    if (trimmed.endsWith('/no_think')) {
+      return text;
+    }
+
+    const separator = text.endsWith('\n') || text.length === 0 ? '' : '\n';
+    return `${text}${separator}/no_think`;
+  }
+
+  private applyNoThinkToContent(content: ChatMessage['content']): ChatMessage['content'] {
+    if (typeof content === 'string') {
+      return this.appendNoThinkSuffix(content);
+    }
+
+    const cloned: ChatMessageContentBlock[] = content.map(block => {
+      if (block.type === 'text') {
+        return { type: 'text', text: block.text } as ChatMessageContentBlock;
+      }
+      return {
+        type: 'image_url',
+        image_url: { ...block.image_url }
+      } as ChatMessageContentBlock;
+    });
+
+    let lastTextIndex = -1;
+    for (let i = cloned.length - 1; i >= 0; i--) {
+      if (cloned[i].type === 'text') {
+        lastTextIndex = i;
+        break;
+      }
+    }
+
+    if (lastTextIndex >= 0) {
+      const textBlock = cloned[lastTextIndex];
+      if (textBlock.type === 'text') {
+        const updatedText = this.appendNoThinkSuffix(textBlock.text);
+        if (updatedText !== textBlock.text) {
+          cloned[lastTextIndex] = { ...textBlock, text: updatedText };
+        }
+      }
+      return cloned;
+    }
+
+    cloned.push({ type: 'text', text: '/no_think' });
+    return cloned;
+  }
+
+  private enforceModelSafety(request: LMStudioRequest, agentType?: string): LMStudioRequest {
+    if (!this.isQwenModel(request.model)) {
+      return request;
+    }
+
+    if (!agentType || !LMStudioService.QUICK_AGENT_TYPES.has(agentType)) {
+      return request;
+    }
+
+    const safeRequest: LMStudioRequest = {
+      ...request,
+      no_think: true,
+      temperature: 0.7,
+      top_p: 0.8,
+      top_k: 20,
+      min_p: 0
+    };
+
+    if (request.messages) {
+      safeRequest.messages = request.messages.map(message => {
+        if (message.role === 'user') {
+          return {
+            ...message,
+            content: this.applyNoThinkToContent(message.content)
+          };
+        }
+        return { ...message };
+      });
+    }
+
+    if (request.prompt) {
+      safeRequest.prompt = this.appendNoThinkSuffix(request.prompt);
+    }
+
+    return safeRequest;
   }
 
   /**

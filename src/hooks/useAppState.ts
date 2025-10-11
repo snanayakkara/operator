@@ -86,10 +86,12 @@ interface DisplaySessionState {
   displaySummary?: string;
   displayTaviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
   displayEducationData?: any; // Patient Education structured data
+  displayReviewData?: any; // AI Medical Review structured data
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
   displayProcessingTime?: number; // Processing time in milliseconds
+  displayModelUsed?: string | null; // Model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
 }
 
 // Combined app state
@@ -148,7 +150,7 @@ type AppAction =
   | { type: 'SET_TIMING_DATA'; payload: Partial<Pick<AppState, 'recordingTime' | 'transcriptionTime' | 'agentProcessingTime' | 'totalProcessingTime' | 'processingStartTime'>> }
   | { type: 'SET_CURRENT_AGENT_NAME'; payload: string | null }
   | { type: 'SET_FAILED_RECORDINGS'; payload: FailedAudioRecording[] }
-  | { type: 'SET_REVIEW_DATA'; payload: BatchAIReviewReport | null }
+  | { type: 'SET_REVIEW_DATA'; payload: any }
   | { type: 'SET_TAVI_STRUCTURED_SECTIONS'; payload: any }
   | { type: 'SET_EDUCATION_DATA'; payload: any }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
@@ -794,10 +796,12 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displaySummary: session.summary,
           displayTaviStructuredSections: session.taviStructuredSections,
           displayEducationData: session.educationData,
+          displayReviewData: session.reviewData,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null,
-          displayProcessingTime: session.processingTime
+          displayProcessingTime: session.processingTime,
+          displayModelUsed: session.modelUsed || null
         }
       };
     }
@@ -932,7 +936,7 @@ export function useAppState() {
       dispatch({ type: 'SET_FAILED_RECORDINGS', payload: recordings });
     }, []),
     
-    setReviewData: useCallback((data: BatchAIReviewReport | null) => {
+    setReviewData: useCallback((data: any) => {
       dispatch({ type: 'SET_REVIEW_DATA', payload: data });
     }, []),
 

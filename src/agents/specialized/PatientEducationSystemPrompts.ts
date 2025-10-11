@@ -332,6 +332,7 @@ PRIORITY-BASED ADVICE:
 • Order recommendations by **expected impact for this patient** (top to bottom)
 • Include concise **magnitude notes** where evidence exists (e.g., typical BP change ranges for exercise modes; fibre helps reduce BP/LDL)
 • Keep it supportive and non-judgemental; personalise to age, ABPM/lipids/HbA1c and profiling toggles
+• When **Increasing fibre** is a selected focus, spell out the patient's daily fibre target in grams (map to age, sex, pregnancy where known) and include approximate fibre grams for each food or swap recommended so they know how to reach the target
 
 STRUCTURE GUIDELINES:
 • Begin each section with a clear heading
@@ -479,6 +480,25 @@ A Mediterranean-style eating pattern supports heart health. Focus on vegetables,
 **Track your fibre (awareness helps):**
 • Use a food‑tracking app (e.g., **MyFitnessPal** or **Easy Diet Diary**) to log a typical day and estimate your fibre grams
 • Compare your usual intake to the **30–45 g/day** range; increase gradually and drink water to avoid tummy upset
+
+**Fibre targets by demographic (state the patient's number in the letter):**
+• Adult women 19–50 years: **25–30 g/day**; ≥51 years: **28–30 g/day**
+• Adult men 19–50 years: **30–38 g/day**; ≥51 years: **28–34 g/day**
+• Pregnant people: **≈28 g/day**; breastfeeding: **≈30 g/day**
+• If sex/gender is not provided, default to **30–34 g/day** and explain it's a general range; when metabolic risk (T2DM, dyslipidaemia, elevated BP, overweight) is present, encourage aiming for the upper end (≈30–38 g/day) with gradual increases and water
+
+**Fibre cheat sheet (approximate fibre per standard serve):**
+• Rolled oats (1 cup cooked / ½ cup dry) ≈ **4 g**
+• Wholemeal or multigrain bread (2 slices) ≈ **6 g**
+• Brown rice, barley or quinoa (1 cup cooked) ≈ **4–5 g**
+• Berries (1 cup raspberries/mixed berries) ≈ **7–8 g**
+• Apple or pear (1 medium) ≈ **4–6 g**; orange (1 medium) ≈ **3–4 g**
+• Broccoli (1 cup cooked) ≈ **5 g**; carrots (1 cup raw sticks) ≈ **3 g**; spinach/silverbeet (1 cup cooked) ≈ **4 g**
+• Lentils, chickpeas or beans (1 cup cooked) ≈ **12–15 g**; ½ cup ≈ **6–8 g**
+• Psyllium husk (2 tsp) ≈ **6 g** (always take with water)
+• Chia seeds (1 tbsp) ≈ **5 g**; ground linseeds/flax (2 tbsp) ≈ **6 g**; almonds or mixed nuts (30 g handful) ≈ **4 g**
+
+When writing actions for this focus, tie each suggested food or swap to its fibre grams so the patient can add them up across the day.
 
 **Carb → protein & fibre swaps (to stay fuller for longer):**
 • **Breakfast:** Swap sugary cereal or white toast for **Greek yoghurt + berries + chia/linseeds**, or **oats** made with milk and topped with **nuts/seeds**

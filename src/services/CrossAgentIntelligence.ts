@@ -75,6 +75,24 @@ export interface MedicalContextEnhancement {
   recommendations: CrossAgentRecommendation[];
 }
 
+export interface CrossAgentMetrics {
+  activeProfiles: number;
+  totalInsights: number;
+  totalRecommendations: number;
+  trackedPatterns: number;
+  lastInsightTimestamp: number | null;
+  lastAnalysisTimestamp: number | null;
+  topCategories: { category: string; count: number }[];
+  insightSummary: string;
+  recentRecommendations: CrossAgentRecommendation[];
+}
+
+type CorrelationDescriptor = {
+  relationship: string;
+  significance: number;
+  recommendation?: string;
+};
+
 /**
  * Cross-Agent Intelligence coordinator for Phase 3 medical agents
  */
@@ -83,9 +101,23 @@ export class CrossAgentIntelligence {
   private patientProfiles: Map<string, PatientProfile> = new Map();
   private globalInsights: Map<string, MedicalInsight[]> = new Map(); // Pattern-based insights
   private correlationRules: Map<string, (insights: MedicalInsight[]) => CrossAgentRecommendation[]> = new Map();
+  private globalCategoryCounts: Map<MedicalInsight['category'], number> = new Map();
+  private correlationLookup: Map<string, CorrelationDescriptor> = new Map();
+  private relatedConditionMap: Map<string, string[]> = new Map();
+  private metrics = {
+    totalInsights: 0,
+    totalRecommendations: 0,
+    trackedPatterns: 0,
+    lastInsightTimestamp: 0,
+    lastAnalysisTimestamp: 0,
+    topCategories: [] as { category: string; count: number }[],
+    insightSummary: 'Collecting intelligence',
+    recentRecommendations: [] as CrossAgentRecommendation[]
+  };
 
   constructor() {
     this.initializeCorrelationRules();
+    this.initializeCorrelationKnowledge();
     this.startPeriodicAnalysis();
   }
 
@@ -112,6 +144,11 @@ export class CrossAgentIntelligence {
     
     // Update global pattern insights
     this.updateGlobalInsights(insights);
+
+    this.metrics.totalInsights += insights.length;
+    this.metrics.lastInsightTimestamp = Date.now();
+    this.metrics.trackedPatterns = this.globalInsights.size;
+    this.updateMetricsSnapshot();
     
     console.log(`🧠 Registered ${insights.length} insights from ${agentType} agent`);
     return insights;
@@ -152,10 +189,30 @@ export class CrossAgentIntelligence {
 
     // Generate cross-agent recommendations
     const _recommendations = this.generateComprehensiveRecommendations(profile);
+    if (_recommendations.length > 0) {
+      this.metrics.recentRecommendations = _recommendations.slice(0, 5);
+      this.metrics.totalRecommendations += _recommendations.length;
+    }
+    this.metrics.lastAnalysisTimestamp = Date.now();
+    this.updateMetricsSnapshot();
     
     console.log(`📋 Analyzed patient profile: ${profile.medicalHistory.length} conditions, ${profile.currentMedications.length} medications`);
     
     return profile;
+  }
+
+  getMetrics(): CrossAgentMetrics {
+    return {
+      activeProfiles: this.patientProfiles.size,
+      totalInsights: this.metrics.totalInsights,
+      totalRecommendations: this.metrics.totalRecommendations,
+      trackedPatterns: this.metrics.trackedPatterns,
+      lastInsightTimestamp: this.metrics.lastInsightTimestamp || null,
+      lastAnalysisTimestamp: this.metrics.lastAnalysisTimestamp || null,
+      topCategories: [...this.metrics.topCategories],
+      insightSummary: this.metrics.insightSummary,
+      recentRecommendations: [...this.metrics.recentRecommendations]
+    };
   }
 
   /**
@@ -441,9 +498,15 @@ export class CrossAgentIntelligence {
       recommendations.push(...ruleRecommendations);
     });
 
-    return recommendations.filter(rec => 
+    const filtered = recommendations.filter(rec => 
       rec.sourceAgents.length === 0 || rec.sourceAgents.includes(agentType)
     );
+
+    if (filtered.length > 0) {
+      this.metrics.recentRecommendations = filtered.slice(0, 5);
+    }
+
+    return filtered;
   }
 
   /**
@@ -516,6 +579,158 @@ export class CrossAgentIntelligence {
       }
       return [];
     });
+
+    // Rule: Heart failure without guideline-directed therapy
+    this.correlationRules.set('heart-failure-therapy-gap', (insights: MedicalInsight[]) => {
+      const heartFailure = insights.filter(i => i.finding.toLowerCase().includes('heart failure'));
+      if (heartFailure.length === 0) {
+        return [];
+      }
+
+      const medications = insights.filter(i => i.category === 'medication');
+      const medsText = medications.map(m => m.finding.toLowerCase());
+      const hasBetaBlocker = medsText.some(text => /(beta\s*blocker|bisoprolol|metoprolol|carvedilol|nebivolol)/i.test(text));
+      const hasAce = medsText.some(text => /(ace\s*inhibitor|perindopril|ramipril|enalapril|pril$)/i.test(text));
+      const hasArni = medsText.some(text => /(sacubitril|valsartan|entresto)/i.test(text));
+
+      if (hasBetaBlocker || hasAce || hasArni) {
+        return [];
+      }
+
+      return [{
+        id: `hf-therapy-gap-${Date.now()}`,
+        type: 'optimization_opportunity',
+        severity: 'major',
+        title: 'Heart failure therapy gap',
+        description: 'Heart failure identified without beta-blocker or ACE/ARNI coverage.',
+        sourceAgents: ['background', 'medication'],
+        supportingEvidence: heartFailure,
+        recommendedActions: [
+          'Review suitability for beta-blocker and ACE inhibitor / ARNI',
+          'Consider adding MRA / SGLT2i based on phenotype',
+          'Monitor vitals and renal function after optimisation'
+        ],
+        timestamp: Date.now()
+      }];
+    });
+
+    // Rule: Atrial fibrillation without anticoagulation
+    this.correlationRules.set('atrial-fibrillation-anticoagulation', (insights: MedicalInsight[]) => {
+      const atrialFibrillation = insights.filter(i => i.finding.toLowerCase().includes('atrial fibrillation'));
+      if (atrialFibrillation.length === 0) {
+        return [];
+      }
+
+      const hasAnticoagulant = insights.some(i =>
+        i.category === 'medication' &&
+        /(warfarin|anticoagulant|apixaban|rivaroxaban|dabigatran|edoxaban)/i.test(i.finding.toLowerCase())
+      );
+
+      if (hasAnticoagulant) {
+        return [];
+      }
+
+      return [{
+        id: `af-anticoagulation-${Date.now()}`,
+        type: 'clinical_alert',
+        severity: 'critical',
+        title: 'Atrial fibrillation without anticoagulation',
+        description: 'Assess stroke prevention strategy for atrial fibrillation.',
+        sourceAgents: ['background', 'medication'],
+        supportingEvidence: atrialFibrillation,
+        recommendedActions: [
+          'Calculate CHA₂DS₂-VASc score',
+          'Discuss anticoagulation options and contraindications',
+          'Review bleeding history and renal function'
+        ],
+        timestamp: Date.now()
+      }];
+    });
+
+    // Rule: Diabetes without statin coverage
+    this.correlationRules.set('diabetes-statin-gap', (insights: MedicalInsight[]) => {
+      const diabetes = insights.filter(i => i.finding.toLowerCase().includes('diabetes'));
+      if (diabetes.length === 0) {
+        return [];
+      }
+
+      const hasStatin = insights.some(i =>
+        i.category === 'medication' && /(statin|atorvastatin|rosuvastatin|simvastatin|pravastatin)/i.test(i.finding.toLowerCase())
+      );
+
+      if (hasStatin) {
+        return [];
+      }
+
+      return [{
+        id: `diabetes-statin-gap-${Date.now()}`,
+        type: 'optimization_opportunity',
+        severity: 'moderate',
+        title: 'Diabetes without statin therapy',
+        description: 'Consider statin therapy for diabetes patients without contraindications.',
+        sourceAgents: ['background', 'medication'],
+        supportingEvidence: diabetes,
+        recommendedActions: [
+          'Review lipid profile and cardiovascular risk',
+          'Discuss statin therapy benefits and tolerance',
+          'Plan follow-up lipid monitoring'
+        ],
+        timestamp: Date.now()
+      }];
+    });
+  }
+
+  private initializeCorrelationKnowledge(): void {
+    const addCorrelation = (findingA: string, findingB: string, descriptor: CorrelationDescriptor) => {
+      const key = CrossAgentIntelligence.makeCorrelationKey(findingA, findingB);
+      this.correlationLookup.set(key, descriptor);
+    };
+
+    addCorrelation('atrial fibrillation', 'stroke', {
+      relationship: 'Atrial fibrillation increases stroke risk without anticoagulation.',
+      significance: 0.88,
+      recommendation: 'Ensure CHA₂DS₂-VASc assessment and anticoagulation strategy.'
+    });
+
+    addCorrelation('diabetes', 'chronic kidney disease', {
+      relationship: 'Diabetes accelerates chronic kidney disease progression.',
+      significance: 0.82,
+      recommendation: 'Monitor renal function and optimise reno-protective therapy.'
+    });
+
+    addCorrelation('diabetes', 'hypertension', {
+      relationship: 'Diabetes and hypertension compound cardiovascular risk.',
+      significance: 0.78,
+      recommendation: 'Tight blood pressure control is recommended (<130/80) in diabetes with hypertension.'
+    });
+
+    addCorrelation('heart failure', 'renal impairment', {
+      relationship: 'Heart failure with renal impairment suggests possible cardiorenal syndrome.',
+      significance: 0.76,
+      recommendation: 'Balance diuretic therapy with renal monitoring and adjust dosages accordingly.'
+    });
+
+    addCorrelation('copd', 'smoking', {
+      relationship: 'Active smoking worsens COPD prognosis and exacerbation frequency.',
+      significance: 0.74,
+      recommendation: 'Provide structured smoking cessation and consider pulmonary rehabilitation.'
+    });
+
+    addCorrelation('coronary artery disease', 'diabetes', {
+      relationship: 'Diabetes with CAD requires intensive secondary prevention.',
+      significance: 0.8,
+      recommendation: 'Ensure high-intensity statin, ACE inhibitor and lifestyle optimisation.'
+    });
+
+    const setRelated = (condition: string, related: string[]) => {
+      this.relatedConditionMap.set(condition.toLowerCase(), related);
+    };
+
+    setRelated('atrial fibrillation', ['stroke', 'heart failure', 'thyroid disease']);
+    setRelated('diabetes', ['chronic kidney disease', 'hypertension', 'dyslipidaemia']);
+    setRelated('heart failure', ['renal impairment', 'atrial fibrillation', 'anaemia']);
+    setRelated('copd', ['smoking', 'pulmonary hypertension', 'sleep apnoea']);
+    setRelated('coronary artery disease', ['diabetes', 'hypertension', 'dyslipidaemia']);
   }
 
   /**
@@ -619,20 +834,292 @@ export class CrossAgentIntelligence {
     };
   }
 
-  private generateComprehensiveRecommendations(_profile: PatientProfile): CrossAgentRecommendation[] {
-    // This would implement comprehensive recommendation generation
-    // based on the complete patient profile
-    return [];
+  private generateComprehensiveRecommendations(profile: PatientProfile): CrossAgentRecommendation[] {
+    const recommendations: CrossAgentRecommendation[] = [];
+    const insights = [
+      ...profile.medicalHistory,
+      ...profile.currentMedications,
+      ...profile.procedures,
+      ...profile.activeProblems
+    ];
+
+    // Include rule-based recommendations
+    recommendations.push(...this.generateRecommendations(profile, 'quick-letter'));
+
+    const medicationTexts = profile.currentMedications.map(m => m.finding.toLowerCase());
+    const historyTexts = profile.medicalHistory.map(h => h.finding.toLowerCase());
+    const risk = profile.riskProfile;
+    const timestamp = Date.now();
+
+    const hasMedication = (patterns: RegExp[]) =>
+      medicationTexts.some(text => patterns.some(pattern => pattern.test(text)));
+
+    const findInsights = (predicate: (insight: MedicalInsight) => boolean) =>
+      insights.filter(predicate);
+
+    // Heart failure without guideline-directed therapy
+    if (historyTexts.some(text => text.includes('heart failure'))) {
+      const hasBetaBlocker = hasMedication([/(beta\s*blocker|bisoprolol|metoprolol|carvedilol|nebivolol)/i]);
+      const hasAce = hasMedication([/(ace\s*inhibitor|pril$|perindopril|ramipril|enalapril)/i]);
+      const hasArni = hasMedication([/(sacubitril|valsartan|entresto)/i]);
+
+      if (!hasBetaBlocker && !hasAce && !hasArni) {
+        const evidence = findInsights(insight => insight.finding.toLowerCase().includes('heart failure'));
+        recommendations.push({
+          id: this.createRecommendationId('hf-therapy'),
+          type: 'optimization_opportunity',
+          severity: 'major',
+          title: 'Heart failure therapy optimisation',
+          description: 'Heart failure identified without beta-blocker or ACE/ARNI coverage. Review guideline-directed medical therapy.',
+          sourceAgents: ['background', 'medication'],
+          supportingEvidence: evidence,
+          recommendedActions: [
+            'Review suitability for beta-blocker and ACE inhibitor / ARNI',
+            'Assess recent echocardiography and LVEF',
+            'Monitor blood pressure and renal function after therapy changes'
+          ],
+          timestamp
+        });
+      }
+    }
+
+    // Atrial fibrillation without anticoagulation
+    if (historyTexts.some(text => text.includes('atrial fibrillation'))) {
+      const hasAnticoagulant = hasMedication([
+        /(warfarin|apixaban|rivaroxaban|dabigatran|edoxaban|anticoagulant)/i
+      ]);
+      if (!hasAnticoagulant) {
+        const evidence = findInsights(insight => insight.finding.toLowerCase().includes('atrial fibrillation'));
+        recommendations.push({
+          id: this.createRecommendationId('af-anticoagulation'),
+          type: 'clinical_alert',
+          severity: 'critical',
+          title: 'Atrial fibrillation stroke prevention',
+          description: 'Atrial fibrillation noted without anticoagulation therapy. Assess CHA₂DS₂-VASc score and anticoagulation needs.',
+          sourceAgents: ['background', 'medication'],
+          supportingEvidence: evidence,
+          recommendedActions: [
+            'Calculate CHA₂DS₂-VASc and HAS-BLED scores',
+            'Discuss anticoagulation options with patient',
+            'Review bleeding history and renal function before initiation'
+          ],
+          timestamp
+        });
+      }
+    }
+
+    // Diabetes risk optimisation
+    if (historyTexts.some(text => text.includes('diabetes'))) {
+      const hasStatin = hasMedication([/(statin|atorvastatin|rosuvastatin|pravastatin|simvastatin)/i]);
+      if (!hasStatin && risk.cardiovascular >= 0.5) {
+        const evidence = findInsights(insight => insight.finding.toLowerCase().includes('diabetes'));
+        recommendations.push({
+          id: this.createRecommendationId('diabetes-lipid'),
+          type: 'optimization_opportunity',
+          severity: 'moderate',
+          title: 'Diabetes cardiovascular risk optimisation',
+          description: 'Diabetes identified without statin therapy despite elevated cardiovascular risk.',
+          sourceAgents: ['background', 'medication'],
+          supportingEvidence: evidence,
+          recommendedActions: [
+            'Review lipid profile and LDL-C goal',
+            'Consider initiating or uptitrating statin therapy',
+            'Reinforce lifestyle measures for cardiometabolic risk'
+          ],
+          timestamp
+        });
+      }
+
+      const renalRisk = risk.renal >= 0.5 || historyTexts.some(text => text.includes('kidney'));
+      if (renalRisk) {
+        const evidence = findInsights(insight =>
+          insight.finding.toLowerCase().includes('diabetes') || insight.finding.toLowerCase().includes('kidney')
+        );
+        recommendations.push({
+          id: this.createRecommendationId('diabetes-renal-monitoring'),
+          type: 'monitoring_required',
+          severity: 'major',
+          title: 'Diabetes with renal involvement monitoring',
+          description: 'Diabetes with renal risk factors detected. Ensure renal monitoring and nephroprotective therapy.',
+          sourceAgents: ['background'],
+          supportingEvidence: evidence,
+          recommendedActions: [
+            'Arrange annual eGFR and urine ACR testing',
+            'Review ACE inhibitor / ARB coverage for renal protection',
+            'Assess blood pressure control and glycaemic targets'
+          ],
+          timestamp
+        });
+      }
+    }
+
+    // Anticoagulation with elevated bleeding risk
+    if (risk.bleeding >= 0.6) {
+      const anticoagulantEvidence = findInsights(insight =>
+        insight.category === 'medication' && /(warfarin|apixaban|rivaroxaban|dabigatran|anticoagulant)/i.test(insight.finding.toLowerCase())
+      );
+
+      if (anticoagulantEvidence.length > 0) {
+        recommendations.push({
+          id: this.createRecommendationId('bleeding-risk'),
+          type: 'clinical_alert',
+          severity: 'major',
+          title: 'Bleeding risk mitigation',
+          description: 'Elevated bleeding risk detected in patient receiving anticoagulation.',
+          sourceAgents: ['medication'],
+          supportingEvidence: anticoagulantEvidence,
+          recommendedActions: [
+            'Review HAS-BLED score and reversible risk factors',
+            'Check haemoglobin and renal function',
+            'Provide bleeding precautions and review concomitant antiplatelets'
+          ],
+          timestamp
+        });
+      }
+    }
+
+    // High cardiovascular risk overall
+    if (risk.cardiovascular >= 0.7) {
+      const cardiovascularEvidence = findInsights(insight =>
+        /(coronary|ischemic|ischaemic|mi|myocardial infarction|stroke|heart)/i.test(insight.finding.toLowerCase())
+      );
+
+      recommendations.push({
+        id: this.createRecommendationId('cardio-risk'),
+        type: 'monitoring_required',
+        severity: 'moderate',
+        title: 'Cardiovascular risk review',
+        description: 'High cardiovascular risk profile identified. Ensure risk factor control plan is current.',
+        sourceAgents: ['background', 'medication'],
+        supportingEvidence: cardiovascularEvidence.slice(0, 5),
+        recommendedActions: [
+          'Confirm blood pressure, lipid and glycaemic targets are met',
+          'Schedule lifestyle counselling or cardiac rehabilitation review',
+          'Ensure secondary prevention therapies are optimised'
+        ],
+        timestamp
+      });
+    }
+
+    return this.deduplicateRecommendations(recommendations);
   }
 
-  private findCorrelation(_finding1: string, _finding2: string): any {
-    // Implement correlation finding logic
+  private deduplicateRecommendations(
+    recommendations: CrossAgentRecommendation[]
+  ): CrossAgentRecommendation[] {
+    const byTitle = new Map<string, CrossAgentRecommendation>();
+
+    recommendations.forEach(recommendation => {
+      const key = recommendation.title.toLowerCase();
+      const existing = byTitle.get(key);
+
+      if (!existing) {
+        byTitle.set(key, recommendation);
+        return;
+      }
+
+      const severityRank: Record<CrossAgentRecommendation['severity'], number> = {
+        critical: 3,
+        major: 2,
+        moderate: 1,
+        minor: 0
+      };
+
+      if (severityRank[recommendation.severity] > severityRank[existing.severity]) {
+        byTitle.set(key, recommendation);
+      }
+    });
+
+    return Array.from(byTitle.values());
+  }
+
+  private createRecommendationId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  private findCorrelation(findingA: string, findingB: string): any {
+    const normalizedA = findingA.toLowerCase();
+    const normalizedB = findingB.toLowerCase();
+    const key = CrossAgentIntelligence.makeCorrelationKey(normalizedA, normalizedB);
+
+    const descriptor = this.correlationLookup.get(key);
+    if (descriptor) {
+      return {
+        finding1: findingA,
+        finding2: findingB,
+        relationship: descriptor.relationship,
+        significance: descriptor.significance,
+        recommendation: descriptor.recommendation
+      };
+    }
+
+    // Heuristic correlations for unlisted combinations
+    const pairs: Array<{
+      match: (a: string, b: string) => boolean;
+      relationship: string;
+      recommendation?: string;
+      significance: number;
+    }> = [
+      {
+        match: (a, b) => a.includes('diabetes') && (b.includes('renal') || b.includes('kidney')),
+        relationship: 'Diabetes accelerates renal decline and warrants tight renal monitoring.',
+        recommendation: 'Check eGFR and urine ACR at least annually and optimise ACE/ARB therapy.',
+        significance: 0.78
+      },
+      {
+        match: (a, b) => a.includes('heart failure') && b.includes('renal'),
+        relationship: 'Cardiorenal syndrome risk with concurrent heart failure and renal impairment.',
+        recommendation: 'Balance diuresis with renal function monitoring and review medication dosing.',
+        significance: 0.72
+      },
+      {
+        match: (a, b) => a.includes('copd') && b.includes('smok'),
+        relationship: 'Active smoking worsens COPD outcomes and accelerates decline.',
+        recommendation: 'Provide smoking cessation support and consider pulmonary rehab referral.',
+        significance: 0.7
+      }
+    ];
+
+    const heuristic = pairs.find(pair => pair.match(normalizedA, normalizedB) || pair.match(normalizedB, normalizedA));
+    if (heuristic) {
+      return {
+        finding1: findingA,
+        finding2: findingB,
+        relationship: heuristic.relationship,
+        significance: heuristic.significance,
+        recommendation: heuristic.recommendation
+      };
+    }
+
     return null;
   }
 
-  private getRelatedConditions(_condition: string): string[] {
-    // Implement related condition lookup
-    return [];
+  private getRelatedConditions(condition: string): string[] {
+    const normalized = condition.toLowerCase();
+    const direct = this.relatedConditionMap.get(normalized);
+    if (direct) {
+      return direct;
+    }
+
+    const related = new Set<string>();
+
+    if (normalized.includes('diabetes')) {
+      ['chronic kidney disease', 'hypertension', 'dyslipidaemia', 'neuropathy'].forEach(item => related.add(item));
+    }
+
+    if (normalized.includes('atrial fibrillation')) {
+      ['stroke', 'heart failure', 'thyroid disease'].forEach(item => related.add(item));
+    }
+
+    if (normalized.includes('chronic kidney') || normalized.includes('renal')) {
+      ['anemia', 'hypertension', 'mineral bone disease'].forEach(item => related.add(item));
+    }
+
+    if (normalized.includes('copd')) {
+      ['smoking', 'pulmonary hypertension', 'sleep apnoea'].forEach(item => related.add(item));
+    }
+
+    return Array.from(related);
   }
 
   private getCorrelationSignificance(condition: string, related: string[]): string {
@@ -656,7 +1143,12 @@ export class CrossAgentIntelligence {
       const existing = this.globalInsights.get(key) || [];
       existing.push(insight);
       this.globalInsights.set(key, existing.slice(-100)); // Keep last 100
+
+      const current = this.globalCategoryCounts.get(insight.category) || 0;
+      this.globalCategoryCounts.set(insight.category, current + 1);
     });
+
+    this.updateMetricsSnapshot();
   }
 
   private startPeriodicAnalysis(): void {
@@ -667,7 +1159,37 @@ export class CrossAgentIntelligence {
   }
 
   private analyzeGlobalPatterns(): void {
-    console.log(`🔍 Analyzing global patterns: ${this.globalInsights.size} pattern categories`);
-    // Implement pattern analysis and learning
+    const totalPatterns = this.globalInsights.size;
+    this.metrics.trackedPatterns = totalPatterns;
+    this.metrics.lastAnalysisTimestamp = Date.now();
+    this.updateMetricsSnapshot();
+
+    const topPatterns = Array.from(this.globalInsights.entries())
+      .sort(([, aInsights], [, bInsights]) => bInsights.length - aInsights.length)
+      .slice(0, 3)
+      .map(([key, values]) => {
+        const label = key.split('_')[1] ?? key;
+        return `${label}: ${values.length}`;
+      });
+
+    console.log(
+      `🔍 Analyzing global patterns: ${totalPatterns} tracked, top signals: ${topPatterns.join(', ') || 'none yet'}`
+    );
+  }
+
+  private updateMetricsSnapshot(): void {
+    const topCategories = Array.from(this.globalCategoryCounts.entries())
+      .sort(([, aCount], [, bCount]) => bCount - aCount)
+      .slice(0, 3)
+      .map(([category, count]) => ({ category, count }));
+
+    this.metrics.topCategories = topCategories;
+    this.metrics.insightSummary = topCategories.length > 0
+      ? topCategories.map(({ category, count }) => `${category}: ${count}`).join(', ')
+      : 'Collecting intelligence';
+  }
+
+  private static makeCorrelationKey(findingA: string, findingB: string): string {
+    return [findingA.toLowerCase().trim(), findingB.toLowerCase().trim()].sort().join('::');
   }
 }

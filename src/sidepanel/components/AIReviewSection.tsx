@@ -141,7 +141,11 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
     try {
       setProcessingActionLocal(actionId);
       console.log('⚡ Calling onQuickAction for AI Review...');
-      await onQuickAction(actionId, data);
+
+      // For batch-ai-review, pass show-modal data to trigger calendar extraction
+      const actionData = actionId === 'batch-ai-review' ? { type: 'show-modal' } : data;
+
+      await onQuickAction(actionId, actionData);
       console.log('⚡ AI Review onQuickAction completed successfully');
     } catch (error) {
       console.error(`❌ AI Review action ${actionId} failed:`, error);

@@ -125,6 +125,18 @@ export class MedicationAgent extends MedicalAgent {
       );
 
       // Enhanced metadata with insights
+      const extractedFindings = Array.isArray(summaryResult.findings)
+        ? summaryResult.findings.map((finding: any) => ({
+            category: finding.category,
+            finding: finding.finding,
+            severity: finding.severity,
+            confidence: finding.confidence,
+            context: finding.context,
+            location: finding.location,
+            measurement: finding.measurement
+          }))
+        : [];
+
       report.metadata = {
         ...report.metadata,
         enhancedProcessing: {
@@ -132,7 +144,8 @@ export class MedicationAgent extends MedicalAgent {
           clinicalFindings: summaryResult.findings.length,
           qualityScore: summaryResult.qualityMetrics.clinicalAccuracy,
           medicationClasses: this.classifyMedications(summaryResult.findings),
-          drugInteractionFlags: this.identifyPotentialInteractions(summaryResult.findings)
+          drugInteractionFlags: this.identifyPotentialInteractions(summaryResult.findings),
+          extractedFindings
         },
         validationResults: {
           formatValid: validation.isValid,

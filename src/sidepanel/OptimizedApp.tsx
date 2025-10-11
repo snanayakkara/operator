@@ -12,9 +12,9 @@ import { QueryProvider } from '@/providers/QueryProvider';
 import { AudioDeviceProvider, useAudioDeviceContext } from '@/contexts/AudioDeviceContext';
 import { OptimizedResultsPanel } from './components/results/OptimizedResultsPanel';
 import { TranscriptionSection } from './components/results/TranscriptionSection';
-import { QuickActions } from './components/QuickActions';
+import { QuickActionsGrouped } from './components/QuickActionsGrouped';
 import { AIReviewSection } from './components/AIReviewSection';
-import { StatusIndicator } from './components/StatusIndicator';
+import { SidebarHeader } from './components/SidebarHeader';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
@@ -326,12 +326,12 @@ const OptimizedAppContent: React.FC = memo(() => {
               };
 
               // Basic missing information detection logic (simplified version of QuickLetterAgent's fallback)
-              if (!text.includes('refer') && !text.includes('follow up') && !text.includes('consultation') && 
+              if (!text.includes('refer') && !text.includes('follow up') && !text.includes('consultation') &&
                   !text.includes('thank you')) {
                 missing.missing_purpose.push('Letter purpose or reason for correspondence');
               }
 
-              if (!text.includes('patient') && !text.includes('gentleman') && !text.includes('lady') && 
+              if (!text.includes('patient') && !text.includes('gentleman') && !text.includes('lady') &&
                   !text.includes('year old') && !text.includes('age')) {
                 missing.missing_clinical.push('Patient demographics or context');
               }
@@ -354,6 +354,11 @@ const OptimizedAppContent: React.FC = memo(() => {
               console.warn('⚠️ Failed to detect missing information during streaming:', error);
             }
           })();
+        } else {
+          // CRITICAL: Clear missing info for non-QuickLetter agents to prevent stale state
+          // Investigation Summary, Background, Medication, etc. should NOT have QuickLetter-style missing info
+          console.log(`🧹 Streaming completion: clearing missing info for ${agent} agent (not quick-letter)`);
+          actions.setMissingInfo(null);
         }
 
         // Use atomic completion to prevent UI state race conditions
@@ -820,10 +825,25 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setProcessingProgress(clampedProgress);
       };
 
+      // Build medical context with demographics for Quick Letter
+      let medicalContext: any = undefined;
+      if (workflowId === 'quick-letter' && state.currentPatientInfo) {
+        medicalContext = {
+          sessionId,
+          timestamp: Date.now(),
+          patientInfo: state.currentPatientInfo
+        };
+        console.log('📋 Added patient demographics to Quick Letter context:', {
+          name: state.currentPatientInfo.name,
+          age: state.currentPatientInfo.age,
+          dob: state.currentPatientInfo.dob
+        });
+      }
+
       const result = await AgentFactory.processWithAgent(
         workflowId,
         correctedTranscription,
-        undefined,
+        medicalContext,
         sessionProcessingAbort.signal,
         processOptions
       );
@@ -1662,11 +1682,20 @@ const OptimizedAppContent: React.FC = memo(() => {
     try {
       await navigator.clipboard.writeText(text);
       console.log('📋 Text copied to clipboard');
+
+      // Auto-mark current session as complete when user copies results
+      if (state.currentSessionId) {
+        const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
+        if (currentSession && currentSession.status === 'completed' && !currentSession.reviewedAt) {
+          handleMarkSessionComplete(currentSession);
+          console.log('✅ Auto-marked session as complete after copy');
+        }
+      }
     } catch (error) {
       console.error('Failed to copy text:', error);
       throw error;
     }
-  }, []);
+  }, [state.currentSessionId, state.patientSessions, handleMarkSessionComplete]);
 
   // State for transcription edit feedback
   const [transcriptionSaveStatus, setTranscriptionSaveStatus] = useState<{
@@ -1939,26 +1968,41 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Patient version generation handler
   const handleGeneratePatientVersion = useCallback(async () => {
-    if (!state.results || state.currentAgent !== 'quick-letter' || state.isGeneratingPatientVersion) {
+    if (!state.results || state.isGeneratingPatientVersion) {
+      return;
+    }
+
+    // Check if current agent supports patient version generation
+    const supportsPatientVersion = state.currentAgent === 'quick-letter' || state.currentAgent === 'angiogram-pci';
+    if (!supportsPatientVersion) {
       return;
     }
 
     try {
-      console.log('🎯 Generating patient-friendly version of letter');
+      console.log(`🎯 Generating patient-friendly version for ${state.currentAgent}`);
       actions.setGeneratingPatientVersion(true);
-      
-      // Import QuickLetterAgent dynamically to avoid bundle bloat
-      const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
-      const quickLetterAgent = new QuickLetterAgent();
-      
-      // Generate patient version from the existing letter content
-      const patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(state.results);
-      
+
+      let patientFriendlyVersion: string;
+
+      if (state.currentAgent === 'quick-letter') {
+        // Import QuickLetterAgent dynamically
+        const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+        const quickLetterAgent = new QuickLetterAgent();
+        patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(state.results);
+      } else if (state.currentAgent === 'angiogram-pci') {
+        // Import AngiogramPCIAgent dynamically
+        const { AngiogramPCIAgent } = await import('@/agents/specialized/AngiogramPCIAgent');
+        const angiogramAgent = new AngiogramPCIAgent();
+        patientFriendlyVersion = await angiogramAgent.generatePatientVersion(state.results);
+      } else {
+        throw new Error(`Patient version not supported for ${state.currentAgent}`);
+      }
+
       // Update state with the generated patient version
       actions.setPatientVersion(patientFriendlyVersion);
-      
+
       console.log('✅ Patient version generated successfully');
-      
+
     } catch (error) {
       console.error('❌ Failed to generate patient version:', error);
       actions.setPatientVersion('Error generating patient version. Please try again.');
@@ -2113,10 +2157,11 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
       console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
 
-      const shouldForceGenericInsertion = currentAgentType === 'angiogram-pci';
+      const genericInsertionAgents: AgentType[] = ['angiogram-pci', 'quick-letter'];
+      const shouldForceGenericInsertion = currentAgentType !== null && genericInsertionAgents.includes(currentAgentType);
 
       if (shouldForceGenericInsertion) {
-        console.log('📝 Angiogram/PCI agent detected - using direct cursor insertion.');
+        console.log('📝 Agent requires direct cursor insertion - bypassing field mapping.');
       }
 
       if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
@@ -2195,11 +2240,20 @@ const OptimizedAppContent: React.FC = memo(() => {
 
         console.log('📝 Text inserted to EMR (generic)');
       }
+
+      // Auto-mark current session as complete when user inserts to EMR
+      if (state.currentSessionId) {
+        const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
+        if (currentSession && currentSession.status === 'completed' && !currentSession.reviewedAt) {
+          handleMarkSessionComplete(currentSession);
+          console.log('✅ Auto-marked session as complete after EMR insertion');
+        }
+      }
     } catch (error) {
       console.error('Failed to insert text to EMR:', error);
       throw error;
     }
-  }, [state.currentAgent, state.ui.activeWorkflow]);
+  }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete]);
 
   // Memoized status checking for better performance
   // Use a stable reference to avoid recreating the callback every render
@@ -2449,34 +2503,23 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
-      {/* Header - Full Width Status Bar */}
-      <div className="flex-shrink-0 bg-white  border-b border-gray-200">
-        <StatusIndicator
-          status={recorder.isRecording ? 'recording' : 'idle'}
-          currentAgent={state.currentAgent || state.ui.activeWorkflow}
-          isRecording={recorder.isRecording}
-          modelStatus={state.modelStatus}
-          onRefreshServices={checkModelStatus}
-          onCompleteRecording={recorder.stopRecording}
-          onCancelProcessing={handleCancel}
-          onWorkflowSelect={handleWorkflowSelect}
-          activeWorkflow={state.ui.activeWorkflow}
-          voiceActivityLevel={state.voiceActivityLevel}
-          recordingTime={recorder.recordingTime}
-          isExtractingPatients={state.ui.isExtractingPatients}
-          patientSessions={state.patientSessions}
-          onRemoveSession={actions.removePatientSession}
-          onClearAllSessions={actions.clearPatientSessions}
-          onSessionSelect={handleSessionSelect}
-          onResumeRecording={handleResumeRecording}
-          onMarkSessionComplete={handleMarkSessionComplete}
-          selectedSessionId={stableSelectedSessionId}
-          currentSessionId={state.currentSessionId}
-          onShowMetrics={() => actions.setSidePanel('metrics-dashboard')}
-          onNewRecording={actions.clearRecording}
-          showNewRecording={state.results?.trim().length > 0 || state.patientSessions.some(s => s.status === 'completed')}
-        />
-      </div>
+      {/* Header - Two-Tier Sidebar Header */}
+      <SidebarHeader
+        status={recorder.isRecording ? 'recording' : state.processingStatus}
+        isRecording={recorder.isRecording}
+        currentAgent={state.currentAgent || state.ui.activeWorkflow}
+        modelStatus={state.modelStatus}
+        onRefreshServices={checkModelStatus}
+        patientSessions={state.patientSessions}
+        onRemoveSession={actions.removePatientSession}
+        onClearAllSessions={actions.clearPatientSessions}
+        onSessionSelect={handleSessionSelect}
+        onResumeRecording={handleResumeRecording}
+        onMarkSessionComplete={handleMarkSessionComplete}
+        selectedSessionId={stableSelectedSessionId}
+        currentSessionId={state.currentSessionId}
+        onShowMetrics={() => actions.setSidePanel('metrics-dashboard')}
+      />
 
 
       {/* Main Content Area - Single Column Layout */}
@@ -2923,8 +2966,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         
         {/* Footer - Quick Actions */}
         <div className="flex-shrink-0 bg-white  border-t border-gray-200 p-4">
-          <QuickActions
-            onQuickAction={async (actionId, data) => {
+          <QuickActionsGrouped
+            onQuickAction={async (actionId, data?: any) => {
               console.log('🔧 Quick action triggered:', actionId, data);
               
               try {
@@ -3122,6 +3165,11 @@ const OptimizedAppContent: React.FC = memo(() => {
             }}
             onStartWorkflow={(workflowId) => handleWorkflowSelect(workflowId as AgentType)}
             isFooter={true}
+            isRecording={recorder.isRecording}
+            activeWorkflow={state.ui.activeWorkflow}
+            voiceActivityLevel={state.voiceActivityLevel}
+            recordingTime={recorder.recordingTime}
+            whisperServerRunning={state.modelStatus.whisperServer?.running}
           />
         </div>
       </div>

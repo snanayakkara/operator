@@ -43,21 +43,9 @@ export const DropdownPortal: React.FC<DropdownPortalProps> = ({
   }
 
   return createPortal(
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        pointerEvents: 'none', // Let clicks pass through the backdrop
-        zIndex: 50
-      }}
-    >
-      <div style={{ pointerEvents: 'auto' }}>
-        {children}
-      </div>
-    </div>,
+    <>
+      {children}
+    </>,
     portalContainer
   );
 };

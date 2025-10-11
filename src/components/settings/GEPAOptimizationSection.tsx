@@ -1,12 +1,12 @@
 /**
  * GEPAOptimizationSection - GEPA Prompt Optimization UI
- * 
+ *
  * Handles GEPA (Generative Expert Prompt Adaptation) optimization workflow:
  * 1. Select medical tasks/agents to optimize
  * 2. Run GEPA optimization with preview candidates
  * 3. Show before/after prompt comparisons with metrics
  * 4. Apply approved optimizations and save state
- * 
+ *
  * Features:
  * - Multi-select medical tasks (angiogram, quick-letter, etc.)
  * - Iteration count and human feedback settings
@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { Play, TrendingUp } from 'lucide-react';
+import { Play, TrendingUp, CheckCircle, XCircle, Info, FileText, Sparkles } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import { GEPAOptimizationError } from '@/types/optimization';
 import type { 
@@ -52,10 +52,11 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
   const [selectedTasks, setSelectedTasks] = useState<Set<AgentType>>(new Set(['quick-letter']));
   const [iterations, setIterations] = useState(5);
   const [withHuman, setWithHuman] = useState(false);
-  const [_preview, _setPreview] = useState<GEPAPreview | null>(null);
+  const [preview, setPreview] = useState<GEPAPreview | null>(null);
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
 
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
-  const [_isApplying, _setIsApplying] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
   const toggleTask = useCallback((taskId: AgentType) => {
     setSelectedTasks(prev => {
@@ -69,6 +70,46 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
     });
   }, []);
 
+  const toggleCandidate = useCallback((candidateId: string) => {
+    setSelectedCandidates(prev => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  }, []);
+
+  const applySelectedCandidates = useCallback(async () => {
+    if (!preview || selectedCandidates.size === 0) return;
+
+    try {
+      setIsApplying(true);
+      onLoadingChange(true);
+
+      const accepted = preview.candidates
+        .filter(c => selectedCandidates.has(c.id))
+        .map(c => ({ task: c.task, candidate_id: c.id }));
+
+      const result = await optimizationService.applyGEPAOptimization({ accepted });
+
+      // Clear preview after successful apply
+      setPreview(null);
+      setSelectedCandidates(new Set());
+
+      // Show success feedback
+      alert(`Successfully applied ${result.applied.length} optimization(s)!${result.errors.length > 0 ? `\n\n${result.errors.length} error(s) occurred.` : ''}`);
+
+    } catch (error) {
+      onError(error instanceof GEPAOptimizationError ? error : new GEPAOptimizationError(error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsApplying(false);
+      onLoadingChange(false);
+    }
+  }, [preview, selectedCandidates, optimizationService, onError, onLoadingChange]);
+
   const generatePreview = useCallback(async () => {
     try {
       setIsGeneratingPreview(true);
@@ -80,13 +121,15 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
         with_human: withHuman
       };
 
-      // This would call the GEPA optimization service
-      // For now, we'll show a placeholder
-      console.log('GEPA preview request:', request);
+      // Call the GEPA optimization service
+      const previewData = await optimizationService.previewGEPAOptimization(request);
+      setPreview(previewData);
 
-      // TODO: Implement actual GEPA preview call
-      // const previewData = await optimizationService.previewGEPAOptimization(request);
-      // setPreview(previewData);
+      // Auto-select all candidates that show improvement
+      const improvedCandidates = previewData.candidates
+        .filter(c => (c.metrics.improvement || 0) > 0)
+        .map(c => c.id);
+      setSelectedCandidates(new Set(improvedCandidates));
 
     } catch (error) {
       onError(error instanceof GEPAOptimizationError ? error : new GEPAOptimizationError(error instanceof Error ? error.message : String(error)));
@@ -98,6 +141,35 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
 
   return (
     <div className="space-y-6">
+      {/* Educational Header */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+        <div className="flex items-start space-x-3">
+          <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-blue-900 space-y-3">
+            <div>
+              <p className="font-semibold text-base mb-2">How GEPA Optimization Works</p>
+              <p className="leading-relaxed">
+                GEPA (Generalized Evolutionary Prompt Augmentation) automatically improves your AI agents by testing prompt variations against golden examples. The system evaluates each agent using a medical rubric and evolves better prompts through iterative optimization.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium">Three-Step Workflow:</p>
+              <ol className="list-decimal list-inside space-y-1.5 ml-2">
+                <li><strong>Select & Configure:</strong> Choose which agents to optimize (Quick Letter, Angiogram, TAVI, etc.) and set iteration count (5-10 recommended)</li>
+                <li><strong>Generate Preview:</strong> Click "Preview Candidates" to run optimization - GEPA tests variations against your dev set examples and shows before/after metrics</li>
+                <li><strong>Review & Apply:</strong> Select candidates with positive improvements (auto-selected for you) and click "Apply Selected" to deploy the optimized prompts</li>
+              </ol>
+            </div>
+            <div className="bg-blue-100 rounded p-3 mt-3">
+              <p className="font-medium mb-1">💡 Pro Tip: Add Golden Examples First</p>
+              <p className="text-xs leading-relaxed">
+                GEPA quality depends on your dev set examples in <code className="bg-blue-200 px-1 rounded">eval/devset/</code>. Add 5-10 high-quality transcript + expected output pairs per agent. Run <code className="bg-blue-200 px-1 rounded">npm run eval:quick-letter</code> first to see baseline scores before optimizing.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Task Selection */}
       <div>
         <h4 className="font-medium text-gray-900 mb-3">Select Medical Tasks to Optimize</h4>
@@ -178,21 +250,165 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
         </button>
       </div>
 
-      {/* Coming Soon Notice */}
-      <div className="text-center py-8 bg-blue-50 border border-blue-200 rounded-lg">
-        <TrendingUp className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-blue-900 mb-2">
-          GEPA Optimization
-        </h3>
-        <p className="text-blue-700 max-w-md mx-auto">
-          Advanced prompt optimization using Generative Expert Prompt Adaptation. 
-          This feature will analyze your selected medical tasks and suggest optimized prompts 
-          based on performance metrics and evaluation results.
-        </p>
-        <p className="text-sm text-blue-600 mt-4">
-          Implementation in progress - backend GEPA endpoints required
-        </p>
-      </div>
+      {/* Results Display */}
+      {preview && preview.candidates.length > 0 ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              Optimization Results ({preview.candidates.length} candidate{preview.candidates.length !== 1 ? 's' : ''})
+            </h4>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setPreview(null); setSelectedCandidates(new Set()); }}
+                className="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Clear Results
+              </button>
+              <button
+                onClick={applySelectedCandidates}
+                disabled={isApplying || selectedCandidates.size === 0}
+                className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{isApplying ? 'Applying...' : `Apply Selected (${selectedCandidates.size})`}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Candidate Cards */}
+          <div className="space-y-4">
+            {preview.candidates.map((candidate) => {
+              const isSelected = selectedCandidates.has(candidate.id);
+              const improvement = candidate.metrics.improvement || 0;
+              const isImprovement = improvement > 0;
+              const taskLabel = AVAILABLE_TASKS.find(t => t.id === candidate.task)?.label || candidate.task;
+
+              return (
+                <div
+                  key={candidate.id}
+                  className={`border-2 rounded-xl overflow-hidden transition-all ${
+                    isSelected
+                      ? 'border-emerald-400 bg-emerald-50'
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  {/* Card Header */}
+                  <div className="p-4 bg-gray-50 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleCandidate(candidate.id)}
+                            className="rounded text-emerald-600 w-5 h-5"
+                          />
+                        </label>
+                        <div>
+                          <h5 className="font-semibold text-gray-900">{taskLabel}</h5>
+                          <p className="text-xs text-gray-600 mt-0.5">Candidate ID: {candidate.id.slice(0, 8)}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        {/* Metrics */}
+                        {isImprovement ? (
+                          <div className="flex items-center space-x-2 px-3 py-1.5 bg-emerald-100 border border-emerald-300 rounded-lg">
+                            <TrendingUp className="w-4 h-4 text-emerald-700" />
+                            <span className="text-sm font-semibold text-emerald-900">
+                              +{improvement.toFixed(1)}% improvement
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 px-3 py-1.5 bg-red-100 border border-red-300 rounded-lg">
+                            <XCircle className="w-4 h-4 text-red-700" />
+                            <span className="text-sm font-semibold text-red-900">
+                              {improvement.toFixed(1)}% change
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                    <div className="grid grid-cols-4 gap-4 text-center">
+                      {candidate.metrics.accuracy !== undefined && (
+                        <div>
+                          <div className="text-xs text-gray-600">Accuracy</div>
+                          <div className="text-lg font-semibold text-gray-900">{candidate.metrics.accuracy.toFixed(1)}%</div>
+                        </div>
+                      )}
+                      {candidate.metrics.completeness !== undefined && (
+                        <div>
+                          <div className="text-xs text-gray-600">Completeness</div>
+                          <div className="text-lg font-semibold text-gray-900">{candidate.metrics.completeness.toFixed(1)}%</div>
+                        </div>
+                      )}
+                      {candidate.metrics.clinical_appropriateness !== undefined && (
+                        <div>
+                          <div className="text-xs text-gray-600">Clinical</div>
+                          <div className="text-lg font-semibold text-gray-900">{candidate.metrics.clinical_appropriateness.toFixed(1)}%</div>
+                        </div>
+                      )}
+                      {candidate.metrics.overall_score !== undefined && (
+                        <div>
+                          <div className="text-xs text-gray-600">Overall</div>
+                          <div className="text-lg font-semibold text-gray-900">{candidate.metrics.overall_score.toFixed(1)}%</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Prompt Comparison */}
+                  <div className="p-4">
+                    <details className="group">
+                      <summary className="cursor-pointer font-medium text-gray-700 hover:text-gray-900 flex items-center gap-2 mb-3">
+                        <FileText className="w-4 h-4" />
+                        View Prompt Changes
+                      </summary>
+                      <div className="grid grid-cols-2 gap-4 mt-3">
+                        {/* Before */}
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1">
+                            <XCircle className="w-3 h-3 text-red-500" />
+                            BEFORE
+                          </div>
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-64 overflow-y-auto">
+                            <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono">{candidate.before}</pre>
+                          </div>
+                        </div>
+                        {/* After */}
+                        <div>
+                          <div className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-500" />
+                            AFTER (Optimized)
+                          </div>
+                          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 max-h-64 overflow-y-auto">
+                            <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono">{candidate.after}</pre>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : preview && preview.candidates.length === 0 ? (
+        <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <Info className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-yellow-900 mb-2">
+            No Improvements Found
+          </h3>
+          <p className="text-yellow-700 max-w-md mx-auto">
+            GEPA optimization completed but found no candidates that improve upon current prompts.
+            Your agents may already be well-optimized, or you may need more diverse dev set examples.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 };

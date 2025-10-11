@@ -2086,7 +2086,7 @@ def save_gepa_history_entry(task, results):
 def list_agents():
     """
     List available DSPy agents and their configuration.
-    
+
     Response:
         {
             "available_agents": [...],
@@ -2098,14 +2098,14 @@ def list_agents():
         available_agents = list(PREDICTOR_CLASSES.keys())
         enabled_agents = []
         agent_configs = {}
-        
+
         config = get_config()
-        
+
         for agent in available_agents:
             is_enabled = is_dspy_enabled(agent)
             if is_enabled:
                 enabled_agents.append(agent)
-            
+
             agent_config = config.config.get('agents', {}).get(agent, {})
             agent_configs[agent] = {
                 'enabled': is_enabled,
@@ -2114,20 +2114,269 @@ def list_agents():
                 'has_predictor': agent in PREDICTOR_CLASSES,
                 'has_rubric': agent in RUBRIC_SCORERS
             }
-        
+
         response = {
             'available_agents': available_agents,
             'enabled_agents': enabled_agents,
             'agent_configs': agent_configs,
             'timestamp': now_melbourne_iso()
         }
-        
+
         log_request('agents', success=True)
         return jsonify(response)
-        
+
     except Exception as e:
         error_msg = f"Failed to list agents: {str(e)}"
+
+@app.route('/v1/dspy/devset/<agent_type>', methods=['GET'])
+def list_devset_examples(agent_type):
+    """
+    List all dev set examples for a given agent type.
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "agent_type": "quick-letter",
+                "examples": [
+                    {
+                        "id": "ex001_simple",
+                        "file_path": "eval/devset/quick-letter/ex001_simple.json",
+                        "file_name": "ex001_simple.json",
+                        "data": {...}
+                    }
+                ]
+            }
+        }
+    """
+    try:
+        import glob
+        from pathlib import Path
+
+        devset_pattern = f"eval/devset/{agent_type}/*.json"
+        files = glob.glob(devset_pattern)
+
+        examples = []
+        for file_path in sorted(files):
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+
+                examples.append({
+                    'id': data.get('id', Path(file_path).stem),
+                    'file_path': file_path,
+                    'file_name': Path(file_path).name,
+                    'data': data
+                })
+            except Exception as e:
+                logger.warning(f"Failed to read dev set file {file_path}: {e}")
+                continue
+
+        response = {
+            'success': True,
+            'data': {
+                'agent_type': agent_type,
+                'examples': examples,
+                'count': len(examples)
+            }
+        }
+
+        log_request(f'devset/{agent_type}', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"Failed to list dev set examples: {str(e)}"
         log_request('agents', success=False, error=error_msg)
+        return jsonify({
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }), 500
+
+@app.route('/v1/dspy/devset/<agent_type>', methods=['POST'])
+def create_devset_example(agent_type):
+    """
+    Create a new dev set example for an agent.
+
+    Request:
+        {
+            "id": "ex004_followup",
+            "transcript": "Patient doing well...",
+            "expected_elements": ["status", "medications"],
+            "expected_output": "...",
+            "rubric_criteria": {...},
+            "metadata": {...}
+        }
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "file_path": "eval/devset/quick-letter/ex004_followup.json",
+                "example": {...}
+            }
+        }
+    """
+    try:
+        import os
+        from pathlib import Path
+
+        data = request.get_json()
+        if not data or 'id' not in data:
+            return jsonify({'error': 'Missing required field: id'}), 400
+
+        example_id = data['id']
+
+        # Ensure devset directory exists
+        devset_dir = f"eval/devset/{agent_type}"
+        os.makedirs(devset_dir, exist_ok=True)
+
+        # Build example data
+        example = {
+            'id': example_id,
+            'task': agent_type,
+            'transcript': data.get('transcript', ''),
+            'expected_elements': data.get('expected_elements', []),
+            'expected_output': data.get('expected_output', ''),
+            'rubric_criteria': data.get('rubric_criteria', {}),
+            'metadata': data.get('metadata', {})
+        }
+
+        # Write to file
+        file_path = os.path.join(devset_dir, f"{example_id}.json")
+        with open(file_path, 'w') as f:
+            json.dump(example, f, indent=2)
+
+        logger.info(f"Created dev set example: {file_path}")
+
+        response = {
+            'success': True,
+            'data': {
+                'file_path': file_path,
+                'example': example
+            }
+        }
+
+        log_request(f'devset/{agent_type}/create', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"Failed to create dev set example: {str(e)}"
+        logger.error(error_msg)
+        log_request(f'devset/{agent_type}/create', success=False, error=error_msg)
+        return jsonify({
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }), 500
+
+@app.route('/v1/dspy/devset/<agent_type>/<example_id>', methods=['PUT'])
+def update_devset_example(agent_type, example_id):
+    """
+    Update an existing dev set example.
+
+    Request: Same as create
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "file_path": "...",
+                "example": {...}
+            }
+        }
+    """
+    try:
+        import os
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        file_path = f"eval/devset/{agent_type}/{example_id}.json"
+
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'Example not found: {example_id}'}), 404
+
+        # Read existing data
+        with open(file_path, 'r') as f:
+            example = json.load(f)
+
+        # Update fields
+        if 'transcript' in data:
+            example['transcript'] = data['transcript']
+        if 'expected_elements' in data:
+            example['expected_elements'] = data['expected_elements']
+        if 'expected_output' in data:
+            example['expected_output'] = data['expected_output']
+        if 'rubric_criteria' in data:
+            example['rubric_criteria'] = data['rubric_criteria']
+        if 'metadata' in data:
+            example['metadata'] = data['metadata']
+
+        # Write back
+        with open(file_path, 'w') as f:
+            json.dump(example, f, indent=2)
+
+        logger.info(f"Updated dev set example: {file_path}")
+
+        response = {
+            'success': True,
+            'data': {
+                'file_path': file_path,
+                'example': example
+            }
+        }
+
+        log_request(f'devset/{agent_type}/update', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"Failed to update dev set example: {str(e)}"
+        logger.error(error_msg)
+        log_request(f'devset/{agent_type}/update', success=False, error=error_msg)
+        return jsonify({
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }), 500
+
+@app.route('/v1/dspy/devset/<agent_type>/<example_id>', methods=['DELETE'])
+def delete_devset_example(agent_type, example_id):
+    """
+    Delete a dev set example.
+
+    Response:
+        {
+            "success": true,
+            "data": {
+                "deleted": "eval/devset/quick-letter/ex004.json"
+            }
+        }
+    """
+    try:
+        import os
+
+        file_path = f"eval/devset/{agent_type}/{example_id}.json"
+
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'Example not found: {example_id}'}), 404
+
+        os.remove(file_path)
+
+        logger.info(f"Deleted dev set example: {file_path}")
+
+        response = {
+            'success': True,
+            'data': {
+                'deleted': file_path
+            }
+        }
+
+        log_request(f'devset/{agent_type}/delete', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"Failed to delete dev set example: {str(e)}"
+        logger.error(error_msg)
+        log_request(f'devset/{agent_type}/delete', success=False, error=error_msg)
         return jsonify({
             'error': error_msg,
             'timestamp': now_melbourne_iso()

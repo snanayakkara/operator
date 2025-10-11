@@ -163,8 +163,8 @@ start_server() {
     while [ $attempt -le $MAX_RETRIES ]; do
         log "Starting DSPy server (attempt $attempt/$MAX_RETRIES)..."
         
-        # Start server in background
-        nohup $PYTHON_CMD "$SERVER_FILE" --host 127.0.0.1 --port 8002 > "$LOG_FILE" 2>&1 &
+        # Start server in background with USE_DSPY environment variable
+        nohup env USE_DSPY=true $PYTHON_CMD "$SERVER_FILE" --host 127.0.0.1 --port 8002 > "$LOG_FILE" 2>&1 &
         local server_pid=$!
         
         # Save PID

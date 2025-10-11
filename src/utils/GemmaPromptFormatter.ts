@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@/types/medical.types';
+import type { ChatMessage, LMStudioRequest } from '@/types/medical.types';
 
 export interface GemmaFormattedPrompt {
   prompt: string;
@@ -64,28 +64,24 @@ export class GemmaPromptFormatter {
     return messages;
   }
 
-  static createGemmaRequest(messages: ChatMessage[], modelName: string, options: Record<string, unknown> = {}) {
+  static createGemmaRequest(messages: ChatMessage[], modelName: string, options: Record<string, unknown> = {}): LMStudioRequest {
+    const baseRequest = {
+      model: modelName,
+      ...options
+    } as LMStudioRequest;
+
     // TEMP DEBUG: Disable Gemma formatting for medgemma-27b-text-it-mlx to test
     if (this.isGemmaModel(modelName) && !modelName.includes('medgemma-27b')) {
       const formatted = this.formatForGemma(messages);
-
-      // For Gemma models, convert the formatted prompt back to a single user message
-      // This works with LMStudio's chat/completions endpoint
-      return {
-        model: modelName,
-        messages: [
-          { role: 'user' as const, content: formatted.prompt }
-        ],
-        ...options
-      };
+      baseRequest.messages = [
+        { role: 'user' as const, content: formatted.prompt }
+      ];
+      return baseRequest;
     }
 
     // For non-Gemma models OR medgemma-27b (testing), use the original messages
-    return {
-      model: modelName,
-      messages,
-      ...options
-    };
+    baseRequest.messages = messages;
+    return baseRequest;
   }
 
   private static renderContent(content: ChatMessage['content']): string {

@@ -150,6 +150,18 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       );
 
       // Add enhanced metadata
+      const extractedFindings = Array.isArray(summaryResult.findings)
+        ? summaryResult.findings.map((finding: any) => ({
+            category: finding.category,
+            finding: finding.finding,
+            severity: finding.severity,
+            confidence: finding.confidence,
+            context: finding.context,
+            location: finding.location,
+            measurement: finding.measurement
+          }))
+        : [];
+
       report.metadata = {
         ...report.metadata,
         enhancedProcessing: {
@@ -159,7 +171,8 @@ export class InvestigationSummaryAgent extends MedicalAgent {
           processingMethod: 'Enhanced_Investigation_Processing',
           normalizedInputLength: normalizedInput.length,
           investigationTypes: this.extractInvestigationTypes(structuredFormat),
-          medicalCodes: this.extractMedicalCodes(structuredFormat)
+          medicalCodes: this.extractMedicalCodes(structuredFormat),
+          extractedFindings
         },
         medicalCodes: this.extractMedicalCodes(structuredFormat),
         modelUsed: MODEL_CONFIG.QUICK_MODEL

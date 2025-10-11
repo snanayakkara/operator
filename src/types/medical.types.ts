@@ -155,6 +155,10 @@ export interface LMStudioRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  no_think?: boolean;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
 }
 
 export type ChatMessageContentBlock =
@@ -252,6 +256,7 @@ export interface AppState {
 
 export type ProcessingStatus =
   | 'idle'
+  | 'extracting-patient' // Extracting patient data from EMR before recording
   | 'recording'
   | 'transcribing'
   | 'classifying'
@@ -746,12 +751,14 @@ export interface PatientSession {
   summary?: string; // Summary for dual card display (especially for QuickLetter)
   taviStructuredSections?: TAVIWorkupStructuredSections; // TAVI structured data for specialized display
   educationData?: any; // Patient Education structured data (JSON metadata + letter content)
+  reviewData?: any; // AI Medical Review structured data (findings array with urgency levels)
   agentType: AgentType;
   agentName: string;
   timestamp: number;
   status: SessionStatus;
   completed: boolean; // Kept for backward compatibility
   processingTime?: number;
+  modelUsed?: string; // LLM model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
   warnings?: string[];
   errors?: string[];
   // Quick Action field tracking for EMR insertion

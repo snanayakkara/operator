@@ -163,7 +163,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
 
       const health = await optimizationService.checkHealth();
       setServerHealth(health);
-      
+
       if (health.status === 'healthy') {
         setIsInitialized(true);
         logger.info('Full-page optimization panel initialized successfully', {
@@ -171,13 +171,16 @@ export const FullPageOptimizationPanel: React.FC = () => {
           serverStatus: health.status
         });
       } else {
+        // Server unhealthy but still show UI with degraded functionality
         setConnectionError('DSPy server is unhealthy');
+        setIsInitialized(true); // Allow UI to render
       }
 
     } catch (error) {
       const errorMsg = error instanceof OptimizationError ? error.message : 'Failed to connect to DSPy server';
       setConnectionError(errorMsg);
-      logger.error('Failed to initialize full-page optimization panel', {
+      setIsInitialized(true); // Still show UI even if server is offline
+      logger.warn('DSPy server offline, showing degraded UI', {
         component: 'FullPageOptimizationPanel',
         error: errorMsg
       });
@@ -371,25 +374,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      {connectionError ? (
-        <div className="text-center py-12">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
-          <h3 className="text-xl font-medium text-ink-primary mb-4">
-            DSPy Server Unavailable
-          </h3>
-          <p className="text-ink-secondary mb-6 max-w-2xl mx-auto">
-            Optimization features require the DSPy server to be running on localhost:8002. 
-            Please ensure the server is properly configured and accessible.
-          </p>
-          <button
-            onClick={refreshHealth}
-            className="mono-button-primary flex items-center space-x-2 mx-auto"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Retry Connection</span>
-          </button>
-        </div>
-      ) : !isInitialized ? (
+      {!isInitialized ? (
         <div className="text-center py-12">
           <Clock className="w-16 h-16 text-blue-500 mx-auto mb-6 animate-spin" />
           <h3 className="text-xl font-medium text-ink-primary mb-2">

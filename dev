@@ -16,7 +16,8 @@
 # 4. Verify all services are healthy
 # 5. Display comprehensive status dashboard
 
-set -e
+# Note: set -e removed to allow graceful degradation when services fail
+# Each service failure is handled explicitly to allow partial success
 
 # macOS-compatible timeout function
 run_with_timeout() {
@@ -86,6 +87,32 @@ check_service_health() {
     fi
 }
 
+# Cleanup background jobs (prevents zombie processes)
+cleanup_background_jobs() {
+    local load_pid=$1
+    local progress_pid=$2
+
+    # Stop load process if running
+    if [ -n "$load_pid" ] && kill -0 "$load_pid" 2>/dev/null; then
+        kill -TERM "$load_pid" 2>/dev/null || true
+        sleep 0.5
+        kill -KILL "$load_pid" 2>/dev/null || true
+        wait "$load_pid" 2>/dev/null || true
+    fi
+
+    # Stop progress indicator
+    if [ -n "$progress_pid" ] && kill -0 "$progress_pid" 2>/dev/null; then
+        kill -TERM "$progress_pid" 2>/dev/null || true
+        wait "$progress_pid" 2>/dev/null || true
+    fi
+}
+
+# Cleanup temporary files on exit
+cleanup_on_exit() {
+    # Clean up any temp files matching our pattern (older than 60 minutes)
+    find /tmp -maxdepth 1 -name "whisper-startup-*.log" -user $(whoami) -mmin +60 -delete 2>/dev/null || true
+}
+
 # Check if lms CLI is available
 check_lms_cli() {
     if ! command -v lms &> /dev/null; then
@@ -97,6 +124,89 @@ check_lms_cli() {
     return 0
 }
 
+# Display available LM Studio models with optional defaults highlighted
+display_model_menu() {
+    local default_reasoning="$1"
+    local default_quick="$2"
+    shift 2
+    local models=("$@")
+
+    if [ ${#models[@]} -eq 0 ]; then
+        echo "No LM Studio models detected."
+        return
+    fi
+
+    echo "Available LM Studio models:"
+    local idx=1
+    for model in "${models[@]}"; do
+        local annotations=""
+        if [ -n "$default_reasoning" ] && [ "$model" = "$default_reasoning" ]; then
+            annotations="default reasoning"
+        fi
+        if [ -n "$default_quick" ] && [ "$model" = "$default_quick" ]; then
+            if [ -n "$annotations" ]; then
+                annotations="$annotations, default quick"
+            else
+                annotations="default quick"
+            fi
+        fi
+
+        if [ -n "$annotations" ]; then
+            printf "  [%d] %s (%s)\n" "$idx" "$model" "$annotations"
+        else
+            printf "  [%d] %s\n" "$idx" "$model"
+        fi
+        ((idx++))
+    done
+    printf "  [0] Skip loading for this slot\n"
+    echo
+}
+
+# Prompt the user to choose a model by index, honoring defaults and skip
+prompt_model_selection() {
+    local role="$1"
+    local default_model="$2"
+    shift 2
+    local models=("$@")
+    local total=${#models[@]}
+
+    if [ $total -eq 0 ]; then
+        echo "$default_model"
+        return 0
+    fi
+
+    local prompt_msg
+    if [ -n "$default_model" ]; then
+        prompt_msg="Select $role model by number [$default_model] (Enter for default, 0 to skip): "
+    else
+        prompt_msg="Select $role model by number (choose index, 0 to skip): "
+    fi
+
+    while true; do
+        local response
+        read -p "$prompt_msg" response
+
+        if [ -z "$response" ]; then
+            echo "$default_model"
+            return 0
+        fi
+
+        if [[ "$response" =~ ^[0-9]+$ ]]; then
+            local idx=$response
+            if [ "$idx" -eq 0 ]; then
+                echo ""
+                return 0
+            fi
+            if [ "$idx" -ge 1 ] && [ "$idx" -le "$total" ]; then
+                echo "${models[$((idx-1))]}"
+                return 0
+            fi
+        fi
+
+        echo "Invalid selection. Please enter a number between 0 and $total."
+    done
+}
+
 # Start LMStudio server and load both models
 ensure_lmstudio_server() {
     info "Checking LMStudio server (localhost:1234)..."
@@ -106,7 +216,7 @@ ensure_lmstudio_server() {
         warn "Falling back to manual LMStudio startup instructions"
         warn "Please start LMStudio manually and load both models:"
         warn "1. Reasoning model: lmstudio-community/medgemma-27b-text-it-MLX-4bit"
-        warn "2. Quick model: google/gemma-3n-e4b"
+        warn "2. Quick model: qwen/qwen3-4b-2507"
         return 1
     fi
     
@@ -155,25 +265,87 @@ ensure_dual_models_loaded() {
         return 1
     fi
 
+    # Prepare list of model ids for interactive selection
+    local models_for_prompt=()
+    while IFS= read -r model_id; do
+        case "$model_id" in
+            ""|"MODEL"|"Model"|"NAME"|"Name"|"ID"|"Id")
+                continue
+                ;;
+        esac
+
+        local exists=0
+        for existing in "${models_for_prompt[@]}"; do
+            if [ "$existing" = "$model_id" ]; then
+                exists=1
+                break
+            fi
+        done
+        if [ $exists -eq 0 ]; then
+            models_for_prompt+=("$model_id")
+        fi
+    done < <(echo "$available_models" | awk '{print $1}' | sed 's/\r$//')
+
     # Find reasoning model (medgemma variants)
     local reasoning_model=$(echo "$available_models" | grep -i "medgemma" | head -1 | awk '{print $1}')
-    local quick_model=$(echo "$available_models" | grep -i "gemma.*3n" | head -1 | awk '{print $1}')
+    # Find quick model: prioritize qwen3-4b, then fall back to gemma variants
+    local quick_model=$(echo "$available_models" | grep -iE "qwen.*3.*4b" | head -1 | awk '{print $1}')
+    if [ -z "$quick_model" ]; then
+        # Fallback: try gemma-3n variants
+        quick_model=$(echo "$available_models" | grep -iE "gemma.*(3n|3-n|-3n|3_n)" | grep -v "medgemma" | head -1 | awk '{print $1}')
+    fi
 
     if [ -z "$reasoning_model" ] && [ -z "$quick_model" ]; then
-        # Fallback: try broader gemma search
+        # Final fallback: any gemma model
         quick_model=$(echo "$available_models" | grep -i "gemma" | grep -v "medgemma" | head -1 | awk '{print $1}')
     fi
 
-    log "📋 Available models found:"
-    if [ ! -z "$reasoning_model" ]; then
+    local reasoning_user_skipped=0
+    local quick_user_skipped=0
+
+    if [ -t 0 ] && [ ${#models_for_prompt[@]} -gt 0 ]; then
+        echo
+        info "Select LM Studio models to load:"
+        display_model_menu "$reasoning_model" "$quick_model" "${models_for_prompt[@]}"
+
+        local selected_reasoning
+        selected_reasoning=$(prompt_model_selection "reasoning" "$reasoning_model" "${models_for_prompt[@]}")
+        if [ -z "$selected_reasoning" ]; then
+            reasoning_model=""
+            reasoning_user_skipped=1
+        else
+            reasoning_model="$selected_reasoning"
+        fi
+
+        local selected_quick
+        selected_quick=$(prompt_model_selection "quick" "$quick_model" "${models_for_prompt[@]}")
+        if [ -z "$selected_quick" ]; then
+            quick_model=""
+            quick_user_skipped=1
+        else
+            quick_model="$selected_quick"
+        fi
+        echo
+    fi
+
+    log "📋 Selected LM Studio models:"
+    if [ -n "$reasoning_model" ]; then
         log "   Reasoning: $reasoning_model"
     else
-        warn "   No MedGemma reasoning model found"
+        if [ $reasoning_user_skipped -eq 1 ]; then
+            warn "   Reasoning: skipped by user"
+        else
+            warn "   No MedGemma reasoning model found"
+        fi
     fi
-    if [ ! -z "$quick_model" ]; then
+    if [ -n "$quick_model" ]; then
         log "   Quick: $quick_model"
     else
-        warn "   No Gemma quick model found"
+        if [ $quick_user_skipped -eq 1 ]; then
+            warn "   Quick: skipped by user"
+        else
+            warn "   No Gemma quick model found"
+        fi
     fi
 
     local reasoning_loaded=0
@@ -186,164 +358,192 @@ ensure_dual_models_loaded() {
         log "✅ Reasoning model already loaded"
     fi
 
-    if echo "$loaded_models" | grep -q "gemma.*3n\|gemma-3n" 2>/dev/null; then
+    if echo "$loaded_models" | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null; then
         quick_loaded=1
         log "✅ Quick model already loaded"
     fi
-    
-    # Load reasoning model if needed
+
+    # Load models in parallel if both needed (saves ~2-3 minutes)
+    local need_reasoning=$([[ $reasoning_loaded -eq 0 && ! -z "$reasoning_model" ]] && echo 1 || echo 0)
+    local need_quick=$([[ $quick_loaded -eq 0 && ! -z "$quick_model" ]] && echo 1 || echo 0)
+
+    if [ $need_reasoning -eq 1 ] && [ $need_quick -eq 1 ]; then
+        info "Loading both models in parallel (faster startup)..."
+        info "Reasoning: $reasoning_model | Quick: $quick_model"
+        info "You can also load them manually in LM Studio - we'll detect automatically"
+
+        local parallel_start=$(date +%s)
+
+        # Start both loads in background
+        (run_with_timeout 600 lms load "$reasoning_model" 2>&1) > /dev/null 2>&1 &
+        local reasoning_pid=$!
+
+        (run_with_timeout 300 lms load "$quick_model" 2>&1) > /dev/null 2>&1 &
+        local quick_pid=$!
+
+        # Single progress indicator for both
+        (
+            echo -n "   Loading both models"
+            while true; do
+                sleep 3
+                local elapsed=$(($(date +%s) - parallel_start))
+                local minutes=$((elapsed / 60))
+                local seconds=$((elapsed % 60))
+                echo -n " [${minutes}m ${seconds}s]."
+            done
+        ) &
+        local progress_pid=$!
+
+        # Poll for both models with unified timeout (10 min max)
+        local poll_count=0
+        while [ $poll_count -lt 200 ]; do
+            sleep 3
+            ((poll_count++))
+
+            local loaded_models=$(lms ps 2>/dev/null || echo "")
+
+            # Check reasoning model
+            if [ $reasoning_loaded -eq 0 ] && echo "$loaded_models" | grep -q "medgemma" 2>/dev/null; then
+                reasoning_loaded=1
+                log "✅ Reasoning model loaded"
+            fi
+
+            # Check quick model
+            if [ $quick_loaded -eq 0 ] && echo "$loaded_models" | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null; then
+                quick_loaded=1
+                log "✅ Quick model loaded"
+            fi
+
+            # Exit when both loaded or both processes finished
+            if [ $reasoning_loaded -eq 1 ] && [ $quick_loaded -eq 1 ]; then
+                break
+            fi
+
+            # Check if processes finished
+            local reasoning_done=$([[ ! kill -0 $reasoning_pid 2>/dev/null ]] && echo 1 || echo 0)
+            local quick_done=$([[ ! kill -0 $quick_pid 2>/dev/null ]] && echo 1 || echo 0)
+
+            if [ $reasoning_done -eq 1 ] && [ $quick_done -eq 1 ]; then
+                # Final check
+                local final_models=$(lms ps 2>/dev/null || echo "")
+                echo "$final_models" | grep -q "medgemma" 2>/dev/null && reasoning_loaded=1
+                echo "$final_models" | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null && quick_loaded=1
+                break
+            fi
+        done
+
+        # Cleanup
+        cleanup_background_jobs "$reasoning_pid" "$progress_pid"
+        [ -n "$quick_pid" ] && kill -TERM "$quick_pid" 2>/dev/null || true
+        wait "$quick_pid" 2>/dev/null || true
+        echo ""
+
+        local parallel_time=$(($(date +%s) - parallel_start))
+        if [ $reasoning_loaded -eq 1 ] && [ $quick_loaded -eq 1 ]; then
+            success "Both models loaded in parallel (took ${parallel_time}s)"
+        elif [ $reasoning_loaded -eq 1 ] || [ $quick_loaded -eq 1 ]; then
+            warn "Partial success after ${parallel_time}s - retrying failed model..."
+        else
+            warn "Parallel load timeout after ${parallel_time}s - retrying sequentially..."
+        fi
+
+    fi
+
+    # Load reasoning model individually if still needed
     if [ $reasoning_loaded -eq 0 ] && [ ! -z "$reasoning_model" ]; then
         info "Loading reasoning model: $reasoning_model"
-        info "This may take several minutes for large models (timeout: 10 minutes)..."
-        info "You can also load it manually in LM Studio - we'll detect it automatically"
+        info "This may take several minutes (timeout: 10 minutes)..."
 
-        # Show progress with elapsed time
         local start_time=$(date +%s)
         (
             echo -n "   Loading"
             while true; do
                 sleep 3
                 local elapsed=$(($(date +%s) - start_time))
-                local minutes=$((elapsed / 60))
-                local seconds=$((elapsed % 60))
-                echo -n " [${minutes}m ${seconds}s]."
+                echo -n " [${elapsed}s]."
             done
         ) &
-        progress_pid=$!
+        local progress_pid=$!
 
-        # Background job to load model
-        (
-            run_with_timeout 600 lms load "$reasoning_model" 2>&1
-        ) > /dev/null 2>&1 &
-        load_pid=$!
+        (run_with_timeout 600 lms load "$reasoning_model" 2>&1) > /dev/null 2>&1 &
+        local load_pid=$!
 
-        # Poll for model loading (either via CLI or manual)
-        local load_success=0
         local poll_count=0
-        while [ $poll_count -lt 200 ]; do  # 200 * 3s = 10 minutes
+        while [ $poll_count -lt 200 ]; do
             sleep 3
             ((poll_count++))
 
-            # Check if model is now loaded (either by CLI or manually)
             if lms ps 2>/dev/null | grep -q "medgemma" 2>/dev/null; then
-                load_success=1
+                reasoning_loaded=1
                 break
             fi
 
-            # Check if load process finished
             if ! kill -0 $load_pid 2>/dev/null; then
-                # Process finished, do final check
-                if lms ps 2>/dev/null | grep -q "medgemma" 2>/dev/null; then
-                    load_success=1
-                fi
+                lms ps 2>/dev/null | grep -q "medgemma" 2>/dev/null && reasoning_loaded=1
                 break
             fi
         done
 
-        # Clean up
-        kill $load_pid 2>/dev/null
-        wait $load_pid 2>/dev/null
-        kill $progress_pid 2>/dev/null
-        wait $progress_pid 2>/dev/null
+        cleanup_background_jobs "$load_pid" "$progress_pid"
         echo ""
 
-        if [ $load_success -eq 1 ]; then
-            local total_time=$(($(date +%s) - start_time))
-            log "✅ Reasoning model loaded successfully (took ${total_time}s)"
-            reasoning_loaded=1
+        if [ $reasoning_loaded -eq 1 ]; then
+            log "✅ Reasoning model loaded (took $(($(date +%s) - start_time))s)"
         else
-            warn "⏰ Model not detected after 10 minutes"
-            warn "Trying alternative loading method..."
-
-            # Try with shorter model name
+            # Try short name fallback
             local short_name=$(echo "$reasoning_model" | cut -d'/' -f2)
             if [ ! -z "$short_name" ] && [ "$short_name" != "$reasoning_model" ]; then
-                info "Attempting load with short name: $short_name"
-                if run_with_timeout 300 lms load "$short_name" 2>&1; then
-                    log "✅ Reasoning model loaded with short name"
-                    reasoning_loaded=1
-                else
-                    error "❌ Alternative loading failed - model may not be downloaded"
-                    error "Please download the model in LM Studio first"
-                fi
+                info "Trying short name: $short_name"
+                run_with_timeout 300 lms load "$short_name" 2>&1 && reasoning_loaded=1
             fi
         fi
     fi
-    
-    # Load quick model if needed
+
+    # Load quick model individually if still needed
     if [ $quick_loaded -eq 0 ] && [ ! -z "$quick_model" ]; then
         info "Loading quick model: $quick_model"
-        info "This should be faster than the reasoning model (timeout: 5 minutes)..."
-        info "You can also load it manually in LM Studio - we'll detect it automatically"
+        info "Timeout: 5 minutes..."
 
-        # Show progress with elapsed time and poll for manual loading
         local start_time=$(date +%s)
         (
             echo -n "   Loading"
             while true; do
                 sleep 2
-                local elapsed=$(($(date +%s) - start_time))
-                local minutes=$((elapsed / 60))
-                local seconds=$((elapsed % 60))
-                echo -n " [${minutes}m ${seconds}s]."
+                echo -n " [$(($(date +%s) - start_time))s]."
             done
         ) &
-        progress_pid=$!
+        local progress_pid=$!
 
-        # Background job to load model
-        (
-            run_with_timeout 300 lms load "$quick_model" 2>&1
-        ) > /dev/null 2>&1 &
-        load_pid=$!
+        (run_with_timeout 300 lms load "$quick_model" 2>&1) > /dev/null 2>&1 &
+        local load_pid=$!
 
-        # Poll for model loading (either via CLI or manual)
-        local load_success=0
         local poll_count=0
-        while [ $poll_count -lt 150 ]; do  # 150 * 2s = 5 minutes
+        while [ $poll_count -lt 150 ]; do
             sleep 2
             ((poll_count++))
 
-            # Check if model is now loaded (either by CLI or manually)
-            if lms ps 2>/dev/null | grep -q "gemma.*3n\|gemma-3n" 2>/dev/null; then
-                load_success=1
+            if lms ps 2>/dev/null | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null; then
+                quick_loaded=1
                 break
             fi
 
-            # Check if load process finished
             if ! kill -0 $load_pid 2>/dev/null; then
-                # Process finished, do final check
-                if lms ps 2>/dev/null | grep -q "gemma.*3n\|gemma-3n" 2>/dev/null; then
-                    load_success=1
-                fi
+                lms ps 2>/dev/null | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null && quick_loaded=1
                 break
             fi
         done
 
-        # Clean up
-        kill $load_pid 2>/dev/null
-        wait $load_pid 2>/dev/null
-        kill $progress_pid 2>/dev/null
-        wait $progress_pid 2>/dev/null
+        cleanup_background_jobs "$load_pid" "$progress_pid"
         echo ""
 
-        if [ $load_success -eq 1 ]; then
-            local total_time=$(($(date +%s) - start_time))
-            log "✅ Quick model loaded successfully (took ${total_time}s)"
-            quick_loaded=1
+        if [ $quick_loaded -eq 1 ]; then
+            log "✅ Quick model loaded (took $(($(date +%s) - start_time))s)"
         else
-            warn "⏰ Model not detected after 5 minutes"
-
-            # Try with shorter model name as fallback
+            # Try short name fallback
             local short_name=$(echo "$quick_model" | cut -d'/' -f2)
             if [ ! -z "$short_name" ] && [ "$short_name" != "$quick_model" ]; then
-                info "Attempting load with short name: $short_name"
-                if run_with_timeout 180 lms load "$short_name" 2>&1; then
-                    log "✅ Quick model loaded with short name"
-                    quick_loaded=1
-                else
-                    error "❌ Alternative loading failed - model may not be downloaded"
-                    error "Please download the model in LM Studio first"
-                fi
+                info "Trying short name: $short_name"
+                run_with_timeout 180 lms load "$short_name" 2>&1 && quick_loaded=1
             fi
         fi
     fi
@@ -355,14 +555,27 @@ ensure_dual_models_loaded() {
     elif [ $reasoning_loaded -eq 1 ] || [ $quick_loaded -eq 1 ]; then
         warn "Partial success - some models loaded but not all"
         if [ $reasoning_loaded -eq 0 ]; then
-            warn "Missing reasoning model - complex analysis may be limited"
+            if [ $reasoning_user_skipped -eq 1 ]; then
+                info "Reasoning model skipped by user selection"
+            else
+                warn "Missing reasoning model - complex analysis may be limited"
+            fi
         fi
         if [ $quick_loaded -eq 0 ]; then
-            warn "Missing quick model - simple tasks may be slower"
+            if [ $quick_user_skipped -eq 1 ]; then
+                info "Quick model skipped by user selection"
+            else
+                warn "Missing quick model - simple tasks may be slower"
+            fi
         fi
         warn "Extension will work but with reduced capabilities"
         return 1
     else
+        if [ $reasoning_user_skipped -eq 1 ] && [ $quick_user_skipped -eq 1 ]; then
+            warn "No models were loaded because both selections were skipped"
+            warn "You can load models later in LM Studio and rerun ./dev to detect them"
+            return 1
+        fi
         error "No models loaded successfully"
         error "Please check:"
         error "  1. Models are downloaded in LM Studio"
@@ -490,16 +703,23 @@ show_service_status() {
         if command -v lms &> /dev/null; then
             local models_info=$(lms ps 2>/dev/null || echo "")
             if [ ! -z "$models_info" ]; then
-                if echo "$models_info" | grep -q "medgemma-27b" 2>/dev/null; then
-                    echo -e "${GREEN}   ├── Reasoning Model: MedGemma-27b ✅${NC}"
+                # Detect reasoning model (medgemma)
+                local reasoning_model=$(echo "$models_info" | grep -i "medgemma" | head -1 | awk '{print $1}')
+                if [ ! -z "$reasoning_model" ]; then
+                    echo -e "${GREEN}   ├── Reasoning Model: $reasoning_model ✅${NC}"
                 else
-                    echo -e "${YELLOW}   ├── Reasoning Model: MedGemma-27b ❌${NC}"
+                    echo -e "${YELLOW}   ├── Reasoning Model: Not loaded ❌${NC}"
                 fi
-                
-                if echo "$models_info" | grep -q "gemma-3n-e4b" 2>/dev/null; then
-                    echo -e "${GREEN}   └── Quick Model: Gemma-3n-e4b ✅${NC}"
+
+                # Detect quick model (qwen or gemma variants)
+                local quick_model=$(echo "$models_info" | grep -iE "qwen.*3.*4b" | head -1 | awk '{print $1}')
+                if [ -z "$quick_model" ]; then
+                    quick_model=$(echo "$models_info" | grep -iE "gemma.*(3n|3-n|-3n|3_n)" | grep -v "medgemma" | head -1 | awk '{print $1}')
+                fi
+                if [ ! -z "$quick_model" ]; then
+                    echo -e "${GREEN}   └── Quick Model: $quick_model ✅${NC}"
                 else
-                    echo -e "${YELLOW}   └── Quick Model: Gemma-3n-e4b ❌${NC}"
+                    echo -e "${YELLOW}   └── Quick Model: Not loaded ❌${NC}"
                 fi
             fi
         fi
@@ -554,25 +774,59 @@ except:
 
 # Main execution
 main() {
+    # Set up cleanup trap for temp files
+    trap cleanup_on_exit EXIT
+
     log "🚀 Starting Medical AI Development Environment..."
     echo
-    
+
     local lmstudio_ok=0
     local whisper_ok=0
     local dspy_ok=0
-    
-    # Start all services
-    if ensure_lmstudio_server; then
-        lmstudio_ok=1
+
+    # Start all services in parallel (saves 13-70 seconds depending on startup states)
+    info "Starting services in parallel..."
+
+    local interactive_shell=0
+    if [ -t 0 ] && [ -t 1 ]; then
+        interactive_shell=1
     fi
-    
-    if ensure_whisper_server; then
-        whisper_ok=1
+
+    (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
+    local whisper_pid=$!
+
+    (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
+    local dspy_pid=$!
+
+    local lms_pid=""
+    if [ $interactive_shell -eq 1 ]; then
+        if ensure_lmstudio_server; then
+            echo "1" > /tmp/lmstudio-ok.$$
+            lmstudio_ok=1
+        else
+            echo "0" > /tmp/lmstudio-ok.$$
+            lmstudio_ok=0
+        fi
+    else
+        # Start LMStudio in background when no interactive terminal is present
+        (ensure_lmstudio_server && echo "1" > /tmp/lmstudio-ok.$$ || echo "0" > /tmp/lmstudio-ok.$$) &
+        lms_pid=$!
     fi
-    
-    if ensure_dspy_server; then
-        dspy_ok=1
+
+    # Wait for all services to complete
+    if [ -n "$lms_pid" ]; then
+        wait $lms_pid 2>/dev/null
     fi
+    wait $whisper_pid 2>/dev/null
+    wait $dspy_pid 2>/dev/null
+
+    # Read status from temp files
+    [ -f /tmp/lmstudio-ok.$$ ] && lmstudio_ok=$(cat /tmp/lmstudio-ok.$$) || lmstudio_ok=0
+    [ -f /tmp/whisper-ok.$$ ] && whisper_ok=$(cat /tmp/whisper-ok.$$) || whisper_ok=0
+    [ -f /tmp/dspy-ok.$$ ] && dspy_ok=$(cat /tmp/dspy-ok.$$) || dspy_ok=0
+
+    # Cleanup temp files
+    rm -f /tmp/lmstudio-ok.$$ /tmp/whisper-ok.$$ /tmp/dspy-ok.$$
     
     # Show comprehensive status
     show_service_status

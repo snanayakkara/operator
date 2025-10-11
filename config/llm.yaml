@@ -56,7 +56,7 @@ agents:
     
   investigation-summary:
     enabled: true  # Enabled for Phase 5
-    model_override: "google/gemma-3n-e4b"
+    model_override: "qwen/qwen3-4b-2507"
     max_tokens: 2000
     temperature: 0.2
     description: "Investigation result formatting"

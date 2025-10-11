@@ -1,22 +1,21 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { WORKFLOWS, type WorkflowConfig } from '@/config/workflowConfig';
 import type { AgentType } from '@/types/medical.types';
-import { Circle } from 'lucide-react';
+import {
+  Circle,
+  Heart,
+  FileText,
+  Activity,
+  Stethoscope,
+  CircleDot,
+  Monitor,
+  Zap,
+  Shield,
+  Square,
+  Mic as MicIcon
+} from 'lucide-react';
 import { DropdownPortal } from './DropdownPortal';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
-import { 
-  MicIcon,
-  SquareIcon,
-  HeartIcon,
-  FileTextIcon,
-  ActivityIcon,
-  StethoscopeIcon,
-  CircleDotIcon,
-  SearchIcon,
-  UserIcon,
-  PillIcon,
-  ShieldIcon
-} from './icons/OptimizedIcons';
 
 interface RecordPanelProps {
   onWorkflowSelect: (workflowId: AgentType) => void;
@@ -29,17 +28,17 @@ interface RecordPanelProps {
 }
 
 const iconMap = {
-  Heart: HeartIcon,
-  FileText: FileTextIcon,
-  Activity: ActivityIcon,
-  Stethoscope: StethoscopeIcon,
-  CircleDot: CircleDotIcon,
+  Heart: Heart,
+  FileText: FileText,
+  Activity: Activity,
+  Stethoscope: Stethoscope,
+  CircleDot: CircleDot,
   Mic: MicIcon,
-  Square: SquareIcon,
-  Search: SearchIcon,
-  User: UserIcon,
-  Pill: PillIcon,
-  Shield: ShieldIcon
+  Square: Square,
+  Monitor: Monitor,
+  Zap: Zap,
+  Shield: Shield,
+  ClipboardList: FileText // Fallback for ClipboardList
 } as const;
 
 export const RecordPanel: React.FC<RecordPanelProps> = memo(({
@@ -57,14 +56,35 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   const isHoveringRef = useRef<boolean>(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const menuIdRef = useRef<string>(`record-menu-${Math.random().toString(36).slice(2)}` as unknown as string);
-  
+
+  // Debug logging for component mount and state changes
+  useEffect(() => {
+    console.log('🎬 RecordPanel mounted', {
+      disabled,
+      whisperServerRunning,
+      isRecording,
+      activeWorkflow
+    });
+    return () => console.log('🎬 RecordPanel unmounted');
+  }, []);
+
+  useEffect(() => {
+    console.log('🔄 RecordPanel isExpanded changed:', isExpanded, {
+      isHovering,
+      disabled,
+      whisperServerRunning
+    });
+  }, [isExpanded, isHovering, disabled, whisperServerRunning]);
+
   // Use dropdown positioning hook for portal-based positioning
+  // Force upward positioning since RecordPanel is in footer
   const { triggerRef, position } = useDropdownPosition({
     isOpen: isExpanded,
     alignment: 'center',
-    offset: { x: 0, y: 8 },
-    maxHeight: 400,
-    dropdownWidth: 390
+    offset: { x: 0, y: 4 }, // Small gap for smooth mouse transition
+    maxHeight: 480,
+    dropdownWidth: 340, // Sidepanel is 360px, leave 20px margins
+    preferredDirection: 'up'
   });
 
   const formatTime = (seconds: number): string => {
@@ -314,6 +334,36 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     };
   }, [isRecording, disabled, whisperServerRunning, activeWorkflow]);
 
+  // Periodic state recovery to fix stuck states (runs every 5 seconds)
+  useEffect(() => {
+    const recoveryInterval = window.setInterval(() => {
+      // Only attempt recovery when not recording and button should be accessible
+      if (!isRecording && !disabled && whisperServerRunning) {
+        // Check for stuck expanded state with no hover
+        if (isExpanded && !isHoveringRef.current) {
+          console.warn('🔧 PERIODIC RECOVERY: Detected stuck expanded state, resetting', {
+            isExpanded,
+            isHoveringRefCurrent: isHoveringRef.current,
+            timestamp: Date.now()
+          });
+
+          setIsExpanded(false);
+          setIsHovering(false);
+          isHoveringRef.current = false;
+
+          if (hoverTimeoutRef.current) {
+            window.clearTimeout(hoverTimeoutRef.current);
+            hoverTimeoutRef.current = null;
+          }
+        }
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => {
+      window.clearInterval(recoveryInterval);
+    };
+  }, [isRecording, disabled, whisperServerRunning, isExpanded]);
+
   const getRecordButtonClasses = () => {
     const baseClasses = "relative flex items-center justify-center transition-all duration-300 cursor-pointer w-11 h-11 rounded-full border-2";
     
@@ -329,27 +379,29 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   };
 
   const getWorkflowButtonClasses = (workflow: WorkflowConfig, isActive: boolean) => {
-    const baseClasses = "relative w-full h-12 rounded-lg border-2 flex items-center justify-start font-medium transition-all duration-200 overflow-hidden hover:shadow-md";
-    
+    const baseClasses = "relative flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 hover:shadow-md";
+
     if (disabled || !whisperServerRunning) {
-      return `${baseClasses} bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 border-gray-300 opacity-50 cursor-not-allowed`;
+      return `${baseClasses} bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed`;
     }
-    
+
     if (isActive && isRecording) {
-      const categoryClass = workflow.category === 'procedure' ? 'procedure-card' : 
-                           workflow.category === 'documentation' ? 'documentation-card' : 
-                           'investigation-card';
-      return `${baseClasses} ${categoryClass} recording-glow border-2`;
+      return `${baseClasses} bg-red-50 border-red-300 shadow-lg ring-2 ring-red-200`;
     }
-    
-    const categoryClass = workflow.category === 'procedure' ? 'btn-procedure-outline' : 
-                         workflow.category === 'documentation' ? 'btn-documentation-outline' : 
-                         'btn-investigation-outline';
-    return `${baseClasses} ${categoryClass} border-2 btn-hover-enhanced`;
+
+    const categoryColors = {
+      procedure: 'border-red-200 hover:border-red-300 hover:bg-red-50',
+      documentation: 'border-blue-200 hover:border-blue-300 hover:bg-blue-50',
+      investigation: 'border-purple-200 hover:border-purple-300 hover:bg-purple-50',
+      batch: 'border-green-200 hover:border-green-300 hover:bg-green-50',
+      advanced: 'border-orange-200 hover:border-orange-300 hover:bg-orange-50'
+    };
+
+    return `${baseClasses} bg-white ${categoryColors[workflow.category]}`;
   };
 
   const renderWorkflowButton = (workflow: WorkflowConfig) => {
-    const IconComponent = iconMap[workflow.icon as keyof typeof iconMap] || FileTextIcon;
+    const IconComponent = iconMap[workflow.icon as keyof typeof iconMap] || FileText;
     const isActive = activeWorkflow === workflow.id;
     
     // Generate tooltip with server status information
@@ -367,48 +419,39 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
         disabled={disabled || (isRecording && !isActive) || !whisperServerRunning}
         className={getWorkflowButtonClasses(workflow, isActive)}
         title={getTooltip()}
-        // Ensure keyboard focus order
         tabIndex={0}
       >
-        <div className="relative flex items-center justify-start w-full h-full px-3 py-2">
-          <div className="relative flex-shrink-0 mr-3">
-            {isActive && isRecording ? (
-              <>
-                <SquareIcon className="w-5 h-5" />
-                <div className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping" />
-              </>
-            ) : (
-              <IconComponent className="w-5 h-5" />
-            )}
-          </div>
-          <div className="flex-1 text-left">
-            <span className={`text-sm font-semibold ${
-              isActive && isRecording ? 'text-red-700 font-bold' : ''
-            }`}>
-              {isActive && isRecording ? 'Complete Recording' : workflow.label}
-            </span>
-            <div className={`text-xs mt-0.5 ${
-              isActive && isRecording ? 'text-red-600' : 'text-gray-500'
-            }`}>
-              {isActive && isRecording ? 
-                formatTime(recordingTime) : 
-                workflow.estimatedTime
-              }
-            </div>
-          </div>
-          
-          {isActive && isRecording && (
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-              <div 
-                className="w-6 h-0.5 rounded-full transition-all duration-150"
-                style={{
-                  backgroundColor: voiceActivityLevel > 0.1 ? '#10b981' : '#e5e7eb',
-                  opacity: 0.3 + (voiceActivityLevel * 0.7)
-                }}
-              />
-            </div>
+        {/* Icon */}
+        <div className="relative mb-2">
+          {isActive && isRecording ? (
+            <>
+              <Square className="w-6 h-6 text-red-600" />
+              <div className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping" />
+            </>
+          ) : (
+            <IconComponent className={`w-6 h-6 ${
+              workflow.category === 'procedure' ? 'text-red-500' :
+              workflow.category === 'documentation' ? 'text-blue-500' :
+              workflow.category === 'investigation' ? 'text-purple-500' :
+              workflow.category === 'batch' ? 'text-green-500' :
+              'text-orange-500'
+            }`} />
           )}
         </div>
+
+        {/* Label */}
+        <div className={`text-xs font-semibold text-center leading-tight ${
+          isActive && isRecording ? 'text-red-700' : 'text-gray-700'
+        }`}>
+          {isActive && isRecording ? 'Stop' : workflow.label}
+        </div>
+
+        {/* Time/Status */}
+        {isActive && isRecording && (
+          <div className="text-xs text-red-600 font-medium mt-1">
+            {formatTime(recordingTime)}
+          </div>
+        )}
       </button>
     );
   };
@@ -536,7 +579,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           isHoveringRef.current = false;
         }}
       >
-        <div 
+        <div
           data-dropdown-menu
           id={menuIdRef.current as unknown as string}
           role="dialog"
@@ -545,39 +588,33 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           onKeyDown={handleDialogKeyDown}
           onMouseEnter={handleCardMouseEnter}
           onMouseLeave={handleCardMouseLeave}
-          className="record-card glass rounded-xl p-4 w-[390px] bg-white border border-gray-200 shadow-xl"
+          className="record-card glass rounded-xl p-3 w-[340px] bg-white border border-gray-200 shadow-xl pointer-events-auto"
           style={{
             position: 'fixed',
             top: position.top,
             left: position.left,
-            zIndex: 999999
+            zIndex: 9990
           }}
         >
             <div className="mb-3 text-center">
-              <h2 id={`${menuIdRef.current}-label` as unknown as string} className="text-gray-900 text-base font-semibold">
-                Record Now
-              </h2>
-              <p className="text-gray-600 text-sm">
-                {isRecording 
+              <h2 id={`${menuIdRef.current}-label` as unknown as string} className="text-gray-900 text-sm font-semibold">
+                {isRecording
                   ? `Recording ${WORKFLOWS.find(w => w.id === activeWorkflow)?.label}...`
-                  : 'Choose the type of medical report to create'
+                  : 'Choose Workflow'
                 }
-              </p>
+              </h2>
             </div>
-            
-            {/* Workflow buttons list */}
-            <div className="flex flex-col gap-2 mb-3">
+
+            {/* Workflow buttons grid */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
               {WORKFLOWS.map(renderWorkflowButton)}
             </div>
-            
+
             {/* Instructions */}
-            {!isRecording && (
-              <div className="text-center text-gray-500 text-sm">
-                {whisperServerRunning ? (
-                  <p>Tap workflow to start recording</p>
-                ) : (
-                  <p className="text-red-600 font-medium flex items-center justify-center gap-2"><span className="inline-block w-2 h-2 rounded-full bg-red-500" aria-hidden="true" /> Whisper server not running - Please start server first</p>
-                )}
+            {!isRecording && !whisperServerRunning && (
+              <div className="text-center text-red-600 text-xs font-medium flex items-center justify-center gap-2">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
+                Whisper server not running
               </div>
             )}
             
@@ -591,7 +628,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
                   </span>
                 </div>
                 <p className="text-red-700 text-sm font-medium flex items-center justify-center gap-2">
-                  {voiceActivityLevel > 0.1 ? <span className="inline-flex items-center gap-1"><MicIcon className="w-3.5 h-3.5" /> Listening...</span> : <span className="inline-flex items-center gap-1"><SquareIcon className="w-3.5 h-3.5" /> Speak now</span>} • Tap <strong>Complete</strong> when done
+                  {voiceActivityLevel > 0.1 ? <span className="inline-flex items-center gap-1"><MicIcon className="w-3.5 h-3.5" /> Listening...</span> : <span className="inline-flex items-center gap-1"><Square className="w-3.5 h-3.5" /> Speak now</span>} • Tap <strong>Complete</strong> when done
                 </p>
               </div>
             )}

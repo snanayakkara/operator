@@ -77,6 +77,14 @@ const STATUS_CONFIGS = {
     bgColor: 'bg-surface-tertiary',
     animate: false
   },
+  'extracting-patient': {
+    icon: Loader2,
+    label: 'Preparing',
+    description: 'Extracting patient context from EMR...',
+    color: 'text-accent-violet',
+    bgColor: 'bg-surface-tertiary',
+    animate: true
+  },
   recording: {
     icon: Mic,
     label: 'Recording',
@@ -284,6 +292,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const getProgressPercentage = () => {
     const progressMap = {
       idle: 0,
+      'extracting-patient': 10,
       recording: 20,
       transcribing: 40,
       classifying: 60,

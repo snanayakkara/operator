@@ -1678,6 +1678,18 @@ If you have any questions about this information, please don't hesitate to call 
     );
 
     // Add enhanced metadata
+    const extractedFindings = Array.isArray(summaryResult.findings)
+      ? summaryResult.findings.map((finding: any) => ({
+          category: finding.category,
+          finding: finding.finding,
+          severity: finding.severity,
+          confidence: finding.confidence,
+          context: finding.context,
+          location: finding.location,
+          measurement: finding.measurement
+        }))
+      : [];
+
     report.metadata = {
       ...report.metadata,
       enhancedProcessing: {
@@ -1685,7 +1697,8 @@ If you have any questions about this information, please don't hesitate to call 
         qualityMetrics: summaryResult.qualityMetrics,
         clinicalFindings: summaryResult.findings.length,
         processingMethod: 'Enhanced_QuickLetter',
-        normalizedInputLength: normalizedInput.length
+        normalizedInputLength: normalizedInput.length,
+        extractedFindings
       },
       rawAIOutput: rawOutput,
       reasoningArtifacts: this.parseReasoningArtifacts(rawOutput)

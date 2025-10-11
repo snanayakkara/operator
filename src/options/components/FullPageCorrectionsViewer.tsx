@@ -732,45 +732,53 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
                       </span>
                     </td>
                     
-                    <td className="px-4 py-4 max-w-xs">
-                      <div className="text-sm text-red-800 bg-red-50 p-2 rounded border border-red-200">
-                        <div className="truncate" title={correction.original}>
-                          {correction.original}
+                    <td className="px-4 py-4 w-1/3">
+                      <div className="text-sm text-red-800 bg-red-50 p-3 rounded border border-red-200 max-h-32 overflow-y-auto">
+                        <div className="whitespace-pre-wrap break-words">
+                          {correction.original || correction.rawText || '—'}
                         </div>
                       </div>
                     </td>
-                    
-                    <td className="px-4 py-4 max-w-xs">
+
+                    <td className="px-4 py-4 w-1/3">
                       {isEditing ? (
                         <div className="space-y-2">
+                          <div className="text-xs text-ink-secondary mb-1 flex items-start space-x-2">
+                            <div className="flex-1 bg-red-50 p-2 rounded border border-red-200 max-h-24 overflow-y-auto">
+                              <strong className="block mb-1">Original:</strong>
+                              <div className="text-red-800 whitespace-pre-wrap break-words">
+                                {correction.original || correction.rawText}
+                              </div>
+                            </div>
+                          </div>
                           <textarea
                             value={editedText}
                             onChange={(e) => setEditedText(e.target.value)}
-                            className="w-full p-2 text-sm border border-line-secondary rounded focus:outline-none focus:ring-2 focus:ring-accent-info focus:border-transparent resize-y"
-                            rows={3}
+                            className="w-full p-3 text-sm border border-line-secondary rounded focus:outline-none focus:ring-2 focus:ring-accent-info focus:border-transparent resize-y font-mono"
+                            rows={6}
                             placeholder="Enter corrected text..."
                           />
                           <div className="flex space-x-2">
                             <button
                               onClick={() => saveEdit(correction.id)}
-                              className="flex items-center space-x-1 px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
+                              className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
                             >
-                              <Save className="w-3 h-3" />
+                              <Save className="w-4 h-4" />
                               <span>Save</span>
                             </button>
                             <button
                               onClick={cancelEdit}
-                              className="flex items-center space-x-1 px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
+                              className="flex items-center space-x-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-4 h-4" />
                               <span>Cancel</span>
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-green-800 bg-green-50 p-2 rounded border border-green-200">
-                          <div className="truncate" title={correction.corrected}>
-                            {correction.corrected}
+                        <div className="text-sm text-green-800 bg-green-50 p-3 rounded border border-green-200 max-h-32 overflow-y-auto">
+                          <div className="whitespace-pre-wrap break-words">
+                            {correction.corrected || correction.correctedText || '—'}
                           </div>
                         </div>
                       )}

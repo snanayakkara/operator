@@ -13,6 +13,7 @@ interface UseDropdownPositionOptions {
   alignment?: 'left' | 'right' | 'center';
   maxHeight?: number;
   dropdownWidth?: number;
+  preferredDirection?: 'auto' | 'up' | 'down';
 }
 
 export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
@@ -21,7 +22,8 @@ export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
     offset = { x: 0, y: 8 },
     alignment = 'right',
     maxHeight = 320,
-    dropdownWidth = 280
+    dropdownWidth = 280,
+    preferredDirection = 'auto'
   } = options;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLElement>(null);
@@ -57,18 +59,32 @@ export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
       right = 8;
     }
 
-    // Adjust vertical positioning if dropdown would go off screen
+    // Adjust vertical positioning based on preferredDirection
     const availableSpaceBelow = viewport.height - triggerRect.bottom - 8;
     const availableSpaceAbove = triggerRect.top - 8;
-    
+
     let adjustedMaxHeight = maxHeight;
-    
-    if (availableSpaceBelow < maxHeight && availableSpaceAbove > availableSpaceBelow) {
-      // Show above the trigger
-      top = triggerRect.top - maxHeight - offset.y;
-      adjustedMaxHeight = Math.min(maxHeight, availableSpaceAbove);
+
+    // Determine direction: forced up, forced down, or auto
+    let showAbove = false;
+
+    if (preferredDirection === 'up') {
+      // Force upward
+      showAbove = true;
+    } else if (preferredDirection === 'down') {
+      // Force downward
+      showAbove = false;
     } else {
-      // Show below the trigger (default)
+      // Auto: choose based on available space
+      showAbove = availableSpaceBelow < maxHeight && availableSpaceAbove > availableSpaceBelow;
+    }
+
+    if (showAbove) {
+      // Show above the trigger - position bottom of dropdown just above the trigger
+      adjustedMaxHeight = Math.min(maxHeight, availableSpaceAbove);
+      top = triggerRect.top - adjustedMaxHeight - offset.y;
+    } else {
+      // Show below the trigger
       adjustedMaxHeight = Math.min(maxHeight, availableSpaceBelow);
     }
 
@@ -78,7 +94,7 @@ export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
       right,
       maxHeight: adjustedMaxHeight
     });
-  }, [isOpen, offset, alignment, maxHeight]);
+  }, [isOpen, offset, alignment, maxHeight, dropdownWidth, preferredDirection]);
 
   useEffect(() => {
     if (isOpen) {

@@ -216,7 +216,7 @@ export class DSPyService {
       }
 
       try {
-        const response = await fetch('http://localhost:8002/api/process', {
+        const response = await fetch('http://localhost:8002/v1/dspy/process', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -313,7 +313,7 @@ export class DSPyService {
         fresh_run: options.freshRun || false
       };
 
-      const response = await fetch('http://localhost:8002/api/evaluate', {
+      const response = await fetch('http://localhost:8002/v1/dspy/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -392,7 +392,7 @@ export class DSPyService {
         fresh_run: options.freshRun || false
       };
 
-      const response = await fetch('http://localhost:8002/api/optimize', {
+      const response = await fetch('http://localhost:8002/v1/dspy/optimize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -514,7 +514,7 @@ export class DSPyService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const response = await fetch('http://localhost:8002/api/health', {
+      const response = await fetch('http://localhost:8002/v1/health', {
         method: 'GET',
         signal: controller.signal
       });

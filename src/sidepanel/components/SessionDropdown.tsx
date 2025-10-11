@@ -362,10 +362,10 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
           {state === 'needs_review' && onMarkSessionComplete && (
             <button
               onClick={() => onMarkSessionComplete(session)}
-              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-600 hover:bg-emerald-50"
+              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-2 py-1 text-[10px] font-semibold uppercase text-emerald-600 hover:bg-emerald-50"
               title="Mark complete"
             >
-              <CheckCircle2 className="w-2.5 h-2.5" />
+              <CheckCircle2 className="w-3.5 h-3.5" />
             </button>
           )}
 
@@ -519,10 +519,28 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       requestAnimationFrame(() => {
         if (triggerRef?.current) {
           const rect = triggerRef.current.getBoundingClientRect();
-          setComputedPos({
-            top: Math.round(rect.bottom + 8),
-            right: Math.round(window.innerWidth - rect.right)
-          });
+          const DROPDOWN_WIDTH = 320;
+          const VIEWPORT_MARGIN = 16;
+
+          // Calculate potential left position (align right edges)
+          const leftPosition = rect.right - DROPDOWN_WIDTH;
+
+          // Check if dropdown would overflow left edge
+          const wouldOverflowLeft = leftPosition < VIEWPORT_MARGIN;
+
+          if (wouldOverflowLeft) {
+            // Use left positioning with minimum margin
+            setComputedPos({
+              top: Math.round(rect.bottom + 8),
+              left: VIEWPORT_MARGIN
+            });
+          } else {
+            // Use calculated left position (right-aligned with button)
+            setComputedPos({
+              top: Math.round(rect.bottom + 8),
+              left: Math.round(leftPosition)
+            });
+          }
         }
       });
       return;
@@ -567,8 +585,8 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
         left: computedPos.left,
         right: computedPos.right,
         width: '320px',
-        maxHeight: '384px',
-        zIndex: 999999
+        maxHeight: '480px',
+        zIndex: 9990
       };
     }
     return {
@@ -576,8 +594,8 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       top: '60px',
       right: '16px',
       width: '320px',
-      maxHeight: '384px',
-      zIndex: 999999
+      maxHeight: '480px',
+      zIndex: 9990
     };
   }, [computedPos]);
 
@@ -620,7 +638,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       </div>
 
       {/* Sessions List */}
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-96 overflow-y-auto">
         {/* In Progress Sessions */}
         {sessionCategories.inProgress.length > 0 && (
           <div className="p-2">

@@ -10,14 +10,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Settings, ExternalLink, BookOpen, Activity } from 'lucide-react';
+import { Settings, ExternalLink, BookOpen, Activity, Sparkles } from 'lucide-react';
 import { DashboardSettings } from './components/DashboardSettings';
 import { PhrasebookPanel } from './components/PhrasebookPanel';
+import { OptimizationDashboard } from './components/OptimizationDashboard';
 import { logger } from '@/utils/Logger';
 
 export const OptionsApp: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'phrasebook'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'phrasebook' | 'optimization'>('dashboard');
 
   // Initialize options app
   useEffect(() => {
@@ -90,7 +91,11 @@ export const OptionsApp: React.FC = () => {
                     Operator Settings
                   </h1>
                   <p className="text-ink-secondary mt-1">
-                    {activeTab === 'dashboard' ? 'Dashboard view — no scrolling, quick insights' : 'Manage custom terminology preferences'}
+                    {activeTab === 'dashboard'
+                      ? 'Dashboard view — no scrolling, quick insights'
+                      : activeTab === 'phrasebook'
+                      ? 'Manage custom terminology preferences'
+                      : 'View and manage transcription corrections for training'}
                   </p>
                 </div>
               </div>
@@ -133,6 +138,17 @@ export const OptionsApp: React.FC = () => {
               <BookOpen className="w-4 h-4" />
               Phrasebook
             </button>
+            <button
+              onClick={() => setActiveTab('optimization')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                activeTab === 'optimization'
+                  ? 'bg-white shadow-sm text-ink-primary'
+                  : 'text-ink-secondary hover:text-ink-primary'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              Optimization
+            </button>
           </nav>
         </div>
 
@@ -140,6 +156,7 @@ export const OptionsApp: React.FC = () => {
         <div className="settings-main">
           {activeTab === 'dashboard' && <DashboardSettings />}
           {activeTab === 'phrasebook' && <PhrasebookPanel />}
+          {activeTab === 'optimization' && <OptimizationDashboard />}
         </div>
       </div>
     </div>
