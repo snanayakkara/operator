@@ -142,14 +142,18 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
         timestamp: Date.now() // Update timestamp to reflect the edit
       };
 
+      // Persist to Chrome storage
+      await asrLog.updateCorrection(id, {
+        correctedText: editedText.trim(),
+        timestamp: Date.now()
+      });
+
       // Update local state
       const updatedCorrections = [...corrections];
       updatedCorrections[correctionIndex] = updatedCorrection;
       setCorrections(updatedCorrections);
 
-      // Save to Chrome storage (Note: ASRCorrectionsLog doesn't have an update method, 
-      // so we'd need to add one or implement a workaround)
-      logger.info('Correction updated', {
+      logger.info('Correction updated and persisted', {
         component: 'LocalCorrectionsViewer',
         id: id,
         newText: editedText.trim()
@@ -164,7 +168,7 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
       });
       onError(error instanceof Error ? error : new Error(String(error)));
     }
-  }, [corrections, editedText, onError]);
+  }, [corrections, editedText, asrLog, onError]);
 
   const cancelEdit = useCallback(() => {
     setEditingId(null);
@@ -177,14 +181,17 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
     }
 
     try {
+      // Persist deletion to Chrome storage
+      await asrLog.deleteCorrection(id);
+
       // Remove from local state
       const updatedCorrections = corrections.filter(c => c.id !== id);
       setCorrections(updatedCorrections);
 
-      // Note: ASRCorrectionsLog would need a delete method to persist this change
-      logger.info('Correction deleted', {
+      logger.info('Correction deleted and persisted', {
         component: 'LocalCorrectionsViewer',
-        id: id
+        id: id,
+        remainingCorrections: updatedCorrections.length
       });
 
     } catch (error) {
@@ -193,7 +200,7 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
       });
       onError(error instanceof Error ? error : new Error(String(error)));
     }
-  }, [corrections, onError]);
+  }, [corrections, asrLog, onError]);
 
   const exportCorrections = useCallback(() => {
     try {

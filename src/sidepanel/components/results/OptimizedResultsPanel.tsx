@@ -503,8 +503,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       </AnimatePresence>
 
       {/* Original Transcription Section - Hide during streaming, show when complete */}
+      {/* For investigation-summary, show transcription AFTER results (handled in content section) */}
       <AnimatePresence>
-        {originalTranscription && !streaming && !isTAVIWorkup && !isRightHeartCath && (
+        {originalTranscription && !streaming && !isTAVIWorkup && !isRightHeartCath && agentType !== 'investigation-summary' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -613,6 +614,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 missingInfo={missingInfo}
                 onSubmit={(answers) => onReprocessWithAnswers && onReprocessWithAnswers(answers)}
                   onDismiss={onDismissMissingInfo}
+                  agentType={agentType}
                 />
               </motion.div>
             )}
@@ -659,7 +661,14 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           ) : agentType === 'quick-letter' && results && !streaming ? (
             // Quick Letter dual cards display - only show when not streaming and results are ready
             (() => {
-              console.log('✅ DISPLAY: Using QuickLetter dual-card display');
+              console.log('✅ RESULTS PANEL: Using QuickLetter dual-card display', {
+                hasResults: !!results,
+                resultsLength: results?.length || 0,
+                hasSummary: !!resultsSummary,
+                summaryLength: resultsSummary?.length || 0,
+                agentType,
+                streaming
+              });
               return null; // This will be replaced by the actual content
             })(),
             <motion.div 
@@ -988,11 +997,124 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             />
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary
-            <ReportDisplay
-              results={results}
-              agentType={agentType}
-            />
+            (() => {
+              // Debug log when Quick Letter falls through to generic display
+              if (agentType === 'quick-letter') {
+                console.warn('⚠️ RESULTS PANEL: Quick Letter falling through to generic ReportDisplay', {
+                  hasResults: !!results,
+                  resultsLength: results?.length || 0,
+                  hasSummary: !!resultsSummary,
+                  summaryLength: resultsSummary?.length || 0,
+                  streaming,
+                  reason: !results ? 'No results' : streaming ? 'Still streaming' : 'Unknown'
+                });
+              }
+              return null;
+            })(),
+            <div className="space-y-0">
+              <ReportDisplay
+                results={results}
+                agentType={agentType}
+              />
+
+              {/* Show transcription AFTER results for investigation-summary */}
+              {agentType === 'investigation-summary' && originalTranscription && !streaming && (
+                <TranscriptionSection
+                  originalTranscription={originalTranscription}
+                  onTranscriptionCopy={onTranscriptionCopy}
+                  onTranscriptionInsert={onTranscriptionInsert}
+                  onTranscriptionEdit={onTranscriptionEdit}
+                  transcriptionSaveStatus={transcriptionSaveStatus}
+                  onAgentReprocess={onAgentReprocess}
+                  currentAgent={currentAgent}
+                  isProcessing={isProcessing}
+                  audioBlob={audioBlob}
+                  defaultExpanded={!resultsReady}
+                  collapseWhen={resultsReady}
+                  approvalState={approvalState}
+                  onTranscriptionApprove={onTranscriptionApprove}
+                />
+              )}
+            </div>
           )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Patient Version Card for Angiogram/PCI */}
+      <AnimatePresence>
+        {agentType === 'angiogram-pci' && patientVersion && !isProcessing && (
+          <motion.div
+            className="space-y-4 px-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="letter-card rounded-lg border border-blue-200 bg-blue-50">
+              <div className="p-3 border-b border-blue-200 bg-blue-100">
+                <h4 className="text-blue-800 font-semibold text-sm">Patient-Friendly Explanation</h4>
+              </div>
+              <div className="p-3 max-h-96 overflow-y-auto">
+                <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
+                  {patientVersion}
+                </div>
+              </div>
+              <div className="p-3 border-t border-blue-200 bg-blue-50">
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Copy Patient Version Button */}
+                  <button
+                    onClick={handlePatientVersionCopy}
+                    className={`
+                      p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+                      ${patientVersionButtonStates.copied
+                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration'
+                        : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
+                      }
+                    `}
+                  >
+                    {patientVersionButtonStates.copied ? (
+                      <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
+                    ) : (
+                      <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
+                    )}
+                    <span className={`text-xs ${patientVersionButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
+                      {patientVersionButtonStates.copied ? 'Copied!' : 'Copy'}
+                    </span>
+                  </button>
+
+                  {/* Insert Patient Version Button */}
+                  <button
+                    onClick={handlePatientVersionInsert}
+                    className={`
+                      p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+                      ${patientVersionButtonStates.inserted
+                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration'
+                        : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
+                      }
+                    `}
+                  >
+                    {patientVersionButtonStates.inserted ? (
+                      <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
+                    ) : (
+                      <SquareIcon className="w-4 h-4" />
+                    )}
+                    <span className={`text-xs ${patientVersionButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
+                      {patientVersionButtonStates.inserted ? 'Inserted!' : 'Insert'}
+                    </span>
+                  </button>
+
+                  {/* Download Patient Version Button */}
+                  <button
+                    onClick={handlePatientVersionDownload}
+                    className="bg-white/60 border border-blue-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-blue-50/60 transition-colors btn-micro-press btn-micro-hover"
+                  >
+                    <Download className="w-4 h-4 text-gray-700" />
+                    <span className="text-xs text-gray-700">Download</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1011,6 +1133,23 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               agentType={agentType}
               onCopy={onCopy}
               onInsertToEMR={onInsertToEMR}
+              customActions={agentType === 'angiogram-pci' ? [
+                {
+                  id: 'generate-patient-version',
+                  label: isGeneratingPatientVersion ? 'Generating...' : 'Patient Version',
+                  icon: ({ className }: { className?: string }) => (
+                    isGeneratingPatientVersion ? (
+                      <div className={`border-2 border-blue-300 border-t-transparent rounded-full animate-spin ${className}`}></div>
+                    ) : (
+                      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    )
+                  ),
+                  onClick: onGeneratePatientVersion || (() => {}),
+                  variant: 'secondary' as const
+                }
+              ] : []}
             />
           </motion.div>
         )}

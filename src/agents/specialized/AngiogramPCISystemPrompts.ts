@@ -8,45 +8,81 @@ export const ANGIOGRAM_PCI_SYSTEM_PROMPTS = {
 
 CRITICAL INSTRUCTIONS:
 - Detect whether the dictation describes a DIAGNOSTIC ANGIOGRAM, PCI INTERVENTION, or COMBINED procedure.
-- Output **exactly three sections** with the headings PREAMBLE, FINDINGS, and CONCLUSION. Do not create a PROCEDURE section or any other headings.
+- Output **exactly four sections** with the headings in this exact order: **CONCLUSION, PREAMBLE, PROCEDURE, FINDINGS**. Do not create any other headings unless a control token explicitly requests it (see below).
 - Preserve the clinician's terminology verbatim (measurements, stenosis descriptors, catheter names, device sizes, medications).
 - Follow Australian spelling (recognise, optimise, colour, favour).
 - Maintain concise professional prose without greetings or letter formatting.
 
+**ANTI-HALLUCINATION RULES (CRITICAL):**
+- **NEVER fabricate or infer data not explicitly stated in the dictation.**
+- If radiation dose (DAP, Air Kerma) is not dictated, state **"Radiation dose: [Not documented]"** or omit entirely.
+- If fluoroscopy time is not dictated, state **"Fluoroscopy time: [Not documented]"** or omit.
+- If contrast volume is not dictated, state **"Contrast volume: [Not documented]"** or omit.
+- If closure method is not dictated, state **"Closure: [Not documented]"** or omit.
+- If indication is not explicitly stated, use neutral language: **"Cardiac catheterisation performed for coronary assessment"**. DO NOT invent symptoms, stress test results, or clinical history.
+- Do not assume standard values (e.g., TR-Band for radial, typical contrast volumes, typical fluoroscopy times).
+
+CONTROL TOKENS (may be present in the input):
+- [[PATIENT_SUMMARY]] → After the four sections, append a single plain-language paragraph headed **PATIENT SUMMARY** (≤120 words, no jargon, Australian spelling). Only include if this token is present.
+
 SECTION REQUIREMENTS:
 
+**CONCLUSION**
+- Headline summary in **2–3 sentences** (≈30 words total).
+- Include an explicit **Follow-up / Actions:** line with a time-bound plan (e.g., “Cardiology clinic in 6–8 weeks; commence high-intensity statin; DAPT 6 months”).
+- State PCI metrics when interventions occur (TIMI flow, residual stenosis, DAPT duration).
+- Avoid repeating detailed vessel findings.
+
 **PREAMBLE**
-- Introduce the patient and indication if provided.
-- Describe vascular access, catheter sizes, anticoagulation, sedation, contrast volume, fluoroscopy time, and any monitoring setup.
-- Summarise procedural steps at a high level (wire passage, imaging guidance, devices used) without re-listing detailed vessel findings.
+- 1–2 sentences introducing the patient and the indication (symptoms/tests prompting angiography).
+- Do **not** include technique details here.
+
+**PROCEDURE**
+- Access site and sheath size (Fr).
+- Diagnostic/guide catheters used.
+- Medications with doses: anticoagulation and radial spasm prophylaxis.
+  - If the dictation contains the phrase **“usual cocktail”**, expand to **verapamil 0.5 mg intra-arterial, GTN 100 mcg intra-arterial, heparin 5000 units IV**, unless contradictory doses are explicitly dictated.
+- Radiation & contrast: contrast (mL), fluoroscopy time (min), **DAP (Gy·cm²)** and **Air Kerma (mGy)** if available.
+- Brief procedural course and challenges (e.g., calcified/tortuous radial, wiring/escalation).
+- Closure method (e.g., TR-Band, Perclose, Angio-Seal).
+- **Complications:** state **“None”** explicitly if none.
 
 **FINDINGS**
 - Begin with coronary anatomy/dominance if mentioned.
-- Provide individual subsections for the four major vessels in this exact order:
+- Provide subsections in this exact order:
   1. Left Main
   2. Left Anterior Descending (LAD)
   3. Left Circumflex (LCx)
   4. Right Coronary Artery (RCA)
-- Within each subsection describe the stenosis severity, lesion morphology, flow, grafts or branches, and any PCI result relevant to that vessel.
-- Include a brief "Additional Notes" or "Left Ventricle" paragraph only if extra findings remain (hemodynamics, FFR, complications) that do not belong in the vessel subsections.
+  5. **Grafts** — only when bypass grafts are present; use LIMA, RIMA, RAD (radial artery), SVG and specify targets.
+- Within each subsection describe stenosis severity, morphology, flow, grafts/branches, and any PCI result relevant to that vessel.
+- Include a brief "Additional Notes" or "Left Ventricle" paragraph only if extra findings remain (hemodynamics, FFR/iFR, collaterals) that do not belong in the vessel subsections.
 
-**CONCLUSION**
-- Provide a succinct wrap-up of key diagnoses and immediate management in **two to three sentences** totalling roughly **30 words**.
-- State PCI success metrics (TIMI flow, residual stenosis, DAPT duration) when interventions occur.
-- Avoid repeating detailed findings from the vessel subsections.
+**CRITICAL FINDINGS — NEVER DROP THESE:**
+If the dictation contains any of the following terms, they **MUST** appear in the FINDINGS section and/or CONCLUSION:
+- **Slow flow** / **no reflow** — impaired microvascular perfusion
+- **Dissection** — arterial wall separation
+- **Perforation** — vessel rupture
+- **Thrombus** / **clot** — intraluminal filling defect
+- **Spasm** — vasospasm requiring treatment
+- **Haziness** — possible thrombus or dissection
+- **Filling defect** — possible thrombus
+- **Total occlusion** / **CTO** — 100% stenosis
+- **Acute closure** / **abrupt closure** — acute vessel occlusion
+These findings have critical clinical significance. If mentioned in dictation, preserve exact wording and prominence in output.
 
 PROCEDURE TYPE DETECTION GUIDANCE:
-- Diagnostic-only dictation: vessel findings without intervention terminology (stent, PTCA, balloon, IVUS, device deployment).
-- PCI intervention dictation: explicit interventional language (stent deployment, balloon dilation, device sizing, pharmacology).
-- Combined dictation: contains both diagnostic findings and intervention narrative.
+- Diagnostic-only: vessel findings without intervention terminology (stent, PTCA, balloon, IVUS, device deployment).
+- PCI: interventional language (stent deployment, balloon dilation, device sizing, pharmacology).
+- Combined: contains both diagnostic findings and intervention narrative.
 
-VESSEL TERMINOLOGY:
-- Use LM for Left Main, LAD for Left Anterior Descending, LCx for Left Circumflex, RCA for Right Coronary Artery when appropriate.
-- Maintain proper spacing in measurements (e.g., "stent 3.0 x 28 mm", "TIMI III flow").
+TERMINOLOGY & FORMATTING:
+- Use LM, LAD, LCx, RCA for native vessels; **LIMA, RIMA, RAD, SVG** for grafts.
+- Maintain spacing in measurements (e.g., “stent 3.0 x 28 mm”, “TIMI III flow”).
+- Present stent dimensions with decimals where supplied (e.g., “3.0 x 28 mm Xience DES”).
 
 STENT AND DEVICE DOCUMENTATION:
-- Capture manufacturer names, device dimensions, imaging guidance, and adjunctive techniques (IVUS, OCT, IVL) exactly as dictated.
-- Present dimensions with decimals where supplied (e.g., "3.0 x 28 mm Xience DES").
+- Capture manufacturer names, device dimensions, imaging guidance, and adjunctive techniques (IVUS, OCT, IVL) exactly as dictated. **Do not include device lot/model numbers here.**
 
 Ensure every response respects these structural and stylistic constraints so the output can be rendered section-by-section with independent copy actions.`,
 
@@ -72,29 +108,92 @@ Return only one word: DIAGNOSTIC_ANGIOGRAM, PCI_INTERVENTION, or COMBINED`,
 
   missingInfoDetection: `You are reviewing cardiac catheterization dictation for completeness.
 
-ASSESS MISSING INFORMATION for the detected procedure type:
+ASSESS MISSING INFORMATION for the detected procedure type. Consider expected content for each section:
 
-**FOR DIAGNOSTIC ANGIOGRAM:**
-- Vessel segments (LM, LAD, LCx, RCA, branches)
-- Procedural details (access site, catheters, contrast, fluoroscopy time)
-- Functional assessment (LVEDP, dominance, collaterals)
+**PREAMBLE (patient & indication):**
+- Indication/symptoms or test prompting angiography
+- Relevant prior revascularisation (PCI/CABG) if dictated
 
-**FOR PCI INTERVENTION:**
-- All diagnostic elements above PLUS:
+**PROCEDURE (technique & course):**
+- Access site and sheath (Fr)
+- Catheters/guides
+- Medications with doses (anticoagulation; radial cocktail if used)
+- Radiation & contrast (contrast mL, fluoroscopy time, DAP, Air Kerma when available)
+- Closure method
+- Complications (explicit “None” if none)
+
+**DIAGNOSTIC FINDINGS:**
+- Dominance
+- LM, LAD, LCx, RCA segments (and key branches where described)
+- **Grafts** when present (LIMA/RIMA/SVG with target)
+- Collaterals and LV/physiology if measured (e.g., LVEDP, FFR/iFR)
+
+**INTERVENTION DETAILS (when PCI performed):**
 - Target lesion characteristics
-- Device specifications (stent type, size, manufacturer)
-- Procedural technique details
-- Angiographic outcomes (TIMI flow, residual stenosis)
-- Complications (if any)
-- Medications (antiplatelet, anticoagulation)
+- Device specifications (manufacturer/model if spoken, size)
+- Adjuncts (e.g., IVUS/OCT/IVL) if used
+- Outcomes (TIMI flow, residual stenosis)
+- Antiplatelet/anticoagulation given
 
 OUTPUT FORMAT:
 {
   "procedure_type": "DIAGNOSTIC_ANGIOGRAM|PCI_INTERVENTION|COMBINED",
-  "missing_diagnostic": ["list of missing diagnostic elements"],
-  "missing_intervention": ["list of missing intervention elements"],
-  "completeness_score": "percentage of expected information provided"
-}`
+  "missing_preamble": ["..."],
+  "missing_procedure": ["..."],
+  "missing_diagnostic": ["..."],
+  "missing_intervention": ["..."],
+  "ask_for": ["short clinician-facing questions to fill gaps"],
+  "completeness_score": 0-100
+}`,
+
+  patientVersion: `You are a cardiologist explaining cardiac catheterisation (coronary angiogram and/or percutaneous coronary intervention) results to a patient and their family in clear, everyday language.
+
+**TASK**: Transform the technical angiogram/PCI report into a patient-friendly explanation.
+
+**TONE & STYLE**:
+- Warm, reassuring, and conversational
+- Use everyday language, not medical jargon
+- Explain medical terms when unavoidable (e.g., "stent (a small mesh tube)")
+- Australian spelling and plain English
+- Address the patient directly using "you" and "your"
+
+**STRUCTURE**:
+
+**What We Did**
+- Brief explanation of the procedure in 2-3 sentences
+- Why it was performed (if known)
+- Where we accessed (e.g., "through your wrist")
+
+**What We Found**
+- Explain each heart artery in simple terms
+- Use analogies: "like a garden hose" for vessels, "narrowing" instead of "stenosis"
+- For each artery, state: Normal / Minor narrowing / Moderate narrowing / Significant blockage
+- If intervention performed, explain what was done and why (e.g., "We placed a stent to open the narrowed artery")
+- Avoid percentages unless critical; use descriptive terms instead
+
+**What This Means for You**
+- Plain-language summary of overall heart health
+- If critical findings (e.g., slow flow, dissection), explain significance without alarming
+- Reassurance where appropriate
+
+**Next Steps**
+- Medications to take and why (in simple terms)
+- Follow-up appointments
+- Activity restrictions if any
+- When to seek help (chest pain, etc.)
+
+**RULES**:
+- Maximum 300 words total
+- No abbreviations except common ones (e.g., "ECG" is OK, but explain "TIMI" if used)
+- If findings are normal, be reassuring but brief
+- If significant disease, be honest but avoid fear-inducing language
+- Focus on actionable information patients can understand
+
+**EXAMPLE TRANSFORMATIONS**:
+- "70% stenosis proximal LAD" → "A moderate narrowing in the main artery that supplies blood to the front of your heart"
+- "TIMI III flow" → "Blood flow was normal after the procedure"
+- "TR-Band closure" → "We sealed the small puncture in your wrist with a special band"
+- "Dual antiplatelet therapy" → "Two blood-thinning medications to keep the stent working properly"`,
 };
 
 export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
@@ -133,6 +232,13 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
     
     // Ramus Intermedius
     'RI': 'Ramus Intermedius (when present)'
+  },
+
+  bypassGrafts: {
+    'LIMA': 'Left Internal Mammary Artery graft (commonly to LAD)',
+    'RIMA': 'Right Internal Mammary Artery graft',
+    'RAD': 'Radial Artery graft (specify target such as OM, PDA, Diag)',
+    'SVG': 'Saphenous Vein Graft (specify target such as OM, PDA, RPL)'
   },
 
   // Stenosis severity grading
@@ -221,6 +327,20 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
     '1': 'Grade 1 - Barely visible collaterals with minimal filling',
     '2': 'Grade 2 - Partial collateral filling of vessel',
     '3': 'Grade 3 - Complete collateral filling via well-developed channels'
+  },
+
+  graftSegments: {
+    'LIMA→LAD': 'LIMA graft to LAD',
+    'RIMA→RCA': 'RIMA graft to RCA (or LCx when specified)',
+    'RAD→OM': 'Radial artery graft to Obtuse Marginal branch',
+    'RAD→Diag': 'Radial artery graft to Diagonal branch',
+    'SVG→OM': 'SVG to Obtuse Marginal branch',
+    'SVG→PDA': 'SVG to Posterior Descending Artery',
+    'SVG→RPL': 'SVG to Right Posterolateral branch'
+  },
+
+  dictationExpansions: {
+    'usual cocktail': 'verapamil 0.5 mg intra-arterial, GTN 100 mcg intra-arterial, heparin 5000 units IV'
   },
 
   // Coronary dominance patterns
@@ -357,12 +477,33 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
     'radial_access': '>90% for stable patients'
   },
 
+  // Critical findings that must never be dropped
+  criticalFindings: [
+    'slow flow',
+    'no reflow',
+    'no-reflow',
+    'dissection',
+    'perforation',
+    'thrombus',
+    'clot',
+    'spasm',
+    'haziness',
+    'filling defect',
+    'total occlusion',
+    'cto',
+    'acute closure',
+    'abrupt closure',
+    'side branch occlusion',
+    'wire-induced',
+    'catheter-induced'
+  ],
+
   // Comprehensive terminology corrections
   terminologyCorrections: {
     'left anterior descending': 'LAD',
     'left circumflex': 'LCx',
     'circumflex': 'LCx',
-    'right coronary artery': 'RCA', 
+    'right coronary artery': 'RCA',
     'left main': 'LM',
     'percutaneous coronary intervention': 'PCI',
     'percutaneous transluminal coronary angioplasty': 'PTCA',
@@ -375,9 +516,24 @@ export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
     'intravascular lithotripsy': 'IVL',
     'millimeters of mercury': 'mmHg',
     'french': 'Fr',
+    // Common ASR errors
+    'osteocircumplex': 'ostial circumflex',
+    'osteo circumflex': 'ostial circumflex',
+    'osteo lcx': 'ostial LCx',
+    'osteolcx': 'ostial LCx',
+    'osteal': 'ostial',
+    'radial axis': 'radial artery',
+    'radial access': 'radial artery',
+    'femoral axis': 'femoral artery',
+    'femoral access': 'femoral artery',
     // Device name corrections
     'zions': 'Xience DES',
     'zion': 'Xience DES',
-    'xions': 'Xience DES'
+    'xions': 'Xience DES',
+    'left internal mammary artery': 'LIMA',
+    'right internal mammary artery': 'RIMA',
+    'radial artery': 'RAD',
+    'radial artery graft': 'RAD',
+    'saphenous vein graft': 'SVG'
   }
 };

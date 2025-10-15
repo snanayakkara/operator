@@ -28,6 +28,15 @@ export interface MedicalContext {
   clinicalCorrelations?: any[];
   terminologyPreferences?: string;
   recommendations?: string[];
+  // Patient demographics for enhanced correspondence
+  demographics?: {
+    name?: string;
+    dateOfBirth?: string;
+    age?: number | string;
+    gender?: string;
+    mrn?: string;
+  };
+  patientInfo?: PatientInfo; // Structured patient information
 }
 
 // Custom error interface for enhanced error handling
@@ -62,6 +71,7 @@ export interface ReportMetadata {
   confidence: number;
   processingTime: number;
   modelUsed: string;
+  patientSummary?: string;
   // Optional enhanced processing metadata extensions
   enhancedProcessing?: Record<string, unknown>;
   validationResults?: Record<string, unknown>;
@@ -1093,31 +1103,67 @@ export interface BatchAIReviewReport extends MedicalReport {
   };
 }
 
-// Batch Patient Review specific types
+// Batch Patient Review specific types (Unified PRIMARY + SECONDARY Prevention)
 export interface BatchPatientReviewInput {
   background: string;
   investigations: string;
   medications: string;
 }
 
+export interface PatientClassification {
+  category: 'primary' | 'secondary-cad' | 'secondary-hfref' | 'secondary-valvular' | 'mixed';
+  rationale: string;
+  triggers: string[];
+  reviewFocus: string[];
+}
+
 export interface BatchPatientReviewFinding {
+  // Classification tag (always present)
+  classificationTag: 'PRIMARY' | 'SECONDARY-CAD' | 'SECONDARY-HFrEF' | 'SECONDARY-VALVULAR';
+
+  // Core fields (always present)
   finding: string;
-  australianGuideline: string;
-  clinicalReasoning: string;
+  evidence: string;
   recommendedAction: string;
+  priority: 'very_high' | 'high' | 'moderate' | 'routine';
   urgency: 'Immediate' | 'Soon' | 'Routine';
+
+  // PRIMARY prevention specific fields (conditional)
+  threshold?: string; // Numeric cut-off
+  mechanism?: string; // Pathophysiology explanation
+
+  // SECONDARY prevention specific fields (conditional)
+  australianGuideline?: string; // NHFA/CSANZ reference
+  clinicalReasoning?: string; // Guideline rationale
+
+  // Optional
   heartFoundationLink?: string;
 }
 
 export interface BatchPatientReviewReport extends MedicalReport {
+  // Patient classification (always present)
+  classification: PatientClassification;
+
   reviewData: {
     findings: BatchPatientReviewFinding[];
+
+    // Primary prevention specific (conditional)
+    missingTests?: string[];
+    therapyTargets?: Record<string, string>;
+    primaryPreventionNotes?: string;
+
+    // Secondary prevention specific (always present for compatibility)
     guidelineReferences: string[];
     heartFoundationResources: string[];
+
+    // Shared metadata
     cvdRiskCalculatorRecommended: boolean;
     aboriginalTorresStraitIslander: boolean;
     qtProlongationRisk: boolean;
     medicationSafetyIssues: number;
+
+    // Clinical notes (always present)
+    clinicalNotes?: string;
   };
 }
 

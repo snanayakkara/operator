@@ -27,6 +27,7 @@ import { ScreenshotAnnotationModal } from './components/ScreenshotAnnotationModa
 import { PatientMismatchConfirmationModal } from './components/PatientMismatchConfirmationModal';
 import { BPDiaryImporter } from './components/BPDiaryImporter';
 import { OptimizationPanel } from '../components/settings/OptimizationPanel';
+import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
@@ -34,7 +35,7 @@ import { WhisperServerService } from '@/services/WhisperServerService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput as _BatchAIReviewInput, ProcessingStatus } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { MetricsService } from '@/services/MetricsService';
@@ -65,7 +66,8 @@ const OptimizedAppContent: React.FC = memo(() => {
     patientSelection: selectors.isOverlayActive('patient-selection'),
     screenshotAnnotation: selectors.isOverlayActive('screenshot-annotation'),
     bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
-    patientMismatch: selectors.isOverlayActive('patient-mismatch')
+    patientMismatch: selectors.isOverlayActive('patient-mismatch'),
+    pasteNotes: selectors.isOverlayActive('paste-notes')
   };
   const metricsDashboardOpen = selectors.isSidePanelOpen('metrics-dashboard');
   const activeWorkflowRef = useRef<AgentType | null>(null);
@@ -239,12 +241,35 @@ const OptimizedAppContent: React.FC = memo(() => {
   const startStreamingGeneration = useCallback(async (
     sessionId: string,
     agent: AgentType,
-    input: string
+    input: string,
+    medicalContext?: any
   ): Promise<StreamingGenerationOutcome> => {
-    const systemPrompt = await getSystemPromptForAgent(agent);
+    let systemPrompt = await getSystemPromptForAgent(agent);
     if (!systemPrompt) {
       return { handled: false, success: false };
     }
+
+    // Add patient demographics to system prompt for Quick Letter if available
+    if (agent === 'quick-letter' && medicalContext?.patientInfo) {
+      const { name, age, dob, gender } = medicalContext.patientInfo;
+      const parts: string[] = [];
+
+      if (name) parts.push(`Patient Name: ${name}`);
+      if (age) parts.push(`Age: ${age}`);
+      if (dob) parts.push(`DOB: ${dob}`);
+      if (gender) parts.push(`Gender: ${gender}`);
+
+      if (parts.length > 0) {
+        systemPrompt += `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nUse these demographics when appropriate in the letter (e.g., salutations, patient identification).`;
+        console.log('📋 Added patient demographics to Quick Letter streaming context:', {
+          name,
+          age,
+          dob,
+          gender
+        });
+      }
+    }
+
     actions.clearStream();
     actions.setStreaming(true);
     actions.setProcessingStatus('processing');
@@ -252,6 +277,19 @@ const OptimizedAppContent: React.FC = memo(() => {
     processingAbortRef.current = controller;
     const { model, maxTokens } = getModelAndTokens(agent);
     const streamingStartTime = Date.now();
+
+    // Update processing start time for elapsed time tracking in UI
+    actions.setProcessingStartTime(streamingStartTime);
+
+    // Initialize pipeline progress at AI Analysis stage (transcription already complete)
+    actions.setPipelineProgress({
+      stage: 'ai-analysis',
+      progress: 50,
+      stageProgress: 10,
+      details: `Generating ${agent === 'quick-letter' ? 'letter' : 'report'}`,
+      modelName: model
+    });
+
     let processingDuration = 0;
     let streamingSucceeded = false;
     let ttftMs: number | null = null;
@@ -270,6 +308,14 @@ const OptimizedAppContent: React.FC = memo(() => {
         if (ttftMs == null && json?.choices?.[0]?.delta?.content) {
           ttftMs = Math.round(performance.now() - t0);
           actions.setTTFT(ttftMs);
+
+          // Update progress to Generation stage once first token arrives
+          actions.updatePipelineProgress({
+            stage: 'generation',
+            progress: 70,
+            stageProgress: 20,
+            details: 'Streaming response'
+          });
         }
       },
       onToken: (t) => {
@@ -731,9 +777,26 @@ const OptimizedAppContent: React.FC = memo(() => {
         currentText: transcriptionResult,
         hasBeenEdited: false
       });
-      
+
+      // Build medical context for Quick Letter if patient demographics are available
+      const streamingMedicalContext = workflowId === 'quick-letter' && state.currentPatientInfo
+        ? {
+            sessionId,
+            timestamp: Date.now(),
+            patientInfo: state.currentPatientInfo
+          }
+        : undefined;
+
+      if (streamingMedicalContext) {
+        console.log('📋 Passing patient demographics to streaming generation:', {
+          name: state.currentPatientInfo?.name,
+          age: state.currentPatientInfo?.age,
+          dob: state.currentPatientInfo?.dob
+        });
+      }
+
       // Try streaming generation first for supported agents
-      const streamingResult = await startStreamingGeneration(sessionId, workflowId, transcriptionResult);
+      const streamingResult = await startStreamingGeneration(sessionId, workflowId, transcriptionResult, streamingMedicalContext);
       if (streamingResult.handled) {
         if (streamingResult.success) {
           const totalDuration = Date.now() - transcriptionStartTime;
@@ -1342,7 +1405,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const getCurrentDisplayData = useCallback(() => {
     // PRIORITY 1: If user explicitly selected a completed session, ALWAYS show it (even during active work)
     if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
-      return {
+      const displayData = {
         transcription: state.displaySession.displayTranscription,
         results: state.displaySession.displayResults,
         summary: state.displaySession.displaySummary,
@@ -1357,6 +1420,21 @@ const OptimizedAppContent: React.FC = memo(() => {
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
         isDisplayingSession: true
       };
+
+      // Debug logging for session display data
+      console.log('🔍 getCurrentDisplayData - Displaying session:', {
+        sessionId: state.displaySession.displaySessionId,
+        agent: displayData.agent,
+        hasResults: !!displayData.results,
+        resultsLength: displayData.results?.length || 0,
+        hasSummary: !!displayData.summary,
+        summaryLength: displayData.summary?.length || 0,
+        hasTranscription: !!displayData.transcription,
+        transcriptionLength: displayData.transcription?.length || 0,
+        patientName: displayData.patientInfo?.name || 'Unknown'
+      });
+
+      return displayData;
     }
 
     // PRIORITY 2: If actively working AND no explicit user selection, show active recording data
@@ -2518,7 +2596,6 @@ const OptimizedAppContent: React.FC = memo(() => {
         onMarkSessionComplete={handleMarkSessionComplete}
         selectedSessionId={stableSelectedSessionId}
         currentSessionId={state.currentSessionId}
-        onShowMetrics={() => actions.setSidePanel('metrics-dashboard')}
       />
 
 
@@ -2986,6 +3063,14 @@ const OptimizedAppContent: React.FC = memo(() => {
                   actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                   return;
                 }
+
+                // Handle Paste Letter action
+                if (actionId === 'paste-letter') {
+                  console.log('📋 Opening Paste Notes Panel');
+                  actions.openOverlay('paste-notes');
+                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+                  return;
+                }
                 
                 // Handle patient education - show configuration card
                 if (actionId === 'patient-education') {
@@ -3184,8 +3269,73 @@ const OptimizedAppContent: React.FC = memo(() => {
             actions.closeOverlay('patient-selection');
             actions.setUIMode('idle', { sessionId: null, origin: 'user' });
           }}
-          onStartReview={() => {
-            console.log('🔄 Starting patient review');
+          onStartReview={async (selectedPatients) => {
+            console.log('🔄 Starting batch AI review for', selectedPatients.length, 'patients');
+
+            try {
+              // Close the selection modal
+              actions.closeOverlay('patient-selection');
+
+              // Import BatchAIReviewOrchestrator
+              const { BatchAIReviewOrchestrator } = await import('@/orchestrators/BatchAIReviewOrchestrator');
+
+              // Create batch input
+              const batchInput: BatchAIReviewInput = {
+                selectedPatients,
+                appointmentDate: state.ui.calendarData?.appointmentDate || new Date().toLocaleDateString(),
+                calendarUrl: state.ui.calendarData?.calendarUrl || window.location.href
+              };
+
+              // Initialize orchestrator
+              const orchestrator = new BatchAIReviewOrchestrator({
+                enableCaching: true,
+                enableMetrics: true,
+                parallelProcessing: false, // Use sequential for safer navigation
+                maxConcurrentOperations: 1,
+                autoSaveCheckpoints: true,
+                checkpointInterval: 1, // Save after each patient
+                enableErrorRecovery: true,
+                maxRetries: 2
+              });
+
+              // Start batch processing with progress tracking
+              console.log('🚀 Starting batch processing...');
+              const result = await orchestrator.processBatch(batchInput, (progress) => {
+                console.log('📊 Batch progress:', progress);
+                // TODO: Update UI with progress information
+                // Could show in a new modal or side panel section
+              });
+
+              console.log('✅ Batch processing complete:', result);
+
+              // Store results in chrome.storage for the results page to read
+              const storageKey = `batchResults_${Date.now()}`;
+              const batchResults = {
+                report: result,
+                patientResults: result.patientReviews,
+                summary: {
+                  total: result.batchData.totalPatients,
+                  successful: result.batchData.successfulReviews,
+                  failed: result.batchData.failedReviews,
+                  processingTime: result.batchData.processingEndTime - result.batchData.processingStartTime
+                },
+                timestamp: Date.now()
+              };
+
+              await chrome.storage.local.set({
+                [storageKey]: batchResults
+              });
+
+              // Open the batch results page in a new tab with the storage key
+              const resultsUrl = chrome.runtime.getURL(`src/components/BatchReviewResults.html?key=${storageKey}`);
+              await chrome.tabs.create({ url: resultsUrl });
+
+              console.log('📊 Batch results page opened in new tab with key:', storageKey);
+
+            } catch (error) {
+              console.error('❌ Batch AI review failed:', error);
+              actions.setErrors([`Batch AI review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+            }
           }}
           calendarData={state.ui.calendarData}
           isExtracting={state.ui.isExtractingPatients}
@@ -3238,6 +3388,23 @@ const OptimizedAppContent: React.FC = memo(() => {
             } catch (error) {
               console.error('❌ Failed to refresh EMR patient data:', error);
             }
+          }}
+        />
+      )}
+
+      {/* Paste Notes Panel */}
+      {overlayState.pasteNotes && (
+        <PasteNotesPanel
+          isVisible={overlayState.pasteNotes}
+          isGenerating={state.isProcessing && state.currentAgent === 'quick-letter'}
+          onClose={() => {
+            actions.closeOverlay('paste-notes');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
+          onGenerate={async (notes: string) => {
+            console.log('📋 Processing pasted notes...');
+            // TODO: Implement paste processing logic
+            ToastService.getInstance().info('Paste letter feature coming soon!');
           }}
         />
       )}

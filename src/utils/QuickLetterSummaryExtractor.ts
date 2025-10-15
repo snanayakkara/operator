@@ -19,9 +19,15 @@ function cleanSummaryText(summaryText: string): string {
 
 /**
  * Clean up and format the summary
+ * Removes patient names and standardizes formatting
  */
 function cleanUpSummary(summary: string): string {
   return summary
+    // Remove "Patient [Name]" patterns at the start
+    .replace(/^Patient\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+/i, '')
+    // Remove "[Name] had/has/presented" patterns at the start
+    .replace(/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:had|has|presented|underwent|received)\s+/i, '')
+    // Clean up whitespace and punctuation
     .replace(/\s+/g, ' ')
     .replace(/\.\s*\./g, '.')
     .replace(/;\s*;/g, ';')
@@ -121,10 +127,10 @@ function generateIntelligentSummary(content: string): string {
     );
     
     if (conditions.length > 0) {
-      summaryParts.push(`Patient with ${conditions.slice(0, 2).join(' and ')}`);
+      summaryParts.push(`${conditions.slice(0, 2).join(' and ')}`);
     }
     if (symptoms.length > 0) {
-      summaryParts.push(`presenting with ${symptoms.slice(0, 2).join(' and ')}`);
+      summaryParts.push(`${symptoms.slice(0, 2).join(' and ')}`);
     }
     if (values.length > 0) {
       summaryParts.push(`${values.slice(0, 2).join(', ')}`);
@@ -146,27 +152,41 @@ function generateIntelligentSummary(content: string): string {
 export function parseQuickLetterStructuredResponse(outputText: string): { summary: string; letterContent: string } {
   try {
     console.log('🔧 Parsing QuickLetter structured response for SUMMARY: and LETTER: markers');
-    
-    // Robust parsing that does not depend on a '---' divider
-    // 1) Prefer explicit markers if present (even if formatting was cleaned)
-    const summaryIdx = outputText.indexOf('SUMMARY:');
-    const letterIdx = outputText.indexOf('LETTER:');
 
-    console.log('🔍 Found SUMMARY: at index:', summaryIdx);
-    console.log('🔍 Found LETTER: at index:', letterIdx);
+    // Robust parsing that handles LLM reasoning/thinking before actual output
+    // Strategy: Find the LAST occurrence of SUMMARY: and LETTER: markers to skip any reasoning prefix
+    // This handles cases where LLM includes "Dictation Analysis:", "Summary Generation:", etc. before actual output
+
+    // Find all occurrences of SUMMARY: and LETTER:
+    const summaryIdx = outputText.lastIndexOf('SUMMARY:');
+    const letterIdx = outputText.lastIndexOf('LETTER:');
+
+    console.log('🔍 Found SUMMARY: at index (last occurrence):', summaryIdx);
+    console.log('🔍 Found LETTER: at index (last occurrence):', letterIdx);
 
     if (summaryIdx !== -1 && letterIdx !== -1 && summaryIdx < letterIdx) {
       console.log('✅ Found both SUMMARY: and LETTER: markers in correct order');
-      const summaryRaw = outputText
+
+      // Extract the text between SUMMARY: and LETTER:
+      let summaryRaw = outputText
         .substring(summaryIdx + 'SUMMARY:'.length, letterIdx)
         .trim();
-      const letterContent = outputText
+
+      // Remove any "---" separator if present
+      summaryRaw = summaryRaw.replace(/^[\-\s]+|[\-\s]+$/g, '').trim();
+
+      // Extract letter content after LETTER:
+      let letterContent = outputText
         .substring(letterIdx + 'LETTER:'.length)
         .trim();
 
-      console.log('📋 Extracted summary raw:', summaryRaw.substring(0, 100) + '...');
+      // Clean up any special tokens or artifacts (e.g., <unused95>, <|endoftext|>)
+      letterContent = letterContent.replace(/<unused\d+>|<\|endoftext\|>|<\|end\|>/gi, '').trim();
+
+      console.log('📋 Extracted summary raw:', summaryRaw.substring(0, 100) + (summaryRaw.length > 100 ? '...' : ''));
       console.log('📝 Extracted letter content length:', letterContent.length);
-      
+      console.log('📝 Letter preview:', letterContent.substring(0, 100) + (letterContent.length > 100 ? '...' : ''));
+
       // Clean the extracted summary to remove trailing dashes
       const summary = cleanSummaryText(summaryRaw);
       console.log('🧹 Cleaned summary:', summary);

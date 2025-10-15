@@ -113,14 +113,30 @@ export const FullPageOptimizationPanel: React.FC = () => {
 
   // Initialize panel on mount
   useEffect(() => {
+    const abortController = new AbortController();
+
     initializePanel();
+
+    // Cleanup: prevent state updates after unmount
+    return () => {
+      abortController.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load completed jobs when review section is expanded
   useEffect(() => {
+    const abortController = new AbortController();
+
     if (sections.review.isExpanded && completedJobs.length === 0) {
       loadCompletedJobs();
     }
+
+    // Cleanup: prevent state updates after unmount
+    return () => {
+      abortController.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sections.review.isExpanded, completedJobs.length]);
 
   const loadCompletedJobs = useCallback(async () => {

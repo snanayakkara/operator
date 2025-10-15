@@ -94,8 +94,10 @@ export const EvaluationDashboard: React.FC<EvaluationDashboardProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          task: selectedAgent,
-          fresh_run: false
+          agent_type: selectedAgent,
+          options: {
+            fresh_run: false
+          }
         })
       });
 

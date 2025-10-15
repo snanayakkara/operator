@@ -1,14 +1,15 @@
 import { MedicalAgent } from '../base/MedicalAgent';
-import type { 
-  MedicalContext, 
-  ChatMessage, 
+import type {
+  MedicalContext,
+  ChatMessage,
   ReportSection,
   BatchPatientReviewInput,
   BatchPatientReviewFinding,
-  BatchPatientReviewReport
+  BatchPatientReviewReport,
+  PatientClassification
 } from '@/types/medical.types';
 import { LMStudioService } from '@/services/LMStudioService';
-import { 
+import {
   BatchPatientReviewSystemPrompts,
   HeartFoundationResources,
   AustralianCVDRiskCalculator
@@ -61,14 +62,17 @@ URGENCY: Routine`;
       
       // Parse the LLM response
       const sections = this.parseResponse(response, context);
-      
+
+      // Extract patient classification
+      const classification = this.extractClassification(response);
+
       // Extract findings and metadata
       const reviewData = this.extractReviewData(response, reviewInput);
-      
+
       // Validate that we have meaningful findings
       if (!reviewData.findings || reviewData.findings.length === 0) {
         console.warn('🚨 BatchPatientReviewAgent: No findings extracted from response. Attempting fallback parsing...');
-        
+
         // Fallback: Try to create a single finding from the raw response if it contains clinical content
         const fallbackFinding = this.createFallbackFinding(response);
         if (fallbackFinding) {
@@ -80,17 +84,19 @@ URGENCY: Routine`;
           reviewData.findings = [];
         }
       }
-      
+
       console.log('🔍 BatchPatientReviewAgent: Final review data before report creation:', {
+        classification: classification.category,
         findingsCount: reviewData.findings.length,
         sectionsCount: sections.length,
         hasContent: !!response && response.length > 0
       });
-      
+
       // Create the specialized report
       const report = this.createBatchPatientReviewReport(
         response,
         sections,
+        classification,
         reviewData,
         context,
         Date.now() - startTime
@@ -112,6 +118,12 @@ URGENCY: Routine`;
       return this.createBatchPatientReviewReport(
         `Error processing medical review: ${error instanceof Error ? error.message : 'Unknown error'}`,
         [],
+        {
+          category: 'primary',
+          rationale: 'Error during processing',
+          triggers: [],
+          reviewFocus: []
+        },
         {
           findings: [],
           guidelineReferences: [],
@@ -285,109 +297,169 @@ URGENCY: Routine`;
 
   private parseFindingBlock(block: string): BatchPatientReviewFinding | null {
     try {
-      console.log('🔍 AusMedicalReviewAgent: Parsing block:', block.substring(0, 200) + '...');
-      
+      console.log('🔍 BatchPatientReviewAgent: Parsing finding block:', block.substring(0, 200) + '...');
+
       const finding: Partial<BatchPatientReviewFinding> = {};
-      
-      // Extract fields using flexible pattern matching for both plain and markdown formats, with optional numbers
+
+      // Extract fields using flexible pattern matching for hybrid PRIMARY/SECONDARY format
       const fieldPatterns = {
-        finding: /(?:\*\*)?FINDING\s*\d*:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:AUSTRALIAN GUIDELINE|CLINICAL REASONING|RECOMMENDED ACTION|URGENCY):|$)/is,
-        australianGuideline: /(?:\*\*)?AUSTRALIAN GUIDELINE:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:CLINICAL REASONING|RECOMMENDED ACTION|URGENCY|FINDING):|$)/is,
-        clinicalReasoning: /(?:\*\*)?CLINICAL REASONING:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:RECOMMENDED ACTION|URGENCY|FINDING|AUSTRALIAN GUIDELINE):|$)/is,
-        recommendedAction: /(?:\*\*)?RECOMMENDED ACTION:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:URGENCY|FINDING|AUSTRALIAN GUIDELINE|CLINICAL REASONING):|$)/is,
-        urgency: /(?:\*\*)?URGENCY:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:FINDING|AUSTRALIAN GUIDELINE|CLINICAL REASONING|RECOMMENDED ACTION):|$)/is
+        classificationTag: /(?:\*\*)?CLASSIFICATION TAG:(?:\*\*)?\s*\[?(PRIMARY|SECONDARY-CAD|SECONDARY-HFrEF|SECONDARY-VALVULAR)\]?/i,
+        finding: /(?:\*\*)?FINDING:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:EVIDENCE|THRESHOLD|AUSTRALIAN GUIDELINE|MECHANISM|CLINICAL REASONING|RECOMMENDED ACTION|PRIORITY|URGENCY|CLASSIFICATION TAG):|$)/is,
+        evidence: /(?:\*\*)?EVIDENCE:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:THRESHOLD|AUSTRALIAN GUIDELINE|MECHANISM|CLINICAL REASONING|RECOMMENDED ACTION|PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG):|$)/is,
+        threshold: /(?:\*\*)?THRESHOLD\/STATUS:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:MECHANISM|RECOMMENDED ACTION|PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE):|$)/is,
+        mechanism: /(?:\*\*)?MECHANISM:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:RECOMMENDED ACTION|PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE|THRESHOLD):|$)/is,
+        australianGuideline: /(?:\*\*)?AUSTRALIAN GUIDELINE:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:CLINICAL REASONING|RECOMMENDED ACTION|PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE):|$)/is,
+        clinicalReasoning: /(?:\*\*)?CLINICAL REASONING:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:RECOMMENDED ACTION|PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE|AUSTRALIAN GUIDELINE):|$)/is,
+        recommendedAction: /(?:\*\*)?RECOMMENDED ACTION:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:PRIORITY|URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE|THRESHOLD|AUSTRALIAN GUIDELINE):|$)/is,
+        priority: /(?:\*\*)?PRIORITY:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:URGENCY|FINDING|CLASSIFICATION TAG|EVIDENCE):|$)/is,
+        urgency: /(?:\*\*)?URGENCY:(?:\*\*)?\s*(.+?)(?=(?:\*\*)?(?:FINDING|CLASSIFICATION TAG|EVIDENCE):|$)/is
       };
       
       // Extract each field
       Object.entries(fieldPatterns).forEach(([key, pattern]) => {
         const match = block.match(pattern);
-        if (match && match[1]) {
-          const value = match[1].trim().replace(/\n+/g, ' ').replace(/\s+/g, ' ');
-          if (key === 'urgency') {
-            const urgencyValue = value.replace(/[.,]$/, ''); // Remove trailing punctuation
-            if (['Immediate', 'Soon', 'Routine'].includes(urgencyValue)) {
-              finding.urgency = urgencyValue as BatchPatientReviewFinding['urgency'];
-            } else {
-              // Try to infer urgency from common variations
-              if (/immediate|urgent|critical|emergency/i.test(urgencyValue)) {
-                finding.urgency = 'Immediate';
-              } else if (/soon|priority|moderate/i.test(urgencyValue)) {
-                finding.urgency = 'Soon';
-              } else {
-                finding.urgency = 'Routine';
-              }
+        if (match) {
+          // Classification tag uses match[1] (captured group)
+          if (key === 'classificationTag' && match[1]) {
+            const tagValue = match[1].toUpperCase().trim();
+            if (['PRIMARY', 'SECONDARY-CAD', 'SECONDARY-HFREF', 'SECONDARY-VALVULAR'].includes(tagValue)) {
+              finding.classificationTag = tagValue as BatchPatientReviewFinding['classificationTag'];
             }
-          } else {
-            (finding as any)[key] = value;
+          }
+          // Other fields use match[1] if present
+          else if (match[1]) {
+            const value = match[1].trim().replace(/\n+/g, ' ').replace(/\s+/g, ' ');
+
+            if (key === 'urgency') {
+              const urgencyValue = value.replace(/[.,]$/, ''); // Remove trailing punctuation
+              if (['Immediate', 'Soon', 'Routine'].includes(urgencyValue)) {
+                finding.urgency = urgencyValue as BatchPatientReviewFinding['urgency'];
+              } else {
+                // Try to infer urgency from common variations
+                if (/immediate|urgent|critical|emergency/i.test(urgencyValue)) {
+                  finding.urgency = 'Immediate';
+                } else if (/soon|priority|moderate/i.test(urgencyValue)) {
+                  finding.urgency = 'Soon';
+                } else {
+                  finding.urgency = 'Routine';
+                }
+              }
+            } else if (key === 'priority') {
+              const priorityValue = value.toLowerCase().replace(/[.,]$/, '');
+              if (['very_high', 'high', 'moderate', 'routine'].includes(priorityValue)) {
+                finding.priority = priorityValue as BatchPatientReviewFinding['priority'];
+              } else {
+                // Try to infer priority from common variations
+                if (/very.high|critical/i.test(priorityValue)) {
+                  finding.priority = 'very_high';
+                } else if (/high/i.test(priorityValue)) {
+                  finding.priority = 'high';
+                } else if (/moderate/i.test(priorityValue)) {
+                  finding.priority = 'moderate';
+                } else {
+                  finding.priority = 'routine';
+                }
+              }
+            } else {
+              (finding as any)[key] = value;
+            }
           }
         }
       });
       
-      // If no FINDING field found, but we have other structured content, create a synthetic finding
-      if (!finding.finding && (finding.australianGuideline || finding.clinicalReasoning)) {
-        console.log('🔧 No explicit FINDING field found, creating synthetic finding from available content...');
-        
-        // Extract a summary from the clinical reasoning or guideline content
-        const contentForSynthesis = finding.clinicalReasoning || finding.australianGuideline || block;
+      // Apply defaults based on classification tag
+      const isPrimary = finding.classificationTag === 'PRIMARY';
+
+      // If no classification tag found, try to infer from content
+      if (!finding.classificationTag) {
+        if (finding.threshold || finding.mechanism) {
+          finding.classificationTag = 'PRIMARY';
+        } else if (finding.australianGuideline || finding.clinicalReasoning) {
+          // Default to SECONDARY-CAD if we have guideline/reasoning but no tag
+          finding.classificationTag = 'SECONDARY-CAD';
+        } else {
+          // Last resort default
+          finding.classificationTag = 'PRIMARY';
+        }
+        console.log('🔧 No classification tag found, inferred:', finding.classificationTag);
+      }
+
+      // Fill in missing core fields with reasonable defaults
+      if (!finding.finding && (finding.threshold || finding.mechanism || finding.australianGuideline || finding.clinicalReasoning)) {
+        console.log('🔧 No explicit FINDING field found, creating synthetic finding...');
+        const contentForSynthesis = finding.mechanism || finding.clinicalReasoning || finding.evidence || block;
         const sentences = contentForSynthesis.split(/[.!?]+/).filter(s => s.trim().length > 10);
-        
         if (sentences.length > 0) {
           finding.finding = sentences[0].trim().substring(0, 100) + (sentences[0].length > 100 ? '...' : '');
         } else {
-          finding.finding = 'Clinical review finding';
+          finding.finding = 'Clinical finding requires review';
         }
       }
-      
-      // Fill in missing fields with reasonable defaults if we have some structured content
-      if ((finding.australianGuideline || finding.clinicalReasoning) && !finding.finding) {
-        finding.finding = 'Clinical oversight identified';
+
+      if (finding.finding && !finding.evidence) {
+        finding.evidence = 'Evidence not explicitly stated';
       }
-      
-      if (finding.finding && !finding.australianGuideline) {
-        finding.australianGuideline = 'NHFA/CSANZ Guidelines (review required)';
-      }
-      
-      if (finding.finding && !finding.clinicalReasoning) {
-        finding.clinicalReasoning = 'Clinical assessment required';
-      }
-      
+
       if (finding.finding && !finding.recommendedAction) {
         finding.recommendedAction = 'Further clinical evaluation recommended';
       }
-      
+
+      if (finding.finding && !finding.priority) {
+        finding.priority = 'moderate';
+      }
+
       if (finding.finding && !finding.urgency) {
         finding.urgency = 'Routine';
       }
-      
-      console.log('🔍 AusMedicalReviewAgent: Parsed finding (after defaults):', {
+
+      console.log('🔍 BatchPatientReviewAgent: Parsed finding (after defaults):', {
+        classificationTag: finding.classificationTag,
         hasFinding: !!finding.finding,
+        hasEvidence: !!finding.evidence,
+        hasThreshold: !!finding.threshold,
+        hasMechanism: !!finding.mechanism,
         hasGuideline: !!finding.australianGuideline,
         hasReasoning: !!finding.clinicalReasoning,
         hasAction: !!finding.recommendedAction,
+        hasPriority: !!finding.priority,
         hasUrgency: !!finding.urgency,
-        finding: finding.finding?.substring(0, 50) + '...',
-        urgency: finding.urgency
+        finding: finding.finding?.substring(0, 50) + '...'
       });
-      
-      // Validate required fields (now with defaults applied)
-      if (finding.finding && finding.australianGuideline && finding.clinicalReasoning && 
-          finding.recommendedAction && finding.urgency) {
+
+      // Validate required core fields
+      const hasCoreFields = finding.classificationTag && finding.finding && finding.evidence &&
+                           finding.recommendedAction && finding.priority && finding.urgency;
+
+      // Validate conditional fields based on classification
+      const hasConditionalFields = isPrimary
+        ? true // PRIMARY doesn't strictly require threshold/mechanism (can have metabolic findings)
+        : (finding.australianGuideline || finding.clinicalReasoning); // SECONDARY should have guideline OR reasoning
+
+      if (hasCoreFields && hasConditionalFields) {
         return finding as BatchPatientReviewFinding;
       }
-      
-      console.warn('🔍 AusMedicalReviewAgent: Still incomplete finding block after applying defaults:', {
+
+      console.warn('🔍 BatchPatientReviewAgent: Incomplete finding block after applying defaults:', {
+        hasCoreFields,
+        hasConditionalFields,
+        isPrimary,
+        classificationTag: finding.classificationTag,
         finding: !!finding.finding,
+        evidence: !!finding.evidence,
+        threshold: !!finding.threshold,
+        mechanism: !!finding.mechanism,
         australianGuideline: !!finding.australianGuideline,
         clinicalReasoning: !!finding.clinicalReasoning,
         recommendedAction: !!finding.recommendedAction,
+        priority: !!finding.priority,
         urgency: !!finding.urgency,
         blockLength: block.length,
-        blockPreview: block.substring(0, 100)
+        blockPreview: block.substring(0, 150)
       });
-      
+
       return null;
     } catch (error) {
-      console.error('🔍 AusMedicalReviewAgent: Failed to parse finding block:', error, 'Block:', block.substring(0, 200) + '...');
+      console.error('🔍 BatchPatientReviewAgent: Failed to parse finding block:', error, 'Block:', block.substring(0, 200) + '...');
       return null;
     }
   }
@@ -472,24 +544,102 @@ URGENCY: Routine`;
   private generateSummaryContent(findingsCount: number, response: string): string {
     let summary = `## Australian Medical Review Summary\n\n`;
     summary += `**Total Findings:** ${findingsCount}\n\n`;
-    
+
     const urgentCount = (response.match(/(?:\*\*)?URGENCY:(?:\*\*)?\s*Immediate/gi) || []).length;
     const soonCount = (response.match(/(?:\*\*)?URGENCY:(?:\*\*)?\s*Soon/gi) || []).length;
     const routineCount = (response.match(/(?:\*\*)?URGENCY:(?:\*\*)?\s*Routine/gi) || []).length;
-    
+
     summary += `**Urgency Breakdown:**\n`;
     summary += `- Immediate: ${urgentCount}\n`;
     summary += `- Soon: ${soonCount}\n`;
     summary += `- Routine: ${routineCount}\n\n`;
-    
+
     summary += `**Guideline Sources:** NHFA/CSANZ, RACGP, Cancer Council Australia\n\n`;
     summary += `**Resources:**\n`;
     summary += `- [Heart Foundation Guidelines](${HeartFoundationResources.guidelines})\n`;
     summary += `- [Australian CVD Risk Calculator](${AustralianCVDRiskCalculator.url})\n\n`;
-    
+
     summary += `⚠️ **Disclaimer:** AI-generated suggestions based on Australian clinical guidelines for cardiology practice. Not a substitute for clinical judgment. Review against current NHFA/CSANZ guidelines.`;
-    
+
     return summary;
+  }
+
+  /**
+   * Extract patient classification from LLM response
+   */
+  private extractClassification(response: string): PatientClassification {
+    try {
+      // Extract classification block
+      const classificationMatch = response.match(
+        /\*\*PATIENT CLASSIFICATION:\*\*\s*([\s\S]*?)(?=\*\*CLASSIFICATION TAG:|$)/i
+      );
+
+      if (!classificationMatch) {
+        console.warn('⚠️ No classification found in response, using default PRIMARY');
+        return {
+          category: 'primary',
+          rationale: 'Classification not explicitly stated by agent',
+          triggers: [],
+          reviewFocus: []
+        };
+      }
+
+      const classificationText = classificationMatch[1];
+
+      // Extract category
+      const categoryMatch = classificationText.match(/Category:\s*\[?(PRIMARY|SECONDARY-CAD|SECONDARY-HFrEF|SECONDARY-VALVULAR|MIXED)\]?/i);
+      const categoryRaw = categoryMatch ? categoryMatch[1].toUpperCase() : 'PRIMARY';
+
+      // Map to TypeScript enum
+      let category: PatientClassification['category'] = 'primary';
+      switch (categoryRaw) {
+        case 'SECONDARY-CAD':
+          category = 'secondary-cad';
+          break;
+        case 'SECONDARY-HFREF':
+          category = 'secondary-hfref';
+          break;
+        case 'SECONDARY-VALVULAR':
+          category = 'secondary-valvular';
+          break;
+        case 'MIXED':
+          category = 'mixed';
+          break;
+        default:
+          category = 'primary';
+      }
+
+      // Extract rationale
+      const rationaleMatch = classificationText.match(/Rationale:\s*(.+?)(?=\n-|$)/i);
+      const rationale = rationaleMatch ? rationaleMatch[1].trim() : 'Not specified';
+
+      // Extract triggers
+      const triggersMatch = classificationText.match(/Triggers:\s*(.+?)(?=\n-|$)/i);
+      const triggersText = triggersMatch ? triggersMatch[1].trim() : '';
+      const triggers = triggersText.split(/[,;]/).map(t => t.trim()).filter(t => t.length > 0);
+
+      // Extract review focus
+      const reviewFocusMatch = classificationText.match(/Review Focus:\s*(.+?)$/im);
+      const reviewFocusText = reviewFocusMatch ? reviewFocusMatch[1].trim() : '';
+      const reviewFocus = reviewFocusText.split(/[,;]/).map(f => f.trim()).filter(f => f.length > 0);
+
+      console.log('✅ Extracted patient classification:', { category, rationale, triggers: triggers.length, reviewFocus: reviewFocus.length });
+
+      return {
+        category,
+        rationale,
+        triggers,
+        reviewFocus
+      };
+    } catch (error) {
+      console.error('❌ Failed to extract classification:', error);
+      return {
+        category: 'primary',
+        rationale: 'Error extracting classification',
+        triggers: [],
+        reviewFocus: []
+      };
+    }
   }
 
   private extractReviewData(response: string, input: BatchPatientReviewInput): BatchPatientReviewReport['reviewData'] {
@@ -499,36 +649,125 @@ URGENCY: Routine`;
 
     // Extract guideline references
     const guidelineReferences = this.extractGuidelineReferences(response);
-    
+
     // Determine Heart Foundation resources
     const heartFoundationResources = this.determineHeartFoundationResources(findings);
-    
+
     // Check if CVD risk calculator is recommended
-    const cvdRiskCalculatorRecommended = response.toLowerCase().includes('cvd risk') || 
+    const cvdRiskCalculatorRecommended = response.toLowerCase().includes('cvd risk') ||
                                        response.toLowerCase().includes('cardiovascular risk') ||
                                        response.toLowerCase().includes('lp(a)');
-    
+
     // Check for Aboriginal/Torres Strait Islander considerations
-    const aboriginalTorresStraitIslander = response.toLowerCase().includes('aboriginal') || 
+    const aboriginalTorresStraitIslander = response.toLowerCase().includes('aboriginal') ||
                                           response.toLowerCase().includes('torres strait');
 
     // Check for QT prolongation risk
-    const qtProlongationRisk = response.toLowerCase().includes('qt') || 
+    const qtProlongationRisk = response.toLowerCase().includes('qt') ||
                               response.toLowerCase().includes('prolongation') ||
                               this.detectQTRiskInMedications(input.medications);
 
     // Count medication safety issues
     const medicationSafetyIssues = this.countMedicationSafetyIssues(response, input.medications);
 
+    // Extract PRIMARY prevention specific sections
+    const missingTests = this.extractMissingTests(response);
+    const therapyTargets = this.extractTherapyTargets(response);
+    const clinicalNotes = this.extractClinicalNotes(response);
+
     return {
       findings,
+      missingTests: missingTests.length > 0 ? missingTests : undefined,
+      therapyTargets: Object.keys(therapyTargets).length > 0 ? therapyTargets : undefined,
+      primaryPreventionNotes: undefined, // Could be extracted separately if needed
       guidelineReferences,
       heartFoundationResources,
       cvdRiskCalculatorRecommended,
       aboriginalTorresStraitIslander,
       qtProlongationRisk,
-      medicationSafetyIssues
+      medicationSafetyIssues,
+      clinicalNotes
     };
+  }
+
+  /**
+   * Extract MISSING / NEXT TESTS section
+   */
+  private extractMissingTests(response: string): string[] {
+    try {
+      const match = response.match(/\*\*MISSING\s*\/\s*NEXT TESTS\*\*:?\s*([\s\S]*?)(?=\*\*THERAPY TARGETS|\*\*CLINICAL NOTES|$)/i);
+      if (!match) return [];
+
+      const testsText = match[1];
+      const tests = testsText
+        .split(/\n/)
+        .map(line => line.trim())
+        .filter(line => line.startsWith('•') || line.startsWith('-') || line.startsWith('*'))
+        .map(line => line.replace(/^[•\-*]\s*/, '').trim())
+        .filter(line => line.length > 0);
+
+      console.log('✅ Extracted missing tests:', tests.length);
+      return tests;
+    } catch (error) {
+      console.error('❌ Failed to extract missing tests:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Extract THERAPY TARGETS section
+   */
+  private extractTherapyTargets(response: string): Record<string, string> {
+    try {
+      const match = response.match(/\*\*THERAPY TARGETS\*\*:?\s*([\s\S]*?)(?=\*\*CLINICAL NOTES|$)/i);
+      if (!match) return {};
+
+      const targetsText = match[1];
+      const targets: Record<string, string> = {};
+
+      const lines = targetsText
+        .split(/\n/)
+        .map(line => line.trim())
+        .filter(line => line.startsWith('•') || line.startsWith('-') || line.startsWith('*'))
+        .map(line => line.replace(/^[•\-*]\s*/, '').trim())
+        .filter(line => line.length > 0);
+
+      lines.forEach(line => {
+        const colonMatch = line.match(/^(.+?):\s*(.+)$/);
+        if (colonMatch) {
+          const [, key, value] = colonMatch;
+          targets[key.trim()] = value.trim();
+        }
+      });
+
+      console.log('✅ Extracted therapy targets:', Object.keys(targets).length);
+      return targets;
+    } catch (error) {
+      console.error('❌ Failed to extract therapy targets:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Extract CLINICAL NOTES section
+   */
+  private extractClinicalNotes(response: string): string | undefined {
+    try {
+      const match = response.match(/\*\*CLINICAL NOTES\*\*:?\s*([\s\S]*?)$/i);
+      if (!match) return undefined;
+
+      const notes = match[1]
+        .split(/\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && (line.startsWith('•') || line.startsWith('-') || line.startsWith('*') || line.length > 10))
+        .join('\n');
+
+      console.log('✅ Extracted clinical notes:', notes.length, 'characters');
+      return notes.length > 0 ? notes : undefined;
+    } catch (error) {
+      console.error('❌ Failed to extract clinical notes:', error);
+      return undefined;
+    }
   }
 
   private extractGuidelineReferences(response: string): string[] {
@@ -604,6 +843,7 @@ URGENCY: Routine`;
   private createBatchPatientReviewReport(
     content: string,
     sections: ReportSection[],
+    classification: PatientClassification,
     reviewData: BatchPatientReviewReport['reviewData'],
     context?: MedicalContext,
     processingTime = 0,
@@ -623,6 +863,7 @@ URGENCY: Routine`;
 
     return {
       ...baseReport,
+      classification,
       reviewData
     };
   }

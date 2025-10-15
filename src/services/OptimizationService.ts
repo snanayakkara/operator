@@ -48,8 +48,24 @@ export class OptimizationService {
   private readonly timeout = 300000; // 5 minutes for optimization operations
   private requestIdCounter = 0;
 
+  // Health check deduplication and caching
+  private pendingHealthCheck: Promise<ServerHealthStatus> | null = null;
+  private cachedHealthStatus: ServerHealthStatus | null = null;
+  private cachedHealthTimestamp: number = 0;
+  private readonly healthCacheTTL = 5000; // 5 seconds
+  private lastHealthCheckTime: number = 0;
+  private readonly healthCheckDebounce = 2000; // 2 seconds minimum between checks
+
+  // ASR state deduplication and caching
+  private pendingASRStateCheck: Promise<ASRCurrentState> | null = null;
+  private cachedASRState: ASRCurrentState | null = null;
+  private cachedASRStateTimestamp: number = 0;
+  private readonly asrStateCacheTTL = 5000; // 5 seconds
+  private lastASRStateCheckTime: number = 0;
+  private readonly asrStateCheckDebounce = 2000; // 2 seconds minimum between checks
+
   private constructor() {
-    logger.info('OptimizationService initialized', { 
+    logger.info('OptimizationService initialized', {
       component: 'OptimizationService',
       baseUrl: this.baseUrl
     });
@@ -170,30 +186,90 @@ export class OptimizationService {
 
   /**
    * Check server health and optimization capabilities
+   * Features:
+   * - Request deduplication: Only one health check runs at a time
+   * - Caching: Results cached for 5 seconds to prevent redundant checks
+   * - Debouncing: Minimum 2 seconds between checks
    */
   async checkHealth(): Promise<ServerHealthStatus> {
-    try {
-      const response = await this.makeRequest<ServerHealthStatus>('/v1/health', {}, 10000);
-      
-      // Add optimization endpoints availability check
-      const optimizationStatus = {
-        asr_endpoints_available: true, // Assume available if server is healthy
-        gepa_endpoints_available: true,
-        overnight_processing_available: true
-      };
+    const now = Date.now();
 
-      return {
-        ...response,
-        optimization: optimizationStatus
-      };
-    } catch (error) {
-      const err = toError(error);
-      logger.error('Health check failed', {
+    // Return cached result if still valid
+    if (this.cachedHealthStatus && (now - this.cachedHealthTimestamp) < this.healthCacheTTL) {
+      logger.debug('Returning cached health status', {
         component: 'OptimizationService',
-        error: err.message
+        age: now - this.cachedHealthTimestamp
       });
-      throw err;
+      return this.cachedHealthStatus;
     }
+
+    // Return pending request if one is already in flight (deduplication)
+    if (this.pendingHealthCheck) {
+      logger.debug('Reusing pending health check request', {
+        component: 'OptimizationService'
+      });
+      return this.pendingHealthCheck;
+    }
+
+    // Enforce debounce period
+    const timeSinceLastCheck = now - this.lastHealthCheckTime;
+    if (timeSinceLastCheck < this.healthCheckDebounce) {
+      logger.debug('Health check debounced', {
+        component: 'OptimizationService',
+        timeSinceLastCheck,
+        debounceRemaining: this.healthCheckDebounce - timeSinceLastCheck
+      });
+      // Return cached result if available, otherwise throw
+      if (this.cachedHealthStatus) {
+        return this.cachedHealthStatus;
+      }
+      throw new OptimizationError(
+        'Health check rate limit - please wait before checking again',
+        'RATE_LIMIT_ERROR',
+        { timeSinceLastCheck, debounceRequired: this.healthCheckDebounce }
+      );
+    }
+
+    // Start new health check
+    this.lastHealthCheckTime = now;
+    this.pendingHealthCheck = (async () => {
+      try {
+        const response = await this.makeRequest<ServerHealthStatus>('/v1/health', {}, 3000); // Reduced from 10s to 3s
+
+        // Add optimization endpoints availability check
+        const optimizationStatus = {
+          asr_endpoints_available: true, // Assume available if server is healthy
+          gepa_endpoints_available: true,
+          overnight_processing_available: true
+        };
+
+        const healthStatus = {
+          ...response,
+          optimization: optimizationStatus
+        };
+
+        // Cache successful result
+        this.cachedHealthStatus = healthStatus;
+        this.cachedHealthTimestamp = Date.now();
+
+        return healthStatus;
+      } catch (error) {
+        const err = toError(error);
+        logger.error('Health check failed', {
+          component: 'OptimizationService',
+          error: err.message
+        });
+        // Clear cache on error
+        this.cachedHealthStatus = null;
+        this.cachedHealthTimestamp = 0;
+        throw err;
+      } finally {
+        // Clear pending request
+        this.pendingHealthCheck = null;
+      }
+    })();
+
+    return this.pendingHealthCheck;
   }
 
   // ASR Optimization Methods
@@ -274,34 +350,94 @@ export class OptimizationService {
 
   /**
    * Get current ASR corrections state
+   * Features:
+   * - Request deduplication: Only one check runs at a time
+   * - Caching: Results cached for 5 seconds to prevent redundant checks
+   * - Debouncing: Minimum 2 seconds between checks
    */
   async getCurrentASRState(): Promise<ASRCurrentState> {
-    try {
-      const response = await this.makeRequest<ApiResponse<ASRCurrentState>>('/v1/asr/current');
+    const now = Date.now();
 
-      if (!response.success) {
-        throw new ASROptimizationError(response.error || 'Failed to get ASR state');
-      }
-
-      return response.data!;
-    } catch (error) {
-      const err = toError(error);
-      // Graceful degradation for ASR server unavailability
-      if (err instanceof OptimizationError && 
-          (err.code === 'HTTP_ERROR' || err.code === 'NETWORK_ERROR')) {
-        logger.warn('ASR server unavailable, returning empty state', {
-          component: 'OptimizationService',
-          error: err.message
-        });
-        // Return empty state instead of throwing error
-        return {
-          glossary: [],
-          rules: []
-        };
-      }
-      if (err instanceof ASROptimizationError) throw err;
-      throw new ASROptimizationError(`Failed to get ASR state: ${err.message}`);
+    // Return cached result if still valid
+    if (this.cachedASRState && (now - this.cachedASRStateTimestamp) < this.asrStateCacheTTL) {
+      logger.debug('Returning cached ASR state', {
+        component: 'OptimizationService',
+        age: now - this.cachedASRStateTimestamp
+      });
+      return this.cachedASRState;
     }
+
+    // Return pending request if one is already in flight (deduplication)
+    if (this.pendingASRStateCheck) {
+      logger.debug('Reusing pending ASR state check request', {
+        component: 'OptimizationService'
+      });
+      return this.pendingASRStateCheck;
+    }
+
+    // Enforce debounce period
+    const timeSinceLastCheck = now - this.lastASRStateCheckTime;
+    if (timeSinceLastCheck < this.asrStateCheckDebounce) {
+      logger.debug('ASR state check debounced', {
+        component: 'OptimizationService',
+        timeSinceLastCheck,
+        debounceRemaining: this.asrStateCheckDebounce - timeSinceLastCheck
+      });
+      // Return cached result if available, otherwise return empty state
+      if (this.cachedASRState) {
+        return this.cachedASRState;
+      }
+      // Return empty state for rate-limited requests
+      return {
+        glossary: [],
+        rules: []
+      };
+    }
+
+    // Start new ASR state check
+    this.lastASRStateCheckTime = now;
+    this.pendingASRStateCheck = (async () => {
+      try {
+        const response = await this.makeRequest<ApiResponse<ASRCurrentState>>('/v1/asr/current');
+
+        if (!response.success) {
+          throw new ASROptimizationError(response.error || 'Failed to get ASR state');
+        }
+
+        const asrState = response.data!;
+
+        // Cache successful result
+        this.cachedASRState = asrState;
+        this.cachedASRStateTimestamp = Date.now();
+
+        return asrState;
+      } catch (error) {
+        const err = toError(error);
+        // Graceful degradation for ASR server unavailability
+        if (err instanceof OptimizationError &&
+            (err.code === 'HTTP_ERROR' || err.code === 'NETWORK_ERROR')) {
+          logger.warn('ASR server unavailable, returning empty state', {
+            component: 'OptimizationService',
+            error: err.message
+          });
+          // Cache empty state on error
+          const emptyState = {
+            glossary: [],
+            rules: []
+          };
+          this.cachedASRState = emptyState;
+          this.cachedASRStateTimestamp = Date.now();
+          return emptyState;
+        }
+        if (err instanceof ASROptimizationError) throw err;
+        throw new ASROptimizationError(`Failed to get ASR state: ${err.message}`);
+      } finally {
+        // Clear pending request
+        this.pendingASRStateCheck = null;
+      }
+    })();
+
+    return this.pendingASRStateCheck;
   }
 
   /**

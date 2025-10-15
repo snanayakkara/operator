@@ -285,6 +285,20 @@ class ContentScriptHandler {
         return;
       }
 
+      // Handle calendar patient extraction for batch AI review
+      if (type === 'extract-calendar-patients') {
+        console.log('📅 Received extract-calendar-patients request');
+        try {
+          const patientData = await this.extractCalendarPatients();
+          console.log('📅 Calendar patient extraction completed:', patientData);
+          sendResponse({ success: true, data: patientData });
+        } catch (error) {
+          console.error('📅 Calendar patient extraction failed:', error);
+          sendResponse({ success: false, error: error instanceof Error ? error.message : 'Calendar extraction failed' });
+        }
+        return;
+      }
+
       if (type !== 'EXECUTE_ACTION') {
         console.log('❌ Unknown message type:', type);
         sendResponse({ error: 'Unknown message type' });
@@ -472,18 +486,6 @@ class ContentScriptHandler {
           sendResponse({ success: true, message: 'AI medical review should use side panel processing only' });
           break;
 
-        case 'extract-calendar-patients':
-          console.log('📅 Received extract-calendar-patients request');
-          try {
-            const patientData = await this.extractCalendarPatients();
-            console.log('📅 Calendar patient extraction completed:', patientData);
-            sendResponse({ success: true, data: patientData });
-          } catch (error) {
-            console.error('📅 Calendar patient extraction failed:', error);
-            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Calendar extraction failed' });
-          }
-          break;
-
         case 'navigate-to-patient':
           console.log('🧭 Received navigate-to-patient request');
           try {
@@ -539,6 +541,17 @@ class ContentScriptHandler {
           } catch (error) {
             console.error('📅 Navigate to appointment book failed:', error);
             sendResponse({ success: false, error: error instanceof Error ? error.message : 'Navigate to appointment book failed' });
+          }
+          break;
+        case 'extract-calendar-patients':
+          console.log('📅 Received extract-calendar-patients request (via EXECUTE_ACTION)');
+          try {
+            const patientData = await this.extractCalendarPatients();
+            console.log('📅 Calendar patient extraction completed:', patientData);
+            sendResponse({ success: true, data: patientData });
+          } catch (error) {
+            console.error('📅 Calendar patient extraction failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Calendar extraction failed' });
           }
           break;
         case 'extract-patient-fields':
@@ -3503,23 +3516,22 @@ class ContentScriptHandler {
         return '';
       }
       
-      // Extract content from all customNote elements
+      // Extract content from all customNote elements (even if hidden - data is in DOM)
       let combinedContent = '';
       for (let i = 0; i < customNotes.length; i++) {
         const note = customNotes[i] as HTMLElement;
-        if (note.offsetParent !== null) { // Check if visible
-          const content = (note.textContent || note.innerText || '').trim();
-          if (content) {
-            if (combinedContent) {
-              combinedContent += '\n\n' + content; // Separate multiple notes
-            } else {
-              combinedContent = content;
-            }
-            console.log(`📋 Extracted customNote ${i + 1} content: ${content.length} chars`);
+        const content = (note.textContent || note.innerText || '').trim();
+        if (content) {
+          if (combinedContent) {
+            combinedContent += '\n\n' + content; // Separate multiple notes
+          } else {
+            combinedContent = content;
           }
+          const isVisible = note.offsetParent !== null;
+          console.log(`📋 Extracted customNote ${i + 1} content: ${content.length} chars (visible: ${isVisible})`);
         }
       }
-      
+
       if (combinedContent) {
         console.log(`✅ Total customNote content for "${fieldDisplayName}": ${combinedContent.length} chars`);
         return combinedContent;
@@ -3549,33 +3561,47 @@ class ContentScriptHandler {
       const xestroBox = await this.findXestroBoxByTitle(fieldDisplayName);
       if (xestroBox) {
         console.log(`✅ Found XestroBox for "${fieldDisplayName}"`);
-        
+
+        let dialogOpened = false;
+
         // Click to expand if needed (some boxes may be collapsed)
         const titleElement = xestroBox.querySelector('.XestroBoxTitle');
         if (titleElement) {
           (titleElement as HTMLElement).click();
+          dialogOpened = true;
           await this.wait(300); // Wait for expansion
         }
-        
+
+        let extractedContent = '';
+
         // Look for textarea or contenteditable within this box
         const textArea = xestroBox.querySelector('textarea') as HTMLTextAreaElement;
         if (textArea && textArea.offsetParent !== null) {
-          const content = textArea.value.trim();
-          console.log(`📋 Found textarea content for "${fieldDisplayName}": ${content.length} chars`);
-          return content;
-        }
-        
-        // Try contenteditable elements
-        const contentEditables = xestroBox.querySelectorAll('[contenteditable="true"]');
-        for (const element of contentEditables) {
-          const htmlElement = element as HTMLElement;
-          if (htmlElement.offsetParent !== null) {
-            const content = (htmlElement.textContent || htmlElement.innerText || '').trim();
-            if (content) {
-              console.log(`📋 Found contenteditable content for "${fieldDisplayName}": ${content.length} chars`);
-              return content;
+          extractedContent = textArea.value.trim();
+          console.log(`📋 Found textarea content for "${fieldDisplayName}": ${extractedContent.length} chars`);
+        } else {
+          // Try contenteditable elements
+          const contentEditables = xestroBox.querySelectorAll('[contenteditable="true"]');
+          for (const element of contentEditables) {
+            const htmlElement = element as HTMLElement;
+            if (htmlElement.offsetParent !== null) {
+              const content = (htmlElement.textContent || htmlElement.innerText || '').trim();
+              if (content) {
+                extractedContent = content;
+                console.log(`📋 Found contenteditable content for "${fieldDisplayName}": ${content.length} chars`);
+                break;
+              }
             }
           }
+        }
+
+        // Close any dialog that was opened
+        if (dialogOpened) {
+          await this.closeAnyOpenDialog();
+        }
+
+        if (extractedContent) {
+          return extractedContent;
         }
       }
       
@@ -3606,19 +3632,65 @@ class ContentScriptHandler {
     }
   }
 
+  /**
+   * Close any open modal/dialog by pressing Escape or clicking close buttons
+   */
+  private async closeAnyOpenDialog(): Promise<void> {
+    console.log(`🚪 Attempting to close any open dialogs...`);
+
+    try {
+      // Method 1: Press Escape key
+      const escapeEvent = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        code: 'Escape',
+        keyCode: 27,
+        which: 27,
+        bubbles: true,
+        cancelable: true
+      });
+      document.dispatchEvent(escapeEvent);
+      await this.wait(200);
+
+      // Method 2: Look for common close button selectors and click them
+      const closeButtonSelectors = [
+        'button[aria-label="Close"]',
+        'button.close',
+        '.modal-close',
+        '.dialog-close',
+        'button:has(.fa-times)',
+        'button:has(.fa-close)',
+        '[data-dismiss="modal"]'
+      ];
+
+      for (const selector of closeButtonSelectors) {
+        const closeButton = document.querySelector(selector) as HTMLElement;
+        if (closeButton && closeButton.offsetParent !== null) {
+          console.log(`🚪 Found close button: ${selector}`);
+          closeButton.click();
+          await this.wait(200);
+          break;
+        }
+      }
+
+      console.log(`✅ Dialog close attempt completed`);
+    } catch (error) {
+      console.error(`❌ Error closing dialog:`, error);
+    }
+  }
+
   private async findXestroBoxByTitle(title: string): Promise<HTMLElement | null> {
     console.log(`🔍 Looking for XestroBox with title: "${title}"`);
-    
+
     const xestroBoxes = document.querySelectorAll('.XestroBox');
     console.log(`🔍 Found ${xestroBoxes.length} XestroBox elements`);
-    
+
     // Log all XestroBox titles for debugging
     xestroBoxes.forEach((box, index) => {
       const titleElement = box.querySelector('.XestroBoxTitle');
       const titleText = titleElement?.textContent || 'No title';
       console.log(`🔍 XestroBox ${index}: "${titleText}"`);
     });
-    
+
     for (const box of xestroBoxes) {
       const titleElement = box.querySelector('.XestroBoxTitle');
       if (titleElement && titleElement.textContent?.includes(title)) {
@@ -4097,96 +4169,97 @@ class ContentScriptHandler {
     console.log(`👆 Double-clicking patient: ${patientName} (ID: ${patientId})`);
     console.log(`👆 Current URL: ${window.location.href}`);
     console.log(`👆 Page title: ${document.title}`);
-    
-    // First, log all available patient elements for debugging
-    const allPatientElements = document.querySelectorAll('span[aria-label]');
-    console.log(`👆 All patient elements found (${allPatientElements.length}):`, Array.from(allPatientElements).map((el, index) => ({
-      index,
-      ariaLabel: el.getAttribute('aria-label'),
-      textContent: el.textContent?.trim(),
-      className: el.className,
-      id: el.id,
-      visible: (el as HTMLElement).offsetParent !== null
-    })));
-    
-    // Find patient in appointment book by name pattern "Name (ID)"
-    const searchPattern = `${patientName} (${patientId})`;
-    console.log(`👆 Searching for patient with pattern: "${searchPattern}"`);
-    
-    // Look for patient elements using the "Name (ID)" pattern
-    const patientElements = Array.from(document.querySelectorAll('span[aria-label]')).filter(el => {
-      const textContent = el.textContent?.trim() || '';
-      const ariaLabel = el.getAttribute('aria-label') || '';
-      
-      // Check for exact "Name (ID)" pattern match
-      const exactPatternMatch = textContent === searchPattern;
-      
-      // Check for name match in either text content or aria-label
-      const nameMatch = textContent.includes(patientName) || ariaLabel.includes(patientName);
-      
-      // Check for ID match in text content (for "Name (ID)" format)
-      const idMatch = textContent.includes(`(${patientId})`);
-      
-      return exactPatternMatch || (nameMatch && idMatch);
-    });
-    
-    console.log(`👆 Filtered patient elements (${patientElements.length}):`, patientElements.map((el, index) => {
-      const textContent = el.textContent?.trim() || '';
-      const ariaLabel = el.getAttribute('aria-label') || '';
-      return {
-        index,
-        ariaLabel,
-        textContent,
-        matches: {
-          exactPattern: textContent === searchPattern,
-          nameMatch: textContent.includes(patientName) || ariaLabel.includes(patientName),
-          idMatch: textContent.includes(`(${patientId})`),
-          searchPattern
+
+    // Find the appointment table
+    const appointmentTable = document.querySelector('table.appointmentBook');
+    if (!appointmentTable) {
+      throw new Error('Appointment book table not found. Make sure you are on the appointment calendar page.');
+    }
+
+    // Find all appointment rows
+    const appointmentRows = appointmentTable.querySelectorAll('tr.appt');
+    console.log(`👆 Found ${appointmentRows.length} appointment rows in table`);
+
+    // Search for the patient row by matching name and file number
+    let targetPatientElement: HTMLElement | null = null;
+
+    for (const row of Array.from(appointmentRows)) {
+      const nameCell = row.querySelector('td.Name');
+      if (!nameCell) continue;
+
+      const nameSpan = nameCell.querySelector('span[aria-label]') as HTMLElement;
+      if (!nameSpan) continue;
+
+      const ariaLabel = nameSpan.getAttribute('aria-label') || '';
+      const displayName = nameSpan.textContent?.trim() || '';
+
+      // Check if this row matches our patient
+      // The aria-label contains the name with DOB, e.g., "Mr Testa Rossa (01/01/2001)"
+      // The displayName might be "Testa Rossa" or "Mr Testa Rossa (16238)" depending on the view
+      const nameMatches = ariaLabel.includes(patientName) || displayName.includes(patientName);
+
+      // Check if the row contains the file number (might be in a data attribute or adjacent element)
+      // For now, if the name matches and it's the only match, we'll use it
+      // In a more robust implementation, we'd also verify the file number
+      if (nameMatches) {
+        // Try to verify file number if possible
+        const rowText = row.textContent || '';
+        const hasFileNumber = rowText.includes(patientId);
+
+        console.log(`👆 Found potential match:`, {
+          ariaLabel,
+          displayName,
+          nameMatches,
+          hasFileNumber,
+          rowText: rowText.substring(0, 100)
+        });
+
+        if (hasFileNumber || appointmentRows.length === 1) {
+          // Either the file number matches, or there's only one patient, so it must be the right one
+          targetPatientElement = nameSpan;
+          console.log(`👆 Selected patient element in row:`, {
+            ariaLabel,
+            displayName,
+            className: nameSpan.className,
+            tagName: nameSpan.tagName
+          });
+          break;
         }
-      };
-    }));
-    
-    if (patientElements.length === 0) {
-      console.error(`👆 ERROR: No patient elements found matching pattern "${searchPattern}"`);
+      }
+    }
+
+    if (!targetPatientElement) {
+      console.error(`👆 ERROR: Patient not found in appointment book`);
       console.error(`👆 Search criteria: Name="${patientName}", ID="${patientId}"`);
-      console.error(`👆 Available patients:`, Array.from(allPatientElements).map(el => ({
-        textContent: el.textContent?.trim(),
-        ariaLabel: el.getAttribute('aria-label')
-      })));
-      throw new Error(`Patient not found in appointment book: ${searchPattern}. Expected format: "Name (ID)"`);
+      console.error(`👆 Available patients:`, Array.from(appointmentRows).map((row, index) => {
+        const nameCell = row.querySelector('td.Name');
+        const nameSpan = nameCell?.querySelector('span[aria-label]');
+        return {
+          index,
+          ariaLabel: nameSpan?.getAttribute('aria-label'),
+          displayName: nameSpan?.textContent?.trim(),
+          rowText: row.textContent?.substring(0, 100)
+        };
+      }));
+      throw new Error(`Patient not found in appointment book: ${patientName} (${patientId})`);
     }
-    
-    if (patientElements.length > 1) {
-      console.warn(`👆 WARNING: Multiple patient elements found (${patientElements.length}), using the first one`);
-    }
-    
-    const patientElement = patientElements[0] as HTMLElement;
-    console.log(`👆 Selected patient element:`, {
-      ariaLabel: patientElement.getAttribute('aria-label'),
-      textContent: patientElement.textContent?.trim(),
-      className: patientElement.className,
-      id: patientElement.id,
-      tagName: patientElement.tagName,
-      parentElement: patientElement.parentElement?.tagName,
-      boundingRect: patientElement.getBoundingClientRect()
-    });
-    
+
     console.log(`👆 Performing double-click on patient element...`);
-    
+
     // Simulate double-click event
     const dblClickEvent = new MouseEvent('dblclick', {
       bubbles: true,
       cancelable: true,
       view: window
     });
-    
-    patientElement.dispatchEvent(dblClickEvent);
+
+    targetPatientElement.dispatchEvent(dblClickEvent);
     console.log(`👆 Double-click event dispatched`);
-    
+
     // Wait for navigation to patient record
     console.log(`👆 Waiting 1 second for navigation...`);
     await this.wait(1000);
-    
+
     console.log(`👆 Double-click completed for patient: ${patientName}`);
     console.log(`👆 Post-click URL: ${window.location.href}`);
     console.log(`👆 Post-click title: ${document.title}`);

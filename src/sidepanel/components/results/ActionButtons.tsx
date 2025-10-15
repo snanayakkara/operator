@@ -57,9 +57,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   const [isReasoningModalOpen, setIsReasoningModalOpen] = useState(false);
 
   // Check if reasoning artifacts are available
-  const hasReasoningArtifacts = reportMetadata?.reasoningArtifacts?.hasReasoningContent || 
+  const hasReasoningArtifacts = reportMetadata?.reasoningArtifacts?.hasReasoningContent ||
                                  (reportMetadata?.rawAIOutput && reportMetadata.rawAIOutput.trim().length > 0);
-  const showDownloadButton = agentType !== 'angiogram-pci';
+  const showDownloadButton = agentType !== 'angiogram-pci' && agentType !== 'investigation-summary';
 
   const handleCopy = async () => {
     try {
@@ -222,18 +222,20 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
         </div>
       </div>
 
-      {/* Usage Tip */}
-      <div className="mt-3 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100">
-        <p className="text-emerald-700 text-xs">
-          💡 <strong>Full Letter:</strong> Complete medical correspondence ready for EMR insertion or sharing.
-          {hasReasoningArtifacts && (
-            <>
-              <br />
-              🧠 <strong>AI Reasoning:</strong> View how the AI processed your dictation for transparency.
-            </>
-          )}
-        </p>
-      </div>
+      {/* Usage Tip - Hide for investigation-summary */}
+      {agentType !== 'investigation-summary' && (
+        <div className="mt-3 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100">
+          <p className="text-emerald-700 text-xs">
+            💡 <strong>Full Letter:</strong> Complete medical correspondence ready for EMR insertion or sharing.
+            {hasReasoningArtifacts && (
+              <>
+                <br />
+                🧠 <strong>AI Reasoning:</strong> View how the AI processed your dictation for transparency.
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       {/* AI Reasoning Modal */}
       {hasReasoningArtifacts && (

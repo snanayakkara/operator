@@ -62,7 +62,15 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
   // Load initial data
   useEffect(() => {
+    const abortController = new AbortController();
+
     loadInitialData();
+
+    // Cleanup: prevent state updates after unmount
+    return () => {
+      abortController.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInitialData = useCallback(async () => {

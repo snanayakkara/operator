@@ -112,6 +112,30 @@ export class BatchAIReviewOrchestrator {
 
     this.log(`🔄 Starting enhanced batch AI review for ${input.selectedPatients.length} patients`);
 
+    // Ensure we're on the appointment book page before starting
+    try {
+      const tabId = await this.getCurrentTabId();
+      this.log(`📅 Ensuring we're on the appointment book page...`);
+
+      const navResponse = await this.sendMessageWithTimeout(tabId, {
+        type: 'EXECUTE_ACTION',
+        action: 'navigate-to-appointment-book',
+        data: {}
+      }, 10000);
+
+      if (!navResponse?.success) {
+        this.log(`⚠️ Warning: Could not ensure appointment book state: ${navResponse?.error || 'Unknown error'}`);
+      } else {
+        this.log(`✅ Confirmed on appointment book page`);
+      }
+
+      // Wait a moment for the page to stabilize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      this.log(`⚠️ Warning: Failed to navigate to appointment book:`, error);
+      // Continue anyway - the validation will catch issues
+    }
+
     // Start metrics collection
     if (this.config.enableMetrics) {
       this.metricsCollector.startSession(this.currentBatchId);

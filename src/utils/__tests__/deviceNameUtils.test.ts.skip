@@ -1,0 +1,88 @@
+/**
+ * Unit tests for device name utilities
+ */
+
+import { shortDeviceName, veryShortDeviceName, formatDeviceSummary } from '../deviceNameUtils';
+
+describe('deviceNameUtils', () => {
+  describe('shortDeviceName', () => {
+    it('should remove "Default - " prefix', () => {
+      expect(shortDeviceName('Default - MacBook Pro Microphone')).toBe('MacBook Pro');
+    });
+
+    it('should handle case-insensitive "Default" prefix', () => {
+      expect(shortDeviceName('default - MacBook Pro Microphone')).toBe('MacBook Pro');
+      expect(shortDeviceName('DEFAULT - MacBook Pro Microphone')).toBe('MacBook Pro');
+    });
+
+    it('should remove trailing device type descriptors', () => {
+      expect(shortDeviceName('External Microphone')).toBe('External');
+      expect(shortDeviceName('Built-in Speaker')).toBe('Built-in');
+      expect(shortDeviceName('HD Camera')).toBe('HD');
+    });
+
+    it('should keep first 2 tokens by default', () => {
+      expect(shortDeviceName('AirPods Pro Max Special Edition')).toBe('AirPods Pro');
+      expect(shortDeviceName('Logitech HD Webcam C920')).toBe('Logitech HD');
+    });
+
+    it('should respect maxTokens parameter', () => {
+      expect(shortDeviceName('AirPods Pro Max', 1)).toBe('AirPods');
+      expect(shortDeviceName('AirPods Pro Max', 3)).toBe('AirPods Pro Max');
+    });
+
+    it('should handle already short names', () => {
+      expect(shortDeviceName('AirPods')).toBe('AirPods');
+      expect(shortDeviceName('AirPods Pro')).toBe('AirPods Pro');
+    });
+
+    it('should handle empty/null/undefined gracefully', () => {
+      expect(shortDeviceName('')).toBe('Unknown');
+      expect(shortDeviceName(null as any)).toBe('Unknown');
+      expect(shortDeviceName(undefined as any)).toBe('Unknown');
+    });
+
+    it('should handle complex real-world device names', () => {
+      expect(shortDeviceName('Default - MacBook Pro Microphone')).toBe('MacBook Pro');
+      expect(shortDeviceName('Default - MacBook Pro Speakers')).toBe('MacBook Pro');
+      expect(shortDeviceName('External Microphone (Vendor 0x046d Product 0x0825)')).toBe('External');
+    });
+  });
+
+  describe('veryShortDeviceName', () => {
+    it('should return only first token', () => {
+      expect(veryShortDeviceName('MacBook Pro Microphone')).toBe('MacBook');
+      expect(veryShortDeviceName('AirPods Pro')).toBe('AirPods');
+    });
+
+    it('should handle "Default - " prefix', () => {
+      expect(veryShortDeviceName('Default - MacBook Pro Microphone')).toBe('MacBook');
+    });
+  });
+
+  describe('formatDeviceSummary', () => {
+    it('should format standard device summary', () => {
+      expect(formatDeviceSummary('MacBook Pro Microphone', 'MacBook Pro Speakers'))
+        .toBe('Mic: MacBook Pro • Out: MacBook Pro');
+    });
+
+    it('should handle "Default - " prefix', () => {
+      expect(formatDeviceSummary(
+        'Default - MacBook Pro Microphone',
+        'Default - MacBook Pro Speakers'
+      )).toBe('Mic: MacBook Pro • Out: MacBook Pro');
+    });
+
+    it('should handle different devices', () => {
+      expect(formatDeviceSummary('AirPods Pro', 'External Speaker'))
+        .toBe('Mic: AirPods Pro • Out: External');
+    });
+
+    it('should shorten long device names', () => {
+      expect(formatDeviceSummary(
+        'Logitech HD Webcam C920 Microphone',
+        'External USB Audio Device Speaker'
+      )).toBe('Mic: Logitech HD • Out: External USB');
+    });
+  });
+});

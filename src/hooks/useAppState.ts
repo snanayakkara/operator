@@ -36,6 +36,7 @@ export type UIOverlay =
   | 'screenshot-annotation'
   | 'bp-diary-importer'
   | 'patient-education'
+  | 'paste-notes'
   | 'field-ingestion'
   | 'processing-phase';
 
@@ -785,6 +786,23 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
 
     case 'SET_DISPLAY_SESSION': {
       const session = action.payload.session;
+
+      // Debug logging to trace session data loading
+      console.log('🔄 SET_DISPLAY_SESSION - Loading session data:', {
+        sessionId: session.id,
+        agentType: session.agentType,
+        patientName: session.patient?.name,
+        hasTranscription: !!session.transcription,
+        transcriptionLength: session.transcription?.length || 0,
+        hasResults: !!session.results,
+        resultsLength: session.results?.length || 0,
+        hasSummary: !!session.summary,
+        summaryLength: session.summary?.length || 0,
+        hasEducationData: !!session.educationData,
+        hasReviewData: !!session.reviewData,
+        hasTaviSections: !!session.taviStructuredSections
+      });
+
       return {
         ...state,
         selectedSessionId: session.id,

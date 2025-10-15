@@ -40,7 +40,6 @@ interface SessionDropdownProps {
 
 // Performance constants
 const INITIAL_VISIBLE_SESSIONS = 3; // Show only first 3 sessions in each category initially
-const MAX_SESSIONS_PER_CATEGORY = 8; // Maximum sessions to show even when expanded
 
 type TimelineState =
   | 'recording'
@@ -76,14 +75,14 @@ const getTimelineMetaFromState = (timelineState: TimelineState): TimelineMeta =>
   const processingState = stateMapping[timelineState];
   const colors = getStateColors(processingState);
 
-  // Icon mapping
+  // Icon mapping (using Tailwind classes instead of CSS variables)
   const iconMapping: Record<TimelineState, React.ReactNode> = {
-    'recording': <Mic className="w-3 h-3" style={{ color: `var(--color-${colors.indicator})` }} />,
-    'transcribing': <Loader2 className="w-3 h-3 animate-spin" style={{ color: `var(--color-${colors.indicator})` }} />,
-    'processing': <Cpu className="w-3 h-3" style={{ color: `var(--color-${colors.indicator})` }} />,
-    'needs_review': <ClipboardList className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />,
-    'completed': <CheckCircle2 className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />,
-    'error': <AlertTriangle className="w-3 h-3" style={{ color: `var(--color-${colors.text})` }} />
+    'recording': <Mic className={`w-3 h-3 text-${colors.indicator}`} />,
+    'transcribing': <Loader2 className={`w-3 h-3 animate-spin text-${colors.indicator}`} />,
+    'processing': <Cpu className={`w-3 h-3 text-${colors.indicator}`} />,
+    'needs_review': <ClipboardList className={`w-3 h-3 text-${colors.text}`} />,
+    'completed': <CheckCircle2 className={`w-3 h-3 text-${colors.text}`} />,
+    'error': <AlertTriangle className={`w-3 h-3 text-${colors.text}`} />
   };
 
   // Description mapping
@@ -475,9 +474,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     const perfStart = performance.now();
     console.time('📋 Visible Sessions Calculation Performance');
 
-    const completedLimit = showAllCompleted ? MAX_SESSIONS_PER_CATEGORY : INITIAL_VISIBLE_SESSIONS;
-    const inProgressLimit = showAllInProgress ? MAX_SESSIONS_PER_CATEGORY : INITIAL_VISIBLE_SESSIONS;
-    const erroredLimit = showAllErrored ? MAX_SESSIONS_PER_CATEGORY : INITIAL_VISIBLE_SESSIONS;
+    const completedLimit = showAllCompleted ? sessionCategories.completed.length : INITIAL_VISIBLE_SESSIONS;
+    const inProgressLimit = showAllInProgress ? sessionCategories.inProgress.length : INITIAL_VISIBLE_SESSIONS;
+    const erroredLimit = showAllErrored ? sessionCategories.errored.length : INITIAL_VISIBLE_SESSIONS;
 
     const result = {
       completed: sessionCategories.completed.slice(0, completedLimit),
@@ -585,7 +584,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
         left: computedPos.left,
         right: computedPos.right,
         width: '320px',
-        maxHeight: '480px',
+        maxHeight: '960px',
         zIndex: 9990
       };
     }
@@ -594,7 +593,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       top: '60px',
       right: '16px',
       width: '320px',
-      maxHeight: '480px',
+      maxHeight: '960px',
       zIndex: 9990
     };
   }, [computedPos]);
@@ -638,7 +637,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       </div>
 
       {/* Sessions List */}
-      <div className="max-h-96 overflow-y-auto">
+      <div className="max-h-[768px] overflow-y-auto">
         {/* In Progress Sessions */}
         {sessionCategories.inProgress.length > 0 && (
           <div className="p-2">

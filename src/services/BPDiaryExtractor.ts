@@ -26,29 +26,35 @@ export class BPDiaryExtractor {
 
   /**
    * Extract BP readings from an image
+   * @param imageDataUrl - Base64 encoded image data URL
+   * @param signal - Optional AbortSignal for cancellation
+   * @param modelOverride - Optional model name to use instead of default
    */
   public async extractFromImage(
     imageDataUrl: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modelOverride?: string
   ): Promise<BPExtractionResult> {
     const startTime = Date.now();
 
     try {
       logger.info('Starting BP diary extraction', {
         component: 'bp-extractor',
-        imageSize: imageDataUrl.length
+        imageSize: imageDataUrl.length,
+        model: modelOverride || 'default'
       });
 
       // Build extraction prompt (text-only, image sent separately)
       const textPrompt = this.buildExtractionPrompt();
 
-      // Call LM Studio vision API with Gemma-3n-e4b (vision-capable model)
+      // Call LM Studio vision API with user-selected model
       const response = await this.lmStudioService.processWithVisionAgent(
         this.getSystemPrompt(),
         textPrompt,
         imageDataUrl,
         'bp-diary-extraction', // Custom agent type for potential future optimization
-        signal
+        signal,
+        modelOverride // Pass model override to LMStudioService
       );
 
       logger.info('Received LM Studio response', {

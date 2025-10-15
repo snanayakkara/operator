@@ -34,6 +34,7 @@ interface WorkflowButtonsProps {
   voiceActivityLevel?: number;
   recordingTime?: number;
   whisperServerRunning?: boolean;
+  onPasteLetterClick?: () => void;
 }
 
 // Optimized icon mapping

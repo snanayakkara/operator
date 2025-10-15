@@ -32,6 +32,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
   private readonly complications = ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE.complications;
   private readonly hemodynamicNormals = ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE.hemodynamicNormals;
   private readonly terminologyCorrections = ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE.terminologyCorrections;
+  private readonly criticalFindings = ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE.criticalFindings;
 
   constructor() {
     super(
@@ -75,15 +76,29 @@ export class AngiogramPCIAgent extends MedicalAgent {
 
       // Correct terminology
       const correctedInput = this.correctTerminology(input);
-      
+
+      // Detect critical findings that must be preserved
+      const criticalFindingsDetected = this.detectCriticalFindings(correctedInput);
+      if (criticalFindingsDetected.length > 0) {
+        console.log(`🔴 Critical findings detected: ${criticalFindingsDetected.join(', ')}`);
+        this.updateMemory('criticalFindings', criticalFindingsDetected);
+      }
+
       // Extract relevant data based on procedure type
       const procedureData = this.extractProcedureData(correctedInput, procedureType);
-      
+
       // Detect missing information
       const missingInfo = await this.detectMissingInformation(correctedInput, procedureType);
-      
+
       // Generate structured report content based on procedure type
       const reportContent = await this.generateStructuredReport(correctedInput, procedureData, procedureType);
+
+      // Validate dominance before normalization
+      const dominanceValidation = this.validateDominance(correctedInput, reportContent);
+      if (dominanceValidation.hasContradiction) {
+        console.warn(`⚠️ Dominance mismatch: input="${dominanceValidation.dictatedDominance}", output="${dominanceValidation.reportedDominance}"`);
+      }
+
       const normalizedReportContent = this.normalizeReportContent(reportContent, procedureData, procedureType);
 
       // Parse response into sections
@@ -102,6 +117,12 @@ export class AngiogramPCIAgent extends MedicalAgent {
       // Add missing information warnings to metadata
       if (missingInfo) {
         report.metadata.missingInformation = missingInfo;
+      }
+
+      // Add patient summary if present
+      const patientSummary = this.getMemory().shortTerm['patientSummary'];
+      if (patientSummary) {
+        report.metadata.patientSummary = patientSummary;
       }
 
       // Add medical codes based on procedure type
@@ -201,9 +222,6 @@ ${input}`;
 
     // Detect procedure type if not already stored in memory
     const procedureType: ProcedureType = this.getMemory().shortTerm['detectedProcedureType'] || 'DIAGNOSTIC_ANGIOGRAM';
-    // Always use unified 3-section report format
-    const contextualSystemPrompt = this.systemPrompt +
-      '\n\nFORMAT: Output exactly three sections labelled PREAMBLE, FINDINGS, and CONCLUSION. Place procedural technique details in the PREAMBLE, structure FINDINGS with explicit subsections (Left Main, Left Anterior Descending (LAD), Left Circumflex (LCx), Right Coronary Artery (RCA)), and keep the CONCLUSION to two or three sentences totalling about 30 words.';
 
     const userPrompt = `Generate a ${procedureType.toLowerCase().replace('_', ' ')} report using the appropriate format.
 
@@ -213,7 +231,7 @@ ${input}
 Use the clinician's exact terminology as provided. Include all relevant details while maintaining clinical accuracy and proper medical terminology.`;
 
     return [
-      { role: 'system', content: contextualSystemPrompt },
+      { role: 'system', content: this.systemPrompt },
       { role: 'user', content: userPrompt }
     ];
   }
@@ -221,48 +239,44 @@ Use the clinician's exact terminology as provided. Include all relevant details 
   protected parseResponse(response: string, _context?: MedicalContext): ReportSection[] {
     // Get procedure type from memory
     const procedureType: ProcedureType = this.getMemory().shortTerm['detectedProcedureType'] || 'DIAGNOSTIC_ANGIOGRAM';
+
+    // Extract sections from content
+    const extractedSections = this.extractSectionsFromContent(response);
+
+    // Check for PATIENT SUMMARY and store in metadata if present
+    const patientSummary = extractedSections['PATIENT SUMMARY'];
+    if (patientSummary && patientSummary.trim()) {
+      // Store in memory to be picked up by report creation
+      this.updateMemory('patientSummary', patientSummary.trim());
+    }
+
+    // Build sections in canonical order: CONCLUSION → PREAMBLE → PROCEDURE → FINDINGS
     const sections: ReportSection[] = [];
-    const lines = response.split('\n');
-    let currentSection: ReportSection | null = null;
+    const sectionOrder = ['CONCLUSION', 'PREAMBLE', 'PROCEDURE', 'FINDINGS'];
 
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
-
-      // Check if this is a section header
-      if (this.isSectionHeader(trimmedLine, procedureType)) {
-        // Save previous section
-        if (currentSection) {
-          sections.push(currentSection);
-        }
-
-        // Start new section
-        currentSection = {
-          title: this.cleanSectionTitle(trimmedLine),
-          content: '',
+    for (const sectionName of sectionOrder) {
+      const content = extractedSections[sectionName];
+      if (content && content.trim()) {
+        sections.push({
+          title: sectionName,
+          content: content.trim(),
           type: 'structured',
-          priority: this.getSectionPriority(trimmedLine, procedureType)
-        };
-      } else if (currentSection) {
-        // Add content to current section
-        currentSection.content += (currentSection.content ? '\n' : '') + trimmedLine;
-      } else if (trimmedLine && !currentSection) {
-        // Handle content without explicit headers (fallback)
-        const defaultTitle = procedureType === 'DIAGNOSTIC_ANGIOGRAM' 
-          ? 'Angiogram Report' 
-          : 'Cardiac Catheterization Report';
-        currentSection = {
-          title: defaultTitle,
-          content: trimmedLine,
-          type: 'structured',
-          priority: 'high'
-        };
+          priority: this.getSectionPriority(sectionName, procedureType)
+        });
       }
     }
 
-    // Add final section
-    if (currentSection) {
-      sections.push(currentSection);
+    // Fallback if no sections were found
+    if (sections.length === 0) {
+      const defaultTitle = procedureType === 'DIAGNOSTIC_ANGIOGRAM'
+        ? 'Angiogram Report'
+        : 'Cardiac Catheterization Report';
+      sections.push({
+        title: defaultTitle,
+        content: response.trim(),
+        type: 'structured',
+        priority: 'high'
+      });
     }
 
     return sections;
@@ -309,27 +323,23 @@ Use the clinician's exact terminology as provided. Include all relevant details 
   }
 
   private async generateStructuredReport(
-    input: string, 
-    procedureData: any, 
+    input: string,
+    procedureData: any,
     procedureType: ProcedureType
   ): Promise<string> {
     console.log(`🏥 Generating ${procedureType} report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
-    
+
     try {
-      // Use processWithAgent with unified three-section format instruction
-      const contextualSystemPrompt = this.systemPrompt +
-        '\n\nFORMAT: Produce three sections titled PREAMBLE, FINDINGS, and CONCLUSION. PREAMBLE should cover patient context and procedural setup, FINDINGS must contain subsections for Left Main, Left Anterior Descending (LAD), Left Circumflex (LCx), and Right Coronary Artery (RCA), and CONCLUSION should be limited to two or three sentences (~30 words).';
-      
-      const report = await this.lmStudioService.processWithAgent(contextualSystemPrompt, input);
-      
+      const report = await this.lmStudioService.processWithAgent(this.systemPrompt, input);
+
       console.log('✅ Report generated successfully');
       console.log('📄 Report length:', report.length, 'characters');
-      
+
       return report;
-      
+
     } catch (error) {
       console.error('❌ Error generating report:', error);
-      
+
       // Fallback to basic structured format
       return this.generateFallbackReport(input, procedureData, procedureType);
     }
@@ -346,30 +356,36 @@ Use the clinician's exact terminology as provided. Include all relevant details 
 
     const sections = this.extractSectionsFromContent(reportContent);
 
-    let preamble = (sections['PREAMBLE'] || '').trim();
-    let findings = (sections['FINDINGS'] || sections['FINDINGS/PROCEDURE'] || '').trim();
-    const procedureSection = (sections['PROCEDURE'] || '').trim();
+    // Extract all four sections (no merging)
     let conclusion = (sections['CONCLUSION'] || '').trim();
+    let preamble = (sections['PREAMBLE'] || '').trim();
+    let procedure = (sections['PROCEDURE'] || '').trim();
+    let findings = (sections['FINDINGS'] || '').trim();
 
-    if (procedureSection) {
-      preamble = [preamble, procedureSection].filter(Boolean).join('\n\n').trim();
-    }
-
-    if (!preamble) {
-      preamble = this.generateFallbackPreamble(procedureData);
-    }
-
-    const normalizedFindings = this.normalizeFindingsSection(findings, procedureData);
-
+    // If all four headings exist but content is missing, try fallbacks
     if (!conclusion) {
       conclusion = this.buildFallbackConclusion(procedureData, procedureType);
     }
+    if (!preamble) {
+      preamble = this.generateFallbackPreamble(procedureData);
+    }
+    if (!procedure && (procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED')) {
+      procedure = 'Procedure details not specified in dictation.';
+    }
+    if (!findings) {
+      findings = this.normalizeFindingsSection('', procedureData);
+    } else {
+      findings = this.normalizeFindingsSection(findings, procedureData);
+    }
+
     const conciseConclusion = this.limitConclusionLength(conclusion);
 
+    // Build sections in canonical order: CONCLUSION → PREAMBLE → PROCEDURE → FINDINGS
     const formattedSections = [
+      { title: 'CONCLUSION', content: conciseConclusion.trim() },
       { title: 'PREAMBLE', content: preamble.trim() },
-      { title: 'FINDINGS', content: normalizedFindings.trim() },
-      { title: 'CONCLUSION', content: conciseConclusion.trim() }
+      { title: 'PROCEDURE', content: procedure.trim() },
+      { title: 'FINDINGS', content: findings.trim() }
     ].filter(section => section.content.length > 0);
 
     return formattedSections
@@ -381,11 +397,11 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     const sections: Record<string, string> = {};
     const lines = content.split('\n');
     const knownHeaders = new Set([
+      'CONCLUSION',
       'PREAMBLE',
-      'FINDINGS',
-      'FINDINGS/PROCEDURE',
       'PROCEDURE',
-      'CONCLUSION'
+      'FINDINGS',
+      'PATIENT SUMMARY'
     ]);
 
     let currentHeader: string | null = null;
@@ -394,7 +410,8 @@ Use the clinician's exact terminology as provided. Include all relevant details 
       const line = rawLine.trim();
       if (!line) continue;
 
-      const normalized = line.replace(/\*/g, '').replace(/:$/, '').trim().toUpperCase();
+      // Normalize: strip **, trailing :, trim, uppercase
+      const normalized = line.replace(/\*\*/g, '').replace(/:$/, '').trim().toUpperCase();
 
       if (knownHeaders.has(normalized)) {
         currentHeader = normalized;
@@ -415,6 +432,19 @@ Use the clinician's exact terminology as provided. Include all relevant details 
   private normalizeFindingsSection(findingsContent: string, procedureData: any): string {
     const baseContent = findingsContent || '';
     let workingContent = baseContent;
+
+    // Check if critical findings from input are present in findings content
+    const criticalFindingsFromInput = this.getMemory().shortTerm['criticalFindings'] || [];
+    if (criticalFindingsFromInput.length > 0) {
+      const findingsLower = workingContent.toLowerCase();
+      const missingCriticalFindings = criticalFindingsFromInput.filter(
+        (finding: string) => !findingsLower.includes(finding.toLowerCase())
+      );
+
+      if (missingCriticalFindings.length > 0) {
+        console.warn(`⚠️ Critical findings missing from FINDINGS section: ${missingCriticalFindings.join(', ')}`);
+      }
+    }
 
     let coronaryAnatomy = '';
     const coronaryMatch = workingContent.match(/coronary anatomy[:\s-]*([^\n]+)/i);
@@ -525,32 +555,13 @@ Use the clinician's exact terminology as provided. Include all relevant details 
   }
 
   private generateFallbackPreamble(procedureData: any): string {
-    const sentences: string[] = [];
-    const indication = procedureData.indication || 'coronary assessment';
-    sentences.push(`Cardiac catheterisation performed for ${indication}.`);
+    // Use neutral language when indication is not explicitly provided
+    // Do not fabricate clinical context like symptoms or test results
+    const indication = procedureData.indication && procedureData.indication !== 'coronary assessment'
+      ? procedureData.indication
+      : 'coronary assessment';
 
-    if (procedureData.accessSite) {
-      sentences.push(`${procedureData.accessSite}.`);
-    } else {
-      sentences.push('Arterial access site not specified in the dictation.');
-    }
-
-    const proceduralDetails: string[] = [];
-    if (procedureData.contrastVolume) {
-      proceduralDetails.push(procedureData.contrastVolume);
-    }
-    if (procedureData.fluoroscopyTime) {
-      proceduralDetails.push(procedureData.fluoroscopyTime);
-    }
-    if (proceduralDetails.length > 0) {
-      sentences.push(proceduralDetails.join(', ') + '.');
-    }
-
-    if (procedureData.proceduralOutcome) {
-      sentences.push(procedureData.proceduralOutcome + '.');
-    }
-
-    return sentences.join(' ');
+    return `Cardiac catheterisation performed for ${indication}.`;
   }
 
   private buildFallbackConclusion(procedureData: any, procedureType: ProcedureType): string {
@@ -585,23 +596,52 @@ Use the clinician's exact terminology as provided. Include all relevant details 
 
   private generateFallbackReport(_input: string, procedureData: any, procedureType: ProcedureType): string {
     const pciPerformed = procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED';
-    return `**PREAMBLE**
-Cardiac catheterization performed. ${procedureData.accessSite || '[Access details not specified]'}${procedureData.contrastVolume ? `, Contrast: ${procedureData.contrastVolume}` : ''}${procedureData.fluoroscopyTime ? `, Fluoroscopy: ${procedureData.fluoroscopyTime}` : ''}.
 
-**FINDINGS/PROCEDURE**
-Coronary anatomy and dominance: [Not specified in dictation]
-Left Main: ${this.describeLMFindings(procedureData) || '[Not specified in dictation]'}
-Left Anterior Descending: ${this.describeLADFindings(procedureData) || '[Not specified in dictation]'}
-Circumflex: ${this.describeLCxFindings(procedureData) || '[Not specified in dictation]'}
-Right Coronary Artery: ${this.describeRCAFindings(procedureData) || '[Not specified in dictation]'}
-Left ventricle/valves/hemodynamics: ${procedureData.hemodynamics || '[Not specified in dictation]'}
-${pciPerformed ? `\nPCI Details:\n- Target lesion/vessel: ${procedureData.interventionDetails?.targetVessel || '[Not specified]'}\n- Lesion characteristics: ${procedureData.interventionDetails?.lesionCharacteristics || '[Not specified]'}\n- Strategy: ${procedureData.interventionDetails?.interventionType || '[Not specified]'}\n- Devices: ${procedureData.interventionDetails?.stentDetails || '[Not specified]'}\n- Result: ${procedureData.interventionDetails?.angiographicResult || '[Not specified]'}\n- Intra-procedural meds: ${procedureData.interventionDetails?.medications || '[Not specified]'}\n` : ''}
-Complications: ${procedureData.complications.length > 0 ? procedureData.complications.join(', ') : '[None specified]'}
-
-**CONCLUSION**
-${pciPerformed 
+    // CONCLUSION first
+    const conclusion = pciPerformed
       ? `${procedureData.proceduralOutcome || 'PCI completed.'} Post-procedural plan: [Not specified].`
-      : `${procedureData.proceduralOutcome || 'Coronary angiography completed.'} Clinical correlation recommended.`}
+      : `${procedureData.proceduralOutcome || 'Coronary angiography completed.'} Clinical correlation recommended.`;
+
+    // PREAMBLE - patient context and indication
+    const preamble = `Cardiac catheterisation performed for ${procedureData.indication || 'coronary assessment'}.`;
+
+    // PROCEDURE - technique details
+    const procedureDetails = [
+      procedureData.accessSite || '[Access details not specified]',
+      procedureData.contrastVolume ? `Contrast: ${procedureData.contrastVolume}` : null,
+      procedureData.fluoroscopyTime ? `Fluoroscopy: ${procedureData.fluoroscopyTime}` : null,
+      pciPerformed ? `\nPCI Details:\n- Target lesion/vessel: ${procedureData.interventionDetails?.targetVessel || '[Not specified]'}\n- Lesion characteristics: ${procedureData.interventionDetails?.lesionCharacteristics || '[Not specified]'}\n- Strategy: ${procedureData.interventionDetails?.interventionType || '[Not specified]'}\n- Devices: ${procedureData.interventionDetails?.stentDetails || '[Not specified]'}\n- Result: ${procedureData.interventionDetails?.angiographicResult || '[Not specified]'}\n- Intra-procedural meds: ${procedureData.interventionDetails?.medications || '[Not specified]'}` : null,
+      `Complications: ${procedureData.complications.length > 0 ? procedureData.complications.join(', ') : 'None'}`
+    ].filter(Boolean).join('. ');
+
+    // FINDINGS - coronary anatomy
+    const findings = `Coronary anatomy and dominance: [Not specified in dictation]
+
+Left Main
+${this.describeLMFindings(procedureData) || '[Not specified in dictation]'}
+
+Left Anterior Descending (LAD)
+${this.describeLADFindings(procedureData) || '[Not specified in dictation]'}
+
+Left Circumflex (LCx)
+${this.describeLCxFindings(procedureData) || '[Not specified in dictation]'}
+
+Right Coronary Artery (RCA)
+${this.describeRCAFindings(procedureData) || '[Not specified in dictation]'}
+
+Left ventricle/valves/hemodynamics: ${procedureData.hemodynamics || '[Not specified in dictation]'}`;
+
+    return `**CONCLUSION**
+${conclusion}
+
+**PREAMBLE**
+${preamble}
+
+**PROCEDURE**
+${procedureDetails}
+
+**FINDINGS**
+${findings}
 
 Note: This report was generated with limited AI processing due to technical issues.`;
   }
@@ -614,14 +654,20 @@ DICTATION TO ANALYZE:
 ${input}`;
 
       const response = await this.lmStudioService.processWithAgent(missingInfoPrompt, input);
-      
+
       try {
         const missingInfo = JSON.parse(response.replace(/```json|```/g, '').trim());
+
+        // Ensure completeness_score is an integer (not a string like "75%")
+        if (typeof missingInfo.completeness_score === 'string') {
+          missingInfo.completeness_score = parseInt(missingInfo.completeness_score.replace('%', ''), 10);
+        }
+
         return missingInfo;
       } catch (parseError) {
         return this.fallbackMissingInfoDetection(input, procedureType);
       }
-      
+
     } catch (error) {
       console.error('❌ Error detecting missing information:', error);
       return this.fallbackMissingInfoDetection(input, procedureType);
@@ -632,28 +678,77 @@ ${input}`;
     const text = input.toLowerCase();
     const missing = {
       procedure_type: procedureType,
+      missing_preamble: [] as string[],
+      missing_procedure: [] as string[],
       missing_diagnostic: [] as string[],
       missing_intervention: [] as string[],
-      completeness_score: "75%"
+      ask_for: [] as string[],
+      completeness_score: 75
     };
+
+    // Check preamble elements
+    if (!text.includes('indication') && !text.includes('reason') && !text.includes('referred')) {
+      missing.missing_preamble.push('Indication or symptoms prompting angiography');
+      missing.ask_for.push('What was the clinical indication for this procedure?');
+    }
+
+    // Check procedure elements
+    if (!text.includes('radial') && !text.includes('femoral') && !text.includes('access')) {
+      missing.missing_procedure.push('Access site');
+      missing.ask_for.push('Which access site was used?');
+    }
+    if (!text.includes('contrast') && !text.includes('ml')) {
+      missing.missing_procedure.push('Contrast volume');
+    }
+    if (!text.includes('fluoroscopy') && !text.includes('fluoro')) {
+      missing.missing_procedure.push('Fluoroscopy time');
+    }
 
     // Check diagnostic elements
     if (!text.includes('left main') && !text.includes('lm ')) {
-      missing.missing_diagnostic.push('Left Main coronary artery');
+      missing.missing_diagnostic.push('Left Main coronary artery findings');
+      missing.ask_for.push('What were the Left Main findings?');
     }
     if (!text.includes('lad') && !text.includes('left anterior descending')) {
-      missing.missing_diagnostic.push('Left Anterior Descending artery');
+      missing.missing_diagnostic.push('Left Anterior Descending artery findings');
+      missing.ask_for.push('What were the LAD findings?');
+    }
+    if (!text.includes('lcx') && !text.includes('circumflex')) {
+      missing.missing_diagnostic.push('Left Circumflex artery findings');
+    }
+    if (!text.includes('rca') && !text.includes('right coronary')) {
+      missing.missing_diagnostic.push('Right Coronary Artery findings');
     }
 
     // Check intervention elements if applicable
     if (procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED') {
       if (!text.includes('stent') && !text.includes('balloon')) {
         missing.missing_intervention.push('Device specifications');
+        missing.ask_for.push('What devices were used in the intervention?');
       }
       if (!text.includes('timi')) {
         missing.missing_intervention.push('TIMI flow assessment');
+        missing.ask_for.push('What was the final TIMI flow?');
+      }
+      if (!text.includes('complications') && !text.includes('complication')) {
+        missing.missing_intervention.push('Complications status');
       }
     }
+
+    // Calculate completeness score based on missing items
+    const totalPossibleItems =
+      2 + // preamble (indication + prior revascularisation)
+      4 + // procedure (access, catheters, meds, contrast/fluoro, closure, complications)
+      5 + // diagnostic (dominance, LM, LAD, LCx, RCA)
+      (procedureType !== 'DIAGNOSTIC_ANGIOGRAM' ? 4 : 0); // intervention (target, devices, adjuncts, outcomes)
+
+    const missingItemsCount =
+      missing.missing_preamble.length +
+      missing.missing_procedure.length +
+      missing.missing_diagnostic.length +
+      missing.missing_intervention.length;
+
+    missing.completeness_score = Math.max(0, Math.round(100 - (missingItemsCount / totalPossibleItems) * 100));
 
     return missing;
   }
@@ -872,32 +967,20 @@ ${input}`;
   }
 
   // Section parsing helpers
-  private isSectionHeader(line: string, _procedureType: ProcedureType): boolean {
-    const normalizedLine = line.toLowerCase().replace(/\*/g, '').trim();
-    return normalizedLine === 'preamble' ||
-           normalizedLine === 'findings' ||
-           normalizedLine === 'findings/procedure' ||
-           normalizedLine === 'conclusion' ||
-           (line.startsWith('**') && line.endsWith('**')) ||
-           (line.toUpperCase() === line && line.length > 3);
-  }
-
   private getSectionPriority(line: string, _procedureType: ProcedureType): 'high' | 'medium' | 'low' {
-    const highPriority = [
-      'preamble', 'findings', 'findings/procedure', 'conclusion', 'procedure', 'indication', 
-      'complications', 'assessment', 'device', 'angiographic', 'hemodynamic'
-    ];
-    const title = line.toLowerCase();
-    
-    for (const keyword of highPriority) {
-      if (title.includes(keyword)) return 'high';
-    }
-    
-    return 'medium';
-  }
+    const normalized = line.toUpperCase();
 
-  private cleanSectionTitle(line: string): string {
-    return line.replace(/\*\*/g, '').replace(/:/g, '').trim();
+    // CONCLUSION and FINDINGS are high priority
+    if (normalized === 'CONCLUSION' || normalized === 'FINDINGS') {
+      return 'high';
+    }
+
+    // PREAMBLE and PROCEDURE are medium priority
+    if (normalized === 'PREAMBLE' || normalized === 'PROCEDURE') {
+      return 'medium';
+    }
+
+    return 'medium';
   }
 
   // Helper methods for vessel findings display
@@ -915,5 +998,171 @@ ${input}`;
 
   private describeRCAFindings(procedureData: any): string {
     return procedureData.vesselFindings?.rca || '[RCA findings not specified in dictation]';
+  }
+
+  /**
+   * Detect critical findings in the input that must be preserved in output
+   */
+  private detectCriticalFindings(input: string): string[] {
+    const text = input.toLowerCase();
+    const detected: string[] = [];
+
+    for (const finding of this.criticalFindings) {
+      if (text.includes(finding.toLowerCase())) {
+        detected.push(finding);
+      }
+    }
+
+    return detected;
+  }
+
+  /**
+   * Validate dominance mentioned in dictation and check for contradictions in output
+   */
+  private validateDominance(input: string, reportContent: string): {
+    dictatedDominance: 'right' | 'left' | 'codominant' | 'unspecified';
+    reportedDominance: 'right' | 'left' | 'codominant' | 'unspecified';
+    hasContradiction: boolean;
+  } {
+    const inputText = input.toLowerCase();
+    const reportText = reportContent.toLowerCase();
+
+    // Detect dominance from input dictation
+    let dictatedDominance: 'right' | 'left' | 'codominant' | 'unspecified' = 'unspecified';
+    if (inputText.includes('dominant rca') || inputText.includes('dominant right')) {
+      dictatedDominance = 'right';
+    } else if (inputText.includes('dominant lcx') || inputText.includes('dominant circumflex') || inputText.includes('dominant left')) {
+      dictatedDominance = 'left';
+    } else if (inputText.includes('codominant') || inputText.includes('co-dominant')) {
+      dictatedDominance = 'codominant';
+    }
+
+    // Detect dominance from report output
+    let reportedDominance: 'right' | 'left' | 'codominant' | 'unspecified' = 'unspecified';
+    if (reportText.includes('right dominant') || reportText.includes('rca') && reportText.includes('dominant')) {
+      reportedDominance = 'right';
+    } else if (reportText.includes('left dominant') || reportText.includes('lcx') && reportText.includes('dominant')) {
+      reportedDominance = 'left';
+    } else if (reportText.includes('codominant') || reportText.includes('co-dominant')) {
+      reportedDominance = 'codominant';
+    }
+
+    // Check for contradiction
+    const hasContradiction =
+      dictatedDominance !== 'unspecified' &&
+      reportedDominance !== 'unspecified' &&
+      dictatedDominance !== reportedDominance;
+
+    if (hasContradiction) {
+      console.warn(`⚠️ Dominance contradiction detected: dictation says "${dictatedDominance}" but report says "${reportedDominance}"`);
+    }
+
+    return { dictatedDominance, reportedDominance, hasContradiction };
+  }
+
+  /**
+   * Generate a patient-friendly version of an angiogram/PCI report
+   * Converts medical jargon into accessible language for patients
+   */
+  async generatePatientVersion(medicalReport: string): Promise<string> {
+    try {
+      const startTime = Date.now();
+
+      console.log('🎯 AngiogramPCI: Generating patient-friendly version');
+
+      // Build the prompt for patient version conversion
+      const conversionPrompt = `${ANGIOGRAM_PCI_SYSTEM_PROMPTS.patientVersion}
+
+TECHNICAL REPORT TO CONVERT:
+${medicalReport}
+
+Please rewrite this cardiac catheterisation report in clear, patient-friendly language that patients and their families can easily understand.`;
+
+      // Process with LMStudio service
+      const patientFriendlyContent = await this.lmStudioService.processWithAgent(
+        conversionPrompt,
+        medicalReport,
+        'angiogram-pci'
+      );
+
+      // Clean up the patient version content
+      const cleanedContent = this.cleanPatientVersionContent(patientFriendlyContent);
+
+      const processingTime = Date.now() - startTime;
+      console.log(`✅ Patient version generated in ${processingTime}ms`);
+
+      return cleanedContent;
+
+    } catch (error) {
+      console.error('❌ Error generating patient version:', error);
+
+      // Fallback patient-friendly message
+      return `Dear Patient,
+
+We performed a heart catheterisation procedure to examine your coronary arteries (the blood vessels that supply your heart muscle).
+
+${this.createFallbackPatientVersion(medicalReport)}
+
+If you have any questions about these results, please don't hesitate to contact your cardiologist.`;
+    }
+  }
+
+  /**
+   * Clean and format patient version content
+   */
+  private cleanPatientVersionContent(content: string): string {
+    let cleaned = content.trim();
+
+    // Remove any system prompt artifacts
+    cleaned = cleaned.replace(/^(You are|Please rewrite|TECHNICAL REPORT|Patient Version|CONVERSION:).*$/gim, '');
+
+    // Ensure proper paragraph spacing
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    // Replace common cardiac abbreviations with full terms
+    const cardiacAbbreviations: Record<string, string> = {
+      'LAD': 'left anterior descending artery',
+      'LCx': 'left circumflex artery',
+      'RCA': 'right coronary artery',
+      'LM': 'left main artery',
+      'PCI': 'angioplasty',
+      'DES': 'drug-coated stent',
+      'TIMI': 'blood flow',
+      'LVEDP': 'heart pressure',
+      'CAD': 'coronary artery disease',
+      'MI': 'heart attack',
+      'STEMI': 'severe heart attack',
+      'NSTEMI': 'heart attack'
+    };
+
+    // Replace abbreviations with full terms (only if not already explained in parentheses)
+    Object.entries(cardiacAbbreviations).forEach(([abbrev, fullTerm]) => {
+      const regex = new RegExp(`\\b${abbrev}\\b(?!\\s*\\()`, 'gi');
+      cleaned = cleaned.replace(regex, fullTerm);
+    });
+
+    return cleaned.trim();
+  }
+
+  /**
+   * Create a simple fallback patient version
+   */
+  private createFallbackPatientVersion(medicalReport: string): string {
+    const text = medicalReport.toLowerCase();
+
+    // Extract key information
+    const hasIntervention = text.includes('stent') || text.includes('angioplasty');
+    const hasNormalFindings = text.includes('normal') && !text.includes('abnormal');
+    const hasBlockage = text.includes('stenosis') || text.includes('blockage') || text.includes('narrowing');
+
+    if (hasNormalFindings && !hasBlockage) {
+      return `Good news - your coronary arteries appear healthy with no significant blockages. We recommend continuing with your current medications and regular follow-up appointments.`;
+    } else if (hasIntervention) {
+      return `We found narrowing in one or more of your heart arteries and treated it during the procedure by opening the artery with a balloon and placing a stent (a small mesh tube) to keep it open. You'll need to take blood-thinning medications to help the stent work properly.`;
+    } else if (hasBlockage) {
+      return `We found some narrowing in your heart arteries. Your cardiologist will discuss the findings with you and recommend the best treatment plan, which may include medications or further procedures.`;
+    }
+
+    return `We completed the catheterisation procedure to examine your heart arteries. Your cardiologist will discuss the detailed findings and recommendations with you at your follow-up appointment.`;
   }
 }

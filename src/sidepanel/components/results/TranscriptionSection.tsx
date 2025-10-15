@@ -70,6 +70,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   const [transcriptionCopied, setTranscriptionCopied] = useState(false);
   const [transcriptionInserted, setTranscriptionInserted] = useState(false);
   const [editedTranscription, setEditedTranscription] = useState(originalTranscription || '');
+  const [reprocessExpanded, setReprocessExpanded] = useState(false);
 
   // Component renders optimally when memoized properly
 
@@ -249,7 +250,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             {approvalState && onTranscriptionApprove && (
               <div className="mb-3 p-3 bg-white border rounded-lg">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-medium text-gray-800">Training Data Quality Control</h4>
+                  <h4 className="text-sm font-medium text-gray-800">Transcription</h4>
                   <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                     approvalState.status === 'pending' ? 'bg-gray-100 text-gray-700' :
                     approvalState.status === 'approved' ? 'bg-green-100 text-green-700' :
@@ -262,16 +263,10 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                     {approvalState.status === 'skipped' && '⏭️ Skipped'}
                   </div>
                 </div>
-                
-                <p className="text-xs text-gray-600 mb-3">
-                  {approvalState.status === 'pending' && "Choose how to handle this transcription for AI training:"}
-                  {approvalState.status === 'approved' && "This transcription has been approved and will be used for training."}
-                  {approvalState.status === 'edited' && "Your corrections will improve future transcriptions."}
-                  {approvalState.status === 'skipped' && "This transcription won't be used for training."}
-                </p>
 
                 <div className="grid grid-cols-3 gap-2">
                   <button
+                    type="button"
                     onClick={() => onTranscriptionApprove('approved')}
                     disabled={approvalState.status === 'approved'}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
@@ -286,6 +281,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => {
                       if (approvalState.status !== 'edited') {
                         onTranscriptionApprove('edited');
@@ -303,6 +299,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => onTranscriptionApprove('skipped')}
                     disabled={approvalState.status === 'skipped'}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
@@ -316,6 +313,22 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                     <span>Skip</span>
                   </button>
                 </div>
+
+                {/* Send for Corrections button - only show when edited */}
+                {approvalState.status === 'edited' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Submit edited transcription for training by marking as approved
+                      console.log('✅ Submitting edited transcription for training');
+                      onTranscriptionApprove('approved');
+                    }}
+                    className="mt-2 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all bg-blue-600 hover:bg-blue-700 text-white border border-blue-700"
+                    title="Submit your corrections to improve AI training"
+                  >
+                    Send for Corrections
+                  </button>
+                )}
               </div>
             )}
             
@@ -350,67 +363,57 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             </div>
           </div>
 
-          {/* Training Data Link */}
-          <div className="mt-2 text-center">
-            <p className="text-xs text-gray-500">
-              {approvalState?.status === 'pending' 
-                ? 'Choose how to handle this transcription above - training data is only submitted with your explicit approval.'
-                : approvalState?.status === 'approved'
-                ? 'This approved transcription will help train Whisper.'
-                : approvalState?.status === 'edited'
-                ? 'Your corrections will help train Whisper to be more accurate.'
-                : approvalState?.status === 'skipped'
-                ? 'This transcription will not be used for training.'
-                : 'Training data is only submitted with your explicit approval.'
-              }{' '}
-              <button 
-                className="text-blue-600 underline hover:text-blue-800"
-                onClick={() => {
-                  // Open settings modal with LocalCorrectionsViewer
-                  console.log('🎯 User wants to view training contributions - would open settings modal');
-                  // This could trigger a callback to parent to show settings modal
-                }}
-              >
-                View your contributions
-              </button>
-            </p>
-          </div>
 
-          {/* Audio Playback Component */}
+          {/* Audio Playback Component with Quality Bar */}
           {audioBlob && (
             <div className="mt-3">
-              <AudioPlayback 
+              <AudioPlayback
                 audioBlob={audioBlob}
                 fileName={`transcription-${currentAgent || 'recording'}`}
-                className="bg-white border-gray-200"
+                className=""
+                showQualityBar={true}
+                defaultExpanded={false}
               />
             </div>
           )}
           
-          {/* Reprocess agents */}
+          {/* Reprocess agents - Collapsible */}
           {onAgentReprocess && (
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-600 mb-2">Reprocess with different agent:</p>
-              <div className="flex flex-wrap gap-2">
-                {availableAgents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    onClick={() => handleReprocess(agent.id as AgentType)}
-                    disabled={isProcessing}
-                    className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center space-x-1 ${
-                      currentAgent === agent.id 
-                        ? 'bg-blue-50 border-blue-200 text-blue-700' 
-                        : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <span>{agent.icon}</span>
-                    <span>{agent.label}</span>
-                    {currentAgent === agent.id && (
-                      <span className="text-xs text-blue-500">•</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              <button
+                onClick={() => setReprocessExpanded(!reprocessExpanded)}
+                className="w-full flex items-center justify-between px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <p className="text-xs text-gray-600">Reprocess ({availableAgents.length} agents)</p>
+                {reprocessExpanded ? (
+                  <ChevronUpIcon className="w-3 h-3 text-gray-400" />
+                ) : (
+                  <ChevronDownIcon className="w-3 h-3 text-gray-400" />
+                )}
+              </button>
+
+              {reprocessExpanded && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {availableAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => handleReprocess(agent.id as AgentType)}
+                      disabled={isProcessing}
+                      className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center space-x-1 ${
+                        currentAgent === agent.id
+                          ? 'bg-blue-50 border-blue-200 text-blue-700'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <span>{agent.icon}</span>
+                      <span>{agent.label}</span>
+                      {currentAgent === agent.id && (
+                        <span className="text-xs text-blue-500">•</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

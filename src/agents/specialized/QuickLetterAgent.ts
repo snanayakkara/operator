@@ -5,6 +5,11 @@ import { QUICK_LETTER_EXEMPLARS, EXEMPLAR_REGISTRY, type ExemplarContent } from 
 import { MedicalSummaryExtractor, MedicalSummaryConfig, ClinicalFocusArea } from '@/utils/text-extraction/MedicalSummaryExtractor';
 import { preNormalizeMedicalText } from '@/utils/medical-text/Phase2TextNormalizer';
 import type { MedicalContext, MedicalReport } from '@/types/medical.types';
+import { parseNotes, checkNotesCompleteness } from '@/utils/pasteNotes/NotesParser';
+import { buildPasteEnvelope } from '@/utils/pasteNotes/EnvelopeBuilder';
+import { checkPreflightTriggers, checkPostGenTriggers } from '@/utils/pasteNotes/ReviewTriggers';
+import { logPasteLetterEvent } from '@/services/PasteLetterEventLog';
+import type { ParsedNotes, EMRContext, StepperResult, ReviewTriggerResult } from '@/types/pasteNotes.types';
 
 /**
  * Specialized agent for processing Quick Medical Letters and brief correspondence.
@@ -213,6 +218,14 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
     // Build contextualized system prompt with exemplars
     let contextualPrompt = this.systemPrompt;
+
+    // Add patient demographics if available
+    const demographicsContext = this.formatDemographicsContext(_context);
+    if (demographicsContext) {
+      contextualPrompt += demographicsContext;
+      console.log('📋 Added patient demographics to Quick Letter context (legacy)');
+    }
+
     if (extractedData.letterType !== 'general') {
       contextualPrompt += `\n\nDetected context: This appears to be ${extractedData.letterType} correspondence. Focus on the relevant clinical content while maintaining continuous narrative prose format.`;
     }
@@ -362,7 +375,7 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       'recognize': 'recognise', 'optimize': 'optimise', 'center': 'centre',
       'favor': 'favour', 'color': 'colour', 'organize': 'organise',
       'realize': 'realise', 'analyze': 'analyse', 'defense': 'defence',
-      
+
       // Medical terminology - American to Australian
       'dyspnea': 'dyspnoea', 'anemia': 'anaemia', 'edema': 'oedema',
       'esophageal': 'oesophageal', 'hemoglobin': 'haemoglobin', 'hemorrhage': 'haemorrhage',
@@ -373,6 +386,29 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     for (const [american, australian] of Object.entries(australianSpelling)) {
       const regex = new RegExp(`\\b${american}\\b`, 'gi');
       cleaned = cleaned.replace(regex, australian);
+    }
+
+    // Medical terminology corrections (common dictation errors and abbreviations)
+    const medicalCorrections: { [key: string]: string } = {
+      // Medication spelling corrections
+      'perhexylene': 'perhexiline',
+      'perhexaline': 'perhexiline',
+
+      // Common abbreviation clarifications (context-dependent)
+      'non-stemmy': 'NSTEMI',
+      'non stemmy': 'NSTEMI',
+      'nonstemmy': 'NSTEMI',
+      'non-stemi': 'NSTEMI',
+
+      // Other common medical term corrections
+      'beta blocker': 'beta-blocker',
+      'betablocker': 'beta-blocker',
+      'ace inhibitor': 'ACE inhibitor',
+      'ace-inhibitor': 'ACE inhibitor'
+    };
+    for (const [incorrect, correct] of Object.entries(medicalCorrections)) {
+      const regex = new RegExp(`\\b${incorrect}\\b`, 'gi');
+      cleaned = cleaned.replace(regex, correct);
     }
 
     // Expand common contractions (formal medical prose)
@@ -839,23 +875,26 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
     // Define patterns that typically indicate paragraph breaks in medical letters
     const paragraphBreakPatterns = [
-      // Time transitions
-      /\.\s+(Today|Yesterday|On \w+|This morning|This afternoon|This evening|Initially|Subsequently|Following|After|During|Prior to)\s/g,
-      
+      // Time transitions (including temporal framing phrases)
+      /\.\s+(Today|Yesterday|On \w+|This morning|This afternoon|This evening|Initially|Subsequently|Following|After|During|Prior to|Over the (?:last|past) (?:few )?(?:days?|weeks?|months?|years?))\s/g,
+
       // Clinical assessment transitions
       /\.\s+(On examination|Examination revealed|Clinical assessment|Assessment shows|I found|I noted|I observed|The patient|He|She)\s/g,
-      
+
       // Investigation transitions
-      /\.\s+(Investigations|Results showed|The ECG|The echo|The chest X-ray|Blood tests|Further testing|Imaging|Laboratory results)\s/g,
-      
+      /\.\s+(Investigations|Results showed|The ECG|The echo(?:cardiogram)?|The chest X-ray|Blood tests|Further testing|Imaging|Laboratory results|I(?:'ll| will) arrange)\s/g,
+
       // Treatment and plan transitions
-      /\.\s+(Treatment|Management|The plan|I recommend|I have arranged|We discussed|I explained|Follow.up|Next steps)\s/g,
-      
+      /\.\s+(Treatment|Management|The plan|I recommend|I have arranged|We discussed|I explained|Follow.up|Next steps|Our plan|From (?:today|here))\s/g,
+
       // Clinical reasoning transitions
-      /\.\s+(Given|Considering|In view of|Based on|Therefore|Hence|Consequently|As a result)\s/g,
-      
+      /\.\s+(Given|Considering|In view of|Based on|Therefore|Hence|Consequently|As a result|However)\s/g,
+
       // Procedural steps
-      /\.\s+(The procedure|During the|We proceeded|I performed|The intervention|Under|With)\s/g
+      /\.\s+(The procedure|During the|We proceeded|I performed|The intervention|Under|With)\s/g,
+
+      // Symptom status and comparison transitions
+      /\.\s+(He (?:does have|has developed|mentions|describes)|She (?:does have|has developed|mentions|describes)|Although|On the whole|Overall)\s/gi
     ];
 
     // Apply paragraph breaks at pattern matches
@@ -1450,12 +1489,12 @@ If you have any questions about this information, please don't hesitate to call 
     
     // Ensure the letter starts properly
     if (!cleaned.match(/^(Dear|Hello)/i)) {
-      cleaned = 'Dear Patient,\n\n' + cleaned;
+      cleaned = 'Hi Patient,\n\n' + cleaned;
     }
     
     // Ensure proper closing if missing
     if (!cleaned.match(/(sincerely|regards|team)$/i)) {
-      cleaned += '\n\nBest regards,\nYour Medical Team';
+      cleaned += '\n\nYours sincerely,\nDr Shane Nanayakkara';
     }
     
     return cleaned.trim();
@@ -1586,6 +1625,45 @@ If you have any questions about this information, please don't hesitate to call 
   }
 
   /**
+   * Format patient demographics for inclusion in system prompt
+   */
+  private formatDemographicsContext(_context?: MedicalContext): string | null {
+    if (!_context) return null;
+
+    // Try structured patientInfo first
+    if (_context.patientInfo) {
+      const { name, age, dob } = _context.patientInfo;
+      const parts: string[] = [];
+
+      if (name) parts.push(`Patient Name: ${name}`);
+      if (age) parts.push(`Age: ${age}`);
+      if (dob) parts.push(`DOB: ${dob}`);
+
+      if (parts.length > 0) {
+        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nUse these demographics when appropriate in the letter (e.g., salutations, patient identification).`;
+      }
+    }
+
+    // Fallback to demographics object
+    if (_context.demographics) {
+      const { name, age, dateOfBirth, gender, mrn } = _context.demographics;
+      const parts: string[] = [];
+
+      if (name) parts.push(`Patient Name: ${name}`);
+      if (age) parts.push(`Age: ${age}`);
+      if (dateOfBirth) parts.push(`DOB: ${dateOfBirth}`);
+      if (gender) parts.push(`Gender: ${gender}`);
+      if (mrn) parts.push(`MRN: ${mrn}`);
+
+      if (parts.length > 0) {
+        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nUse these demographics when appropriate in the letter (e.g., salutations, patient identification).`;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Process with enhanced exemplar and context awareness
    */
   private async processWithEnhancedContext(
@@ -1603,6 +1681,13 @@ If you have any questions about this information, please don't hesitate to call 
 
     // Build enhanced contextualized system prompt
     let enhancedPrompt = this.systemPrompt;
+
+    // Add patient demographics if available
+    const demographicsContext = this.formatDemographicsContext(_context);
+    if (demographicsContext) {
+      enhancedPrompt += demographicsContext;
+      console.log('📋 Added patient demographics to Quick Letter context');
+    }
 
     // Add clinical findings context
     if (summaryResult.findings.length > 0) {
@@ -1728,6 +1813,29 @@ If you have any questions about this information, please don't hesitate to call 
     if (report.content.length < 50) {
       issues.push('Letter content too short');
       confidence -= 30;
+    }
+
+    // Check paragraph structure quality
+    const paragraphCount = (report.content.match(/\n\n/g) || []).length;
+    const totalSentences = (report.content.match(/[.!?]\s+/g) || []).length;
+    const contentLength = report.content.length;
+
+    if (contentLength > 200) {
+      // For longer letters, expect proper paragraphs
+      if (paragraphCount === 0) {
+        warnings.push('No paragraph breaks found (wall of text)');
+        confidence -= 15;
+      } else if (paragraphCount < Math.floor(contentLength / 400)) {
+        warnings.push('Insufficient paragraph breaks for letter length');
+        confidence -= 10;
+      } else if (totalSentences / (paragraphCount + 1) > 6) {
+        warnings.push('Paragraphs too dense (>6 sentences per paragraph)');
+        confidence -= 8;
+      } else {
+        // Reward good paragraph structure
+        confidence += 5;
+        console.log(`✅ Good paragraph structure detected (${paragraphCount} paragraphs, ~${(totalSentences / (paragraphCount + 1)).toFixed(1)} sentences/paragraph)`);
+      }
     }
 
     // Check for medical terminology preservation
@@ -1899,5 +2007,342 @@ If you have any questions about this information, please don't hesitate to call 
     enhancedPrompt += 'Use these exemplars as style and structure guides, but ensure your response is specific to the input dictation provided.\n\n';
 
     return enhancedPrompt;
+  }
+
+  /**
+   * Process pasted clinical notes (non-dictation mode)
+   *
+   * Flow:
+   * 1. Parse notes → medications, deltas, sections
+   * 2. Lightweight sparsity check (before LLM)
+   * 3. If borderline → escalate to missingInfoDetection
+   * 4. If sparse (completeness <85% or >2 items) → halt & invoke stepper
+   * 5. Check preflight review triggers (before LLM)
+   * 6. If preflight triggers → show PasteReviewPanel → user confirms → proceed
+   * 7. Build JSON envelope
+   * 8. Call LM Studio with paste system prompt + envelope + raw notes (timeout: 30s)
+   * 9. Parse response (SUMMARY/LETTER contract)
+   * 10. Enforce SUMMARY ≤ 150 chars (re-prompt once if exceeds)
+   * 11. Check post-gen gate triggers
+   * 12. If post-gen triggers → show PasteReviewPanel again (gate copy/insert actions)
+   * 13. Return MedicalReport with paste metadata
+   */
+  async processPaste(
+    notes: string,
+    emrContext: EMRContext,
+    flags: {
+      identity_mismatch: boolean;
+      patient_friendly_requested: boolean;
+    },
+    callbacks?: {
+      onProgress?: (msg: string) => void;
+      onPreflightReview?: (triggers: ReviewTriggerResult['preflight'], parsedNotes: ParsedNotes) => Promise<boolean>;
+      onPostGenReview?: (triggers: ReviewTriggerResult['postGen'], content: string) => Promise<boolean>;
+      onSparsityDetected?: (missing: string[], prefillData?: { diagnosis?: string; plan?: string }) => Promise<StepperResult>;
+      abortSignal?: AbortSignal;
+    }
+  ): Promise<MedicalReport> {
+    const startTime = Date.now();
+
+    try {
+      callbacks?.onProgress?.('Parsing clinical notes...');
+      console.log('📋 QuickLetterAgent.processPaste: Starting paste processing');
+
+      // Step 1: Parse notes
+      const parsedNotes = parseNotes(notes);
+      console.log('📋 Parsed notes:', {
+        has_meds_header: parsedNotes.contains_meds_header,
+        meds_snapshot_count: parsedNotes.meds_snapshot.length,
+        deltas_count: parsedNotes.deltas.length,
+        confidence: parsedNotes.confidence,
+        placeholders: parsedNotes.placeholders.length,
+        sections: Object.keys(parsedNotes.sections)
+      });
+
+      // Step 2: Lightweight sparsity check (before LLM)
+      callbacks?.onProgress?.('Checking note completeness...');
+      const sparsityCheck = checkNotesCompleteness(notes);
+
+      if (sparsityCheck.sparse) {
+        console.warn('📋 Notes are sparse:', sparsityCheck.missing);
+
+        // Check if we should escalate to missingInfoDetection
+        if (sparsityCheck.missing.length === 2) {
+          // Borderline - escalate to LLM-based analysis
+          callbacks?.onProgress?.('Analyzing completeness with AI...');
+
+          const missingInfo = await this.detectMissingInformation(notes, 'general');
+
+          if (missingInfo && (
+            parseInt(missingInfo.completeness_score.replace('%', '')) < 85 ||
+            (missingInfo.missing_purpose.length + missingInfo.missing_clinical.length + missingInfo.missing_recommendations.length) > 2
+          )) {
+            // Still sparse after LLM analysis - invoke stepper
+            if (callbacks?.onSparsityDetected) {
+              callbacks?.onProgress?.('Additional information required...');
+              const stepperResult = await callbacks.onSparsityDetected(
+                [
+                  ...missingInfo.missing_purpose,
+                  ...missingInfo.missing_clinical,
+                  ...missingInfo.missing_recommendations
+                ],
+                {
+                  diagnosis: parsedNotes.sections.background,
+                  plan: parsedNotes.sections.plan
+                }
+              );
+
+              // Merge stepper answers into notes
+              const enhancedNotes = `${notes}\n\n--- ADDITIONAL CONTEXT (from stepper) ---\nPurpose: ${stepperResult.purpose}\nDiagnosis: ${stepperResult.diagnosis}\nPlan: ${stepperResult.plan}\nMedications: ${stepperResult.medications}`;
+
+              // Re-parse with enhanced notes
+              parsedNotes.raw = enhancedNotes;
+              parsedNotes.sections.plan = stepperResult.plan;
+
+              // Log stepper usage
+              logPasteLetterEvent({
+                mode: 'paste',
+                success: true,
+                had_snapshot: parsedNotes.meds_snapshot.length > 0,
+                review_trigger_conflict: false,
+                identity_mismatch: flags.identity_mismatch,
+                used_stepper: true
+              });
+            } else {
+              throw new Error('Notes are too sparse and stepper callback not provided');
+            }
+          }
+        } else if (sparsityCheck.missing.length >= 3) {
+          // Definitely sparse - invoke stepper immediately
+          if (callbacks?.onSparsityDetected) {
+            callbacks?.onProgress?.('Additional information required...');
+            const stepperResult = await callbacks.onSparsityDetected(
+              sparsityCheck.missing,
+              {
+                diagnosis: parsedNotes.sections.background,
+                plan: parsedNotes.sections.plan
+              }
+            );
+
+            // Merge stepper answers into notes
+            const enhancedNotes = `${notes}\n\n--- ADDITIONAL CONTEXT (from stepper) ---\nPurpose: ${stepperResult.purpose}\nDiagnosis: ${stepperResult.diagnosis}\nPlan: ${stepperResult.plan}\nMedications: ${stepperResult.medications}`;
+
+            parsedNotes.raw = enhancedNotes;
+            parsedNotes.sections.plan = stepperResult.plan;
+
+            logPasteLetterEvent({
+              mode: 'paste',
+              success: true,
+              had_snapshot: parsedNotes.meds_snapshot.length > 0,
+              review_trigger_conflict: false,
+              identity_mismatch: flags.identity_mismatch,
+              used_stepper: true
+            });
+          } else {
+            throw new Error('Notes are too sparse and stepper callback not provided');
+          }
+        }
+      }
+
+      // Step 3: Check preflight review triggers (before LLM)
+      callbacks?.onProgress?.('Checking safety triggers...');
+      const preflightTriggers = checkPreflightTriggers(
+        parsedNotes,
+        emrContext,
+        flags.identity_mismatch
+      );
+
+      if (preflightTriggers.triggered && callbacks?.onPreflightReview) {
+        console.log('⚠️ Preflight review triggers detected:', preflightTriggers.triggers);
+        callbacks?.onProgress?.('Review required before generation...');
+
+        const userConfirmed = await callbacks.onPreflightReview(preflightTriggers, parsedNotes);
+
+        if (!userConfirmed) {
+          logPasteLetterEvent({
+            mode: 'paste',
+            success: false,
+            had_snapshot: parsedNotes.meds_snapshot.length > 0,
+            review_trigger_conflict: true,
+            identity_mismatch: flags.identity_mismatch,
+            used_stepper: false,
+            error_type: 'user_cancelled_preflight'
+          });
+          throw new Error('User cancelled generation at preflight review');
+        }
+      }
+
+      // Step 4: Build JSON envelope
+      callbacks?.onProgress?.('Building request payload...');
+      const envelope = buildPasteEnvelope(parsedNotes, emrContext, flags);
+      console.log('📋 Envelope built, length:', envelope.length);
+
+      // Step 5: Load paste system prompt
+      const pastePrompt = await systemPromptLoader.loadSystemPrompt('quick-letter', 'paste');
+
+      // Step 6: Call LM Studio with paste prompt + envelope (timeout: 30s)
+      callbacks?.onProgress?.('Generating letter with AI...');
+      console.log('📋 Calling LM Studio with paste mode...');
+
+      // Call LM Studio with 30s timeout
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 30000);
+
+      if (callbacks?.abortSignal) {
+        callbacks.abortSignal.addEventListener('abort', () => abortController.abort());
+      }
+
+      let response: string;
+      try {
+        response = await this.lmStudioService.processWithAgent(
+          pastePrompt,
+          envelope,
+          'quick-letter'
+        );
+        clearTimeout(timeoutId);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (abortController.signal.aborted) {
+          logPasteLetterEvent({
+            mode: 'paste',
+            success: false,
+            had_snapshot: parsedNotes.meds_snapshot.length > 0,
+            review_trigger_conflict: preflightTriggers.triggered,
+            identity_mismatch: flags.identity_mismatch,
+            used_stepper: false,
+            error_type: 'timeout'
+          });
+          throw new Error('Letter generation timed out after 30 seconds. Please try again with more concise notes.');
+        }
+        throw error;
+      }
+
+      // Step 7: Parse response (SUMMARY/LETTER contract)
+      callbacks?.onProgress?.('Parsing generated content...');
+      const parseResult = this.parseStructuredResponse(response);
+
+      if (!parseResult.summary || !parseResult.letterContent) {
+        logPasteLetterEvent({
+          mode: 'paste',
+          success: false,
+          had_snapshot: parsedNotes.meds_snapshot.length > 0,
+          review_trigger_conflict: preflightTriggers.triggered,
+          identity_mismatch: flags.identity_mismatch,
+          used_stepper: false,
+          error_type: 'format_error'
+        });
+        throw new Error('ERROR – notes could not be parsed coherently.');
+      }
+
+      // Step 8: Enforce SUMMARY ≤ 150 chars
+      if (parseResult.summary && parseResult.summary.length > 150) {
+        console.warn('📋 Summary too long, truncating...');
+        // Truncate to 150 chars
+        parseResult.summary = parseResult.summary.substring(0, 147) + '...';
+      }
+
+      // Step 9: Check post-gen gate triggers
+      callbacks?.onProgress?.('Validating output quality...');
+      const postGenTriggers = checkPostGenTriggers(
+        parseResult.letterContent || '',
+        parsedNotes,
+        undefined,
+        undefined,
+        false
+      );
+
+      if (postGenTriggers.triggered && callbacks?.onPostGenReview) {
+        console.log('⚠️ Post-gen review triggers detected:', postGenTriggers.triggers);
+        callbacks?.onProgress?.('Quality review required...');
+
+        const userConfirmed = await callbacks.onPostGenReview(postGenTriggers, parseResult.letterContent || '');
+
+        if (!userConfirmed) {
+          logPasteLetterEvent({
+            mode: 'paste',
+            success: false,
+            had_snapshot: parsedNotes.meds_snapshot.length > 0,
+            review_trigger_conflict: true,
+            identity_mismatch: flags.identity_mismatch,
+            used_stepper: false,
+            error_type: 'user_cancelled_postgen'
+          });
+          throw new Error('User cancelled at post-generation review');
+        }
+      }
+
+      // Step 10: Build MedicalReport
+      const processingTime = Date.now() - startTime;
+      callbacks?.onProgress?.('Finalizing letter...');
+
+      const report: MedicalReport = {
+        id: `paste_${Date.now()}`,
+        agentName: this.name,
+        content: parseResult.letterContent || '',
+        summary: parseResult.summary,
+        sections: [
+          {
+            title: 'Letter Body',
+            content: parseResult.letterContent || '',
+            type: 'narrative',
+            priority: 'high'
+          }
+        ],
+        metadata: {
+          confidence: parsedNotes.confidence * 100,
+          processingTime,
+          modelUsed: 'medgemma-27b-text-it-mlx',
+          missingInformation: undefined,
+          enhancedProcessing: {
+            mode: 'paste',
+            parsedNotes: {
+              meds_snapshot_count: parsedNotes.meds_snapshot.length,
+              deltas_count: parsedNotes.deltas.length,
+              confidence: parsedNotes.confidence,
+              has_meds_header: parsedNotes.contains_meds_header
+            },
+            triggers: {
+              preflight: preflightTriggers.triggered,
+              postgen: postGenTriggers.triggered
+            }
+          },
+          rawAIOutput: response
+        },
+        timestamp: Date.now(),
+        warnings: postGenTriggers.triggered ? postGenTriggers.triggers.map(t => `Post-gen trigger: ${t}`) : undefined
+      };
+
+      // Log success event
+      logPasteLetterEvent({
+        mode: 'paste',
+        success: true,
+        had_snapshot: parsedNotes.meds_snapshot.length > 0,
+        review_trigger_conflict: preflightTriggers.triggered || postGenTriggers.triggered,
+        identity_mismatch: flags.identity_mismatch,
+        used_stepper: false,
+        model_confidence: parsedNotes.confidence * 100
+      });
+
+      console.log(`✅ QuickLetterAgent.processPaste completed in ${processingTime}ms`);
+      callbacks?.onProgress?.('Letter generated successfully');
+
+      return report;
+
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      console.error('❌ QuickLetterAgent.processPaste failed:', error);
+
+      logPasteLetterEvent({
+        mode: 'paste',
+        success: false,
+        had_snapshot: false,
+        review_trigger_conflict: false,
+        identity_mismatch: flags.identity_mismatch,
+        used_stepper: false,
+        error_type: error instanceof Error ? error.message.includes('timeout') ? 'timeout' : 'generation_error' : 'unknown'
+      });
+
+      throw error;
+    }
   }
 }

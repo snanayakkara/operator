@@ -158,6 +158,77 @@ export class ASRCorrectionsLog {
   }
 
   /**
+   * Update an existing correction entry
+   */
+  async updateCorrection(id: string, updates: Partial<Omit<ASRCorrectionsEntry, 'id'>>): Promise<void> {
+    try {
+      const stored = await this.getStoredData();
+      const entryIndex = stored.entries.findIndex(entry => entry.id === id);
+
+      if (entryIndex === -1) {
+        throw new Error(`Correction with id ${id} not found`);
+      }
+
+      // Update the entry with new values
+      stored.entries[entryIndex] = {
+        ...stored.entries[entryIndex],
+        ...updates,
+        id // Preserve the original ID
+      };
+
+      await this.saveStoredData(stored);
+      this.invalidateCache();
+
+      logger.debug('ASR correction updated', {
+        component: 'ASRCorrectionsLog',
+        id,
+        updates: Object.keys(updates)
+      });
+
+    } catch (error) {
+      const err = toError(error);
+      logger.error('Failed to update ASR correction', err, {
+        component: 'ASRCorrectionsLog',
+        id
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Delete a correction entry
+   */
+  async deleteCorrection(id: string): Promise<void> {
+    try {
+      const stored = await this.getStoredData();
+      const originalLength = stored.entries.length;
+
+      stored.entries = stored.entries.filter(entry => entry.id !== id);
+
+      if (stored.entries.length === originalLength) {
+        throw new Error(`Correction with id ${id} not found`);
+      }
+
+      await this.saveStoredData(stored);
+      this.invalidateCache();
+
+      logger.debug('ASR correction deleted', {
+        component: 'ASRCorrectionsLog',
+        id,
+        remainingEntries: stored.entries.length
+      });
+
+    } catch (error) {
+      const err = toError(error);
+      logger.error('Failed to delete ASR correction', err, {
+        component: 'ASRCorrectionsLog',
+        id
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Get corrections aggregated for batch processing
    */
   async getAggregatedCorrections(options: {

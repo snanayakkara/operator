@@ -99,7 +99,7 @@ export class LMStudioService {
         'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
 
         // Vision tasks - Use vision-capable model (gemma-3n-e4b supports vision)
-        'bp-diary-extraction': MODEL_CONFIG.QUICK_MODEL, // BP diary image OCR/extraction
+        'bp-diary-extraction': 'google/gemma-3n-e4b', // BP diary image OCR/extraction - requires vision support
 
         // All workflow buttons use default REASONING_MODEL for comprehensive medical analysis:
         // - 'quick-letter': Uses REASONING_MODEL for proper medical dictation processing
@@ -132,7 +132,7 @@ export class LMStudioService {
         'medication': 3000, // Medication lists can be longer than investigation summaries
 
         // Vision tasks
-        'bp-diary-extraction': 2000, // Structured JSON output for BP readings
+        'bp-diary-extraction': 4000, // Increased to 4k tokens to handle large BP diaries (30+ readings)
 
         // Default for unlisted agents
         'default': 4000
@@ -484,7 +484,8 @@ export class LMStudioService {
     textPrompt: string,
     imageDataUrl: string,
     agentType?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modelOverride?: string
   ): Promise<string> {
     const startTime = Date.now();
 
@@ -492,13 +493,14 @@ export class LMStudioService {
       component: 'lm-studio',
       operation: 'vision-agent-start',
       agentType,
-      imageSize: imageDataUrl.length
+      imageSize: imageDataUrl.length,
+      modelOverride: modelOverride || 'none'
     });
 
-    // Determine which model to use based on agent type
-    const modelToUse = (agentType && this.config.agentModels?.[agentType])
-      ? this.config.agentModels[agentType]
-      : this.config.processorModel;
+    // Determine which model to use: override > agent-specific > default
+    const modelToUse = modelOverride
+      || (agentType && this.config.agentModels?.[agentType])
+      || this.config.processorModel;
 
     // Determine agent-specific token limit
     const tokenLimit = (agentType && this.config.agentTokenLimits?.[agentType])

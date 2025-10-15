@@ -10,13 +10,14 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, FileJson, FileText, Clipboard, RefreshCw, Trash2, CheckCircle } from 'lucide-react';
+import { X, FileJson, FileText, Clipboard, RefreshCw, Trash2, CheckCircle, Settings } from 'lucide-react';
 import { BPDropzone } from './BPDropzone';
 import { BPReviewGrid } from './BPReviewGrid';
 import { BPChart, BPChartHandle } from './BPChart';
 import { BPDiaryExtractor } from '@/services/BPDiaryExtractor';
 import { BPDataValidator } from '@/utils/BPDataValidator';
 import { BPDiaryStorage } from '@/services/BPDiaryStorage';
+import { LMStudioService } from '@/services/LMStudioService';
 import type { BPReading, BPDiarySession, BPDiarySettings } from '@/types/BPTypes';
 import { DEFAULT_BP_SETTINGS } from '@/types/BPTypes';
 import { ToastService } from '@/services/ToastService';
@@ -38,20 +39,72 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [settings, setSettings] = useState<BPDiarySettings>(DEFAULT_BP_SETTINGS);
   const [showLoadConfirm, setShowLoadConfirm] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('medgemma-4b-it-mlx');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [showModelPicker, setShowModelPicker] = useState(false);
 
   const chartRef = useRef<BPChartHandle>(null);
   const extractorRef = useRef(BPDiaryExtractor.getInstance());
   const validatorRef = useRef(BPDataValidator.getInstance());
   const storageRef = useRef(BPDiaryStorage.getInstance());
+  const lmStudioRef = useRef(LMStudioService.getInstance());
 
-  // Load settings on mount
+  // Load settings and available models on mount
   useEffect(() => {
     loadSettings();
+    loadAvailableModels();
   }, []);
 
   const loadSettings = async () => {
     const loaded = await storageRef.current.loadSettings();
     setSettings(loaded);
+  };
+
+  const loadAvailableModels = async () => {
+    const allModels = await lmStudioRef.current.getAvailableModels();
+
+    // Filter to only vision-capable models
+    // Known vision models: LLaVA, Gemma (with vision), Qwen2-VL, MiniCPM-V, Pixtral
+    const visionModels = allModels.filter(m => {
+      const lowerModel = m.toLowerCase();
+      return (
+        lowerModel.includes('llava') ||
+        lowerModel.includes('gemma') ||  // Gemma models often support vision
+        lowerModel.includes('vision') ||
+        lowerModel.includes('qwen2-vl') ||
+        lowerModel.includes('minicpm') ||
+        lowerModel.includes('pixtral') ||
+        lowerModel.includes('phi-3-vision') ||
+        lowerModel.includes('molmo')
+      );
+    });
+
+    setAvailableModels(visionModels);
+
+    // Priority order for auto-selection
+    const preferredModels = [
+      'medgemma-4b-it-mlx',
+      'google/gemma-3n-e4b',
+      'llava-v1.6',
+      'llava-v1.5'
+    ];
+
+    // Try to find preferred model
+    let selectedModel = 'medgemma-4b-it-mlx'; // Default fallback
+    for (const preferred of preferredModels) {
+      const found = visionModels.find(m => m.includes(preferred));
+      if (found) {
+        selectedModel = found;
+        break;
+      }
+    }
+
+    // If no preferred model found, use first available vision model
+    if (!visionModels.some(m => m === selectedModel) && visionModels.length > 0) {
+      selectedModel = visionModels[0];
+    }
+
+    setSelectedModel(selectedModel);
   };
 
   /**
@@ -63,7 +116,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     setErrorMessage('');
 
     try {
-      const result = await extractorRef.current.extractFromImage(dataUrl);
+      const result = await extractorRef.current.extractFromImage(dataUrl, undefined, selectedModel);
 
       if (!result.success || result.readings.length === 0) {
         setProcessingState('error');
@@ -93,7 +146,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
       setErrorMessage(message);
       ToastService.getInstance().error('Processing failed', message);
     }
-  }, []);
+  }, [selectedModel]);
 
   /**
    * Handle readings edit from grid
@@ -274,6 +327,62 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
           {/* Image Upload Section */}
           {processingState === 'idle' && (
             <div className="space-y-4">
+              {/* Model Selector */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-blue-700" />
+                    <h3 className="text-sm font-semibold text-blue-900">Vision Model</h3>
+                  </div>
+                  {!showModelPicker && (
+                    <button
+                      onClick={() => setShowModelPicker(true)}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Change
+                    </button>
+                  )}
+                </div>
+
+                {showModelPicker ? (
+                  <div className="space-y-2">
+                    {availableModels.length > 0 ? (
+                      <>
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {availableModels.map(model => (
+                            <option key={model} value={model}>{model}</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-600">
+                          ✓ Showing only vision-capable models (LLaVA, Gemma, Qwen2-VL, etc.)
+                        </p>
+                      </>
+                    ) : (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                        <p className="text-xs text-yellow-800 font-semibold mb-1">⚠️ No vision models detected</p>
+                        <p className="text-xs text-gray-600">
+                          Load a vision model in LM Studio (e.g., LLaVA, Gemma-3n, Qwen2-VL)
+                        </p>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setShowModelPicker(false)}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-700">
+                    Using: <span className="font-mono font-semibold text-blue-700">{selectedModel}</span>
+                  </div>
+                )}
+              </div>
+
               <BPDropzone
                 onImageSelect={handleImageSelect}
                 currentImage={imageDataUrl}

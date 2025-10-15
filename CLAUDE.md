@@ -39,7 +39,65 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 
 **Core procedures**: TAVI; Angiogram/PCI; mTEER; PFO Closure; Right Heart Cath
 **Documentation & review**: Quick Letter; Consultation; Investigation Summary
-**Specialised**: Aus Medical Review; Background; Medication; Bloods; Imaging; Patient Education; Batch Patient Review
+**Specialised**: Unified AI Medical Review (PRIMARY + SECONDARY prevention); Background; Medication; Bloods; Imaging; Patient Education; Batch Patient Review
+
+### 2.1 Unified AI Medical Review (Intelligent PRIMARY + SECONDARY Prevention)
+
+**Single button, intelligent classification system** that automatically detects patient context and applies appropriate frameworks:
+
+**Classification Categories:**
+- **PRIMARY PREVENTION**: No prior CABG/PCI, no HFrEF (EF >50%), no severe valve disease
+  - Focus: Insulin resistance phenotypes, lipid thresholds, BP patterns (ABPM), subclinical atherosclerosis (CTCA), anthropometrics, end-organ damage
+  - Thresholds: TG/HDL ≥1.5, HOMA-IR >2.0, TyG ≥8.8, waist ≥102/88cm, Non-HDL ≥3.4, ACR >2.5/>3.5
+  - Output: Findings + MISSING/NEXT TESTS + THERAPY TARGETS + CLINICAL NOTES
+
+- **SECONDARY PREVENTION (CAD)**: Prior CABG, PCI, stent, or MI
+  - Focus: Post-ACS management (DAPT, high-intensity statin, beta-blocker, ACE/ARB), aggressive lipid targets (LDL <1.8), cardiac rehab
+
+- **SECONDARY PREVENTION (HFrEF)**: EF ≤40% or documented HFrEF
+  - Focus: GDMT pillar gaps (ARNI, beta-blocker, MRA, SGLT2i), iron deficiency, device therapy (ICD/CRT), vaccination
+
+- **SECONDARY PREVENTION (VALVULAR)**: Severe/moderate valve disease or prior valve intervention
+  - Focus: Intervention timing (severe AS symptoms, severe MR with LVESD ≥45mm/EF <60%), NT-proBNP stratification
+
+- **MIXED**: Multiple categories apply (e.g., prior PCI + metabolic syndrome)
+  - Applies ALL relevant frameworks; prioritizes life-threatening → high-yield prevention → safety
+
+**How it works:**
+1. Analyzes BACKGROUND, INVESTIGATIONS, MEDICATIONS
+2. Detects keywords: CABG/PCI → CAD; EF ≤40% → HFrEF; severe valve disease → VALVULAR; absence → PRIMARY
+3. Assigns classification with rationale and review focus
+4. Applies appropriate framework(s) with explicit thresholds (PRIMARY) or Australian guidelines (SECONDARY)
+5. Generates 5 prioritized findings with classification tags
+6. For PRIMARY: includes MISSING TESTS and THERAPY TARGETS sections
+
+**Example Output:**
+```
+**PATIENT CLASSIFICATION:**
+- Category: PRIMARY
+- Rationale: No prior CABG, PCI, HFrEF, or severe valve disease. Presents with metabolic syndrome.
+- Review Focus: Insulin resistance phenotype, BP phenotyping (ABPM), subclinical atherosclerosis
+
+**CLASSIFICATION TAG:** [PRIMARY]
+**FINDING:** Insulin-resistant dyslipidaemia (TG/HDL high)
+**EVIDENCE:** TG 1.9 mmol/L, HDL-C 0.9 mmol/L (TG/HDL 2.11) on 2025-09-28
+**THRESHOLD/STATUS:** ≥1.5 (mmol/L) → crossed
+**MECHANISM:** Hepatic IR ↑ VLDL, low HDL, small-dense LDL → atherogenic milieu
+**RECOMMENDED ACTION:** Start statin if 5-yr risk ≥10% (LDL <2.0; Non-HDL <2.6); check ApoB, fasting insulin
+**PRIORITY:** high | **URGENCY:** Soon
+
+**MISSING / NEXT TESTS:**
+• Waist circumference (assess central obesity)
+• Fasting insulin (calculate HOMA-IR for insulin resistance quantification)
+• ABPM (assess nocturnal BP pattern)
+• ApoB (better marker than LDL-C)
+
+**THERAPY TARGETS:**
+• BP: <130/80 mmHg
+• LDL-C: <2.0 mmol/L
+• Non-HDL-C: <2.6 mmol/L
+• HbA1c: <7%
+```
 
 Each agent has dedicated SystemPrompts, validation patterns, template structure, QA rules; Australian terminology.
 
@@ -147,20 +205,7 @@ npm run optim:quick-letter
   - Copy/Insert/Edit actions
   - Transcription approval controls (Perfect/Edit/Skip) for training data quality
 
-### 10.3 Theme System
-- **Light & Dark Modes**: Full theme support with system preference detection
-- **Theme Manager** (`utils/themeSystem.ts`): Centralized theme management with CSS variable injection
-- **Modes**: Light, Dark, System (auto-detects OS preference)
-- **Persistence**: User preference saved to localStorage
-- **ThemeToggle**: Compact toggle in header (Sun/Moon/Monitor icons)
-- **Clinical Dark Mode**: Optimized for low-light environments while maintaining medical clarity
-
-**Theme Colors**:
-- All colors defined as CSS variables (e.g., `--color-bg-primary`, `--color-text-primary`)
-- Tailwind classes use `var()` references for automatic theme switching
-- State colors adapt across themes while maintaining visual hierarchy
-
-### 10.4 Design Principle
+### 10.3 Design Principle
 **"Same task = Same UI"** - If two agents perform the same underlying action (progress tracking, copying text, displaying results), they use the **same component** with the **same visual design**. Agent-specific complexity lives in designated content areas, not in chrome/buttons/status displays.
 
 ---
@@ -190,7 +235,6 @@ src/
   config/ (workflowConfig, appointmentPresets, recordingPrompts)
   utils/
     stateColors.ts (shared color definitions for consistency)
-    themeSystem.ts (light/dark theme manager with CSS variables)
     formatting.ts, animations.ts, etc.
   types/ (medical.types.ts, optimization.ts, BatchProcessingTypes.ts)
 llm/ (DSPy server + prompts); eval/ (datasets + feedback); tests/e2e/*; whisper-server.py

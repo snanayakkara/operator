@@ -287,11 +287,12 @@ export class LazyAgentLoader {
         return new InvestigationSummaryAgent();
       }
         
-      case 'aus-medical-review': {
+      case 'aus-medical-review':
+      case 'ai-medical-review': {
         const { BatchPatientReviewAgent } = await import('@/agents/specialized/BatchPatientReviewAgent');
         return new BatchPatientReviewAgent();
       }
-        
+
       case 'background': {
         const { BackgroundAgent } = await import('@/agents/specialized/BackgroundAgent');
         return new BackgroundAgent();

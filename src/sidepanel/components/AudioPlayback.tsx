@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Download, RotateCcw, Volume2 } from 'lucide-react';
+import { Play, Pause, Download, RotateCcw, Volume2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AudioPlaybackProps {
   audioBlob: Blob;
   fileName?: string;
   className?: string;
   onAnalysisUpdate?: (analysis: AudioAnalysis) => void;
+  showQualityBar?: boolean; // Whether to show the quality summary bar inside this component
+  defaultExpanded?: boolean; // Whether playback controls are expanded by default
 }
 
 interface AudioAnalysis {
@@ -21,7 +23,9 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   audioBlob,
   fileName = 'investigation-audio',
   className = '',
-  onAnalysisUpdate
+  onAnalysisUpdate,
+  showQualityBar = true,
+  defaultExpanded = false
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -33,6 +37,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null);
   const [isSeeking, setIsSeeking] = useState(false);
   const [isUserInteracting, setIsUserInteracting] = useState(false);
+  const [playbackExpanded, setPlaybackExpanded] = useState(defaultExpanded);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -487,7 +492,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
   }, [stopProgressAnimation]);
 
   return (
-    <div className={`space-y-4 p-4 bg-gray-50 rounded-lg border ${className}`}>
+    <div className={`space-y-3 ${className}`}>
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
@@ -501,211 +506,246 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
         preload="metadata"
       />
 
-      {/* Audio Analysis Summary */}
-      {analysis && (
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Quality:</span>
-              <span className={`font-medium ${getQualityColor(analysis.quality)}`}>
-                {getQualityIcon(analysis.quality)} {analysis.quality.toUpperCase()}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Duration:</span>
-              <span className="text-gray-900">{formatTime(analysis.duration)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">File Size:</span>
-              <span className="text-gray-900">{(analysis.fileSize / 1024).toFixed(1)}KB</span>
-            </div>
+      {/* Audio Quality Summary Bar - Collapsible (optional, controlled by parent) */}
+      {showQualityBar && analysis && (
+        <button
+          onClick={() => setPlaybackExpanded(!playbackExpanded)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center space-x-3 text-sm">
+            <span className="text-gray-600">Quality:</span>
+            <span className={`font-medium ${getQualityColor(analysis.quality)}`}>
+              {getQualityIcon(analysis.quality)} {analysis.quality.toUpperCase()}
+            </span>
+            <span className="text-gray-400">•</span>
+            <span className="text-gray-600">Duration:</span>
+            <span className="text-gray-900">{formatTime(analysis.duration)}</span>
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Avg Volume:</span>
-              <span className="text-gray-900">{(analysis.avgVolume * 100).toFixed(1)}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Silence:</span>
-              <span className="text-gray-900">{formatTime(analysis.silenceDuration)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Est. SNR:</span>
-              <span className="text-gray-900">{analysis.estimatedSNR.toFixed(1)}dB</span>
-            </div>
-          </div>
-        </div>
+          {playbackExpanded ? (
+            <ChevronUp className="w-4 h-4 text-gray-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          )}
+        </button>
       )}
 
-      {/* Waveform Display */}
-      <div className="space-y-2">
-        <canvas
-          ref={canvasRef}
-          width={400}
-          height={80}
-          className={`w-full h-20 bg-white rounded border transition-all duration-200 ${
-            isSeeking 
-              ? 'cursor-grabbing border-blue-400 shadow-md' 
-              : 'cursor-pointer hover:bg-gray-50 hover:border-gray-300'
-          }`}
-          onClick={handleWaveformClick}
-          onMouseMove={(e) => {
-            const canvas = canvasRef.current;
-            if (canvas && duration && isFinite(duration) && duration > 0 && !isSeeking) {
-              const rect = canvas.getBoundingClientRect();
-              const x = e.clientX - rect.left;
-              const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
-              const seekTime = (percentage / 100) * duration;
-              canvas.title = `Click to seek to ${formatTime(seekTime)}`;
-            } else if (canvas && isSeeking) {
-              canvas.title = 'Seeking...';
-            }
-          }}
-          style={{ touchAction: 'none' }}
-        />
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>{formatTime(currentTime)}</span>
-          <span className={isSeeking ? 'text-blue-600 font-medium' : ''}>
-            {isSeeking ? 'Seeking...' : 'Click waveform to seek'}
-          </span>
-          <span>{formatTime(duration)}</span>
-        </div>
-        
-        {/* Alternative: Progress/Seek Slider */}
-        <div className="space-y-1">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="0.1"
-            value={duration && isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0}
-            onMouseDown={() => {
-              setIsUserInteracting(true);
-              stopProgressAnimation();
-            }}
-            onMouseUp={() => {
-              setIsUserInteracting(false);
-              if (isPlaying && !isSeeking) {
-                startProgressAnimation();
-              }
-            }}
-            onTouchStart={() => {
-              setIsUserInteracting(true);
-              stopProgressAnimation();
-            }}
-            onTouchEnd={() => {
-              setIsUserInteracting(false);
-              if (isPlaying && !isSeeking) {
-                startProgressAnimation();
-              }
-            }}
-            onInput={(e) => {
-              if (isUserInteracting) {
-                const percentage = parseFloat((e.target as HTMLInputElement).value);
-                if (isFinite(percentage)) {
-                  seekTo(percentage);
-                }
-              }
-            }}
-            onChange={() => {
-              // Prevent onChange feedback loops - all seeking handled by onInput
-            }}
-            className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            disabled={!duration || !isFinite(duration) || duration <= 0}
-          />
-          <div className="text-xs text-gray-400 text-center">
-            Alternative: Use slider above to seek
-          </div>
-        </div>
-      </div>
-
-      {/* Playback Controls */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={togglePlayback}
-            className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
-            disabled={!audioUrl}
-          >
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
-          </button>
-          
-          <button
-            onClick={resetPlayback}
-            className="flex items-center justify-center w-8 h-8 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-full transition-colors"
-            disabled={!audioUrl}
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <div className="flex items-center space-x-2">
-            <Volume2 className="w-4 h-4 text-gray-600" />
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.1"
-              value={volume}
-              onChange={(e) => {
-                const newVolume = parseFloat(e.target.value);
-                setVolume(newVolume);
-                if (audioRef.current) {
-                  audioRef.current.volume = newVolume;
-                }
-              }}
-              className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          {/* Playback Speed Control */}
-          <select
-            value={playbackRate}
-            onChange={(e) => {
-              const rate = parseFloat(e.target.value);
-              setPlaybackRate(rate);
-              if (audioRef.current) {
-                audioRef.current.playbackRate = rate;
-              }
-            }}
-            className="text-xs bg-white border border-gray-300 rounded px-2 py-1"
-          >
-            <option value={0.5}>0.5x</option>
-            <option value={0.75}>0.75x</option>
-            <option value={1}>1.0x</option>
-            <option value={1.25}>1.25x</option>
-            <option value={1.5}>1.5x</option>
-            <option value={2}>2.0x</option>
-          </select>
-
-          {/* Download Button */}
-          <button
-            onClick={downloadAudio}
-            className="flex items-center justify-center w-8 h-8 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-            title="Download audio file"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Quality Warnings */}
-      {analysis && analysis.quality !== 'good' && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3">
-          <div className="flex items-start">
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700 font-medium">
-                Audio Quality Issues Detected
-              </p>
-              <div className="mt-1 text-xs text-yellow-600 space-y-1">
-                {analysis.avgVolume < 0.005 && <p>• Recording is very quiet - check microphone levels</p>}
-                {analysis.silenceDuration > analysis.duration * 0.5 && <p>• Recording contains significant silence</p>}
-                {analysis.estimatedSNR < 15 && <p>• High background noise detected</p>}
-                {analysis.duration < 2 && <p>• Recording is very short - may affect transcription accuracy</p>}
+      {/* Expandable Waveform and Playback Controls */}
+      {playbackExpanded && analysis && (
+        <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          {/* Detailed Metrics */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Quality:</span>
+                <span className={`font-medium ${getQualityColor(analysis.quality)}`}>
+                  {getQualityIcon(analysis.quality)} {analysis.quality.toUpperCase()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Duration:</span>
+                <span className="text-gray-900">{formatTime(analysis.duration)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">File Size:</span>
+                <span className="text-gray-900">{(analysis.fileSize / 1024).toFixed(1)}KB</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Avg Volume:</span>
+                <span className="text-gray-900">{(analysis.avgVolume * 100).toFixed(1)}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Silence:</span>
+                <span className="text-gray-900">{formatTime(analysis.silenceDuration)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Est. SNR:</span>
+                <span className="text-gray-900">{analysis.estimatedSNR.toFixed(1)}dB</span>
               </div>
             </div>
           </div>
+
+          {/* Waveform Display */}
+          <div className="space-y-2">
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={80}
+              className={`w-full h-20 bg-white rounded border transition-all duration-200 ${
+                isSeeking
+                  ? 'cursor-grabbing border-blue-400 shadow-md'
+                  : 'cursor-pointer hover:bg-gray-50 hover:border-gray-300'
+              }`}
+              onClick={handleWaveformClick}
+              onMouseMove={(e) => {
+                const canvas = canvasRef.current;
+                if (canvas && duration && isFinite(duration) && duration > 0 && !isSeeking) {
+                  const rect = canvas.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+                  const seekTime = (percentage / 100) * duration;
+                  canvas.title = `Click to seek to ${formatTime(seekTime)}`;
+                } else if (canvas && isSeeking) {
+                  canvas.title = 'Seeking...';
+                }
+              }}
+              style={{ touchAction: 'none' }}
+            />
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>{formatTime(currentTime)}</span>
+              <span className={isSeeking ? 'text-blue-600 font-medium' : ''}>
+                {isSeeking ? 'Seeking...' : 'Click waveform to seek'}
+              </span>
+              <span>{formatTime(duration)}</span>
+            </div>
+
+            {/* Alternative: Progress/Seek Slider */}
+            <div className="space-y-1">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={duration && isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0}
+                onMouseDown={() => {
+                  setIsUserInteracting(true);
+                  stopProgressAnimation();
+                }}
+                onMouseUp={() => {
+                  setIsUserInteracting(false);
+                  if (isPlaying && !isSeeking) {
+                    startProgressAnimation();
+                  }
+                }}
+                onTouchStart={() => {
+                  setIsUserInteracting(true);
+                  stopProgressAnimation();
+                }}
+                onTouchEnd={() => {
+                  setIsUserInteracting(false);
+                  if (isPlaying && !isSeeking) {
+                    startProgressAnimation();
+                  }
+                }}
+                onInput={(e) => {
+                  if (isUserInteracting) {
+                    const percentage = parseFloat((e.target as HTMLInputElement).value);
+                    if (isFinite(percentage)) {
+                      seekTo(percentage);
+                    }
+                  }
+                }}
+                onChange={() => {
+                  // Prevent onChange feedback loops - all seeking handled by onInput
+                }}
+                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                disabled={!duration || !isFinite(duration) || duration <= 0}
+                title="Seek audio position"
+              />
+              <div className="text-xs text-gray-400 text-center">
+                Alternative: Use slider above to seek
+              </div>
+            </div>
+          </div>
+
+          {/* Playback Controls */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={togglePlayback}
+                className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
+                disabled={!audioUrl}
+                title={isPlaying ? "Pause audio" : "Play audio"}
+                type="button"
+              >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
+              </button>
+
+              <button
+                onClick={resetPlayback}
+                className="flex items-center justify-center w-8 h-8 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-full transition-colors"
+                disabled={!audioUrl}
+                title="Reset to beginning"
+                type="button"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <Volume2 className="w-4 h-4 text-gray-600" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={(e) => {
+                    const newVolume = parseFloat(e.target.value);
+                    setVolume(newVolume);
+                    if (audioRef.current) {
+                      audioRef.current.volume = newVolume;
+                    }
+                  }}
+                  className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  title="Adjust volume"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Playback Speed Control */}
+              <select
+                value={playbackRate}
+                onChange={(e) => {
+                  const rate = parseFloat(e.target.value);
+                  setPlaybackRate(rate);
+                  if (audioRef.current) {
+                    audioRef.current.playbackRate = rate;
+                  }
+                }}
+                className="text-xs bg-white border border-gray-300 rounded px-2 py-1"
+                title="Playback speed"
+              >
+                <option value={0.5}>0.5x</option>
+                <option value={0.75}>0.75x</option>
+                <option value={1}>1.0x</option>
+                <option value={1.25}>1.25x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2.0x</option>
+              </select>
+
+              {/* Download Button - More subtle, inside panel */}
+              <button
+                onClick={downloadAudio}
+                className="flex items-center space-x-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded border border-gray-300 transition-colors"
+                title="Download audio file"
+                type="button"
+              >
+                <Download className="w-3 h-3" />
+                <span>Save</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quality Warnings */}
+          {analysis.quality !== 'good' && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded">
+              <div className="flex items-start">
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700 font-medium">
+                    Audio Quality Issues Detected
+                  </p>
+                  <div className="mt-1 text-xs text-yellow-600 space-y-1">
+                    {analysis.avgVolume < 0.005 && <p>• Recording is very quiet - check microphone levels</p>}
+                    {analysis.silenceDuration > analysis.duration * 0.5 && <p>• Recording contains significant silence</p>}
+                    {analysis.estimatedSNR < 15 && <p>• High background noise detected</p>}
+                    {analysis.duration < 2 && <p>• Recording is very short - may affect transcription accuracy</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

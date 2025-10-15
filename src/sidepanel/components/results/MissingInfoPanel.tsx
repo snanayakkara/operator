@@ -1,50 +1,66 @@
 import React, { useMemo, useState } from 'react';
+import type { AgentType } from '@/types/medical.types';
 
 interface MissingInfoPanelProps {
   missingInfo: any;
   onSubmit: (answers: Record<string, string>) => void;
   onDismiss?: () => void;
+  agentType?: AgentType | null;
 }
 
-export const MissingInfoPanel: React.FC<MissingInfoPanelProps> = ({ missingInfo, onSubmit, onDismiss }) => {
-  console.log('🔍 MissingInfoPanel: Received missingInfo:', missingInfo);
+export const MissingInfoPanel: React.FC<MissingInfoPanelProps> = ({ missingInfo, onSubmit, onDismiss, agentType }) => {
+  console.log('🔍 MissingInfoPanel: Received missingInfo:', missingInfo, 'for agent:', agentType);
 
   const questions = useMemo(() => {
     const q: string[] = [];
 
-    // Handle AngiogramPCI format
-    if (Array.isArray(missingInfo?.missing_diagnostic)) {
-      console.log('📋 MissingInfoPanel: Adding missing_diagnostic:', missingInfo.missing_diagnostic);
+    // DEFENSIVE: Filter out agent-inappropriate fields based on agent type
+    // Investigation Summary should NEVER have QuickLetter-style missing info (letter purpose, clinical exam)
+    // Background/Medication/Imaging agents shouldn't have letter-specific fields either
+
+    const isLetterAgent = agentType === 'quick-letter';
+    const isAngioPCIAgent = agentType === 'angiogram-pci';
+    const isTAVIAgent = agentType === 'tavi-workup';
+    const isInvestigationSummary = agentType === 'investigation-summary';
+
+    // Log agent type for debugging
+    if (isInvestigationSummary && (missingInfo?.missing_purpose || missingInfo?.missing_clinical)) {
+      console.warn('⚠️ MissingInfoPanel: Investigation Summary incorrectly has QuickLetter-style missing info - filtering out');
+    }
+
+    // Handle AngiogramPCI format (only for angiogram-pci agent)
+    if (isAngioPCIAgent && Array.isArray(missingInfo?.missing_diagnostic)) {
+      console.log('📋 MissingInfoPanel: Adding missing_diagnostic (angiogram-pci):', missingInfo.missing_diagnostic);
       q.push(...missingInfo.missing_diagnostic);
     }
-    if (Array.isArray(missingInfo?.missing_intervention)) {
-      console.log('📋 MissingInfoPanel: Adding missing_intervention:', missingInfo.missing_intervention);
+    if (isAngioPCIAgent && Array.isArray(missingInfo?.missing_intervention)) {
+      console.log('📋 MissingInfoPanel: Adding missing_intervention (angiogram-pci):', missingInfo.missing_intervention);
       q.push(...missingInfo.missing_intervention);
     }
 
-    // Handle Quick Letter format
-    if (Array.isArray(missingInfo?.missing_purpose)) {
-      console.log('📋 MissingInfoPanel: Adding missing_purpose:', missingInfo.missing_purpose);
+    // Handle Quick Letter format (ONLY for quick-letter agent)
+    if (isLetterAgent && Array.isArray(missingInfo?.missing_purpose)) {
+      console.log('📋 MissingInfoPanel: Adding missing_purpose (quick-letter):', missingInfo.missing_purpose);
       q.push(...missingInfo.missing_purpose);
     }
-    if (Array.isArray(missingInfo?.missing_clinical)) {
-      console.log('📋 MissingInfoPanel: Adding missing_clinical:', missingInfo.missing_clinical);
+    if (isLetterAgent && Array.isArray(missingInfo?.missing_clinical)) {
+      console.log('📋 MissingInfoPanel: Adding missing_clinical (quick-letter):', missingInfo.missing_clinical);
       q.push(...missingInfo.missing_clinical);
     }
-    if (Array.isArray(missingInfo?.missing_recommendations)) {
-      console.log('📋 MissingInfoPanel: Adding missing_recommendations:', missingInfo.missing_recommendations);
+    if (isLetterAgent && Array.isArray(missingInfo?.missing_recommendations)) {
+      console.log('📋 MissingInfoPanel: Adding missing_recommendations (quick-letter):', missingInfo.missing_recommendations);
       q.push(...missingInfo.missing_recommendations);
     }
 
-    // Structured TAVI workup missing fields
-    if (Array.isArray(missingInfo?.missing_structured)) {
-      console.log('📋 MissingInfoPanel: Adding missing_structured:', missingInfo.missing_structured);
+    // Structured TAVI workup missing fields (only for TAVI agent)
+    if (isTAVIAgent && Array.isArray(missingInfo?.missing_structured)) {
+      console.log('📋 MissingInfoPanel: Adding missing_structured (tavi-workup):', missingInfo.missing_structured);
       q.push(...missingInfo.missing_structured);
     }
 
-    // TAVI-specific missing field categories
-    if (Array.isArray(missingInfo?.missing_measurements)) {
-      console.log('📋 MissingInfoPanel: Adding missing_measurements:', missingInfo.missing_measurements);
+    // TAVI-specific missing field categories (only for TAVI agent)
+    if (isTAVIAgent && Array.isArray(missingInfo?.missing_measurements)) {
+      console.log('📋 MissingInfoPanel: Adding missing_measurements (tavi-workup):', missingInfo.missing_measurements);
       q.push(...missingInfo.missing_measurements);
     }
 
@@ -121,7 +137,7 @@ export const MissingInfoPanel: React.FC<MissingInfoPanelProps> = ({ missingInfo,
     console.log(`📊 MissingInfoPanel: Total questions before dedup: ${q.length}, after enhanced dedup: ${uniqueQuestions.length}`);
     console.log(`📊 MissingInfoPanel: Removed ${q.length - uniqueQuestions.length} duplicate/similar questions`);
     return uniqueQuestions;
-  }, [missingInfo]);
+  }, [missingInfo, agentType]);
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
 

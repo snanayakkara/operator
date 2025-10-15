@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
-import { 
-  Shield, 
-  AlertTriangle, 
-  CheckCircle, 
-  ExternalLink, 
+import {
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  ExternalLink,
   Heart,
   Calculator,
-  MapPin
+  MapPin,
+  Activity,
+  Stethoscope,
+  HeartPulse,
+  Info
 } from 'lucide-react';
-import type { BatchPatientReviewFinding } from '@/types/medical.types';
+import type { BatchPatientReviewFinding, PatientClassification } from '@/types/medical.types';
 import { IndividualFindingCard } from './IndividualFindingCard';
 
 interface BatchPatientReviewResultsProps {
+  classification: PatientClassification;
   findings: BatchPatientReviewFinding[];
   guidelineReferences: string[];
   heartFoundationResources: string[];
@@ -19,10 +24,14 @@ interface BatchPatientReviewResultsProps {
   aboriginalTorresStraitIslander: boolean;
   qtProlongationRisk: boolean;
   medicationSafetyIssues: number;
+  missingTests?: string[];
+  therapyTargets?: Record<string, string>;
+  clinicalNotes?: string;
   isProcessing?: boolean;
 }
 
 export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps> = ({
+  classification,
   findings,
   guidelineReferences,
   heartFoundationResources,
@@ -30,8 +39,64 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
   aboriginalTorresStraitIslander,
   qtProlongationRisk,
   medicationSafetyIssues,
+  missingTests,
+  therapyTargets,
+  clinicalNotes,
   isProcessing = false
 }) => {
+  // Helper function to get classification display info
+  const getClassificationInfo = (category: PatientClassification['category']) => {
+    switch (category) {
+      case 'primary':
+        return {
+          label: 'Primary Prevention',
+          color: 'emerald',
+          bgGradient: 'from-emerald-50 to-teal-50',
+          borderColor: 'border-emerald-200',
+          textColor: 'text-emerald-800',
+          icon: Activity
+        };
+      case 'secondary-cad':
+        return {
+          label: 'Secondary Prevention (CAD)',
+          color: 'red',
+          bgGradient: 'from-red-50 to-rose-50',
+          borderColor: 'border-red-200',
+          textColor: 'text-red-800',
+          icon: HeartPulse
+        };
+      case 'secondary-hfref':
+        return {
+          label: 'Secondary Prevention (HFrEF)',
+          color: 'purple',
+          bgGradient: 'from-purple-50 to-indigo-50',
+          borderColor: 'border-purple-200',
+          textColor: 'text-purple-800',
+          icon: Heart
+        };
+      case 'secondary-valvular':
+        return {
+          label: 'Secondary Prevention (Valvular)',
+          color: 'blue',
+          bgGradient: 'from-blue-50 to-cyan-50',
+          borderColor: 'border-blue-200',
+          textColor: 'text-blue-800',
+          icon: Stethoscope
+        };
+      case 'mixed':
+        return {
+          label: 'Mixed (Primary + Secondary)',
+          color: 'amber',
+          bgGradient: 'from-amber-50 to-yellow-50',
+          borderColor: 'border-amber-200',
+          textColor: 'text-amber-800',
+          icon: Shield
+        };
+    }
+  };
+
+  const classificationInfo = getClassificationInfo(classification.category);
+  const ClassificationIcon = classificationInfo.icon;
   // Track completion status for individual findings
   const [completedFindings, setCompletedFindings] = useState<Set<number>>(new Set());
 
@@ -73,11 +138,39 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
         <div className="flex items-center space-x-3 mb-3">
           <Shield className="w-6 h-6 text-purple-600" />
           <div>
-            <h3 className="text-gray-900 font-semibold text-lg">Batch Patient Review</h3>
-            <p className="text-gray-600 text-sm">Multi-patient clinical oversight based on NHFA/CSANZ/RACGP guidelines</p>
+            <h3 className="text-gray-900 font-semibold text-lg">Comprehensive Cardiovascular Review</h3>
+            <p className="text-gray-600 text-sm">Primary + Secondary Prevention • NHFA/CSANZ/RACGP Guidelines</p>
           </div>
         </div>
-        
+
+        {/* Patient Classification Banner */}
+        <div className={`mt-4 p-4 rounded-lg border-2 bg-gradient-to-r ${classificationInfo.bgGradient} ${classificationInfo.borderColor}`}>
+          <div className="flex items-start space-x-3">
+            <ClassificationIcon className={`w-5 h-5 mt-0.5 ${classificationInfo.textColor} flex-shrink-0`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2 mb-1">
+                <h4 className={`font-semibold text-sm ${classificationInfo.textColor}`}>{classificationInfo.label}</h4>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-white/50 ${classificationInfo.textColor}`}>
+                  {classification.category.toUpperCase()}
+                </span>
+              </div>
+              <p className="text-gray-700 text-xs mb-2">{classification.rationale}</p>
+              {classification.reviewFocus.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-gray-600 text-xs font-medium mb-1">Review Focus:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {classification.reviewFocus.map((focus, idx) => (
+                      <span key={idx} className="px-2 py-0.5 bg-white/70 text-gray-700 text-xs rounded">
+                        {focus}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Summary Stats */}
         <div className="grid grid-cols-4 gap-3">
           <div className="text-center">
@@ -209,6 +302,56 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
           </>
         )}
       </div>
+
+      {/* Primary Prevention Sections (Missing Tests + Therapy Targets) */}
+      {(missingTests && missingTests.length > 0) || (therapyTargets && Object.keys(therapyTargets).length > 0) ? (
+        <div className="p-6 border-t border-gray-200 bg-gradient-to-r from-emerald-50/30 to-teal-50/30">
+          <div className="flex items-center space-x-2 mb-4">
+            <Info className="w-5 h-5 text-emerald-600" />
+            <h4 className="font-semibold text-gray-900 text-sm">Primary Prevention Recommendations</h4>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Missing / Next Tests */}
+            {missingTests && missingTests.length > 0 && (
+              <div className="bg-white/70 backdrop-blur-sm rounded-lg p-4 border border-emerald-200">
+                <h5 className="font-medium text-emerald-800 text-xs mb-2">Missing / Next Tests</h5>
+                <ul className="space-y-1">
+                  {missingTests.map((test, idx) => (
+                    <li key={idx} className="text-gray-700 text-xs flex items-start">
+                      <span className="text-emerald-600 mr-2">•</span>
+                      <span>{test}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Therapy Targets */}
+            {therapyTargets && Object.keys(therapyTargets).length > 0 && (
+              <div className="bg-white/70 backdrop-blur-sm rounded-lg p-4 border border-teal-200">
+                <h5 className="font-medium text-teal-800 text-xs mb-2">Therapy Targets</h5>
+                <dl className="space-y-1">
+                  {Object.entries(therapyTargets).map(([key, value], idx) => (
+                    <div key={idx} className="flex items-start text-xs">
+                      <dt className="font-medium text-gray-700 mr-2">{key}:</dt>
+                      <dd className="text-gray-600">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )}
+          </div>
+
+          {/* Clinical Notes */}
+          {clinicalNotes && (
+            <div className="mt-4 bg-amber-50/50 border border-amber-200 rounded-lg p-4">
+              <h5 className="font-medium text-amber-800 text-xs mb-2">Clinical Notes</h5>
+              <p className="text-gray-700 text-xs whitespace-pre-line">{clinicalNotes}</p>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Resources Section */}
       <div className="p-6 bg-gray-50 border-t border-gray-200">

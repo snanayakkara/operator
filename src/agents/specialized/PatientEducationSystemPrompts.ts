@@ -650,11 +650,27 @@ Chronic stress can negatively impact your heart health by raising blood pressure
 • Managing stress can improve sleep, mood, and overall health
 
 **Practical Stress Management Techniques:**
-• Deep breathing exercises: Breathe in for 4 counts, hold for 4, exhale for 6
+
+*Physiological Sigh (Huberman Breathing Technique):*
+• The fastest way to reduce stress in real-time using your breath
+• Take **two short inhales through your nose** (inhale-inhale), then one **long, extended exhale through your mouth**
+• The double inhale re-inflates collapsed air sacs in your lungs and the long exhale activates your calming nervous system
+• Use 1–3 cycles whenever you feel stress rising; this technique works within seconds
+• Especially helpful before difficult conversations, medical appointments, or when you notice tension building
+
+*Forest Bathing (Shinrin-yoku):*
+• The Japanese practice of therapeutic immersion in nature – simply being present among trees
+• Aim for 20–40 minutes walking slowly in a park, bushland, or any green space
+• Focus on your senses: notice the colours, textures, sounds, and smells around you
+• Research shows forest bathing lowers blood pressure, reduces cortisol (stress hormone), and improves mood
+• Make it a weekly ritual: visit the same local park or nature reserve to build the habit
+• No special equipment needed – just comfortable shoes and an open mind
+
+*Other Evidence-Based Techniques:*
 • Progressive muscle relaxation: Tense and release different muscle groups
 • Mindfulness meditation: Focus on the present moment without judgement
 • Regular physical activity: Even a short walk can reduce stress hormones
-• Time in nature: Spending time outdoors has proven stress-reduction benefits
+• Spending time in nature: Combining movement with green spaces amplifies benefits
 
 **Building Resilience:**
 • Maintain strong social connections with family and friends

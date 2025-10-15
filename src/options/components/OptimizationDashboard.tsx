@@ -147,25 +147,25 @@ export const OptimizationDashboard: React.FC = () => {
 
       {/* Content Area */}
       <div className="min-h-[600px]">
-        {/* Always mount all views to prevent re-initialization, use visibility to toggle */}
-        <div className={activeView === 'devset' ? 'block' : 'hidden'}>
+        {/* Conditionally render only the active view to prevent multiple simultaneous initializations */}
+        {activeView === 'devset' && (
           <DevSetManagerSection
             onError={(error) => console.error('DevSet error:', error)}
             onLoadingChange={(loading) => console.log('DevSet loading:', loading)}
           />
-        </div>
-        <div className={activeView === 'evaluation' ? 'block' : 'hidden'}>
+        )}
+        {activeView === 'evaluation' && (
           <EvaluationDashboard
             onError={(error) => console.error('Evaluation error:', error)}
             onLoadingChange={(loading) => console.log('Evaluation loading:', loading)}
           />
-        </div>
-        <div className={activeView === 'dspy' ? 'block' : 'hidden'}>
+        )}
+        {activeView === 'dspy' && (
           <FullPageOptimizationPanel />
-        </div>
-        <div className={activeView === 'corrections' ? 'block' : 'hidden'}>
+        )}
+        {activeView === 'corrections' && (
           <FullPageCorrectionsViewer />
-        </div>
+        )}
       </div>
     </div>
   );

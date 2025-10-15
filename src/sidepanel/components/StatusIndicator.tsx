@@ -27,8 +27,6 @@ import {
 import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus as _WhisperServerStatus, PatientSession } from '@/types/medical.types';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
-import { RecordPanel } from './RecordPanel';
-import { ThemeToggle } from './ThemeToggle';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { ToastService } from '@/services/ToastService';
@@ -189,10 +187,10 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   isRecording = false,
   modelStatus,
   onRefreshServices,
-  onWorkflowSelect,
-  activeWorkflow,
-  voiceActivityLevel = 0,
-  recordingTime = 0,
+  onWorkflowSelect: _onWorkflowSelect,
+  activeWorkflow: _activeWorkflow,
+  voiceActivityLevel: _voiceActivityLevel = 0,
+  recordingTime: _recordingTime = 0,
   isExtractingPatients = false,
   patientSessions = [],
   onRemoveSession,
@@ -372,21 +370,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       {/* Full-Width Status Bar - Fixed Height */}
       <div className={`w-full h-16 ${config.bgColor} border-b border-white/20 px-4 py-3`}>
         <div className="flex items-center justify-between h-full">
-          {/* Left Side: Record Panel + Status Information */}
+          {/* Left Side: Status Information */}
           <div className="flex items-center space-x-3 flex-1 min-w-0">
-            {/* Record Panel */}
-            <div className="flex-shrink-0">
-              <RecordPanel
-                onWorkflowSelect={onWorkflowSelect}
-                activeWorkflow={activeWorkflow}
-                isRecording={isRecording}
-                disabled={false}
-                voiceActivityLevel={voiceActivityLevel}
-                recordingTime={recordingTime}
-                whisperServerRunning={modelStatus.whisperServer?.running}
-              />
-            </div>
-            
             {/* Status Icon */}
             <div className="relative flex-shrink-0">
               <Icon 
@@ -405,11 +390,8 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
                 <h3 className={`font-medium text-sm ${config.color}`}>
-                  {/* Hide redundant "Recording" label during recording - RecordPanel handles this */}
-                  {isRecording ? 'Ready' : config.label}
+                  operator
                 </h3>
-                
-                {/* Agent indicator removed - agent name now shown in subtitle only */}
               </div>
               
               <p className="text-ink-secondary text-xs mt-0.5 truncate">
@@ -555,9 +537,6 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               </div>
             )}
 
-
-            {/* Theme Toggle */}
-            <ThemeToggle compact className="mr-1" />
 
             {/* Settings quick view trigger */}
             <button

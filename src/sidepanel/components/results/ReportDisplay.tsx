@@ -122,10 +122,6 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
           'PROCEDURE',
           'CONCLUSION',
           'ADDITIONAL NOTES',
-          'LEFT MAIN',
-          'LEFT ANTERIOR DESCENDING (LAD)',
-          'LEFT CIRCUMFLEX (LCX)',
-          'RIGHT CORONARY ARTERY (RCA)',
           'LEFT VENTRICLE'
         ];
         if (known.includes(upper)) return true;
