@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.6.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.12.4-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
