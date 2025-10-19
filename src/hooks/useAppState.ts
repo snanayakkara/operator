@@ -35,10 +35,12 @@ export type UIOverlay =
   | 'patient-mismatch'
   | 'screenshot-annotation'
   | 'bp-diary-importer'
+  | 'lipid-profile-importer'
   | 'patient-education'
   | 'paste-notes'
   | 'field-ingestion'
-  | 'processing-phase';
+  | 'processing-phase'
+  | 'sparsity-stepper';
 
 export type UISidePanel =
   | 'none'
@@ -93,6 +95,7 @@ interface DisplaySessionState {
   displayPatientInfo?: PatientInfo | null;
   displayProcessingTime?: number; // Processing time in milliseconds
   displayModelUsed?: string | null; // Model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
+  displayPipelineProgress?: PipelineProgress | null; // Pipeline progress for sessions still processing
 }
 
 // Combined app state
@@ -287,7 +290,8 @@ const initialState: CombinedAppState = {
     displayTaviStructuredSections: undefined,
     displayAgent: null,
     displayAgentName: null,
-    displayPatientInfo: null
+    displayPatientInfo: null,
+    displayPipelineProgress: null
   },
   
   // UI state
@@ -566,7 +570,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTaviStructuredSections: undefined,
           displayAgent: null,
           displayAgentName: null,
-          displayPatientInfo: null
+          displayPatientInfo: null,
+          displayPipelineProgress: null
         },
         transcriptionApproval: {
           status: 'pending',
@@ -800,7 +805,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         summaryLength: session.summary?.length || 0,
         hasEducationData: !!session.educationData,
         hasReviewData: !!session.reviewData,
-        hasTaviSections: !!session.taviStructuredSections
+        hasTaviSections: !!session.taviStructuredSections,
+        hasPipelineProgress: !!session.pipelineProgress,
+        pipelineStage: session.pipelineProgress?.stage,
+        pipelineProgress: session.pipelineProgress?.progress
       });
 
       return {
@@ -819,7 +827,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null,
           displayProcessingTime: session.processingTime,
-          displayModelUsed: session.modelUsed || null
+          displayModelUsed: session.modelUsed || null,
+          displayPipelineProgress: session.pipelineProgress || null
         }
       };
     }
@@ -837,7 +846,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTaviStructuredSections: undefined,
           displayAgent: null,
           displayAgentName: null,
-          displayPatientInfo: null
+          displayPatientInfo: null,
+          displayPipelineProgress: null
         }
       };
 

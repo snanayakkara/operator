@@ -558,7 +558,8 @@ export class LMStudioService {
     agentPrompt: string,
     userInput: string,
     agentType?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modelOverride?: string
   ): Promise<string> {
     // DSPy integration with feature flag
     if (agentType) {
@@ -610,16 +611,18 @@ export class LMStudioService {
     ];
 
     // Determine which model to use based on agent type
-    const modelToUse = (agentType && this.config.agentModels?.[agentType])
-      ? this.config.agentModels[agentType]
-      : this.config.processorModel;
+    const modelToUse = modelOverride
+      || ((agentType && this.config.agentModels?.[agentType])
+        ? this.config.agentModels[agentType]
+        : this.config.processorModel);
 
     // Determine agent-specific token limit
     const tokenLimit = (agentType && this.config.agentTokenLimits?.[agentType])
       ? this.config.agentTokenLimits[agentType]
       : this.config.agentTokenLimits?.['default'] || 4000;
 
-    console.log(`🤖 Using model: ${modelToUse} for agent: ${agentType || 'default'}`);
+    const modelSource = modelOverride ? 'override' : (agentType && this.config.agentModels?.[agentType]) ? 'agent-config' : 'default';
+    console.log(`🤖 Using model: ${modelToUse} for agent: ${agentType || 'default'} (${modelSource})`);
     console.log(`🎯 Token limit: ${tokenLimit} tokens for optimal response length`);
 
     // Create request using Gemma-aware formatting
@@ -900,7 +903,25 @@ export class LMStudioService {
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          // Enhanced error logging for debugging vision API issues
+          let errorDetails = '';
+          try {
+            const errorBody = await response.text();
+            errorDetails = errorBody;
+            console.error('❌ LM Studio HTTP Error Details:', {
+              status: response.status,
+              statusText: response.statusText,
+              errorBody: errorBody,
+              agentType: agentType,
+              model: preparedRequest.model,
+              isVisionRequest: preparedRequest.messages?.some(m =>
+                Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
+              )
+            });
+          } catch (e) {
+            errorDetails = response.statusText;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorDetails}`);
         }
 
         const data: LMStudioResponse = await response.json();

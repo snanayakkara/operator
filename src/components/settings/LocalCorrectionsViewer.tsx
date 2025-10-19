@@ -34,38 +34,89 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
   // State
   const [corrections, setCorrections] = useState<ASRCorrectionsEntry[]>([]);
   const [filteredCorrections, setFilteredCorrections] = useState<ASRCorrectionsEntry[]>([]);
+  const [displayedCorrections, setDisplayedCorrections] = useState<ASRCorrectionsEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDetails, setShowDetails] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editedText, setEditedText] = useState('');
-  
+
   // Filters
   const [selectedAgent, setSelectedAgent] = useState<AgentType | 'all'>('all');
   const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Load corrections on mount
+  // Progressive loading
+  const [loadedChunks, setLoadedChunks] = useState(1);
+  const CHUNK_SIZE = 50;
+
+  // Load corrections on mount with debouncing to prevent blocking message handlers
   useEffect(() => {
-    loadCorrections();
+    // Defer loading by 300ms to allow UI to render first
+    const timeoutId = setTimeout(() => {
+      loadCorrections();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Apply filters when corrections or filters change
+  // Use requestIdleCallback to defer expensive filter operations
   useEffect(() => {
-    applyFilters();
+    if ('requestIdleCallback' in window) {
+      const idleId = requestIdleCallback(() => {
+        applyFilters();
+      });
+      return () => cancelIdleCallback(idleId);
+    } else {
+      // Fallback for browsers without requestIdleCallback
+      const timeoutId = setTimeout(() => {
+        applyFilters();
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corrections, selectedAgent, dateRange]);
+
+  // Progressive display of filtered results
+  useEffect(() => {
+    const chunkEnd = loadedChunks * CHUNK_SIZE;
+    setDisplayedCorrections(filteredCorrections.slice(0, chunkEnd));
+  }, [filteredCorrections, loadedChunks, CHUNK_SIZE]);
 
   const loadCorrections = useCallback(async () => {
     try {
       setIsLoading(true);
       onLoadingChange(true);
 
-      const allCorrections = await asrLog.getCorrections({ limit: 500 });
-      setCorrections(allCorrections);
+      // Load only first chunk initially (50 items) for faster UI response
+      const initialCorrections = await asrLog.getCorrections({ limit: CHUNK_SIZE });
+      setCorrections(initialCorrections);
+      setLoadedChunks(1);
 
-      logger.info('Local corrections loaded', {
+      logger.info('Local corrections (initial chunk) loaded', {
         component: 'LocalCorrectionsViewer',
-        count: allCorrections.length
+        count: initialCorrections.length
       });
+
+      // Load remaining data in background after a delay
+      setTimeout(async () => {
+        try {
+          const allCorrections = await asrLog.getCorrections({ limit: 500 });
+          setCorrections(allCorrections);
+          setLoadedChunks(1); // Reset chunks for full dataset
+
+          logger.info('Local corrections (full) loaded', {
+            component: 'LocalCorrectionsViewer',
+            count: allCorrections.length
+          });
+        } catch (bgError) {
+          logger.warn('Failed to load full corrections in background', {
+            component: 'LocalCorrectionsViewer',
+            error: bgError instanceof Error ? bgError.message : String(bgError)
+          });
+        }
+      }, 1000);
 
     } catch (error) {
       logger.error('Failed to load local corrections', error instanceof Error ? error : new Error(String(error)), {
@@ -76,7 +127,7 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
       setIsLoading(false);
       onLoadingChange(false);
     }
-  }, [asrLog, onError, onLoadingChange]);
+  }, [asrLog, onError, onLoadingChange, CHUNK_SIZE]);
 
   const applyFilters = useCallback(() => {
     let filtered = [...corrections];
@@ -253,11 +304,26 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
     return Array.from(agents).sort();
   }, [corrections]);
 
-  if (isLoading) {
+  if (isLoading && corrections.length === 0) {
     return (
-      <div className="p-4 text-center text-gray-600">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-        Loading corrections...
+      <div className="space-y-3 p-4">
+        {/* Loading skeleton */}
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="border border-gray-200 rounded-lg p-3 animate-pulse">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <div className="h-3 w-24 bg-gray-200 rounded"></div>
+                <div className="h-5 w-20 bg-blue-100 rounded"></div>
+              </div>
+              <div className="flex space-x-1">
+                <div className="h-6 w-6 bg-gray-100 rounded"></div>
+                <div className="h-6 w-6 bg-gray-100 rounded"></div>
+                <div className="h-6 w-6 bg-gray-100 rounded"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="text-center text-sm text-gray-500 mt-4">Loading corrections...</div>
       </div>
     );
   }
@@ -335,7 +401,7 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
 
           {/* Corrections list */}
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {filteredCorrections.map((correction) => {
+            {displayedCorrections.map((correction) => {
               const isEditing = editingId === correction.id;
               const showingDetails = showDetails.has(correction.id);
 
@@ -428,6 +494,18 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
               );
             })}
           </div>
+
+          {/* Load More button */}
+          {displayedCorrections.length < filteredCorrections.length && (
+            <div className="text-center py-4">
+              <button
+                onClick={() => setLoadedChunks(prev => prev + 1)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Load More ({filteredCorrections.length - displayedCorrections.length} remaining)
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -463,7 +463,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* TAVI Workup Progress - Uses unified progress for consistency */}
       <AnimatePresence>
-        {agentType === 'tavi-workup' && pipelineProgress && isProcessing && (
+        {agentType === 'tavi-workup' && pipelineProgress && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -483,7 +483,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* Unified Pipeline Progress for all agents during processing */}
       <AnimatePresence>
-        {isProcessing && pipelineProgress && agentType !== 'tavi-workup' && (
+        {pipelineProgress && agentType !== 'tavi-workup' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -1155,10 +1155,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
         )}
       </AnimatePresence>
 
-      {/* Processing Time Display - at bottom for metrics visibility */}
+      {/* Processing Time Display - only show after completion (not during processing since UnifiedPipelineProgress shows live updates) */}
       <AnimatePresence>
-        {(totalProcessingTime || processingStatus !== 'idle') && (
-          <motion.div 
+        {processingStatus === 'complete' && totalProcessingTime && (
+          <motion.div
             className="px-4 pb-4"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

@@ -47,6 +47,7 @@ interface QuickActionsGroupedProps {
   voiceActivityLevel?: number;
   recordingTime?: number;
   whisperServerRunning?: boolean;
+  onTypeClick?: (workflowId: AgentType) => void; // For expandable workflows that support Type mode
 }
 
 export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
@@ -57,7 +58,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   activeWorkflow = null,
   voiceActivityLevel = 0,
   recordingTime = 0,
-  whisperServerRunning = true
+  whisperServerRunning = true,
+  onTypeClick
 }) => {
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState(false);
@@ -75,8 +77,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   }, [isCollapsed]);
 
   // Extract AI action configs for JSX rendering
-  const aiReviewAction = SECONDARY_ACTIONS[5]; // AI Medical Review
-  const batchAiAction = SECONDARY_ACTIONS[6]; // Batch AI Review
+  const aiReviewAction = SECONDARY_ACTIONS.find(action => action.id === 'ai-medical-review');
+  const batchAiAction = SECONDARY_ACTIONS.find(action => action.id === 'batch-ai-review');
   const AiReviewIcon = aiReviewAction?.icon;
   const BatchAiIcon = batchAiAction?.icon;
 
@@ -404,6 +406,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                   voiceActivityLevel={voiceActivityLevel}
                   recordingTime={recordingTime}
                   whisperServerRunning={whisperServerRunning}
+                  onTypeClick={onTypeClick}
                 />
               </div>
             )}
@@ -455,6 +458,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                     voiceActivityLevel={voiceActivityLevel}
                     recordingTime={recordingTime}
                     whisperServerRunning={whisperServerRunning}
+                    onTypeClick={onTypeClick}
                   />
                 </div>
               )}
@@ -494,8 +498,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             }}
           >
             <div className="grid grid-cols-4 gap-x-2 gap-y-2.5">
-              {/* First 6 secondary actions */}
-              {SECONDARY_ACTIONS.slice(0, 5).map((action, index) => (
+              {SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).map((action, index, array) => (
                 <motion.div
                   key={action.id}
                   variants={withReducedMotion(listItemVariants)}
@@ -516,8 +519,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
               {/* AI Actions Split Cell - Last cell contains both AI actions side by side */}
               <motion.div
                 variants={withReducedMotion(listItemVariants)}
-                custom={5}
-                className="relative overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300 transition-all"
+                custom={SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).length}
+                className="relative overflow-hidden rounded-lg transition-all"
                 style={{ minHeight: '64px' }}
               >
                 <div className="grid grid-cols-2 gap-0 h-full">

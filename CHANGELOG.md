@@ -9,6 +9,12 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.13.0] - 2025-10-20
+
+- feat: introduce Lipid Profile Importer with EMR capture, charting, and clinical insights
+- fix: restore Create Task quick action alongside new lipid shortcut
+- docs: update README badge and release notes for 3.13.0
+
 ## [3.12.4] - 2025-10-17
 
 - chore: bump version to 3.12.4 and update README badge

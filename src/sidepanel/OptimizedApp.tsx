@@ -28,6 +28,8 @@ import { PatientMismatchConfirmationModal } from './components/PatientMismatchCo
 import { BPDiaryImporter } from './components/BPDiaryImporter';
 import { OptimizationPanel } from '../components/settings/OptimizationPanel';
 import { PasteNotesPanel } from './components/PasteNotesPanel';
+import { SparsityStepperModal } from './components/SparsityStepperModal';
+import { LipidProfileImporter } from './components/LipidProfileImporter';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
@@ -35,7 +37,7 @@ import { WhisperServerService } from '@/services/WhisperServerService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { MetricsService } from '@/services/MetricsService';
@@ -46,6 +48,23 @@ import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
+
+interface CurrentDisplayData {
+  transcription: string;
+  results: string;
+  summary?: string;
+  taviStructuredSections?: any;
+  educationData?: any;
+  reviewData?: any;
+  agent: AgentType | null;
+  agentName: string | null;
+  patientInfo: PatientInfo | null;
+  processingTime?: number | null;
+  modelUsed?: string | null;
+  pipelineProgress?: PipelineProgress | null;
+  processingStatus: ProcessingStatus;
+  isDisplayingSession: boolean;
+}
 
 const OptimizedApp: React.FC = memo(() => {
   return (
@@ -66,12 +85,21 @@ const OptimizedAppContent: React.FC = memo(() => {
     patientSelection: selectors.isOverlayActive('patient-selection'),
     screenshotAnnotation: selectors.isOverlayActive('screenshot-annotation'),
     bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
+    lipidProfileImporter: selectors.isOverlayActive('lipid-profile-importer'),
     patientMismatch: selectors.isOverlayActive('patient-mismatch'),
-    pasteNotes: selectors.isOverlayActive('paste-notes')
+    pasteNotes: selectors.isOverlayActive('paste-notes'),
+    sparsityStepper: selectors.isOverlayActive('sparsity-stepper')
   };
   const metricsDashboardOpen = selectors.isSidePanelOpen('metrics-dashboard');
   const activeWorkflowRef = useRef<AgentType | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
+
+  // State for sparsity stepper
+  const [sparsityData, setSparsityData] = React.useState<{
+    missingFields: string[];
+    prefillData?: { diagnosis?: string; plan?: string };
+    onComplete: (result: any) => void;
+  } | null>(null);
   
   // Store current audio blob for failed transcription storage
   const currentAudioBlobRef = useRef<Blob | null>(null);
@@ -1402,21 +1430,22 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [generateSmartSummary]);
 
   // Determine which data to display: PRIORITY 1: User selection, PRIORITY 2: Active work
-  const getCurrentDisplayData = useCallback(() => {
+  const getCurrentDisplayData = useCallback((): CurrentDisplayData => {
     // PRIORITY 1: If user explicitly selected a completed session, ALWAYS show it (even during active work)
     if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
-      const displayData = {
+      const displayData: CurrentDisplayData = {
         transcription: state.displaySession.displayTranscription,
         results: state.displaySession.displayResults,
         summary: state.displaySession.displaySummary,
         taviStructuredSections: state.displaySession.displayTaviStructuredSections,
         educationData: state.displaySession.displayEducationData,
         reviewData: state.displaySession.displayReviewData,
-        agent: state.displaySession.displayAgent,
-        agentName: state.displaySession.displayAgentName,
-        patientInfo: state.displaySession.displayPatientInfo,
-        processingTime: state.displaySession.displayProcessingTime,
-        modelUsed: state.displaySession.displayModelUsed,
+        agent: state.displaySession.displayAgent ?? null,
+        agentName: state.displaySession.displayAgentName ?? null,
+        patientInfo: state.displaySession.displayPatientInfo ?? null,
+        processingTime: state.displaySession.displayProcessingTime ?? null,
+        modelUsed: state.displaySession.displayModelUsed ?? null,
+        pipelineProgress: state.displaySession.displayPipelineProgress ?? null,
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
         isDisplayingSession: true
       };
@@ -1431,7 +1460,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         summaryLength: displayData.summary?.length || 0,
         hasTranscription: !!displayData.transcription,
         transcriptionLength: displayData.transcription?.length || 0,
-        patientName: displayData.patientInfo?.name || 'Unknown'
+        patientName: displayData.patientInfo?.name || 'Unknown',
+        hasPipelineProgress: !!displayData.pipelineProgress,
+        pipelineStage: displayData.pipelineProgress?.stage,
+        pipelineProgressPercent: displayData.pipelineProgress?.progress
       });
 
       return displayData;
@@ -1459,9 +1491,15 @@ const OptimizedAppContent: React.FC = memo(() => {
         transcription: state.transcription,
         results: state.results,
         summary: state.aiGeneratedSummary,
+        taviStructuredSections: state.taviStructuredSections,
+        educationData: state.educationData,
+        reviewData: state.reviewData,
         agent: state.currentAgent,
         agentName: state.currentAgentName,
         patientInfo: state.currentPatientInfo,
+        processingTime: state.totalProcessingTime,
+        modelUsed: null,
+        pipelineProgress: state.pipelineProgress,
         processingStatus: state.processingStatus,
         isDisplayingSession: false
       };
@@ -1472,9 +1510,15 @@ const OptimizedAppContent: React.FC = memo(() => {
       transcription: state.transcription,
       results: state.results,
       summary: state.aiGeneratedSummary,
+      taviStructuredSections: state.taviStructuredSections,
+      educationData: state.educationData,
+      reviewData: state.reviewData,
       agent: state.currentAgent,
       agentName: state.currentAgentName,
       patientInfo: state.currentPatientInfo,
+      processingTime: state.totalProcessingTime,
+      modelUsed: null,
+      pipelineProgress: state.pipelineProgress,
       processingStatus: state.processingStatus,
       isDisplayingSession: false
     };
@@ -1709,6 +1753,18 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setProcessingStartTime(Date.now());
     }
   }, [recorder, state.ui.activeWorkflow, actions, extractPatientData, state.patientSessions, state.modelStatus]);
+
+  // Handle Type mode for expandable workflows (e.g., Quick Letter)
+  const handleTypeClick = useCallback((workflowId: AgentType) => {
+    console.log('⌨️ Type mode selected for workflow:', workflowId);
+
+    // For Quick Letter, open the paste notes modal
+    if (workflowId === 'quick-letter') {
+      console.log('📋 Opening Paste Notes Panel for Quick Letter');
+      actions.openOverlay('paste-notes');
+      actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+    }
+  }, [actions, state.selectedSessionId]);
 
   // Handle cancellation with proper cleanup
   const handleCancel = useCallback(() => {
@@ -2994,7 +3050,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
-                pipelineProgress={displayData.isDisplayingSession ? null : state.pipelineProgress}
+                pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                   />
                 );
@@ -3060,6 +3116,13 @@ const OptimizedAppContent: React.FC = memo(() => {
                 if (actionId === 'bp-diary-importer') {
                   console.log('🩺 Opening BP Diary Importer');
                   actions.openOverlay('bp-diary-importer');
+                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+                  return;
+                }
+
+                if (actionId === 'lipid-profile-importer') {
+                  console.log('🧪 Opening Lipid Profile Importer');
+                  actions.openOverlay('lipid-profile-importer');
                   actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                   return;
                 }
@@ -3131,18 +3194,84 @@ const OptimizedAppContent: React.FC = memo(() => {
                 } else if (actionId === 'ai-medical-review') {
                   // Handle AI Medical Review processing
                   console.log('🤖 Processing AI Medical Review with data:', data);
-                  
+
                   if (data?.formattedInput) {
+                    // Create a session for this AI Medical Review
+                    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+                    const patientInfo = state.currentPatientInfo || data.emrData?.patientInfo || {
+                      name: 'AI Medical Review Session',
+                      id: `AI-${Date.now()}`,
+                      dob: '',
+                      age: '',
+                      extractedAt: Date.now()
+                    };
+
+                    const patientSession: PatientSession = {
+                      id: sessionId,
+                      patient: patientInfo,
+                      transcription: '', // No audio transcription for AI Medical Review
+                      results: '',
+                      agentType: 'ai-medical-review',
+                      agentName: 'AI Medical Review',
+                      timestamp: Date.now(),
+                      status: 'processing',
+                      completed: false,
+                      processingStartTime: Date.now()
+                    };
+
+                    // Add the session to the timeline
+                    actions.addPatientSession(patientSession);
+                    actions.setCurrentSessionId(sessionId);
+
                     // Set processing state
                     actions.setProcessing(true);
                     actions.setCurrentAgent('ai-medical-review');
                     actions.setResults('');
                     actions.setErrors([]);
-                    
+                    actions.setProcessingStartTime(Date.now());
+
+                    // Initialize pipeline progress at AI Analysis stage (skip audio/transcription for AI Review)
+                    actions.setPipelineProgress({
+                      stage: 'ai-analysis',
+                      progress: 45,
+                      stageProgress: 10,
+                      details: 'Analyzing EMR data against Australian guidelines',
+                      modelName: 'MedGemma-27B'
+                    });
+
+                    // Update session with initial progress
+                    actions.updatePatientSession(sessionId, {
+                      pipelineProgress: {
+                        stage: 'ai-analysis',
+                        progress: 45,
+                        stageProgress: 10,
+                        details: 'Analyzing EMR data against Australian guidelines',
+                        modelName: 'MedGemma-27B'
+                      }
+                    });
+
                     try {
                       // Import AgentFactory dynamically to avoid circular dependencies
                       const { AgentFactory } = await import('@/services/AgentFactory');
-                      
+
+                      // Update progress to generation stage
+                      actions.setPipelineProgress({
+                        stage: 'generation',
+                        progress: 70,
+                        stageProgress: 30,
+                        details: 'Generating clinical findings and recommendations',
+                        modelName: 'MedGemma-27B'
+                      });
+                      actions.updatePatientSession(sessionId, {
+                        pipelineProgress: {
+                          stage: 'generation',
+                          progress: 70,
+                          stageProgress: 30,
+                          details: 'Generating clinical findings and recommendations',
+                          modelName: 'MedGemma-27B'
+                        }
+                      });
+
                       // Process with the AI Medical Review agent
                       console.log('🤖 Processing with BatchPatientReviewAgent...');
                       const result = await AgentFactory.processWithAgent('ai-medical-review', data.formattedInput);
@@ -3164,14 +3293,42 @@ const OptimizedAppContent: React.FC = memo(() => {
                         console.warn('⚠️ No reviewData found in result!');
                       }
 
+                      // Calculate processing time with safe fallback if start time was not recorded
+                      const processingStartTime = patientSession.processingStartTime ?? patientSession.timestamp ?? Date.now();
+                      const processingTime = Date.now() - processingStartTime;
+
+                      // Update session with results and mark completed
+                      actions.updatePatientSession(sessionId, {
+                        results: result.content,
+                        status: 'completed',
+                        completed: true,
+                        reviewData: result.reviewData,
+                        processingTime,
+                        pipelineProgress: {
+                          stage: 'generation',
+                          progress: 100,
+                          stageProgress: 100,
+                          details: `Review completed in ${Math.round(processingTime / 1000)}s`,
+                          modelName: 'MedGemma-27B'
+                        }
+                      });
+
                       // Update state with results
                       actions.setMissingInfo(result.missingInfo || null);
                       // Use atomic completion to ensure consistent state management
-                      actions.completeProcessingAtomic(state.currentSessionId || 'ai-review-session', result.content);
+                      actions.completeProcessingAtomic(sessionId, result.content);
 
-                      console.log('✅ AI Medical Review completed successfully');
+                      console.log('✅ AI Medical Review completed successfully in', processingTime, 'ms');
                     } catch (error) {
                       console.error('❌ AI Medical Review processing failed:', error);
+
+                      // Mark session as failed
+                      actions.updatePatientSession(sessionId, {
+                        status: 'error',
+                        completed: true,
+                        errors: [`AI Medical Review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
+                      });
+
                       actions.setErrors([`AI Medical Review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
                       actions.setProcessingStatus('idle');
                       actions.setProcessing(false);
@@ -3249,6 +3406,7 @@ const OptimizedAppContent: React.FC = memo(() => {
               }
             }}
             onStartWorkflow={(workflowId) => handleWorkflowSelect(workflowId as AgentType)}
+            onTypeClick={handleTypeClick}
             isFooter={true}
             isRecording={recorder.isRecording}
             activeWorkflow={state.ui.activeWorkflow}
@@ -3290,12 +3448,12 @@ const OptimizedAppContent: React.FC = memo(() => {
               const orchestrator = new BatchAIReviewOrchestrator({
                 enableCaching: true,
                 enableMetrics: true,
+                enableAdvancedDiagnostics: true,
                 parallelProcessing: false, // Use sequential for safer navigation
                 maxConcurrentOperations: 1,
-                autoSaveCheckpoints: true,
+                enableCheckpoints: true,
                 checkpointInterval: 1, // Save after each patient
-                enableErrorRecovery: true,
-                maxRetries: 2
+                retryAttempts: 2
               });
 
               // Start batch processing with progress tracking
@@ -3312,7 +3470,7 @@ const OptimizedAppContent: React.FC = memo(() => {
               const storageKey = `batchResults_${Date.now()}`;
               const batchResults = {
                 report: result,
-                patientResults: result.patientReviews,
+                patientResults: result.batchData.patientResults,
                 summary: {
                   total: result.batchData.totalPatients,
                   successful: result.batchData.successfulReviews,
@@ -3365,6 +3523,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         />
       )}
 
+      {/* Lipid Profile Importer Modal */}
+      {overlayState.lipidProfileImporter && (
+        <LipidProfileImporter
+          isOpen={overlayState.lipidProfileImporter}
+          onClose={() => {
+            actions.closeOverlay('lipid-profile-importer');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
+        />
+      )}
+
       {/* Patient Mismatch Confirmation Modal */}
       {overlayState.patientMismatch && (
         <PatientMismatchConfirmationModal
@@ -3402,13 +3571,147 @@ const OptimizedAppContent: React.FC = memo(() => {
             actions.setUIMode('idle', { sessionId: null, origin: 'user' });
           }}
           onGenerate={async (notes: string) => {
-            console.log('📋 Processing pasted notes...');
-            // TODO: Implement paste processing logic
-            ToastService.getInstance().info('Paste letter feature coming soon!');
+            console.log('📋 Processing pasted notes for Quick Letter...');
+
+            try {
+              // Close the paste modal
+              actions.closeOverlay('paste-notes');
+
+              // Extract patient data from EMR
+              const patientData = await extractPatientData();
+
+              // Create EMR context for processPaste
+              const emrContext = {
+                demographics: {
+                  name: patientData.name,
+                  age: patientData.age,
+                  dob: patientData.dob,
+                  gender: patientData.gender,
+                  mrn: patientData.mrn
+                },
+                gp: patientData.gp,
+                allergies: patientData.allergies || [],
+                background: patientData.background || '',
+                investigation_summary: patientData.investigationSummary || '',
+                medications_emr: (patientData.medications || []).map((med: any) => ({
+                  name: med.name || med,
+                  dose: med.dose || '',
+                  frequency: med.frequency || '',
+                  indication: med.indication || ''
+                }))
+              };
+
+              // Create a session for this paste operation
+              const sessionId = `paste-${Date.now()}`;
+              const patientSession: PatientSession = {
+                id: sessionId,
+                patient: patientData,
+                timestamp: Date.now(),
+                agentType: 'quick-letter' as AgentType,
+                agentName: 'Quick Letter',
+                status: 'processing' as const,
+                transcription: notes, // Use pasted notes as "transcription"
+                results: '',
+                completed: false,
+                processingTime: 0,
+                modelUsed: '',
+                pipelineProgress: { stage: 'ai-analysis', progress: 0, stageProgress: 0 }
+              };
+
+              actions.addPatientSession(patientSession);
+              actions.setCurrentSessionId(sessionId);
+              actions.setSelectedSessionId(sessionId);
+              actions.setUIMode('processing', { sessionId, origin: 'user' });
+              actions.setProcessing(true);
+              actions.setProcessingStatus('processing');
+              actions.setProcessingStartTime(Date.now());
+
+              // Get QuickLetterAgent instance
+              const QuickLetterAgentClass = (await import('@/agents/specialized/QuickLetterAgent')).QuickLetterAgent;
+              const quickLetterAgent = new QuickLetterAgentClass();
+
+              // Call processPaste method
+              const report = await quickLetterAgent.processPaste(
+                notes,
+                emrContext,
+                {
+                  identity_mismatch: false,
+                  patient_friendly_requested: false
+                },
+                {
+                  onProgress: (message: string) => {
+                    console.log(`📝 Paste processing: ${message}`);
+                    // Update pipeline progress if needed
+                  },
+                  onSparsityDetected: async (missing: string[], prefillData?: { diagnosis?: string; plan?: string }) => {
+                    console.log('📝 Sparsity detected, missing fields:', missing);
+                    console.log('📝 Prefill data:', prefillData);
+
+                    // Return a Promise that resolves when user completes the stepper
+                    return new Promise((resolve) => {
+                      setSparsityData({
+                        missingFields: missing,
+                        prefillData,
+                        onComplete: (result) => {
+                          resolve(result);
+                          // Close modal
+                          actions.closeOverlay('sparsity-stepper');
+                          setSparsityData(null);
+                        }
+                      });
+                      // Open the stepper modal
+                      actions.openOverlay('sparsity-stepper');
+                    });
+                  }
+                }
+              );
+
+              // Update session with results
+              const processingTime = Date.now() - (patientSession.timestamp || Date.now());
+              actions.updatePatientSession(sessionId, {
+                status: 'completed',
+                completed: true,
+                results: report.content,
+                processingTime,
+                pipelineProgress: { stage: 'generation', progress: 100, stageProgress: 100 }
+              });
+
+              actions.setResults(report.content);
+              actions.setProcessing(false);
+              actions.setProcessingStatus('idle');
+              actions.setUIMode('idle', { sessionId, origin: 'user' });
+
+              console.log('✅ Paste letter generated successfully');
+              ToastService.getInstance().success('Letter generated from pasted notes!');
+
+            } catch (error) {
+              console.error('❌ Failed to process pasted notes:', error);
+              actions.setProcessing(false);
+              actions.setProcessingStatus('error');
+              actions.setErrors([`Failed to generate letter: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+              ToastService.getInstance().error('Failed to generate letter from pasted notes');
+            }
           }}
         />
       )}
-      
+
+      {/* Sparsity Stepper Modal */}
+      {overlayState.sparsityStepper && sparsityData && (
+        <SparsityStepperModal
+          isVisible={overlayState.sparsityStepper}
+          missingFields={sparsityData.missingFields}
+          prefillData={sparsityData.prefillData}
+          onComplete={sparsityData.onComplete}
+          onCancel={() => {
+            actions.closeOverlay('sparsity-stepper');
+            setSparsityData(null);
+            // Also need to handle the rejection of the Promise
+            // This will cause the processPaste to fail gracefully
+            ToastService.getInstance().info('Letter generation cancelled');
+          }}
+        />
+      )}
+
       {/* Recording Prompts are now integrated into the unified recording interface above */}
 
 

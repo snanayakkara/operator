@@ -515,7 +515,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
           <div className="flex items-center space-x-3 text-sm">
             <span className="text-gray-600">Quality:</span>
             <span className={`font-medium ${getQualityColor(analysis.quality)}`}>
-              {getQualityIcon(analysis.quality)} {analysis.quality.toUpperCase()}
+              {analysis.quality}
             </span>
             <span className="text-gray-400">•</span>
             <span className="text-gray-600">Duration:</span>
@@ -538,7 +538,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Quality:</span>
                 <span className={`font-medium ${getQualityColor(analysis.quality)}`}>
-                  {getQualityIcon(analysis.quality)} {analysis.quality.toUpperCase()}
+                  {analysis.quality !== 'good' && `${getQualityIcon(analysis.quality)} `}{analysis.quality}
                 </span>
               </div>
               <div className="flex items-center justify-between">

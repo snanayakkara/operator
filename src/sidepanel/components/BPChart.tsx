@@ -101,7 +101,7 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
     ctx.clearRect(0, 0, width, height);
 
     // Chart dimensions
-    const padding = { top: 30, right: 60, bottom: 50, left: 70 };
+    const padding = { top: 30, right: 60, bottom: 60, left: 70 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
@@ -157,7 +157,7 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
     if (!ctx) return;
 
     const { width, height } = dimensions;
-    const padding = { top: 30, right: 60, bottom: 50, left: 70 };
+    const padding = { top: 30, right: 60, bottom: 60, left: 70 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
 
@@ -302,16 +302,19 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
 
     // X-axis labels (date + time) - show every nth label to avoid overlap
     ctx.textAlign = 'center';
-    ctx.font = '10px sans-serif';
-    const labelInterval = Math.max(1, Math.ceil(readings.length / 8)); // Show max 8 labels
+    ctx.font = '9px sans-serif';
+    const labelInterval = Math.max(1, Math.ceil(readings.length / 6)); // Show max 6 labels to avoid crowding
     readings.forEach((reading, index) => {
       if (index % labelInterval === 0 || index === readings.length - 1) {
         const x = padding.left + (index / (readings.length - 1)) * chartWidth;
         const date = new Date(reading.date);
         const dateLabel = `${date.getDate()}/${date.getMonth() + 1}`;
-        const timeLabel = reading.timeOfDay === 'morning' ? 'M' : 'E';
 
-        ctx.fillText(`${dateLabel} ${timeLabel}`, x, padding.top + chartHeight + 20);
+        // Show date on first line, time on second line
+        ctx.fillText(dateLabel, x, padding.top + chartHeight + 15);
+        ctx.font = '8px monospace';
+        ctx.fillText(reading.time, x, padding.top + chartHeight + 27);
+        ctx.font = '9px sans-serif';
       }
     });
 
@@ -347,7 +350,7 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
     const y = event.clientY - rect.top;
 
     const { width } = dimensions;
-    const padding = { top: 30, right: 60, bottom: 50, left: 70 };
+    const padding = { top: 30, right: 60, bottom: 60, left: 70 };
     const chartWidth = width - padding.left - padding.right;
 
     // Check if mouse is within chart area
@@ -474,7 +477,7 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
             {new Date(tooltip.reading.date).toLocaleDateString('en-AU', {
               day: 'numeric',
               month: 'short'
-            })} {tooltip.reading.timeOfDay === 'morning' ? 'AM' : 'PM'}
+            })} <span className="font-mono">{tooltip.reading.time}</span>
           </div>
           <div className="space-y-0.5 text-[10px]">
             <div className="flex justify-between">

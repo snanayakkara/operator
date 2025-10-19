@@ -148,23 +148,26 @@ export const OptimizationDashboard: React.FC = () => {
       {/* Content Area */}
       <div className="min-h-[600px]">
         {/* Conditionally render only the active view to prevent multiple simultaneous initializations */}
+        {/* Using key prop to force remount and cleanup on view change */}
         {activeView === 'devset' && (
           <DevSetManagerSection
+            key="devset-view"
             onError={(error) => console.error('DevSet error:', error)}
             onLoadingChange={(loading) => console.log('DevSet loading:', loading)}
           />
         )}
         {activeView === 'evaluation' && (
           <EvaluationDashboard
+            key="evaluation-view"
             onError={(error) => console.error('Evaluation error:', error)}
             onLoadingChange={(loading) => console.log('Evaluation loading:', loading)}
           />
         )}
         {activeView === 'dspy' && (
-          <FullPageOptimizationPanel />
+          <FullPageOptimizationPanel key="dspy-view" />
         )}
         {activeView === 'corrections' && (
-          <FullPageCorrectionsViewer />
+          <FullPageCorrectionsViewer key="corrections-view" />
         )}
       </div>
     </div>

@@ -17,6 +17,7 @@ export interface WorkflowConfig {
   category: 'procedure' | 'documentation' | 'investigation' | 'batch' | 'advanced';
   estimatedTime: string;
   complexity: 'low' | 'medium' | 'high';
+  isExpandable?: boolean; // Hover to reveal Dictate vs Type options
 }
 
 export const WORKFLOWS: readonly WorkflowConfig[] = [
@@ -30,7 +31,8 @@ export const WORKFLOWS: readonly WorkflowConfig[] = [
     color: 'green',
     category: 'documentation',
     estimatedTime: '1-3 min',
-    complexity: 'low'
+    complexity: 'low',
+    isExpandable: true // Hover to reveal Dictate vs Type options
   },
   {
     id: 'tavi-workup',

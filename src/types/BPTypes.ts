@@ -6,7 +6,8 @@
 export interface BPReading {
   id: string;
   date: string; // YYYY-MM-DD format
-  timeOfDay: 'morning' | 'evening';
+  time: string; // HH:MM format (24-hour)
+  timeOfDay?: 'morning' | 'evening'; // Derived field for backward compatibility
   sbp: number; // Systolic BP (mmHg)
   dbp: number; // Diastolic BP (mmHg)
   hr: number; // Heart rate (bpm)
@@ -24,9 +25,19 @@ export interface BPWarning {
 export interface BPExtractionResult {
   success: boolean;
   readings: BPReading[];
+  insights?: BPInsights;
   rawResponse?: string;
   error?: string;
   processingTime: number;
+}
+
+export interface BPInsights {
+  controlSummary: string; // e.g., "Suboptimal control - 67% of readings above target"
+  diurnalPattern: string; // e.g., "Higher in morning (avg 145/85) vs evening (avg 132/78)"
+  variabilityConcern: string; // e.g., "High variability (SBP range 129-170 mmHg)"
+  keyRecommendations: string[]; // e.g., ["Consider uptitrating antihypertensive", "Assess medication timing"]
+  peakTimes?: string; // e.g., "Highest readings typically 06:00-08:00"
+  lowestTimes?: string; // e.g., "Best control 18:00-20:00"
 }
 
 export interface BPValidationResult {

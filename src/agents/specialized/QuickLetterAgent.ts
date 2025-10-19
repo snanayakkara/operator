@@ -823,8 +823,8 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       console.log('⚠️ No SUMMARY:/LETTER: markers found, using fallback parsing');
       console.log('📄 Cleaned output for fallback:', cleanedOutput.substring(0, 200) + '...');
       const intelligentSummary = this.generateIntelligentSummary(cleanedOutput);
-      const fallbackSummary = intelligentSummary.length > 150
-        ? intelligentSummary.substring(0, 147) + '...'
+      const fallbackSummary = intelligentSummary.length > 100
+        ? intelligentSummary.substring(0, 97) + '...'
         : intelligentSummary;
 
       console.log('🔄 Generated fallback summary:', fallbackSummary);
@@ -838,8 +838,8 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       console.warn('❌ Error parsing structured response:', error);
       // Try to clean the output even in error case
       const cleanedOutput = this.preprocessResponseOutput(outputText);
-      const fallbackSummary = cleanedOutput.length > 150
-        ? cleanedOutput.substring(0, 147) + '...'
+      const fallbackSummary = cleanedOutput.length > 100
+        ? cleanedOutput.substring(0, 97) + '...'
         : cleanedOutput;
       console.log('🚨 Using emergency fallback parsing with preprocessing');
       return { summary: fallbackSummary, letterContent: cleanedOutput };
@@ -1228,14 +1228,14 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     // Take the first meaningful clinical sentence
     if (clinicalSentences.length > 0) {
       let summary = clinicalSentences[0].trim();
-      if (summary.length > 150) {
-        summary = summary.substring(0, 147) + '...';
+      if (summary.length > 100) {
+        summary = summary.substring(0, 97) + '...';
       }
       return summary;
     }
-    
+
     // Last resort
-    return content.substring(0, 150).trim() + (content.length > 150 ? '...' : '');
+    return content.substring(0, 100).trim() + (content.length > 100 ? '...' : '');
   }
 
   /**
@@ -2022,7 +2022,7 @@ If you have any questions about this information, please don't hesitate to call 
    * 7. Build JSON envelope
    * 8. Call LM Studio with paste system prompt + envelope + raw notes (timeout: 30s)
    * 9. Parse response (SUMMARY/LETTER contract)
-   * 10. Enforce SUMMARY ≤ 150 chars (re-prompt once if exceeds)
+   * 10. Enforce SUMMARY ≤ 100 chars (re-prompt once if exceeds)
    * 11. Check post-gen gate triggers
    * 12. If post-gen triggers → show PasteReviewPanel again (gate copy/insert actions)
    * 13. Return MedicalReport with paste metadata
@@ -2234,11 +2234,11 @@ If you have any questions about this information, please don't hesitate to call 
         throw new Error('ERROR – notes could not be parsed coherently.');
       }
 
-      // Step 8: Enforce SUMMARY ≤ 150 chars
-      if (parseResult.summary && parseResult.summary.length > 150) {
+      // Step 8: Enforce SUMMARY ≤ 100 chars
+      if (parseResult.summary && parseResult.summary.length > 100) {
         console.warn('📋 Summary too long, truncating...');
-        // Truncate to 150 chars
-        parseResult.summary = parseResult.summary.substring(0, 147) + '...';
+        // Truncate to 100 chars
+        parseResult.summary = parseResult.summary.substring(0, 97) + '...';
       }
 
       // Step 9: Check post-gen gate triggers

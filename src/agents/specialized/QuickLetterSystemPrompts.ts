@@ -97,7 +97,7 @@ STRICTLY PROHIBITED:
 EXAMPLE FORMAT:
 SUMMARY: Acute chest pain. ECG shows ST elevation. Primary PCI performed with drug-eluting stent to LAD. Good angiographic result.
 ---
-LETTER: Thank you for referring this 65-year-old gentleman who presented with acute chest pain.
+LETTER: Thank you for referring John, a 65 year old male with a history of hypertension and hyperlipidemia who presented with acute chest pain.
 
 He developed severe central chest pain at 2 PM today while at rest. The pain was crushing in nature and radiated to his left arm. He had associated nausea and diaphoresis.
 
@@ -213,7 +213,7 @@ STRICTLY PROHIBITED:
 EXAMPLE FORMAT:
 SUMMARY: FU HTN. Perindopril ↑ to 5 mg od. Amlodipine ceased. BP control improving. Lifestyle modifications reinforced.
 ---
-LETTER: Thank you for seeing this 65-year-old gentleman for follow-up of hypertension.
+LETTER: I had the pleasure of seeing John for follow-up of hypertension.
 
 Over the past few weeks, his blood pressure control has improved with recent home readings averaging 135/85 mmHg. However, he reports some persistent ankle oedema which we attribute to the amlodipine.
 

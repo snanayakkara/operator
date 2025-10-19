@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.12.4-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.13.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -55,6 +55,7 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 | **Background** | Patient History | Comprehensive medical history compilation |
 | **Medication** | Pharmacy | Drug interactions, dosing, contraindications |
 | **Bloods** | Laboratory | Lab result analysis with trend detection |
+| **Lipid Profile Importer** | Laboratory | EMR capture with LDL/TChol charts, guideline overlays, clinical insights |
 | **Imaging** | Radiology | Structured radiology report generation |
 | **Patient Education** | Patient Care | Readable educational materials |
 | **Batch Patient Review** | Population Health | Multi-patient analysis and insights |

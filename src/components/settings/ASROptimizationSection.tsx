@@ -48,27 +48,38 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
   const [correctionsCount, setCorrectionsCount] = useState(0);
   const [selectedGlossaryTerms, setSelectedGlossaryTerms] = useState<Set<string>>(new Set());
   const [selectedRules, setSelectedRules] = useState<Set<string>>(new Set());
-  
+
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [isUploadingCorrections, setIsUploadingCorrections] = useState(false);
-  
+
   const [showCurrentState, setShowCurrentState] = useState(false);
   const [lastApplied, setLastApplied] = useState<Date | null>(null);
-  
+
   // Server availability state
   const [serverAvailable, setServerAvailable] = useState<boolean | null>(null);
   const [isCheckingServer, setIsCheckingServer] = useState(false);
 
-  // Load initial data
+  // Progress state
+  const [uploadProgressText, setUploadProgressText] = useState<string>('');
+  const [previewProgressText, setPreviewProgressText] = useState<string>('');
+  const [applyProgressText, setApplyProgressText] = useState<string>('');
+
+  // Load initial data with debouncing to prevent blocking message handlers
   useEffect(() => {
     const abortController = new AbortController();
 
-    loadInitialData();
+    // Defer initialization to prevent blocking on mount
+    const timeoutId = setTimeout(() => {
+      if (!abortController.signal.aborted) {
+        loadInitialData();
+      }
+    }, 200);
 
     // Cleanup: prevent state updates after unmount
     return () => {
       abortController.abort();
+      clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -131,6 +142,7 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
     try {
       setIsUploadingCorrections(true);
       onLoadingChange(true);
+      setUploadProgressText('Loading corrections from local storage...');
 
       // Get corrections from Chrome storage
       const corrections = await asrLog.getCorrections({
@@ -138,12 +150,17 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
       });
 
       if (corrections.length === 0) {
+        setUploadProgressText('');
         throw new Error('No corrections found in the last 7 days');
       }
 
+      setUploadProgressText(`Uploading ${corrections.length} corrections to DSPy server...`);
+
       // Upload to server
       const result = await optimizationService.uploadCorrections(corrections);
-      
+
+      setUploadProgressText(`✓ Successfully uploaded ${result.uploaded} corrections!`);
+
       logger.info('Corrections uploaded successfully', {
         component: 'ASROptimizationSection',
         uploaded: result.uploaded
@@ -151,7 +168,11 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
       setCorrectionsCount(result.uploaded);
 
+      // Clear success message after 3 seconds
+      setTimeout(() => setUploadProgressText(''), 3000);
+
     } catch (error) {
+      setUploadProgressText('');
       onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsUploadingCorrections(false);
@@ -163,6 +184,7 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
     try {
       setIsPreviewLoading(true);
       onLoadingChange(true);
+      setPreviewProgressText('Analyzing correction patterns...');
 
       // Request preview from server
       const previewData = await optimizationService.previewASRCorrections({
@@ -170,6 +192,8 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         maxTerms: 50,
         maxRules: 30
       });
+
+      setPreviewProgressText('Processing suggestions...');
 
       setPreview(previewData);
 
@@ -184,6 +208,9 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         .map(rule => `${rule.raw}→${rule.fix}`);
       setSelectedRules(new Set(highFreqRules));
 
+      const totalSuggestions = previewData.glossary_additions.length + previewData.rule_candidates.length;
+      setPreviewProgressText(`✓ Found ${totalSuggestions} suggestions (${highFreqTerms.length + highFreqRules.length} pre-selected)`);
+
       logger.info('ASR preview generated', {
         component: 'ASROptimizationSection',
         glossaryTerms: previewData.glossary_additions.length,
@@ -191,7 +218,11 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         preselected: { terms: highFreqTerms.length, rules: highFreqRules.length }
       });
 
+      // Clear success message after 3 seconds
+      setTimeout(() => setPreviewProgressText(''), 3000);
+
     } catch (error) {
+      setPreviewProgressText('');
       onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsPreviewLoading(false);
@@ -212,14 +243,24 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         return { raw, fix };
       });
 
+      const totalItems = approvedGlossary.length + approvedRules.length;
+      setApplyProgressText(`Applying ${totalItems} corrections...`);
+
       const result = await optimizationService.applyASRCorrections({
         approve_glossary: approvedGlossary,
         approve_rules: approvedRules
       });
 
+      setApplyProgressText('Refreshing correction state...');
+
       // Refresh current state
       const newState = await optimizationService.getCurrentASRState();
       setCurrentState(newState);
+
+      setApplyProgressText('Updating cache...');
+
+      // Refresh dynamic corrections cache
+      await dynamicASR.refreshDynamicCorrections();
 
       // Clear preview
       setPreview(null);
@@ -227,8 +268,7 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
       setSelectedRules(new Set());
       setLastApplied(new Date());
 
-      // Refresh dynamic corrections cache
-      await dynamicASR.refreshDynamicCorrections();
+      setApplyProgressText(`✓ Successfully applied ${result.written.glossary + result.written.rules} corrections!`);
 
       logger.info('ASR corrections applied successfully', {
         component: 'ASROptimizationSection',
@@ -236,7 +276,11 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         paths: result.paths
       });
 
+      // Clear success message after 3 seconds
+      setTimeout(() => setApplyProgressText(''), 3000);
+
     } catch (error) {
+      setApplyProgressText('');
       onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsApplying(false);
@@ -360,6 +404,19 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
     onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error.message));
   }, [onError]);
 
+  // Show loading skeleton during initial check
+  if (isCheckingServer && serverAvailable === null) {
+    return (
+      <div className="space-y-6">
+        <div className="animate-pulse">
+          <div className="h-20 bg-gray-100 rounded-lg mb-4"></div>
+          <div className="h-64 bg-gray-50 rounded-lg"></div>
+        </div>
+        <div className="text-center text-sm text-gray-500">Checking server status...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Server Status Banner */}
@@ -398,39 +455,61 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
       {serverAvailable && (
         <>
           {/* Upload Corrections */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <h4 className="font-medium text-gray-900">Upload to DSPy Server</h4>
-              <p className="text-sm text-gray-600">
-                Send {correctionsCount} local corrections to the DSPy server for batch analysis
-              </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div>
+                <h4 className="font-medium text-gray-900">Upload to DSPy Server</h4>
+                <p className="text-sm text-gray-600">
+                  Send {correctionsCount} local corrections to the DSPy server for batch analysis
+                </p>
+              </div>
+              <button
+                onClick={uploadCorrections}
+                disabled={isUploadingCorrections || correctionsCount === 0}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Upload className={`w-4 h-4 ${isUploadingCorrections ? 'animate-pulse' : ''}`} />
+                <span>{isUploadingCorrections ? 'Uploading...' : 'Upload to Server'}</span>
+              </button>
             </div>
-            <button
-              onClick={uploadCorrections}
-              disabled={isUploadingCorrections || correctionsCount === 0}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Upload className="w-4 h-4" />
-              <span>{isUploadingCorrections ? 'Uploading...' : 'Upload to Server'}</span>
-            </button>
+            {uploadProgressText && (
+              <div className={`px-4 py-2 rounded-lg text-sm ${
+                uploadProgressText.startsWith('✓')
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                {uploadProgressText}
+              </div>
+            )}
           </div>
 
           {/* Generate Preview */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-medium text-gray-900">Batch Corrections Analysis</h4>
-              <p className="text-sm text-gray-600">
-                Analyze patterns and generate improvement suggestions via DSPy server
-              </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-gray-900">Batch Corrections Analysis</h4>
+                <p className="text-sm text-gray-600">
+                  Analyze patterns and generate improvement suggestions via DSPy server
+                </p>
+              </div>
+              <button
+                onClick={generatePreview}
+                disabled={isPreviewLoading}
+                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isPreviewLoading ? 'animate-spin' : ''}`} />
+                <span>{isPreviewLoading ? 'Analyzing...' : 'Prepare Batch'}</span>
+              </button>
             </div>
-            <button
-              onClick={generatePreview}
-              disabled={isPreviewLoading}
-              className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isPreviewLoading ? 'animate-spin' : ''}`} />
-              <span>{isPreviewLoading ? 'Analyzing...' : 'Prepare Batch'}</span>
-            </button>
+            {previewProgressText && (
+              <div className={`px-4 py-2 rounded-lg text-sm ${
+                previewProgressText.startsWith('✓')
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                {previewProgressText}
+              </div>
+            )}
           </div>
 
           {/* Preview Results */}
@@ -553,23 +632,34 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
               )}
 
               {/* Apply Changes */}
-              <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
-                <div>
-                  <div className="font-medium text-gray-900">
-                    Ready to Apply: {selectedGlossaryTerms.size + selectedRules.size} items
+              <div className="space-y-2">
+                <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      Ready to Apply: {selectedGlossaryTerms.size + selectedRules.size} items
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {selectedGlossaryTerms.size} glossary terms, {selectedRules.size} correction rules
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    {selectedGlossaryTerms.size} glossary terms, {selectedRules.size} correction rules
-                  </div>
+                  <button
+                    onClick={applyChanges}
+                    disabled={isApplying || (selectedGlossaryTerms.size === 0 && selectedRules.size === 0)}
+                    className="flex items-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Check className={`w-4 h-4 ${isApplying ? 'animate-pulse' : ''}`} />
+                    <span>{isApplying ? 'Applying...' : 'Apply Changes'}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={applyChanges}
-                  disabled={isApplying || (selectedGlossaryTerms.size === 0 && selectedRules.size === 0)}
-                  className="flex items-center space-x-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{isApplying ? 'Applying...' : 'Apply Changes'}</span>
-                </button>
+                {applyProgressText && (
+                  <div className={`px-4 py-2 rounded-lg text-sm ${
+                    applyProgressText.startsWith('✓')
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                  }`}>
+                    {applyProgressText}
+                  </div>
+                )}
               </div>
             </div>
           )}

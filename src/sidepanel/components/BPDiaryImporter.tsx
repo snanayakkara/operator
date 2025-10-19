@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, FileJson, FileText, Clipboard, RefreshCw, Trash2, CheckCircle, Settings } from 'lucide-react';
+import { X, FileJson, FileText, Clipboard, RefreshCw, Trash2, CheckCircle, Settings, Info } from 'lucide-react';
 import { BPDropzone } from './BPDropzone';
 import { BPReviewGrid } from './BPReviewGrid';
 import { BPChart, BPChartHandle } from './BPChart';
@@ -42,6 +42,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   const [selectedModel, setSelectedModel] = useState<string>('medgemma-4b-it-mlx');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [insights, setInsights] = useState<import('@/types/BPTypes').BPInsights | undefined>(undefined);
 
   const chartRef = useRef<BPChartHandle>(null);
   const extractorRef = useRef(BPDiaryExtractor.getInstance());
@@ -64,14 +65,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     const allModels = await lmStudioRef.current.getAvailableModels();
 
     // Filter to only vision-capable models
-    // Known vision models: LLaVA, Gemma (with vision), Qwen2-VL, MiniCPM-V, Pixtral
+    // Known vision models: LLaVA, Gemma (with vision), Qwen-VL, MiniCPM-V, Pixtral
     const visionModels = allModels.filter(m => {
       const lowerModel = m.toLowerCase();
       return (
         lowerModel.includes('llava') ||
         lowerModel.includes('gemma') ||  // Gemma models often support vision
         lowerModel.includes('vision') ||
-        lowerModel.includes('qwen2-vl') ||
+        (lowerModel.includes('qwen') && lowerModel.includes('vl')) ||  // Qwen2-VL, Qwen3-VL, etc.
         lowerModel.includes('minicpm') ||
         lowerModel.includes('pixtral') ||
         lowerModel.includes('phi-3-vision') ||
@@ -82,9 +83,11 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     setAvailableModels(visionModels);
 
     // Priority order for auto-selection
+    // Qwen3-VL is preferred as it has proven vision support in LM Studio
     const preferredModels = [
-      'medgemma-4b-it-mlx',
-      'google/gemma-3n-e4b',
+      'qwen/qwen3-vl-8b',      // Best vision support, proven compatibility
+      'google/gemma-3n-e4b',   // Efficient 4B vision model
+      'medgemma-4b-it-mlx',    // Medical-specific vision model
       'llava-v1.6',
       'llava-v1.5'
     ];
@@ -133,6 +136,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
       const validated = validatorRef.current.validateAndSort(result.readings);
 
       setReadings(validated);
+      setInsights(result.insights);
       setProcessingState('ready');
 
       ToastService.getInstance().success(
@@ -163,6 +167,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   const handleClear = useCallback(() => {
     setImageDataUrl(null);
     setReadings([]);
+    setInsights(undefined);
     setProcessingState('idle');
     setErrorMessage('');
   }, []);
@@ -235,11 +240,12 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
       },
       readings: readings.map(r => ({
         date: r.date,
-        timeOfDay: r.timeOfDay,
+        time: r.time,
         sbp: r.sbp,
         dbp: r.dbp,
         hr: r.hr
-      }))
+      })),
+      insights: insights
     };
 
     const json = JSON.stringify(exportData, null, 2);
@@ -265,7 +271,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
 
     // Data rows
     readings.forEach(r => {
-      rows.push(`${r.date},${r.timeOfDay},${r.sbp},${r.dbp},${r.hr}`);
+      rows.push(`${r.date},${r.time},${r.sbp},${r.dbp},${r.hr}`);
     });
 
     const csv = rows.join('\n');
@@ -311,7 +317,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">BP Diary Importer</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Upload a photo of your blood pressure diary for analysis
+              Upload a photo of the blood pressure diary for analysis
             </p>
           </div>
           <button
@@ -439,20 +445,20 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    // Add 12 sample readings for comprehensive testing
+                    // Add 12 sample readings for comprehensive testing with timestamps
                     const sampleReadings: BPReading[] = [
-                      { id: '1', date: '2025-09-09', timeOfDay: 'morning', sbp: 144, dbp: 85, hr: 58, warnings: [] },
-                      { id: '2', date: '2025-09-10', timeOfDay: 'morning', sbp: 137, dbp: 85, hr: 60, warnings: [] },
-                      { id: '3', date: '2025-09-11', timeOfDay: 'morning', sbp: 146, dbp: 81, hr: 64, warnings: [] },
-                      { id: '4', date: '2025-09-12', timeOfDay: 'morning', sbp: 123, dbp: 87, hr: 80, warnings: [] },
-                      { id: '5', date: '2025-09-15', timeOfDay: 'morning', sbp: 140, dbp: 87, hr: 62, warnings: [] },
-                      { id: '6', date: '2025-09-16', timeOfDay: 'morning', sbp: 136, dbp: 88, hr: 61, warnings: [] },
-                      { id: '7', date: '2025-09-17', timeOfDay: 'morning', sbp: 140, dbp: 85, hr: 59, warnings: [] },
-                      { id: '8', date: '2025-09-24', timeOfDay: 'morning', sbp: 144, dbp: 87, hr: 61, warnings: [] },
-                      { id: '9', date: '2025-09-25', timeOfDay: 'morning', sbp: 140, dbp: 84, hr: 65, warnings: [] },
-                      { id: '10', date: '2025-09-26', timeOfDay: 'morning', sbp: 140, dbp: 81, hr: 59, warnings: [] },
-                      { id: '11', date: '2025-09-28', timeOfDay: 'morning', sbp: 143, dbp: 87, hr: 60, warnings: [] },
-                      { id: '12', date: '2025-09-29', timeOfDay: 'morning', sbp: 145, dbp: 88, hr: 55, warnings: [] },
+                      { id: '1', date: '2025-09-09', time: '07:15', timeOfDay: 'morning', sbp: 144, dbp: 85, hr: 58, warnings: [] },
+                      { id: '2', date: '2025-09-10', time: '06:44', timeOfDay: 'morning', sbp: 137, dbp: 85, hr: 60, warnings: [] },
+                      { id: '3', date: '2025-09-11', time: '08:24', timeOfDay: 'morning', sbp: 146, dbp: 81, hr: 64, warnings: [] },
+                      { id: '4', date: '2025-09-12', time: '07:02', timeOfDay: 'morning', sbp: 123, dbp: 87, hr: 80, warnings: [] },
+                      { id: '5', date: '2025-09-15', time: '06:55', timeOfDay: 'morning', sbp: 140, dbp: 87, hr: 62, warnings: [] },
+                      { id: '6', date: '2025-09-16', time: '19:21', timeOfDay: 'evening', sbp: 136, dbp: 88, hr: 61, warnings: [] },
+                      { id: '7', date: '2025-09-17', time: '07:33', timeOfDay: 'morning', sbp: 140, dbp: 85, hr: 59, warnings: [] },
+                      { id: '8', date: '2025-09-24', time: '18:45', timeOfDay: 'evening', sbp: 144, dbp: 87, hr: 61, warnings: [] },
+                      { id: '9', date: '2025-09-25', time: '06:12', timeOfDay: 'morning', sbp: 140, dbp: 84, hr: 65, warnings: [] },
+                      { id: '10', date: '2025-09-26', time: '20:18', timeOfDay: 'evening', sbp: 140, dbp: 81, hr: 59, warnings: [] },
+                      { id: '11', date: '2025-09-28', time: '07:41', timeOfDay: 'morning', sbp: 143, dbp: 87, hr: 60, warnings: [] },
+                      { id: '12', date: '2025-09-29', time: '19:05', timeOfDay: 'evening', sbp: 145, dbp: 88, hr: 55, warnings: [] },
                     ];
                     setReadings(sampleReadings);
                     setProcessingState('ready');
@@ -469,47 +475,115 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
           {/* Results */}
           {processingState === 'ready' && readings.length > 0 && (
             <div className="space-y-6">
+              {/* Clinical Insights */}
+              {insights && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="w-5 h-5 text-blue-700" />
+                    <h3 className="text-lg font-semibold text-blue-900">Clinical Insights</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Control Summary */}
+                    <div className="bg-white rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Control Summary</div>
+                      <div className="text-sm text-gray-900">{insights.controlSummary}</div>
+                    </div>
+
+                    {/* Diurnal Pattern */}
+                    <div className="bg-white rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Diurnal Pattern</div>
+                      <div className="text-sm text-gray-900">{insights.diurnalPattern}</div>
+                    </div>
+
+                    {/* Variability */}
+                    <div className="bg-white rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-600 mb-1">Variability</div>
+                      <div className="text-sm text-gray-900">{insights.variabilityConcern}</div>
+                    </div>
+
+                    {/* Peak/Lowest Times (if available) */}
+                    {(insights.peakTimes || insights.lowestTimes) && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {insights.peakTimes && (
+                          <div className="bg-white rounded-lg p-3">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">Peak Times</div>
+                            <div className="text-sm text-gray-900">{insights.peakTimes}</div>
+                          </div>
+                        )}
+                        {insights.lowestTimes && (
+                          <div className="bg-white rounded-lg p-3">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">Best Control</div>
+                            <div className="text-sm text-gray-900">{insights.lowestTimes}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Recommendations */}
+                    <div className="bg-white rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-600 mb-2">Key Recommendations</div>
+                      <ul className="space-y-1.5">
+                        {insights.keyRecommendations.map((rec, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm text-gray-900">
+                            <span className="text-blue-600 font-semibold mt-0.5">{idx + 1}.</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Statistics Summary */}
               {stats && (
-                <div className="grid grid-cols-5 gap-1.5">
-                  <div className="bg-gray-50 rounded-lg p-1.5 flex flex-col justify-between h-16">
-                    <div className="text-[9px] text-gray-600 leading-tight h-7 flex items-start">Average SBP</div>
-                    <div className="text-lg font-bold text-gray-900 leading-none h-8 flex items-center">{stats.avgSBP}</div>
-                    <div className="text-[8px] text-gray-500 leading-tight h-4 flex items-end">mmHg</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-1.5 flex flex-col justify-between h-16">
-                    <div className="text-[9px] text-gray-600 leading-tight h-7 flex items-start">Average DBP</div>
-                    <div className="text-lg font-bold text-gray-900 leading-none h-8 flex items-center">{stats.avgDBP}</div>
-                    <div className="text-[8px] text-gray-500 leading-tight h-4 flex items-end">mmHg</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-1.5 flex flex-col justify-between h-16">
-                    <div className="text-[9px] text-gray-600 leading-tight h-7 flex items-start">Average HR</div>
-                    <div className="text-lg font-bold text-gray-900 leading-none h-8 flex items-center">{stats.avgHR}</div>
-                    <div className="text-[8px] text-gray-500 leading-tight h-4 flex items-end">bpm</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-1.5 flex flex-col justify-between h-16">
-                    <div className="text-[9px] text-gray-600 leading-tight h-7 flex items-start whitespace-nowrap">Above Target</div>
-                    <div className="text-lg font-bold text-gray-900 leading-none h-8 flex items-center">{stats.percentAboveTarget}%</div>
-                    <div className="text-[8px] text-gray-500 leading-tight h-4 flex items-end">&gt;135/85</div>
-                  </div>
-                  <div className={`rounded-lg p-1.5 flex flex-col justify-between h-16 ${
-                    stats.percentSBPBelowTarget >= settings.sbpControlGoal
-                      ? 'bg-green-50 border border-green-200'
-                      : stats.percentSBPBelowTarget >= (settings.sbpControlGoal - 10)
-                      ? 'bg-yellow-50 border border-yellow-200'
-                      : 'bg-gray-50 border border-gray-200'
-                  }`}>
-                    <div className="text-[9px] text-gray-600 leading-tight h-7 flex items-start whitespace-nowrap">SBP Control</div>
-                    <div className={`text-lg font-bold leading-none h-8 flex items-center ${
-                      stats.percentSBPBelowTarget >= settings.sbpControlGoal
-                        ? 'text-green-700'
-                        : stats.percentSBPBelowTarget >= (settings.sbpControlGoal - 10)
-                        ? 'text-yellow-700'
-                        : 'text-gray-900'
-                    }`}>
-                      {stats.percentSBPBelowTarget}%
+                <div className="space-y-1.5">
+                  {/* Row 1: Averages */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div className="bg-gray-50 rounded-lg p-2 flex flex-col justify-between h-16">
+                      <div className="text-[10px] text-gray-600 leading-tight">Average SBP</div>
+                      <div className="text-xl font-bold text-gray-900 leading-none">{stats.avgSBP}</div>
+                      <div className="text-[9px] text-gray-500 leading-tight">mmHg</div>
                     </div>
-                    <div className="text-[8px] text-gray-500 leading-[1.1] h-4 flex items-end">&lt;{settings.sbpControlTarget} (goal&nbsp;{settings.sbpControlGoal}%)</div>
+                    <div className="bg-gray-50 rounded-lg p-2 flex flex-col justify-between h-16">
+                      <div className="text-[10px] text-gray-600 leading-tight">Average DBP</div>
+                      <div className="text-xl font-bold text-gray-900 leading-none">{stats.avgDBP}</div>
+                      <div className="text-[9px] text-gray-500 leading-tight">mmHg</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2 flex flex-col justify-between h-16">
+                      <div className="text-[10px] text-gray-600 leading-tight">Average HR</div>
+                      <div className="text-xl font-bold text-gray-900 leading-none">{stats.avgHR}</div>
+                      <div className="text-[9px] text-gray-500 leading-tight">bpm</div>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Control Metrics */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div className="bg-gray-50 rounded-lg p-2 flex flex-col justify-between h-16">
+                      <div className="text-[10px] text-gray-600 leading-tight">Above Target</div>
+                      <div className="text-xl font-bold text-gray-900 leading-none">{stats.percentAboveTarget}%</div>
+                      <div className="text-[9px] text-gray-500 leading-tight">&gt;135/85 mmHg</div>
+                    </div>
+                    <div className={`rounded-lg p-2 flex flex-col justify-between h-16 ${
+                      stats.percentSBPBelowTarget >= settings.sbpControlGoal
+                        ? 'bg-green-50 border border-green-200'
+                        : stats.percentSBPBelowTarget >= (settings.sbpControlGoal - 10)
+                        ? 'bg-yellow-50 border border-yellow-200'
+                        : 'bg-gray-50 border border-gray-200'
+                    }`}>
+                      <div className="text-[10px] text-gray-600 leading-tight">SBP Control</div>
+                      <div className={`text-xl font-bold leading-none ${
+                        stats.percentSBPBelowTarget >= settings.sbpControlGoal
+                          ? 'text-green-700'
+                          : stats.percentSBPBelowTarget >= (settings.sbpControlGoal - 10)
+                          ? 'text-yellow-700'
+                          : 'text-gray-900'
+                      }`}>
+                        {stats.percentSBPBelowTarget}%
+                      </div>
+                      <div className="text-[9px] text-gray-500 leading-tight">&lt;{settings.sbpControlTarget} mmHg (goal {settings.sbpControlGoal}%)</div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -526,19 +600,8 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
 
               {/* Chart */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900">Trend Chart</h3>
-                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.showReferenceLines}
-                      onChange={handleToggleReferenceLines}
-                      className="rounded border-gray-300"
-                    />
-                    Show guidelines (130/80)
-                  </label>
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Trend Chart</h3>
+                <div className="bg-white border border-gray-200 rounded-lg p-2">
                   <BPChart
                     ref={chartRef}
                     readings={readings}
@@ -546,6 +609,18 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                     referenceSBP={settings.referenceSBP}
                     referenceDBP={settings.referenceDBP}
                   />
+                </div>
+                {/* Guidelines toggle - minimal, below chart */}
+                <div className="flex justify-center mt-2">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.showReferenceLines}
+                      onChange={handleToggleReferenceLines}
+                      className="rounded border-gray-300 w-3 h-3"
+                    />
+                    Show guidelines (130/80)
+                  </label>
                 </div>
               </div>
             </div>

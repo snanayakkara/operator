@@ -40,10 +40,14 @@ export class ASRCorrectionsLog {
   private readonly MAX_STORAGE_MB = 4; // Leave 1MB buffer from Chrome's 5MB quota
   private readonly MAX_ENTRIES = 1000;
   private readonly CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
-  
+
   private cache: ASRCorrectionsEntry[] | null = null;
   private cacheTimestamp = 0;
   private readonly CACHE_TTL = 60 * 1000; // 1 minute
+
+  // Async operation queue to prevent blocking message handlers
+  private storageQueue: Promise<any> = Promise.resolve();
+  private pendingReads = 0;
 
   private constructor() {
     logger.info('ASRCorrectionsLog initialized', {
@@ -536,60 +540,79 @@ export class ASRCorrectionsLog {
       };
     }
 
-    try {
-      const result = await new Promise<{ [key: string]: any }>((resolve) => {
-        chrome.storage.local.get([this.STORAGE_KEY], resolve);
-      });
+    // Queue the storage operation to prevent blocking message handlers
+    this.pendingReads++;
 
-      const stored = result[this.STORAGE_KEY] || {
-        entries: [],
-        lastCleanup: Date.now(),
-        totalSize: 0
-      };
+    return this.storageQueue = this.storageQueue.then(async () => {
+      try {
+        // Double-check cache after queue wait (another operation might have loaded it)
+        if (this.cache && (Date.now() - this.cacheTimestamp) < this.CACHE_TTL) {
+          return {
+            entries: this.cache,
+            lastCleanup: Date.now(),
+            totalSize: 0
+          };
+        }
 
-      // Update cache
-      this.cache = stored.entries;
-      this.cacheTimestamp = Date.now();
+        const result = await new Promise<{ [key: string]: any }>((resolve) => {
+          chrome.storage.local.get([this.STORAGE_KEY], resolve);
+        });
 
-      return stored;
+        const stored = result[this.STORAGE_KEY] || {
+          entries: [],
+          lastCleanup: Date.now(),
+          totalSize: 0
+        };
 
-    } catch (error) {
-      const err = toError(error);
-      logger.error('Failed to get stored ASR data', err, {
-        component: 'ASRCorrectionsLog'
-      });
-      return {
-        entries: [],
-        lastCleanup: Date.now(),
-        totalSize: 0
-      };
-    }
+        // Update cache
+        this.cache = stored.entries;
+        this.cacheTimestamp = Date.now();
+
+        return stored;
+
+      } catch (error) {
+        const err = toError(error);
+        logger.error('Failed to get stored ASR data', err, {
+          component: 'ASRCorrectionsLog'
+        });
+        return {
+          entries: [],
+          lastCleanup: Date.now(),
+          totalSize: 0
+        };
+      } finally {
+        this.pendingReads--;
+      }
+    });
   }
 
   private async saveStoredData(data: StoredCorrections): Promise<void> {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        chrome.storage.local.set({ [this.STORAGE_KEY]: data }, () => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve();
-          }
+    // Queue write operations to prevent blocking
+    return this.storageQueue = this.storageQueue.then(async () => {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          chrome.storage.local.set({ [this.STORAGE_KEY]: data }, () => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve();
+            }
+          });
         });
-      });
 
-      // Update cache
-      this.cache = data.entries;
-      this.cacheTimestamp = Date.now();
+        // Update cache
+        this.cache = data.entries;
+        this.cacheTimestamp = Date.now();
 
-    } catch (error) {
-      const err = toError(error);
-      logger.error('Failed to save ASR corrections', err, {
-        component: 'ASRCorrectionsLog',
-        entriesCount: data.entries.length
-      });
-      throw err;
-    }
+      } catch (error) {
+        const err = toError(error);
+        logger.error('Failed to save ASR corrections', err, {
+          component: 'ASRCorrectionsLog',
+          entriesCount: data.entries.length
+        });
+        throw err;
+      }
+    });
   }
 
   private async performCleanup(stored: StoredCorrections): Promise<void> {

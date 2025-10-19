@@ -124,17 +124,18 @@ export class BPDataValidator {
     // Validate each reading
     const validated = readings.map(r => this.validateReading(r).reading);
 
-    // Sort by date, then by time of day (morning before evening)
+    // Sort by date, then by exact time
     return validated.sort((a, b) => {
       // Primary sort: by date
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;
 
-      // Secondary sort: morning before evening
-      if (a.timeOfDay === 'morning' && b.timeOfDay === 'evening') return -1;
-      if (a.timeOfDay === 'evening' && b.timeOfDay === 'morning') return 1;
+      // Secondary sort: by exact time (HH:MM format)
+      // Convert time strings to comparable numbers (e.g., "19:21" → 1921)
+      const timeA = parseInt(a.time.replace(':', ''), 10);
+      const timeB = parseInt(b.time.replace(':', ''), 10);
 
-      return 0;
+      return timeA - timeB;
     });
   }
 

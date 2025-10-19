@@ -168,8 +168,8 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
                 <td className="px-2 py-2 text-gray-900">
                   {formatDate(reading.date)}
                 </td>
-                <td className="px-2 py-2 text-gray-700">
-                  {reading.timeOfDay === 'morning' ? 'Morning' : 'Evening'}
+                <td className="px-2 py-2 text-gray-700 font-mono text-xs">
+                  {reading.time}
                 </td>
                 <td className="px-2 py-2 text-center">
                   {renderCell(reading, 'sbp')}
@@ -199,7 +199,7 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
           {readings.filter(r => r.warnings && r.warnings.length > 0).map(reading => (
             <div key={reading.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <div className="text-xs font-semibold text-gray-700 mb-1">
-                {formatDate(reading.date)} {reading.timeOfDay}:
+                {formatDate(reading.date)} {reading.time}:
               </div>
               <ul className="text-xs text-gray-600 space-y-1">
                 {reading.warnings?.map((warning, idx) => (

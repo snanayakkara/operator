@@ -145,7 +145,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             : 'hover:bg-gray-50/50'
         }`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <FileTextIcon className={`w-4 h-4 flex-shrink-0 ${isProcessing ? 'text-blue-600' : 'text-gray-600'}`} />
           <span className={`font-medium text-sm leading-none ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
             Original Transcription
@@ -163,7 +163,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {/* Transcription Actions - Enhanced during processing */}
           {onTranscriptionCopy && (
             <button
@@ -337,7 +337,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                 value={editedTranscription}
                 onChange={(e) => handleTranscriptionChange(e.target.value)}
                 disabled={!onTranscriptionEdit}
-                className={`w-full h-32 p-2 pb-6 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed ${
+                className={`w-full h-32 p-2 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed ${
                   !onTranscriptionEdit ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
                 placeholder={onTranscriptionEdit
@@ -349,17 +349,6 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                   : "Transcription editing not available"
                 }
               />
-              <div className="absolute bottom-1 right-2 flex items-center space-x-2 text-xs text-gray-400">
-                <span>🧠 Training AI</span>
-                <span>•</span>
-                <span>{(editedTranscription || '').split(' ').filter(w => w.trim()).length} words</span>
-                {editedTranscription !== originalTranscription && (
-                  <>
-                    <span>•</span>
-                    <span className="text-blue-600">edited</span>
-                  </>
-                )}
-              </div>
             </div>
           </div>
 

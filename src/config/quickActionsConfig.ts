@@ -22,6 +22,7 @@ import {
   TestTube,
   Scan,
   Activity,
+  Droplet,
   type LucideIcon
 } from 'lucide-react';
 
@@ -170,6 +171,15 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     label: 'BP Diary',
     icon: Activity,
     description: 'Import and analyze blood pressure diary images',
+    group: 'secondary',
+    category: 'analysis'
+  },
+  {
+    id: 'lipid-profile-importer',
+    label: 'Lipid Profile',
+    alias: 'Lipids',
+    icon: Droplet,
+    description: 'Import lipid profiles from Investigation Summary and generate insights',
     group: 'secondary',
     category: 'analysis'
   },

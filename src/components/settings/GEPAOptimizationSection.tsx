@@ -58,6 +58,10 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
+  // Progress state
+  const [previewProgressText, setPreviewProgressText] = useState<string>('');
+  const [applyProgressText, setApplyProgressText] = useState<string>('');
+
   const toggleTask = useCallback((taskId: AgentType) => {
     setSelectedTasks(prev => {
       const next = new Set(prev);
@@ -93,16 +97,25 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
         .filter(c => selectedCandidates.has(c.id))
         .map(c => ({ task: c.task, candidate_id: c.id }));
 
+      setApplyProgressText(`Applying ${accepted.length} optimization(s) to agent prompts...`);
+
       const result = await optimizationService.applyGEPAOptimization({ accepted });
+
+      if (result.errors.length > 0) {
+        setApplyProgressText(`⚠ Applied ${result.applied.length} optimizations with ${result.errors.length} error(s)`);
+      } else {
+        setApplyProgressText(`✓ Successfully applied ${result.applied.length} optimization(s)!`);
+      }
 
       // Clear preview after successful apply
       setPreview(null);
       setSelectedCandidates(new Set());
 
-      // Show success feedback
-      alert(`Successfully applied ${result.applied.length} optimization(s)!${result.errors.length > 0 ? `\n\n${result.errors.length} error(s) occurred.` : ''}`);
+      // Clear success message after 3 seconds
+      setTimeout(() => setApplyProgressText(''), 3000);
 
     } catch (error) {
+      setApplyProgressText('');
       onError(error instanceof GEPAOptimizationError ? error : new GEPAOptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsApplying(false);
@@ -112,8 +125,17 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
 
   const generatePreview = useCallback(async () => {
     try {
+      console.log('[GEPAOptimization] Starting preview generation...', {
+        tasks: Array.from(selectedTasks),
+        iterations,
+        withHuman
+      });
+
       setIsGeneratingPreview(true);
       onLoadingChange(true);
+
+      const taskCount = selectedTasks.size;
+      setPreviewProgressText(`Starting GEPA optimization for ${taskCount} agent(s) with ${iterations} iterations...`);
 
       const request = {
         tasks: Array.from(selectedTasks),
@@ -122,7 +144,14 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
       };
 
       // Call the GEPA optimization service
+      console.log('[GEPAOptimization] Calling previewGEPAOptimization...');
+      setPreviewProgressText(`Running ${iterations} optimization iterations (this may take 1-3 minutes)...`);
+
       const previewData = await optimizationService.previewGEPAOptimization(request);
+      console.log('[GEPAOptimization] Preview data received:', previewData);
+
+      setPreviewProgressText('Analyzing results...');
+
       setPreview(previewData);
 
       // Auto-select all candidates that show improvement
@@ -131,7 +160,26 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
         .map(c => c.id);
       setSelectedCandidates(new Set(improvedCandidates));
 
+      const totalCandidates = previewData.candidates.length;
+      const improvedCount = improvedCandidates.length;
+
+      if (totalCandidates === 0) {
+        setPreviewProgressText('⚠ No improvement candidates found');
+      } else {
+        setPreviewProgressText(`✓ Found ${totalCandidates} candidate(s) - ${improvedCount} showing improvement!`);
+      }
+
+      console.log('[GEPAOptimization] Preview generation complete!', {
+        candidateCount: totalCandidates,
+        improvedCount
+      });
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setPreviewProgressText(''), 5000);
+
     } catch (error) {
+      console.error('[GEPAOptimization] Error during preview generation:', error);
+      setPreviewProgressText('');
       onError(error instanceof GEPAOptimizationError ? error : new GEPAOptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsGeneratingPreview(false);
@@ -233,47 +281,73 @@ export const GEPAOptimizationSection: React.FC<GEPAOptimizationSectionProps> = (
       </div>
 
       {/* Generate Preview */}
-      <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
-        <div>
-          <h4 className="font-medium text-gray-900">GEPA Optimization Preview</h4>
-          <p className="text-sm text-gray-600">
-            Run optimization analysis to preview prompt improvements
-          </p>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
+          <div>
+            <h4 className="font-medium text-gray-900">GEPA Optimization Preview</h4>
+            <p className="text-sm text-gray-600">
+              Run optimization analysis to preview prompt improvements
+            </p>
+          </div>
+          <button
+            onClick={generatePreview}
+            disabled={isGeneratingPreview || selectedTasks.size === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play className={`w-4 h-4 ${isGeneratingPreview ? 'animate-pulse' : ''}`} />
+            <span>{isGeneratingPreview ? 'Optimizing...' : 'Preview Candidates'}</span>
+          </button>
         </div>
-        <button
-          onClick={generatePreview}
-          disabled={isGeneratingPreview || selectedTasks.size === 0}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Play className="w-4 h-4" />
-          <span>{isGeneratingPreview ? 'Optimizing...' : 'Preview Candidates'}</span>
-        </button>
+        {previewProgressText && (
+          <div className={`px-4 py-2 rounded-lg text-sm ${
+            previewProgressText.startsWith('✓')
+              ? 'bg-green-50 text-green-700 border border-green-200'
+              : previewProgressText.startsWith('⚠')
+              ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+              : 'bg-blue-50 text-blue-700 border border-blue-200'
+          }`}>
+            {previewProgressText}
+          </div>
+        )}
       </div>
 
       {/* Results Display */}
       {preview && preview.candidates.length > 0 ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-600" />
-              Optimization Results ({preview.candidates.length} candidate{preview.candidates.length !== 1 ? 's' : ''})
-            </h4>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setPreview(null); setSelectedCandidates(new Set()); }}
-                className="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Clear Results
-              </button>
-              <button
-                onClick={applySelectedCandidates}
-                disabled={isApplying || selectedCandidates.size === 0}
-                className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>{isApplying ? 'Applying...' : `Apply Selected (${selectedCandidates.size})`}</span>
-              </button>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+                Optimization Results ({preview.candidates.length} candidate{preview.candidates.length !== 1 ? 's' : ''})
+              </h4>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setPreview(null); setSelectedCandidates(new Set()); }}
+                  className="px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Clear Results
+                </button>
+                <button
+                  onClick={applySelectedCandidates}
+                  disabled={isApplying || selectedCandidates.size === 0}
+                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle className={`w-4 h-4 ${isApplying ? 'animate-pulse' : ''}`} />
+                  <span>{isApplying ? 'Applying...' : `Apply Selected (${selectedCandidates.size})`}</span>
+                </button>
+              </div>
             </div>
+            {applyProgressText && (
+              <div className={`px-4 py-2 rounded-lg text-sm ${
+                applyProgressText.startsWith('✓')
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : applyProgressText.startsWith('⚠')
+                  ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                {applyProgressText}
+              </div>
+            )}
           </div>
 
           {/* Candidate Cards */}

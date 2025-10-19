@@ -12,7 +12,8 @@ import {
   Zap,
   Shield,
   Square,
-  Mic as MicIcon
+  Mic as MicIcon,
+  Keyboard
 } from 'lucide-react';
 import { DropdownPortal } from './DropdownPortal';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
@@ -25,6 +26,7 @@ interface RecordPanelProps {
   voiceActivityLevel?: number;
   recordingTime?: number;
   whisperServerRunning?: boolean;
+  onTypeClick?: (workflowId: AgentType) => void; // For expandable workflows that support Type mode
 }
 
 const iconMap = {
@@ -48,10 +50,12 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   disabled = false,
   voiceActivityLevel = 0,
   recordingTime = 0,
-  whisperServerRunning = true
+  whisperServerRunning = true,
+  onTypeClick
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
+  const [hoveredExpandableId, setHoveredExpandableId] = useState<AgentType | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
   const isHoveringRef = useRef<boolean>(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +85,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   const { triggerRef, position } = useDropdownPosition({
     isOpen: isExpanded,
     alignment: 'center',
-    offset: { x: 0, y: 4 }, // Small gap for smooth mouse transition
+    offset: { x: 0, y: -2 }, // Minimal gap to connect visually with button
     maxHeight: 480,
     dropdownWidth: 340, // Sidepanel is 360px, leave 20px margins
     preferredDirection: 'up'
@@ -379,7 +383,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   };
 
   const getWorkflowButtonClasses = (workflow: WorkflowConfig, isActive: boolean) => {
-    const baseClasses = "relative flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 hover:shadow-md";
+    const baseClasses = "relative w-full aspect-square min-h-[96px] min-w-[96px] flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 hover:shadow-md";
 
     if (disabled || !whisperServerRunning) {
       return `${baseClasses} bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed`;
@@ -403,7 +407,9 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   const renderWorkflowButton = (workflow: WorkflowConfig) => {
     const IconComponent = iconMap[workflow.icon as keyof typeof iconMap] || FileText;
     const isActive = activeWorkflow === workflow.id;
-    
+    const isHovered = hoveredExpandableId === workflow.id;
+    const isExpandable = workflow.isExpandable && !isRecording && !disabled && whisperServerRunning && onTypeClick;
+
     // Generate tooltip with server status information
     const getTooltip = () => {
       if (!whisperServerRunning) {
@@ -411,25 +417,53 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
       }
       return `${workflow.description} • ${workflow.estimatedTime} • ${workflow.complexity} complexity`;
     };
-    
+
+    const handleMouseEnter = () => {
+      if (isExpandable) {
+        setHoveredExpandableId(workflow.id);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (isExpandable) {
+        setHoveredExpandableId(null);
+      }
+    };
+
+    const handleTypeClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (onTypeClick) {
+        onTypeClick(workflow.id);
+        setIsExpanded(false); // Close dropdown after selection
+        setHoveredExpandableId(null);
+      }
+    };
+
     return (
-      <button
+      <div
         key={workflow.id}
-        onClick={() => onWorkflowSelect(workflow.id)}
-        disabled={disabled || (isRecording && !isActive) || !whisperServerRunning}
-        className={getWorkflowButtonClasses(workflow, isActive)}
-        title={getTooltip()}
-        tabIndex={0}
+        className="relative w-full h-full"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
+        {/* Non-expandable or collapsed state */}
+        {(!isExpandable || !isHovered) && (
+          <button
+            onClick={() => onWorkflowSelect(workflow.id)}
+            disabled={disabled || (isRecording && !isActive) || !whisperServerRunning}
+            className={getWorkflowButtonClasses(workflow, isActive)}
+            title={getTooltip()}
+            tabIndex={0}
+          >
         {/* Icon */}
-        <div className="relative mb-2">
+        <div className="relative mb-2.5">
           {isActive && isRecording ? (
             <>
-              <Square className="w-6 h-6 text-red-600" />
+              <Square className="w-7 h-7 text-red-600" />
               <div className="absolute inset-0 rounded-full bg-red-500/20 motion-safe:animate-ping" />
             </>
           ) : (
-            <IconComponent className={`w-6 h-6 ${
+            <IconComponent className={`w-7 h-7 ${
               workflow.category === 'procedure' ? 'text-red-500' :
               workflow.category === 'documentation' ? 'text-blue-500' :
               workflow.category === 'investigation' ? 'text-purple-500' :
@@ -440,7 +474,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
         </div>
 
         {/* Label */}
-        <div className={`text-xs font-semibold text-center leading-tight ${
+        <div className={`text-[10px] font-semibold text-center leading-snug min-h-[2.5rem] flex items-center justify-center w-full px-1 ${
           isActive && isRecording ? 'text-red-700' : 'text-gray-700'
         }`}>
           {isActive && isRecording ? 'Stop' : workflow.label}
@@ -453,6 +487,31 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           </div>
         )}
       </button>
+        )}
+
+        {/* Expandable split view - Dictate | Type */}
+        {isExpandable && isHovered && (
+          <div className="absolute inset-0 grid grid-cols-2 gap-0.5 overflow-hidden rounded-lg">
+            {/* Dictate Button (Left Half) */}
+            <button
+              onClick={() => onWorkflowSelect(workflow.id)}
+              className="relative bg-white border-2 border-blue-200 rounded-l-lg flex flex-col items-center justify-center p-2 hover:bg-blue-50 hover:border-blue-300 transition-all"
+            >
+              <MicIcon className="w-5 h-5 text-blue-600 mb-1" strokeWidth={2} />
+              <span className="text-[10px] font-semibold text-blue-700">Dictate</span>
+            </button>
+
+            {/* Type Button (Right Half) */}
+            <button
+              onClick={handleTypeClick}
+              className="relative bg-white border-2 border-purple-200 rounded-r-lg flex flex-col items-center justify-center p-2 hover:bg-purple-50 hover:border-purple-300 transition-all"
+            >
+              <Keyboard className="w-5 h-5 text-purple-600 mb-1" strokeWidth={2} />
+              <span className="text-[10px] font-semibold text-purple-700">Type</span>
+            </button>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -536,21 +595,9 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
             timestamp: Date.now()
           });
 
-          if (!disabled && whisperServerRunning) {
-            // Force clear any stale timeouts before toggling
-            if (hoverTimeoutRef.current) {
-              window.clearTimeout(hoverTimeoutRef.current);
-              hoverTimeoutRef.current = null;
-            }
-
-            setIsExpanded((prev) => {
-              const newState = !prev;
-              console.log('🎯 Toggling dropdown expansion:', prev, '->', newState);
-              return newState;
-            });
-          } else {
-            console.log('⚠️ Click ignored - button disabled or whisper server not running');
-          }
+          // Record button click is a no-op - menu is controlled by hover state only
+          // This prevents conflicts between click-toggle and hover-expand/collapse logic
+          console.log('ℹ️ Click on record button - menu is hover-controlled, no action taken');
         }}
         onKeyDown={handleTriggerKeyDown}
         aria-haspopup="dialog"
@@ -606,7 +653,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
             </div>
 
             {/* Workflow buttons grid */}
-            <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-3 auto-rows-fr gap-3 mb-3">
               {WORKFLOWS.map(renderWorkflowButton)}
             </div>
 

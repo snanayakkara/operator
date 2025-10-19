@@ -248,7 +248,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       </div>
 
       {/* Stage Labels */}
-      <div className="flex justify-between text-xs mb-3">
+      <div className="flex justify-between text-[10px] mb-3">
         {PIPELINE_SEGMENTS.map((segment) => {
           const status = getSegmentStatus(segment);
           const Icon = segment.icon;
@@ -256,7 +256,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
           return (
             <div
               key={segment.id}
-              className={`flex items-center space-x-1 ${
+              className={`flex items-center space-x-0.5 ${
                 status === 'complete'
                   ? 'text-gray-600'
                   : status === 'active'
@@ -264,7 +264,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
                   : 'text-gray-400'
               }`}
             >
-              <Icon className="w-3 h-3" />
+              <Icon className="w-2.5 h-2.5" />
               <span>{segment.label}</span>
             </div>
           );
@@ -289,6 +289,8 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
         <p className="text-xs text-gray-500">
           {progress.progress >= 100
             ? '✅ Processing complete'
+            : progress.modelName
+            ? `🤖 ${progress.modelName}`
             : '🔄 Local processing - privacy-first'}
         </p>
       </div>

@@ -897,19 +897,24 @@ URGENCY: Routine`;
       // Create a synthetic finding from the available content
       const clinicalContent = sentences.slice(0, 3).join('. ').trim();
       
+      const fallbackReasoning = clinicalContent.length > 200 
+        ? clinicalContent.substring(0, 200) + '...' 
+        : clinicalContent;
+
       const fallbackFinding: BatchPatientReviewFinding = {
+        classificationTag: 'PRIMARY',
         finding: 'Clinical review requires attention',
+        evidence: fallbackReasoning,
         australianGuideline: 'NHFA/CSANZ Guidelines - Clinical Review Required',
-        clinicalReasoning: clinicalContent.length > 200 
-          ? clinicalContent.substring(0, 200) + '...' 
-          : clinicalContent,
+        clinicalReasoning: fallbackReasoning,
         recommendedAction: 'Manual clinical review of AI analysis recommended',
+        priority: 'routine',
         urgency: 'Routine' as const
       };
       
       console.log('🔧 Created fallback finding:', {
         finding: fallbackFinding.finding,
-        reasoningLength: fallbackFinding.clinicalReasoning.length,
+        reasoningLength: fallbackReasoning.length,
         originalResponseLength: response.length
       });
       

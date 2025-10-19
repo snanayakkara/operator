@@ -2,7 +2,7 @@ import React, { memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WORKFLOWS, type WorkflowConfig } from '@/config/workflowConfig';
 import type { AgentType } from '@/types/medical.types';
-import { 
+import {
   HeartIcon,
   FileTextIcon,
   ActivityIcon,
@@ -16,6 +16,7 @@ import {
   ShieldIcon,
   MonitorIcon
 } from './icons/OptimizedIcons';
+import { Keyboard } from 'lucide-react';
 import { 
   staggerContainer,
   listItemVariants,
@@ -35,6 +36,7 @@ interface WorkflowButtonsProps {
   recordingTime?: number;
   whisperServerRunning?: boolean;
   onPasteLetterClick?: () => void;
+  onTypeClick?: (workflowId: AgentType) => void; // For expandable workflows that support Type mode
 }
 
 // Optimized icon mapping
@@ -60,8 +62,10 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
   disabled = false,
   voiceActivityLevel = 0,
   recordingTime = 0,
-  whisperServerRunning = true
+  whisperServerRunning = true,
+  onTypeClick
 }) => {
+  const [hoveredExpandableId, setHoveredExpandableId] = React.useState<AgentType | null>(null);
 
   const handleWorkflowClick = useCallback((workflowId: AgentType) => {
     console.log('🎯 Workflow button clicked:', {
@@ -88,18 +92,18 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
   };
 
   const getButtonClasses = (workflow: WorkflowConfig, isActive: boolean) => {
-    const baseClasses = "relative w-full h-16 rounded-2xl border flex flex-col items-center justify-center p-2 font-medium text-[9px] leading-tight";
+    const baseClasses = "relative w-full aspect-square min-h-[96px] min-w-[96px] rounded-2xl border flex flex-col items-center justify-center p-3 font-medium text-[8px] leading-snug";
     const disabledClasses = "opacity-50 cursor-not-allowed";
-    
+
     if (disabled || !whisperServerRunning) {
       return `${baseClasses} bg-surface-primary border-line-primary text-ink-tertiary ${disabledClasses}`;
     }
-    
+
     if (isActive && isRecording) {
       // Active recording - monochrome with accent red dot only
       return `${baseClasses} bg-surface-primary border-accent-red text-ink-primary shadow-sm`;
     }
-    
+
     // Normal state - monochrome with subtle accent on hover
     return `${baseClasses} bg-surface-primary border-line-primary text-ink-secondary hover:text-ink-primary hover:border-accent-violet/30 hover:shadow-sm micro-lift transition-all duration-160`;
   };
@@ -107,7 +111,9 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
   const renderWorkflowButton = (workflow: WorkflowConfig) => {
     const IconComponent = iconMap[workflow.icon as keyof typeof iconMap] || FileTextIcon;
     const isActive = activeWorkflow === workflow.id;
-    
+    const isHovered = hoveredExpandableId === workflow.id;
+    const isExpandable = workflow.isExpandable && !isRecording && !disabled && whisperServerRunning && onTypeClick;
+
     // Generate tooltip with server status information
     const getTooltip = () => {
       if (!whisperServerRunning) {
@@ -123,15 +129,41 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
       if (isActive) return 'active';
       return 'inactive';
     };
-    
+
+    // Handle expandable workflow hover states
+    const handleMouseEnter = useCallback(() => {
+      if (isExpandable) {
+        setHoveredExpandableId(workflow.id);
+      }
+    }, [isExpandable, workflow.id]);
+
+    const handleMouseLeave = useCallback(() => {
+      if (isExpandable) {
+        setHoveredExpandableId(null);
+      }
+    }, [isExpandable]);
+
+    const handleTypeClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (onTypeClick) {
+        onTypeClick(workflow.id);
+      }
+      setHoveredExpandableId(null);
+    }, [onTypeClick, workflow.id]);
+
     return (
       <motion.div
         key={workflow.id}
         variants={withReducedMotion(listItemVariants)}
         whileHover={!disabled && whisperServerRunning ? "hover" : undefined}
         whileTap={!disabled && whisperServerRunning ? "tap" : undefined}
+        className="group relative w-full h-full"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <motion.button
+        {/* Non-expandable or collapsed state */}
+        {(!isExpandable || !isHovered) && (
+          <motion.button
           onClick={() => handleWorkflowClick(workflow.id)}
           disabled={disabled || (isRecording && !isActive) || !whisperServerRunning}
           className={getButtonClasses(workflow, isActive)}
@@ -146,8 +178,8 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
         >
           <div className="relative flex flex-col items-center justify-center w-full h-full">
             {/* Icon with animation */}
-            <motion.div 
-              className="relative mb-1"
+            <motion.div
+              className="relative mb-1.5"
               animate={{
                 rotate: isActive && isRecording ? [0, 2, -2, 0] : 0
               }}
@@ -166,13 +198,13 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
                     initial={{ scale: 0, rotate: -90 }}
                     animate={{ scale: 1, rotate: 0 }}
                     exit={{ scale: 0, rotate: 90 }}
-                    transition={{ 
+                    transition={{
                       type: "spring",
                       damping: 20,
                       stiffness: 300
                     }}
                   >
-                    <SquareIcon className="w-4 h-4" />
+                    <SquareIcon className="w-5 h-5" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -180,13 +212,13 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
                     initial={{ scale: 0, rotate: 90 }}
                     animate={{ scale: 1, rotate: 0 }}
                     exit={{ scale: 0, rotate: -90 }}
-                    transition={{ 
+                    transition={{
                       type: "spring",
                       damping: 20,
                       stiffness: 300
                     }}
                   >
-                    <IconComponent className="w-4 h-4" />
+                    <IconComponent className="w-5 h-5" />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -209,11 +241,11 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
             </motion.div>
             
             {/* Label with animation */}
-            <motion.span 
-              className={`text-[9px] font-semibold text-center leading-tight truncate w-full px-1 ${
+            <motion.span
+              className={`text-[10px] font-semibold text-center leading-snug w-full px-1 line-clamp-2 min-h-[2.5rem] flex items-center justify-center ${
                 isActive && isRecording ? 'text-ink-primary font-bold' : ''
               }`}
-              animate={{ 
+              animate={{
                 color: isActive && isRecording ? 'var(--ink-primary)' : 'var(--ink-secondary)'
               }}
             >
@@ -292,6 +324,56 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
             )}
           </AnimatePresence>
         </motion.button>
+        )}
+
+        {/* Expandable split view - Dictate | Type */}
+        {isExpandable && isHovered && (
+          <motion.div
+            className="absolute inset-0 grid grid-cols-2 gap-0.5 overflow-hidden rounded-2xl"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+          >
+            {/* Dictate Button (Left Half) */}
+            <motion.button
+              onClick={() => handleWorkflowClick(workflow.id)}
+              className="relative bg-surface-primary border border-line-primary rounded-l-2xl flex flex-col items-center justify-center p-3 hover:bg-blue-50 hover:border-blue-300 transition-all"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <MicIcon className="w-5 h-5 text-blue-600 mb-1.5" />
+              <span className="text-[10px] font-semibold text-blue-700">Dictate</span>
+            </motion.button>
+
+            {/* Type Button (Right Half) */}
+            <motion.button
+              onClick={handleTypeClick}
+              className="relative bg-surface-primary border border-line-primary rounded-r-2xl flex flex-col items-center justify-center p-3 hover:bg-purple-50 hover:border-purple-300 transition-all"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <Keyboard className="w-5 h-5 text-purple-600 mb-1.5" />
+              <span className="text-[10px] font-semibold text-purple-700">Type</span>
+            </motion.button>
+          </motion.div>
+        )}
+
+        {/* Custom tooltip with fast appearance */}
+        {!isRecording && !disabled && whisperServerRunning && !isHovered && (
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 pointer-events-none z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <div className="bg-gray-900 text-white text-[10px] px-3 py-2 rounded-lg shadow-lg whitespace-nowrap">
+              <div className="font-medium">{workflow.description}</div>
+              <div className="text-gray-300 mt-0.5">
+                {workflow.estimatedTime} • {workflow.complexity} complexity
+              </div>
+              {/* Arrow */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                <div className="border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     );
   };
@@ -326,8 +408,8 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
       </motion.div>
       
       {/* Workflow buttons grid with stagger animation */}
-      <motion.div 
-        className="grid grid-cols-3 gap-2 mb-3"
+      <motion.div
+        className="grid grid-cols-3 auto-rows-fr gap-3 mb-3"
         variants={withReducedMotion(staggerContainer)}
         transition={{
           staggerChildren: STAGGER_CONFIGS.normal,
