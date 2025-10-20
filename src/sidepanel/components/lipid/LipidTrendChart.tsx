@@ -17,12 +17,12 @@ interface TooltipState {
 }
 
 const ANALYTE_COLORS: Record<LipidAnalyte, string> = {
-  ldl: '#111827',
-  tchol: '#4b5563',
-  hdl: '#0ea5e9',
-  tg: '#f97316',
-  apob: '#7c3aed',
-  nonHDL: '#2563eb'
+  tchol: '#111827',    // Total cholesterol - charcoal/ink primary
+  ldl: '#dc2626',      // LDL-C - clinical emphasis red
+  tg: '#ea580c',       // Triglycerides - orange accent
+  hdl: '#0284c7',      // HDL - teal/blue accent
+  apob: '#7c3aed',     // ApoB - violet accent
+  nonHDL: '#2563eb'    // Non-HDL - blue accent
 };
 
 function getAnalyteValue(reading: LipidResult, analyte: LipidAnalyte): number | undefined {
@@ -129,7 +129,7 @@ export const LipidTrendChart: React.FC<LipidTrendChartProps> = ({
         .map(analyte => getAnalyteValue(r, analyte) ?? null)
         .filter((val): val is number => val != null)
     );
-    const minValue = Math.max(0, Math.min(...values) - 0.5);
+    const minValue = 0;
     const maxValue = Math.max(...values, overlay.bands.reduce((acc, band) => Math.max(acc, band.threshold), 0) + 0.5);
 
     const sortedDates = readings.map(r => parseDate(r.date));
@@ -207,11 +207,13 @@ export const LipidTrendChart: React.FC<LipidTrendChartProps> = ({
 
     const drawOverlayBands = () => {
       ctx.save();
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
       overlay.bands.forEach(band => {
         const y = getY(band.threshold);
-        ctx.fillRect(padding.left, padding.top, chartWidth, padding.top + chartHeight - y);
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+        const heightSegment = padding.top + chartHeight - y;
+        if (heightSegment > 0) {
+          ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
+          ctx.fillRect(padding.left, y, chartWidth, heightSegment);
+        }
         ctx.strokeStyle = 'rgba(37, 99, 235, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -229,18 +231,20 @@ export const LipidTrendChart: React.FC<LipidTrendChartProps> = ({
     const drawTherapyBands = () => {
       if (!settings.showTherapyBands || therapyPhases.length === 0) return;
       ctx.save();
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
       therapyPhases.forEach(phase => {
         const start = parseDate(phase.startDate);
         const end = phase.endDate ? parseDate(phase.endDate) : endMonth;
         const xStart = getX(start);
         const xEnd = getX(end);
-        ctx.fillRect(xStart, padding.top, Math.max(4, xEnd - xStart), chartHeight);
-        ctx.fillStyle = 'rgba(5, 150, 105, 0.25)';
+        const bandWidth = Math.max(6, xEnd - xStart);
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.14)';
+        ctx.fillRect(xStart, padding.top, bandWidth, chartHeight);
+        ctx.strokeStyle = 'rgba(22, 163, 74, 0.4)';
+        ctx.strokeRect(xStart, padding.top, bandWidth, chartHeight);
+        ctx.fillStyle = 'rgba(22, 163, 74, 0.85)';
         ctx.font = '10px Inter';
         ctx.textAlign = 'left';
-        ctx.fillText(phase.label, xStart + 4, padding.top + 6);
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
+        ctx.fillText(phase.label, xStart + 6, padding.top + 12);
       });
       ctx.restore();
     };
@@ -248,7 +252,7 @@ export const LipidTrendChart: React.FC<LipidTrendChartProps> = ({
     const plotSeries = () => {
       datasets.forEach(analyte => {
         ctx.beginPath();
-        ctx.lineWidth = analyte === 'ldl' ? 2.2 : 1.6;
+        ctx.lineWidth = analyte === 'ldl' ? 2.4 : 1.8;
         ctx.strokeStyle = ANALYTE_COLORS[analyte];
         ctx.fillStyle = ANALYTE_COLORS[analyte];
         let started = false;
@@ -377,6 +381,7 @@ export const LipidTrendChart: React.FC<LipidTrendChartProps> = ({
         >
           {formatTooltip(tooltip.reading)}
           {tooltip.reading.therapyNote ? `\n(${tooltip.reading.therapyNote})` : ''}
+          {tooltip.reading.source ? `\n${tooltip.reading.source}` : ''}
         </div>
       )}
     </div>

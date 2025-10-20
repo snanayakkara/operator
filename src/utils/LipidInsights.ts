@@ -10,6 +10,16 @@ import type {
 const MS_PER_DAY = 86400000;
 const MONTH_IN_MS = MS_PER_DAY * 30.4375;
 
+function formatDateAU(date?: string): string | undefined {
+  if (!date) return undefined;
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.valueOf())) return undefined;
+  const day = String(parsed.getUTCDate()).padStart(2, '0');
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+  const year = parsed.getUTCFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 function parseISO(date: string | undefined): Date | null {
   if (!date) return null;
   const parsed = new Date(date);
@@ -278,7 +288,9 @@ export function buildLipidInsightsContext(
     largestRise,
     therapyResponseNote: therapyResponse,
     strictOverlayRecommended: riskContext.strictOverlayRecommended,
-    riskContext: riskContext.note
+    riskContext: riskContext.note,
+    latestDate: latest.date,
+    previousDate: previous?.date
   };
 }
 
@@ -289,9 +301,21 @@ export function buildLipidInsightsSummary(context: LipidInsightsContext, overlay
     return `${sign}${Math.abs(delta).toFixed(1)} mmol/L (${percent > 0 ? '+' : ''}${Math.round(percent)}%)`;
   };
 
+  const latestDateText = formatDateAU(context.latestDate);
+  const previousDateText = formatDateAU(context.previousDate);
+  const baselineDateText = formatDateAU(context.baselineDate);
+
   const latestSummary = context.latestLDL != null
-    ? `Latest LDL ${context.latestLDL.toFixed(1)} mmol/L${context.latestTotal != null ? `, Total Chol ${context.latestTotal.toFixed(1)} mmol/L` : ''} (${formatDelta(context.deltaSincePrevious, context.percentDeltaSincePrevious)} vs prior; ${formatDelta(context.deltaSinceBaseline, context.percentReduction)} vs baseline).`
+    ? `Latest LDL ${context.latestLDL.toFixed(1)} mmol/L${context.latestTotal != null ? `, Total Chol ${context.latestTotal.toFixed(1)} mmol/L` : ''}${latestDateText ? ` (${latestDateText})` : ''}.`
     : 'Latest LDL not available.';
+
+  const priorComparison = context.deltaSincePrevious != null
+    ? `Change since prior result${previousDateText ? ` (${previousDateText})` : ''}: ${formatDelta(context.deltaSincePrevious, context.percentDeltaSincePrevious)}.`
+    : 'No prior comparison available.';
+
+  const baselineComparison = context.deltaSinceBaseline != null
+    ? `Baseline${baselineDateText ? ` (${baselineDateText})` : ''}: ${formatDelta(context.deltaSinceBaseline, context.percentReduction)}.`
+    : 'Baseline not established.';
 
   let trajectory = 'Trend assessment unavailable.';
   switch (context.slopeClassification) {
@@ -308,7 +332,15 @@ export function buildLipidInsightsSummary(context: LipidInsightsContext, overlay
       break;
   }
 
-  const timeInTargetText = `Time-in-target (${context.timeInTarget.timeframe}): ${percentage(context.timeInTarget.percentage)}${context.timeInTarget.lastAtGoalDate ? `; last at-goal ${context.timeInTarget.lastAtGoalDate}` : ''}.`;
+  const timeframeLabel: Record<LipidTimeFilter, string> = {
+    '3m': '3 months',
+    '6m': '6 months',
+    '12m': '12 months',
+    all: 'all results'
+  };
+
+  const lastAtGoal = context.timeInTarget.lastAtGoalDate ? formatDateAU(context.timeInTarget.lastAtGoalDate) : undefined;
+  const timeInTargetText = `Time-in-target (${timeframeLabel[context.timeInTarget.timeframe]}): ${percentage(context.timeInTarget.percentage)}${lastAtGoal ? `; last at goal ${lastAtGoal}` : ''}.`;
 
   const nadirText = context.bestNadir
     ? `Best on-therapy nadir ${context.bestNadir.value.toFixed(1)} mmol/L (${context.bestNadir.date}${context.bestNadir.therapyNote ? ` – ${context.bestNadir.therapyNote}` : ''}).`
@@ -325,6 +357,8 @@ export function buildLipidInsightsSummary(context: LipidInsightsContext, overlay
 
   return {
     latestSummary,
+    priorComparison,
+    baselineComparison,
     trajectory,
     timeInTarget: timeInTargetText,
     therapyResponse,

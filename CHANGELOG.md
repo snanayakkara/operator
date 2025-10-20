@@ -9,6 +9,31 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.15.0] - 2025-10-21
+
+### Added
+- **TTE Trend Importer** - Complete transthoracic echocardiography trend tracking system
+  - Import and parse TTE/Echo reports from EMR or clipboard
+  - Extract key cardiac measurements over time: LVEF, LVEDD, LVESD, GLS, valve function (MR/AR/TR/AS), diastolic function (E/e', LA), RV function (TAPSE), and pulmonary pressures (RVSP)
+  - Interactive trend visualization with multi-series charting
+  - Clinical insights generation: identifies deteriorating/improving metrics, calculates slopes and trends, highlights significant changes
+  - Manual editing of extracted values
+  - Session persistence and review
+  - Quick action integration for easy access
+
+### Enhanced
+- **Lipid Profile Importer Improvements**
+  - Therapy phases timeline: Visual display of medication periods with start/end dates
+  - Inline results table showing parsed lipid values before charting
+  - Narrower, more focused modal layout (600px width)
+  - Enhanced clinical insights with improved recommendations
+  - Better visual hierarchy and component organization
+  - Refined chart interactions and data display
+
+### Improved
+- **Live Audio Visualizer** - Enhanced visual feedback during recording
+- **Quick Actions** - Added TTE Trend Importer to quick actions menu
+
 ## [3.14.0] - 2025-10-21
 
 ### Added

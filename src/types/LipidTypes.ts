@@ -93,6 +93,8 @@ export interface LipidProfileSession {
 
 export interface LipidInsightsSummary {
   latestSummary: string;
+  priorComparison: string;
+  baselineComparison: string;
   trajectory: string;
   timeInTarget: string;
   therapyResponse?: string;
@@ -130,4 +132,6 @@ export interface LipidInsightsContext {
   therapyResponseNote?: string;
   strictOverlayRecommended?: boolean;
   riskContext?: string;
+  latestDate?: string;
+  previousDate?: string;
 }

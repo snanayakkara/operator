@@ -19,6 +19,8 @@ export const LipidInsightsPanel: React.FC<LipidInsightsPanelProps> = ({ summary 
       </div>
       <ul className="space-y-2 text-sm text-gray-900">
         <li><strong className="text-gray-700">Latest status:</strong> {summary.latestSummary}</li>
+        <li><strong className="text-gray-700">Change vs prior:</strong> {summary.priorComparison}</li>
+        <li><strong className="text-gray-700">Baseline context:</strong> {summary.baselineComparison}</li>
         <li><strong className="text-gray-700">Trajectory:</strong> {summary.trajectory}</li>
         <li><strong className="text-gray-700">Time in target:</strong> {summary.timeInTarget}</li>
         {summary.therapyResponse && (
@@ -35,4 +37,3 @@ export const LipidInsightsPanel: React.FC<LipidInsightsPanelProps> = ({ summary 
     </div>
   );
 };
-

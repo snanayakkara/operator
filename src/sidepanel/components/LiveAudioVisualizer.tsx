@@ -35,13 +35,17 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
   className = ""
 }) => {
   // Debounced audio status state
-  const [debouncedAudioStatus, setDebouncedAudioStatus] = React.useState({ 
-    status: 'idle', 
-    color: 'gray', 
-    message: 'Not recording' 
+  const [debouncedAudioStatus, setDebouncedAudioStatus] = React.useState({
+    status: 'idle',
+    color: 'gray',
+    message: 'Not recording'
   });
   const [showPersistentWarning, setShowPersistentWarning] = React.useState(false);
   const statusDebounceRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  // Frame smoothing for inertia effect
+  const previousFrameRef = React.useRef<number[]>([]);
+  const peakHoldsRef = React.useRef<number[]>([]);
 
   // Minimal error logging (removed excessive debug output)
   React.useEffect(() => {
@@ -112,18 +116,66 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
   // Calculate VU meter angle (0 to 180 degrees)
   const _vuAngle = Math.min(voiceActivityLevel * 180, 180);
 
+  // Apply smoothing with frame averaging for organic motion
+  const applySmoothingAndPeakHold = (currentFrame: number[]) => {
+    const smoothed: number[] = [];
+    const peaks: number[] = [];
+
+    // Initialize arrays if needed
+    if (previousFrameRef.current.length !== currentFrame.length) {
+      previousFrameRef.current = new Array(currentFrame.length).fill(0);
+      peakHoldsRef.current = new Array(currentFrame.length).fill(0);
+    }
+
+    for (let i = 0; i < currentFrame.length; i++) {
+      // Blend current frame with previous frames (60% current, 40% previous)
+      const blended = currentFrame[i] * 0.6 + previousFrameRef.current[i] * 0.4;
+      smoothed.push(blended);
+
+      // Peak hold with decay
+      if (blended > peakHoldsRef.current[i]) {
+        peakHoldsRef.current[i] = blended;
+      } else {
+        // Slow decay (0.95 multiplier per frame)
+        peakHoldsRef.current[i] *= 0.95;
+      }
+      peaks.push(peakHoldsRef.current[i]);
+    }
+
+    // Update previous frame
+    previousFrameRef.current = smoothed;
+
+    return { smoothed, peaks };
+  };
+
   // Create symmetrical frequency data for center-out visualization
   const createSymmetricalFrequencyData = (data: number[]) => {
     if (data.length === 0) return [];
-    
+
+    // Apply smoothing first
+    const { smoothed } = applySmoothingAndPeakHold(data);
+
     // Create a mirrored array - center-out pattern
-    const mirrored = [...data].reverse();
-    return [...mirrored, ...data];
+    const mirrored = [...smoothed].reverse();
+    return [...mirrored, ...smoothed];
   };
 
   // Get symmetrical frequency data
   const symmetricalFrequencyData = createSymmetricalFrequencyData(frequencyData);
 
+  // Debug logging (remove after testing)
+  React.useEffect(() => {
+    if (isRecording && symmetricalFrequencyData.length > 0 && Math.random() < 0.02) {
+      const avg = symmetricalFrequencyData.reduce((sum, v) => sum + v, 0) / symmetricalFrequencyData.length;
+      const max = Math.max(...symmetricalFrequencyData);
+      console.log('📊 Visualizer Debug:', {
+        voiceLevel: Math.round(voiceActivityLevel * 100) + '%',
+        avgFreq: Math.round(avg * 100) + '%',
+        maxFreq: Math.round(max * 100) + '%',
+        barCount: symmetricalFrequencyData.length
+      });
+    }
+  }, [isRecording, symmetricalFrequencyData, voiceActivityLevel]);
 
   return (
     <motion.div 
@@ -228,49 +280,73 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
             >
               Live Audio Spectrum
             </motion.div>
-            <div className="h-40 bg-gray-100 rounded-3xl border border-gray-200 flex items-center justify-center px-6 overflow-hidden shadow-sm">
+            <div className="h-40 bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl border border-gray-200 flex items-center justify-center px-6 overflow-hidden shadow-sm">
               {symmetricalFrequencyData.length > 0 ? (
-                <div className="flex items-end justify-center gap-0.5 h-full w-full px-2">
+                <div className="flex items-end justify-center gap-[1px] h-full w-full px-2">
                   {symmetricalFrequencyData.map((freq, index) => {
                     // Calculate distance from center for animation delay
                     const centerIndex = Math.floor(symmetricalFrequencyData.length / 2);
                     const distanceFromCenter = Math.abs(index - centerIndex);
 
-                    // Enhanced scaling for better visibility - amplify small values significantly
-                    const amplifiedFreq = Math.pow(freq * 3, 0.6); // Amplify by 3x then apply curve
-                    const barHeight = Math.max(amplifiedFreq * 90, 8); // Minimum 8px, max 90% of container
+                    // NOTE: freq is already normalized 0-1 from useRecorder (line 143-144)
+                    // It's been divided by 128 and curved with Math.pow(x, 0.7)
 
-                    // Color based on frequency intensity with lower thresholds
-                    const getBarColor = (intensity: number) => {
-                      if (intensity > 0.3) return '#10b981'; // emerald-500 - lower threshold
-                      if (intensity > 0.2) return '#059669'; // emerald-600 - lower threshold
-                      if (intensity > 0.15) return '#3b82f6'; // blue-500 - lower threshold
-                      if (intensity > 0.1) return '#6366f1'; // indigo-500 - lower threshold
-                      if (intensity > 0.05) return '#f59e0b'; // amber-500 - lower threshold
-                      if (intensity > 0.02) return '#9ca3af'; // gray-400 - much lower threshold
-                      return '#d1d5db'; // gray-300
+                    // Counter the 0.7 curve and apply more linear response
+                    // Math.pow(x, 1.43) ≈ inverse of Math.pow(x, 0.7)
+                    const linearized = Math.pow(freq, 1.43);
+
+                    // Apply gentle compression curve for better visual range
+                    // This ensures 50% input ≈ 50% output, but compresses extremes
+                    const shaped = linearized < 0.6
+                      ? linearized * 0.95  // Slightly reduce low/mid values
+                      : 0.57 + (linearized - 0.6) * 0.7; // Compress high values (60-100% → 57-85%)
+
+                    // Scale to percentage (3% min, 85% max)
+                    const barHeightPercent = Math.max(3, Math.min(85, 3 + shaped * 82));
+
+                    // Dynamic color based on height (not raw intensity)
+                    const getBarColor = (heightPercent: number) => {
+                      if (heightPercent > 70) return '#10b981'; // emerald-500 - very loud
+                      if (heightPercent > 55) return '#14b8a6'; // teal-500 - loud
+                      if (heightPercent > 40) return '#3b82f6'; // blue-500 - moderate
+                      if (heightPercent > 25) return '#6366f1'; // indigo-500 - quiet
+                      if (heightPercent > 15) return '#8b5cf6'; // violet-500 - very quiet
+                      if (heightPercent > 8) return '#a78bfa'; // violet-400 - barely audible
+                      return '#d1d5db'; // gray-300 - silence
                     };
 
+                    // Variable border radius based on height (taller = more rounded)
+                    const borderRadius = barHeightPercent > 50 ? 'rounded-full' :
+                                        barHeightPercent > 30 ? 'rounded-lg' :
+                                        'rounded-md';
+
+                    // Glow effect for active bars
+                    const glowIntensity = Math.max(0, (barHeightPercent - 40) / 45); // 0-1 for bars > 40%
+                    const boxShadow = glowIntensity > 0
+                      ? `0 0 ${4 + glowIntensity * 8}px ${glowIntensity * 4}px ${getBarColor(barHeightPercent)}40`
+                      : 'none';
 
                     return (
                       <motion.div
                         key={index}
-                        className="flex-1 min-w-[2px] max-w-[4px] rounded-full"
+                        className={`flex-1 min-w-[2px] max-w-[4px] ${borderRadius}`}
                         style={{
-                          backgroundColor: getBarColor(amplifiedFreq),
-                          height: `${Math.min(barHeight, 95)}%`,
-                          minHeight: '8px'
+                          backgroundColor: getBarColor(barHeightPercent),
+                          height: `${barHeightPercent}%`,
+                          minHeight: '2px',
+                          boxShadow,
+                          willChange: 'height, box-shadow'
                         }}
-                        initial={{ height: '8px' }}
+                        initial={{ height: '2px' }}
                         animate={{
-                          height: `${Math.min(barHeight, 95)}%`,
+                          height: `${barHeightPercent}%`,
                         }}
                         transition={{
                           type: "spring",
-                          damping: 20,
-                          stiffness: 400,
-                          mass: 0.2,
-                          delay: distanceFromCenter * 0.003
+                          damping: 25,
+                          stiffness: 350,
+                          mass: 0.15,
+                          delay: distanceFromCenter * 0.002
                         }}
                       />
                     );

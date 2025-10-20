@@ -184,6 +184,15 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     category: 'analysis'
   },
   {
+    id: 'tte-trend-importer',
+    label: 'Echo (TTE) Trends',
+    alias: 'TTE',
+    icon: Scan,
+    description: 'Import echo reports, trend LVEF/RVSP/LVEDD, and generate clinical insights',
+    group: 'secondary',
+    category: 'analysis'
+  },
+  {
     id: 'create-task',
     label: 'Create Task',
     alias: 'Task',

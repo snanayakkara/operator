@@ -420,8 +420,8 @@ ensure_dual_models_loaded() {
             fi
 
             # Check if processes finished
-            local reasoning_done=$([[ ! kill -0 $reasoning_pid 2>/dev/null ]] && echo 1 || echo 0)
-            local quick_done=$([[ ! kill -0 $quick_pid 2>/dev/null ]] && echo 1 || echo 0)
+            local reasoning_done=$(! kill -0 $reasoning_pid 2>/dev/null && echo 1 || echo 0)
+            local quick_done=$(! kill -0 $quick_pid 2>/dev/null && echo 1 || echo 0)
 
             if [ $reasoning_done -eq 1 ] && [ $quick_done -eq 1 ]; then
                 # Final check

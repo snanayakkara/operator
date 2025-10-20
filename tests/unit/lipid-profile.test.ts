@@ -68,6 +68,8 @@ describe('Lipid insights', () => {
     );
     const summary = buildLipidInsightsSummary(context, overlay);
     expect(summary.latestSummary).toMatch(/Latest LDL/);
+    expect(summary.priorComparison).toMatch(/\d{2}-\d{2}-\d{4}/);
+    expect(summary.baselineComparison).toMatch(/\d{2}-\d{2}-\d{4}/);
     expect(summary.timeInTarget).toMatch(/Time-in-target/);
     expect(summary.whyItMatters).toMatch(/relative ASCVD risk reduction/i);
   });

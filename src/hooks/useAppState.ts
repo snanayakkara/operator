@@ -36,6 +36,7 @@ export type UIOverlay =
   | 'screenshot-annotation'
   | 'bp-diary-importer'
   | 'lipid-profile-importer'
+  | 'tte-trend-importer'
   | 'patient-education'
   | 'paste-notes'
   | 'field-ingestion'
