@@ -9,6 +9,17 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.14.0] - 2025-10-21
+
+### Added
+- **Enhanced Session Dropdown UX**
+  - Larger, more visible checkboxes (20x20px) with prominent hover states
+  - Smart session reordering: unchecked sessions float to top, checked sessions sink to bottom
+  - Compact display mode for checked sessions (smaller cards, reduced opacity)
+  - Increased dropdown height to maximize viewport usage (calc(100vh - 80px))
+  - Auto-check sessions when "Insert to EMR" button is pressed
+  - Smooth transitions and animations for all state changes
+
 ## [3.13.0] - 2025-10-20
 
 - feat: introduce Lipid Profile Importer with EMR capture, charting, and clinical insights

@@ -36,6 +36,7 @@ interface SessionDropdownProps {
   onClose: () => void;
   triggerRef?: React.RefObject<HTMLElement>;
   position?: { top: number; left?: number; right?: number };
+  autoCheckedSessionIds?: Set<string>; // Sessions to auto-check (e.g., after EMR insertion)
 }
 
 // Performance constants
@@ -211,6 +212,9 @@ interface EnhancedSessionItemProps {
   isNextReview: boolean;
   isActiveRecording: boolean;
   copiedSessionId: string | null;
+  isChecked: boolean;
+  isCompact: boolean;
+  onToggleCheck: (sessionId: string) => void;
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
   onStopRecording?: () => void;
@@ -226,6 +230,9 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   isNextReview,
   isActiveRecording,
   copiedSessionId,
+  isChecked,
+  isCompact,
+  onToggleCheck,
   onSessionSelect,
   onResumeRecording,
   onStopRecording,
@@ -246,135 +253,209 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
     }
   }, [onSessionSelect, session]);
 
+  const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleCheck(session.id);
+  }, [onToggleCheck, session.id]);
+
+  // Compact mode: smaller padding, hide details
+  if (isCompact) {
+    return (
+      <div
+        className={`relative rounded-lg border transition-all duration-300 px-2 py-1.5 ${meta.cardClass} ${
+          isSelected ? 'border-accent-violet/70' : ''
+        } opacity-60 hover:opacity-80`}
+      >
+        <div className="flex items-center gap-2">
+          {/* Checkbox */}
+          <div
+            className="flex-shrink-0 cursor-pointer group"
+            onClick={handleCheckboxClick}
+            role="button"
+            aria-label="Unmark session as complete"
+          >
+            <div className="w-5 h-5 rounded border-2 bg-emerald-500 border-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate font-medium text-xs text-slate-700">
+                {session.patient?.name || 'Unnamed patient'}
+              </p>
+              <span className="text-[9px] text-slate-500 whitespace-nowrap">
+                {formatClockTime(session.timestamp)}
+              </span>
+            </div>
+            <div className="text-[9px] text-slate-500 truncate">
+              {session.agentName || session.agentType}
+            </div>
+          </div>
+
+          {/* Minimal actions */}
+          <button
+            onClick={() => onRemoveSession(session.id)}
+            className="flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+            title="Remove"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Full mode
   return (
     <div
-      className={`relative rounded-xl border px-3 py-2 transition-all ${meta.cardClass} ${
+      className={`relative rounded-xl border transition-all duration-300 px-3 py-2 ${meta.cardClass} ${
         isSelected ? 'border-accent-violet/70' : ''
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5 mb-1">
-            <p className="truncate font-semibold text-sm text-slate-900">
-              {session.patient?.name || 'Unnamed patient'}
-            </p>
-            <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass} ${meta.chipClass}`}>
-              {meta.icon}
-              <span>{meta.label}</span>
-            </span>
-            {state === 'processing' && session.pipelineProgress && (
-              <SessionProgressIndicator
-                phase={session.pipelineProgress.details || session.pipelineProgress.stage || 'Processing'}
-                progress={session.pipelineProgress.stageProgress || session.pipelineProgress.progress}
-                compact={true}
-              />
-            )}
-            {isNextReview && (
-              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
-                Next
-              </span>
+      <div className="flex items-start gap-2">
+        {/* Larger checkbox */}
+        <div
+          className="flex-shrink-0 pt-0.5 cursor-pointer group"
+          onClick={handleCheckboxClick}
+          role="button"
+          aria-label={isChecked ? "Unmark session as complete" : "Mark session as complete"}
+        >
+          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+            isChecked
+              ? 'bg-emerald-500 border-emerald-600'
+              : 'bg-white border-slate-300 group-hover:border-emerald-400 group-hover:bg-emerald-50'
+          }`}>
+            {isChecked && (
+              <CheckCircle2 className="w-3.5 h-3.5 text-white" />
             )}
           </div>
-
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-            <span className="flex items-center gap-0.5">
-              <Clock className="w-2.5 h-2.5 text-slate-400" />
-              {formatClockTime(session.timestamp)}
-            </span>
-            <span>{session.agentName || session.agentType}</span>
-            {dictationDuration !== null && (
-              <span className="flex items-center gap-0.5">
-                <Mic className="w-2.5 h-2.5 text-slate-400" />
-                {formatDuration(dictationDuration)}
-              </span>
-            )}
-            {processingDuration !== null && (
-              <span className="flex items-center gap-0.5">
-                <Cpu className="w-2.5 h-2.5 text-slate-400" />
-                {formatDuration(processingDuration)}
-              </span>
-            )}
-          </div>
-
-          {state === 'error' && session.errors?.length ? (
-            <div className="mt-1 text-[10px] text-rose-600 flex items-center gap-1">
-              <AlertTriangle className="w-2.5 h-2.5" />
-              {session.errors[0]}
-            </div>
-          ) : null}
-
-          {(state === 'needs_review' || state === 'completed') && hasResults && (
-            <div className="mt-2 rounded border border-slate-200/70 bg-slate-50/80 px-2 py-1 text-[10px] text-slate-600">
-              <p className="line-clamp-2 leading-relaxed">
-                {session.results!.slice(0, 120)}…
-              </p>
-            </div>
-          )}
         </div>
 
-        <div className="flex flex-col gap-1">
-          {state === 'recording' && isActiveRecording && onStopRecording && (
-            <button
-              onClick={onStopRecording}
-              className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-50"
-              title="Stop recording"
-            >
-              <XCircle className="w-2.5 h-2.5" />
-            </button>
-          )}
+        <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 mb-1">
+              <p className="truncate font-semibold text-sm text-slate-900">
+                {session.patient?.name || 'Unnamed patient'}
+              </p>
+              <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass} ${meta.chipClass}`}>
+                {meta.icon}
+                <span>{meta.label}</span>
+              </span>
+              {state === 'processing' && session.pipelineProgress && (
+                <SessionProgressIndicator
+                  phase={session.pipelineProgress.details || session.pipelineProgress.stage || 'Processing'}
+                  progress={session.pipelineProgress.stageProgress || session.pipelineProgress.progress}
+                  compact={true}
+                />
+              )}
+              {isNextReview && (
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+                  Next
+                </span>
+              )}
+            </div>
 
-          {state === 'recording' && !isActiveRecording && onResumeRecording && (
-            <button
-              onClick={() => onResumeRecording(session)}
-              className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-red-50/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-100"
-              title="Resume recording"
-            >
-              <Play className="w-2.5 h-2.5" />
-            </button>
-          )}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <span className="flex items-center gap-0.5">
+                <Clock className="w-2.5 h-2.5 text-slate-400" />
+                {formatClockTime(session.timestamp)}
+              </span>
+              <span>{session.agentName || session.agentType}</span>
+              {dictationDuration !== null && (
+                <span className="flex items-center gap-0.5">
+                  <Mic className="w-2.5 h-2.5 text-slate-400" />
+                  {formatDuration(dictationDuration)}
+                </span>
+              )}
+              {processingDuration !== null && (
+                <span className="flex items-center gap-0.5">
+                  <Cpu className="w-2.5 h-2.5 text-slate-400" />
+                  {formatDuration(processingDuration)}
+                </span>
+              )}
+            </div>
 
-          {state !== 'recording' && onSessionSelect && (
-            <button
-              onClick={handlePrimaryAction}
-              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
-              title="View session"
-            >
-              <ArrowRight className="w-2.5 h-2.5" />
-            </button>
-          )}
+            {state === 'error' && session.errors?.length ? (
+              <div className="mt-1 text-[10px] text-rose-600 flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {session.errors[0]}
+              </div>
+            ) : null}
 
-          {(state === 'needs_review' || state === 'completed') && (
-            <button
-              onClick={() => onCopyResults(session)}
-              disabled={!hasResults}
-              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                hasResults
-                  ? 'border-emerald-200/80 bg-white text-emerald-600 hover:bg-emerald-50'
-                  : 'border-slate-200/80 bg-white text-slate-400 cursor-not-allowed'
-              }`}
-              title="Copy letter"
-            >
-              {isCopying ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
-            </button>
-          )}
+            {(state === 'needs_review' || state === 'completed') && hasResults && (
+              <div className="mt-2 rounded border border-slate-200/70 bg-slate-50/80 px-2 py-1 text-[10px] text-slate-600">
+                <p className="line-clamp-2 leading-relaxed">
+                  {session.results!.slice(0, 120)}…
+                </p>
+              </div>
+            )}
+          </div>
 
-          {state === 'needs_review' && onMarkSessionComplete && (
-            <button
-              onClick={() => onMarkSessionComplete(session)}
-              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-2 py-1 text-[10px] font-semibold uppercase text-emerald-600 hover:bg-emerald-50"
-              title="Mark complete"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="flex flex-col gap-1">
+            {state === 'recording' && isActiveRecording && onStopRecording && (
+              <button
+                onClick={onStopRecording}
+                className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-50"
+                title="Stop recording"
+              >
+                <XCircle className="w-2.5 h-2.5" />
+              </button>
+            )}
 
-          <button
-            onClick={() => onRemoveSession(session.id)}
-            className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
-            title="Remove"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
+            {state === 'recording' && !isActiveRecording && onResumeRecording && (
+              <button
+                onClick={() => onResumeRecording(session)}
+                className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-red-50/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-100"
+                title="Resume recording"
+              >
+                <Play className="w-2.5 h-2.5" />
+              </button>
+            )}
+
+            {state !== 'recording' && onSessionSelect && (
+              <button
+                onClick={handlePrimaryAction}
+                className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
+                title="View session"
+              >
+                <ArrowRight className="w-2.5 h-2.5" />
+              </button>
+            )}
+
+            {(state === 'needs_review' || state === 'completed') && (
+              <button
+                onClick={() => onCopyResults(session)}
+                disabled={!hasResults}
+                className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                  hasResults
+                    ? 'border-emerald-200/80 bg-white text-emerald-600 hover:bg-emerald-50'
+                    : 'border-slate-200/80 bg-white text-slate-400 cursor-not-allowed'
+                }`}
+                title="Copy letter"
+              >
+                {isCopying ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+              </button>
+            )}
+
+            {state === 'needs_review' && onMarkSessionComplete && (
+              <button
+                onClick={() => onMarkSessionComplete(session)}
+                className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-2 py-1 text-[10px] font-semibold uppercase text-emerald-600 hover:bg-emerald-50"
+                title="Mark complete"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={() => onRemoveSession(session.id)}
+              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+              title="Remove"
+            >
+              <Trash2 className="w-2.5 h-2.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -394,19 +475,44 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   isOpen,
   onClose,
   triggerRef,
-  position
+  position,
+  autoCheckedSessionIds
 }) => {
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
+  const [checkedSessions, setCheckedSessions] = useState<Set<string>>(new Set());
   // Local state for lazy loading
   const [showAllCompleted, setShowAllCompleted] = useState(false);
   const [showAllInProgress, setShowAllInProgress] = useState(false);
   const [showAllErrored, setShowAllErrored] = useState(false);
+
+  // Sync auto-checked sessions from parent
+  useEffect(() => {
+    if (autoCheckedSessionIds && autoCheckedSessionIds.size > 0) {
+      setCheckedSessions(prev => {
+        const next = new Set(prev);
+        autoCheckedSessionIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [autoCheckedSessionIds]);
 
   useEffect(() => {
     if (!copiedSessionId) return;
     const timeout = setTimeout(() => setCopiedSessionId(null), 2000);
     return () => clearTimeout(timeout);
   }, [copiedSessionId]);
+
+  const handleToggleCheck = useCallback((sessionId: string) => {
+    setCheckedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleCopyResults = useCallback(async (session: PatientSession) => {
     if (!session.results || session.results.trim().length === 0) {
@@ -437,43 +543,52 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   const timelineStates = useMemo(() => {
     return sessions.map((session) => ({
       session,
-      state: deriveTimelineState(session)
+      state: deriveTimelineState(session),
+      isChecked: checkedSessions.has(session.id)
     }));
-  }, [sessions]);
+  }, [sessions, checkedSessions]);
 
   // Next review session
   const nextReviewSession = useMemo(() => {
     return (
-      timelineStates.find(item => item.state === 'needs_review') ||
-      timelineStates.find(item => item.state === 'completed')
+      timelineStates.find(item => item.state === 'needs_review' && !item.isChecked) ||
+      timelineStates.find(item => item.state === 'completed' && !item.isChecked)
     );
   }, [timelineStates]);
 
-  // Optimized filtered lists with better caching and lazy loading
+  // Optimized filtered lists with smart reordering: unchecked first, checked last
   const sessionCategories = useMemo(() => {
-    const completed: PatientSession[] = [];
-    const inProgress: PatientSession[] = [];
-    const errored: PatientSession[] = [];
+    const completed: { session: PatientSession; isChecked: boolean }[] = [];
+    const inProgress: { session: PatientSession; isChecked: boolean }[] = [];
+    const errored: { session: PatientSession; isChecked: boolean }[] = [];
 
     // Single pass through sessions for better performance
-    timelineStates.forEach(({ session, state }) => {
+    timelineStates.forEach(({ session, state, isChecked }) => {
+      const item = { session, isChecked };
       if (state === 'recording' || state === 'transcribing' || state === 'processing') {
-        inProgress.push(session);
+        inProgress.push(item);
       } else if (state === 'error') {
-        errored.push(session);
+        errored.push(item);
       } else if (state === 'needs_review' || state === 'completed') {
-        completed.push(session);
+        completed.push(item);
       }
     });
+
+    // Sort each category: unchecked first, checked last
+    const sortByChecked = (a: { isChecked: boolean }, b: { isChecked: boolean }) => {
+      if (a.isChecked === b.isChecked) return 0;
+      return a.isChecked ? 1 : -1;
+    };
+
+    completed.sort(sortByChecked);
+    inProgress.sort(sortByChecked);
+    errored.sort(sortByChecked);
 
     return { completed, inProgress, errored };
   }, [timelineStates]);
 
   // Apply lazy loading limits
   const visibleSessions = useMemo(() => {
-    const perfStart = performance.now();
-    console.time('📋 Visible Sessions Calculation Performance');
-
     const completedLimit = showAllCompleted ? sessionCategories.completed.length : INITIAL_VISIBLE_SESSIONS;
     const inProgressLimit = showAllInProgress ? sessionCategories.inProgress.length : INITIAL_VISIBLE_SESSIONS;
     const erroredLimit = showAllErrored ? sessionCategories.errored.length : INITIAL_VISIBLE_SESSIONS;
@@ -486,15 +601,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       hasMoreInProgress: sessionCategories.inProgress.length > inProgressLimit,
       hasMoreErrored: sessionCategories.errored.length > erroredLimit
     };
-
-    const perfEnd = performance.now();
-    console.timeEnd('📋 Visible Sessions Calculation Performance');
-    console.log('📋 Visible sessions calculation completed', {
-      duration: `${(perfEnd - perfStart).toFixed(2)}ms`,
-      visibleCompleted: result.completed.length,
-      visibleInProgress: result.inProgress.length,
-      visibleErrored: result.errored.length
-    });
 
     return result;
   }, [sessionCategories, showAllCompleted, showAllInProgress, showAllErrored]);
@@ -548,10 +654,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   }, [position, triggerRef]);
 
   // Helper component for "Show More" buttons
-  const ShowMoreButton: React.FC<{ 
-    onClick: () => void; 
-    hiddenCount: number; 
-    category: string 
+  const ShowMoreButton: React.FC<{
+    onClick: () => void;
+    hiddenCount: number;
+    category: string
   }> = ({ onClick, hiddenCount, category }) => (
     <button
       onClick={onClick}
@@ -584,7 +690,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
         left: computedPos.left,
         right: computedPos.right,
         width: '320px',
-        maxHeight: '960px',
+        maxHeight: 'calc(100vh - 80px)', // Increased from 960px
         zIndex: 9990
       };
     }
@@ -593,7 +699,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       top: '60px',
       right: '16px',
       width: '320px',
-      maxHeight: '960px',
+      maxHeight: 'calc(100vh - 80px)', // Increased from 960px
       zIndex: 9990
     };
   }, [computedPos]);
@@ -605,7 +711,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
 
 
   const dropdownContent = (
-    <div 
+    <div
       style={getDropdownStyle()}
       className="bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
       data-dropdown-menu
@@ -623,7 +729,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
               </p>
             </div>
           </div>
-          
+
           {sessions.length > 0 && (
             <button
               onClick={handleClearAll}
@@ -637,7 +743,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       </div>
 
       {/* Sessions List */}
-      <div className="max-h-[768px] overflow-y-auto">
+      <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
         {/* In Progress Sessions */}
         {sessionCategories.inProgress.length > 0 && (
           <div className="p-2">
@@ -646,7 +752,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
               <span className="text-xs font-medium text-amber-700">In Progress</span>
             </div>
             <div className="space-y-2">
-              {visibleSessions.inProgress.map((session) => {
+              {visibleSessions.inProgress.map(({ session, isChecked }) => {
                 const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                 return (
                   <EnhancedSessionItem
@@ -657,6 +763,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     isNextReview={nextReviewSession?.session.id === session.id}
                     isActiveRecording={session.id === activeRecordingSessionId}
                     copiedSessionId={copiedSessionId}
+                    isChecked={isChecked}
+                    isCompact={isChecked}
+                    onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}
@@ -686,7 +795,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
               <span className="text-xs font-medium text-red-700">Issues</span>
             </div>
             <div className="space-y-2">
-              {visibleSessions.errored.map((session) => {
+              {visibleSessions.errored.map(({ session, isChecked }) => {
                 const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                 return (
                   <EnhancedSessionItem
@@ -697,6 +806,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     isNextReview={nextReviewSession?.session.id === session.id}
                     isActiveRecording={session.id === activeRecordingSessionId}
                     copiedSessionId={copiedSessionId}
+                    isChecked={isChecked}
+                    isCompact={isChecked}
+                    onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}
@@ -728,7 +840,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
               </div>
             )}
             <div className="space-y-2">
-              {visibleSessions.completed.map((session) => {
+              {visibleSessions.completed.map(({ session, isChecked }) => {
                 const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                 return (
                   <EnhancedSessionItem
@@ -739,6 +851,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     isNextReview={nextReviewSession?.session.id === session.id}
                     isActiveRecording={session.id === activeRecordingSessionId}
                     copiedSessionId={copiedSessionId}
+                    isChecked={isChecked}
+                    isCompact={isChecked}
+                    onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}

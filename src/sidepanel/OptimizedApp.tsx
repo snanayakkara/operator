@@ -30,6 +30,7 @@ import { OptimizationPanel } from '../components/settings/OptimizationPanel';
 import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { SparsityStepperModal } from './components/SparsityStepperModal';
 import { LipidProfileImporter } from './components/LipidProfileImporter';
+import { TTETrendImporter } from './components/TTETrendImporter';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
@@ -86,6 +87,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     screenshotAnnotation: selectors.isOverlayActive('screenshot-annotation'),
     bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
     lipidProfileImporter: selectors.isOverlayActive('lipid-profile-importer'),
+    tteTrendImporter: selectors.isOverlayActive('tte-trend-importer'),
     patientMismatch: selectors.isOverlayActive('patient-mismatch'),
     pasteNotes: selectors.isOverlayActive('paste-notes'),
     sparsityStepper: selectors.isOverlayActive('sparsity-stepper')
@@ -100,7 +102,10 @@ const OptimizedAppContent: React.FC = memo(() => {
     prefillData?: { diagnosis?: string; plan?: string };
     onComplete: (result: any) => void;
   } | null>(null);
-  
+
+  // State for auto-checked sessions (after EMR insertion)
+  const [autoCheckedSessions, setAutoCheckedSessions] = useState<Set<string>>(new Set());
+
   // Store current audio blob for failed transcription storage
   const currentAudioBlobRef = useRef<Blob | null>(null);
   const currentRecordingTimeRef = useRef<number>(0);
@@ -2383,6 +2388,17 @@ const OptimizedAppContent: React.FC = memo(() => {
           console.log('✅ Auto-marked session as complete after EMR insertion');
         }
       }
+
+      // Auto-check the session in the dropdown after successful EMR insertion
+      const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId;
+      if (insertedSessionId) {
+        setAutoCheckedSessions(prev => {
+          const next = new Set(prev);
+          next.add(insertedSessionId);
+          return next;
+        });
+        console.log('✅ Auto-checked session in dropdown after EMR insertion:', insertedSessionId);
+      }
     } catch (error) {
       console.error('Failed to insert text to EMR:', error);
       throw error;
@@ -2652,6 +2668,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         onMarkSessionComplete={handleMarkSessionComplete}
         selectedSessionId={stableSelectedSessionId}
         currentSessionId={state.currentSessionId}
+        autoCheckedSessionIds={autoCheckedSessions}
       />
 
 
@@ -3127,6 +3144,13 @@ const OptimizedAppContent: React.FC = memo(() => {
                   return;
                 }
 
+                if (actionId === 'tte-trend-importer') {
+                  console.log('🫀 Opening TTE Trend Importer');
+                  actions.openOverlay('tte-trend-importer');
+                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+                  return;
+                }
+
                 // Handle Paste Letter action
                 if (actionId === 'paste-letter') {
                   console.log('📋 Opening Paste Notes Panel');
@@ -3529,6 +3553,17 @@ const OptimizedAppContent: React.FC = memo(() => {
           isOpen={overlayState.lipidProfileImporter}
           onClose={() => {
             actions.closeOverlay('lipid-profile-importer');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
+        />
+      )}
+
+      {/* TTE Trend Importer Modal */}
+      {overlayState.tteTrendImporter && (
+        <TTETrendImporter
+          isOpen={overlayState.tteTrendImporter}
+          onClose={() => {
+            actions.closeOverlay('tte-trend-importer');
             actions.setUIMode('idle', { sessionId: null, origin: 'user' });
           }}
         />
