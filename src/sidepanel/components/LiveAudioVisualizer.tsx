@@ -116,66 +116,104 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
   // Calculate VU meter angle (0 to 180 degrees)
   const _vuAngle = Math.min(voiceActivityLevel * 180, 180);
 
-  // Apply smoothing with frame averaging for organic motion
+  // Apply Gaussian smoothing for ultra-smooth waveforms (like professional audio software)
   const applySmoothingAndPeakHold = (currentFrame: number[]) => {
-    const smoothed: number[] = [];
-    const peaks: number[] = [];
-
     // Initialize arrays if needed
     if (previousFrameRef.current.length !== currentFrame.length) {
       previousFrameRef.current = new Array(currentFrame.length).fill(0);
       peakHoldsRef.current = new Array(currentFrame.length).fill(0);
     }
 
-    for (let i = 0; i < currentFrame.length; i++) {
-      // Blend current frame with previous frames (60% current, 40% previous)
-      const blended = currentFrame[i] * 0.6 + previousFrameRef.current[i] * 0.4;
-      smoothed.push(blended);
+    // Temporal smoothing (60% previous, 40% current) for balanced smooth + responsive
+    const temporalSmoothed = currentFrame.map((value, i) =>
+      value * 0.4 + previousFrameRef.current[i] * 0.6
+    );
 
-      // Peak hold with decay
-      if (blended > peakHoldsRef.current[i]) {
-        peakHoldsRef.current[i] = blended;
-      } else {
-        // Slow decay (0.95 multiplier per frame)
-        peakHoldsRef.current[i] *= 0.95;
+    // Gaussian kernel for spatial smoothing (sigma = 1.0, 7-tap)
+    const gaussianKernel = [0.06, 0.09, 0.12, 0.15, 0.12, 0.09, 0.06];
+    const radius = Math.floor(gaussianKernel.length / 2);
+
+    const gaussianSmoothed: number[] = [];
+    for (let i = 0; i < temporalSmoothed.length; i++) {
+      let sum = 0;
+      let weightSum = 0;
+
+      for (let j = -radius; j <= radius; j++) {
+        const idx = i + j;
+        if (idx >= 0 && idx < temporalSmoothed.length) {
+          const weight = gaussianKernel[j + radius];
+          sum += temporalSmoothed[idx] * weight;
+          weightSum += weight;
+        }
       }
-      peaks.push(peakHoldsRef.current[i]);
+
+      gaussianSmoothed.push(sum / weightSum);
     }
 
     // Update previous frame
-    previousFrameRef.current = smoothed;
+    previousFrameRef.current = gaussianSmoothed;
 
-    return { smoothed, peaks };
+    return { smoothed: gaussianSmoothed, peaks: [] };
+  };
+
+  // Interpolate between data points for smoother curves
+  const interpolateData = (data: number[], targetLength: number): number[] => {
+    if (data.length === 0) return [];
+    if (data.length >= targetLength) return data;
+
+    const result: number[] = [];
+    const ratio = (data.length - 1) / (targetLength - 1);
+
+    for (let i = 0; i < targetLength; i++) {
+      const position = i * ratio;
+      const index = Math.floor(position);
+      const fraction = position - index;
+
+      if (index >= data.length - 1) {
+        result.push(data[data.length - 1]);
+      } else {
+        // Cubic interpolation for smooth curves
+        const p0 = data[Math.max(0, index - 1)];
+        const p1 = data[index];
+        const p2 = data[index + 1];
+        const p3 = data[Math.min(data.length - 1, index + 2)];
+
+        // Catmull-Rom spline interpolation
+        const t = fraction;
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        const v = 0.5 * (
+          (2 * p1) +
+          (-p0 + p2) * t +
+          (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+          (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+        );
+
+        result.push(Math.max(0, Math.min(1, v)));
+      }
+    }
+
+    return result;
   };
 
   // Create symmetrical frequency data for center-out visualization
   const createSymmetricalFrequencyData = (data: number[]) => {
     if (data.length === 0) return [];
 
-    // Apply smoothing first
+    // Apply smoothing
     const { smoothed } = applySmoothingAndPeakHold(data);
 
+    // Interpolate to create MANY more points for ultra-smooth curves
+    const interpolated = interpolateData(smoothed, 150);
+
     // Create a mirrored array - center-out pattern
-    const mirrored = [...smoothed].reverse();
-    return [...mirrored, ...smoothed];
+    const mirrored = [...interpolated].reverse();
+    return [...mirrored, ...interpolated];
   };
 
   // Get symmetrical frequency data
   const symmetricalFrequencyData = createSymmetricalFrequencyData(frequencyData);
-
-  // Debug logging (remove after testing)
-  React.useEffect(() => {
-    if (isRecording && symmetricalFrequencyData.length > 0 && Math.random() < 0.02) {
-      const avg = symmetricalFrequencyData.reduce((sum, v) => sum + v, 0) / symmetricalFrequencyData.length;
-      const max = Math.max(...symmetricalFrequencyData);
-      console.log('📊 Visualizer Debug:', {
-        voiceLevel: Math.round(voiceActivityLevel * 100) + '%',
-        avgFreq: Math.round(avg * 100) + '%',
-        maxFreq: Math.round(max * 100) + '%',
-        barCount: symmetricalFrequencyData.length
-      });
-    }
-  }, [isRecording, symmetricalFrequencyData, voiceActivityLevel]);
 
   return (
     <motion.div 
@@ -282,76 +320,110 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
             </motion.div>
             <div className="h-40 bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl border border-gray-200 flex items-center justify-center px-6 overflow-hidden shadow-sm">
               {symmetricalFrequencyData.length > 0 ? (
-                <div className="flex items-end justify-center gap-[1px] h-full w-full px-2">
-                  {symmetricalFrequencyData.map((freq, index) => {
-                    // Calculate distance from center for animation delay
-                    const centerIndex = Math.floor(symmetricalFrequencyData.length / 2);
-                    const distanceFromCenter = Math.abs(index - centerIndex);
+                <svg
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 600 160"
+                  preserveAspectRatio="none"
+                  className="w-full h-full"
+                >
+                  {/* Render smooth waveform */}
+                  {(() => {
+                    // Convert frequency data to heights with sine envelope (rope effect)
+                    const heights = symmetricalFrequencyData.map((freq, i) => {
+                      // Apply sine wave envelope to force edges to center (rope physics)
+                      const normalizedPos = i / (symmetricalFrequencyData.length - 1); // 0 to 1
+                      const sineEnvelope = Math.sin(normalizedPos * Math.PI); // 0 at edges, 1 at center
 
-                    // NOTE: freq is already normalized 0-1 from useRecorder (line 143-144)
-                    // It's been divided by 128 and curved with Math.pow(x, 0.7)
+                      // Scale frequency data and apply envelope
+                      const scaled = freq * 100 * sineEnvelope; // Constrained by sine curve
+                      return Math.max(2, Math.min(90, scaled)); // Clamp between 2-90%
+                    });
 
-                    // Counter the 0.7 curve and apply more linear response
-                    // Math.pow(x, 1.43) ≈ inverse of Math.pow(x, 0.7)
-                    const linearized = Math.pow(freq, 1.43);
+                    // Calculate average for color
+                    const avgHeight = heights.reduce((sum, h) => sum + h, 0) / heights.length;
+                    const color = avgHeight > 50 ? '#3b82f6' : avgHeight > 25 ? '#6366f1' : '#8b5cf6';
 
-                    // Apply gentle compression curve for better visual range
-                    // This ensures 50% input ≈ 50% output, but compresses extremes
-                    const shaped = linearized < 0.6
-                      ? linearized * 0.95  // Slightly reduce low/mid values
-                      : 0.57 + (linearized - 0.6) * 0.7; // Compress high values (60-100% → 57-85%)
+                    // Create smooth path using Catmull-Rom splines
+                    const createSmoothPath = (heights: number[], isBottom: boolean) => {
+                      const centerY = 80;
+                      const spacing = 600 / Math.max(1, heights.length - 1);
 
-                    // Scale to percentage (3% min, 85% max)
-                    const barHeightPercent = Math.max(3, Math.min(85, 3 + shaped * 82));
+                      // Generate points
+                      const points = heights.map((height, i) => ({
+                        x: i * spacing,
+                        y: isBottom ? centerY + (height / 2) * 0.8 : centerY - (height / 2) * 0.8
+                      }));
 
-                    // Dynamic color based on height (not raw intensity)
-                    const getBarColor = (heightPercent: number) => {
-                      if (heightPercent > 70) return '#10b981'; // emerald-500 - very loud
-                      if (heightPercent > 55) return '#14b8a6'; // teal-500 - loud
-                      if (heightPercent > 40) return '#3b82f6'; // blue-500 - moderate
-                      if (heightPercent > 25) return '#6366f1'; // indigo-500 - quiet
-                      if (heightPercent > 15) return '#8b5cf6'; // violet-500 - very quiet
-                      if (heightPercent > 8) return '#a78bfa'; // violet-400 - barely audible
-                      return '#d1d5db'; // gray-300 - silence
+                      if (points.length < 2) return `M 0 ${centerY}`;
+
+                      // Start path
+                      let path = `M ${points[0].x},${points[0].y}`;
+
+                      // Use Catmull-Rom spline for smooth curves
+                      for (let i = 0; i < points.length - 1; i++) {
+                        const p0 = points[Math.max(0, i - 1)];
+                        const p1 = points[i];
+                        const p2 = points[i + 1];
+                        const p3 = points[Math.min(points.length - 1, i + 2)];
+
+                        // Calculate control points for cubic Bézier
+                        const cp1x = p1.x + (p2.x - p0.x) / 6;
+                        const cp1y = p1.y + (p2.y - p0.y) / 6;
+                        const cp2x = p2.x - (p3.x - p1.x) / 6;
+                        const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+                        path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+                      }
+
+                      return path;
                     };
 
-                    // Variable border radius based on height (taller = more rounded)
-                    const borderRadius = barHeightPercent > 50 ? 'rounded-full' :
-                                        barHeightPercent > 30 ? 'rounded-lg' :
-                                        'rounded-md';
-
-                    // Glow effect for active bars
-                    const glowIntensity = Math.max(0, (barHeightPercent - 40) / 45); // 0-1 for bars > 40%
-                    const boxShadow = glowIntensity > 0
-                      ? `0 0 ${4 + glowIntensity * 8}px ${glowIntensity * 4}px ${getBarColor(barHeightPercent)}40`
-                      : 'none';
+                    // Generate paths
+                    const topPath = createSmoothPath(heights, false);
+                    const bottomPath = createSmoothPath(heights, true);
 
                     return (
-                      <motion.div
-                        key={index}
-                        className={`flex-1 min-w-[2px] max-w-[4px] ${borderRadius}`}
-                        style={{
-                          backgroundColor: getBarColor(barHeightPercent),
-                          height: `${barHeightPercent}%`,
-                          minHeight: '2px',
-                          boxShadow,
-                          willChange: 'height, box-shadow'
-                        }}
-                        initial={{ height: '2px' }}
-                        animate={{
-                          height: `${barHeightPercent}%`,
-                        }}
-                        transition={{
-                          type: "spring",
-                          damping: 25,
-                          stiffness: 350,
-                          mass: 0.15,
-                          delay: distanceFromCenter * 0.002
-                        }}
-                      />
+                      <>
+                        {/* Top waveform */}
+                        <motion.path
+                          d={topPath}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          animate={{ d: topPath }}
+                          transition={{ type: "spring", damping: 25, stiffness: 200, mass: 0.08 }}
+                        />
+                        {/* Bottom waveform */}
+                        <motion.path
+                          d={bottomPath}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          animate={{ d: bottomPath }}
+                          transition={{ type: "spring", damping: 25, stiffness: 200, mass: 0.08 }}
+                        />
+                        {/* Fill for depth */}
+                        <motion.path
+                          d={`${topPath} L 600,80 L 0,80 Z`}
+                          fill={`${color}15`}
+                          animate={{ d: `${topPath} L 600,80 L 0,80 Z` }}
+                          transition={{ type: "spring", damping: 25, stiffness: 200, mass: 0.08 }}
+                        />
+                        <motion.path
+                          d={`${bottomPath} L 600,80 L 0,80 Z`}
+                          fill={`${color}15`}
+                          animate={{ d: `${bottomPath} L 600,80 L 0,80 Z` }}
+                          transition={{ type: "spring", damping: 25, stiffness: 200, mass: 0.08 }}
+                        />
+                      </>
                     );
-                  })}
-                </div>
+                  })()}
+                </svg>
               ) : (
                 <div className="flex items-center space-x-4 text-gray-400">
                   <div className="flex items-center space-x-2">

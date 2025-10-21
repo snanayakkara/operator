@@ -99,6 +99,19 @@ interface DisplaySessionState {
   displayPipelineProgress?: PipelineProgress | null; // Pipeline progress for sessions still processing
 }
 
+interface ResultRevisionState {
+  original: string;
+  edited: string;
+  savedText: string;
+  notes: string;
+  workflowId?: string | null;
+  tags: string[];
+  lastSavedAt?: number;
+  hasUnsavedChanges: boolean;
+  isEditing: boolean;
+  runEvaluationOnSave: boolean;
+}
+
 // Combined app state
 interface CombinedAppState extends AppState {
   ui: UIState;
@@ -110,6 +123,9 @@ interface CombinedAppState extends AppState {
 
   // Session display isolation - prevents cross-contamination between active recording and viewing completed sessions
   displaySession: DisplaySessionState;
+
+  // Result revision tracking per workflow/session
+  resultRevisions: Record<string, ResultRevisionState>;
 
   // Streaming generation state
   streamBuffer?: string;
@@ -196,6 +212,11 @@ type AppAction =
   | { type: 'RESULTS_STREAM_CANCELLED' }
   | { type: 'RESULTS_STREAMING'; payload: boolean }
   | { type: 'RESULTS_CLEAR_STREAM' }
+  // Result revision tracking
+  | { type: 'SET_RESULT_REVISION'; payload: { key: string; revision: ResultRevisionState } }
+  | { type: 'UPDATE_RESULT_REVISION'; payload: { key: string; updates: Partial<ResultRevisionState> } }
+  | { type: 'CLEAR_RESULT_REVISION'; payload: { key: string } }
+  | { type: 'RESET_RESULT_REVISIONS' }
   | { type: 'SET_TRANSCRIPTION_APPROVAL'; payload: TranscriptionApprovalState }
   // Unified pipeline progress actions
   | { type: 'SET_PIPELINE_PROGRESS'; payload: PipelineProgress }
@@ -294,6 +315,9 @@ const initialState: CombinedAppState = {
     displayPatientInfo: null,
     displayPipelineProgress: null
   },
+
+  // Result revision tracking
+  resultRevisions: {},
   
   // UI state
   ui: {
@@ -571,9 +595,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTaviStructuredSections: undefined,
           displayAgent: null,
           displayAgentName: null,
-          displayPatientInfo: null,
-          displayPipelineProgress: null
-        },
+        displayPatientInfo: null,
+        displayPipelineProgress: null
+      },
+        resultRevisions: {},
         transcriptionApproval: {
           status: 'pending',
           originalText: '',
@@ -668,6 +693,59 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       };
     case 'RESULTS_STREAM_CANCELLED':
       return { ...state, streaming: false };
+
+    // Result revision tracking cases
+    case 'SET_RESULT_REVISION': {
+      const { key, revision } = action.payload;
+      const currentRevision = state.resultRevisions[key];
+      if (currentRevision === revision) {
+        return state;
+      }
+      return {
+        ...state,
+        resultRevisions: {
+          ...state.resultRevisions,
+          [key]: revision
+        }
+      };
+    }
+    case 'UPDATE_RESULT_REVISION': {
+      const { key, updates } = action.payload;
+      const existing = state.resultRevisions[key];
+      if (!existing) {
+        return state;
+      }
+      const nextRevision = {
+        ...existing,
+        ...updates
+      };
+      return {
+        ...state,
+        resultRevisions: {
+          ...state.resultRevisions,
+          [key]: nextRevision
+        }
+      };
+    }
+    case 'CLEAR_RESULT_REVISION': {
+      const { key } = action.payload;
+      if (!state.resultRevisions[key]) {
+        return state;
+      }
+      const { [key]: _removed, ...rest } = state.resultRevisions;
+      return {
+        ...state,
+        resultRevisions: rest
+      };
+    }
+    case 'RESET_RESULT_REVISIONS':
+      if (Object.keys(state.resultRevisions).length === 0) {
+        return state;
+      }
+      return {
+        ...state,
+        resultRevisions: {}
+      };
     
     case 'SET_TRANSCRIPTION_APPROVAL':
       return { ...state, transcriptionApproval: action.payload };
@@ -1123,6 +1201,20 @@ export function useAppState() {
     }, []),
     streamCancelled: useCallback(() => {
       dispatch({ type: 'RESULTS_STREAM_CANCELLED' });
+    }, []),
+
+    // Result revision helpers
+    setResultRevision: useCallback((key: string, revision: ResultRevisionState) => {
+      dispatch({ type: 'SET_RESULT_REVISION', payload: { key, revision } });
+    }, []),
+    updateResultRevision: useCallback((key: string, updates: Partial<ResultRevisionState>) => {
+      dispatch({ type: 'UPDATE_RESULT_REVISION', payload: { key, updates } });
+    }, []),
+    clearResultRevision: useCallback((key: string) => {
+      dispatch({ type: 'CLEAR_RESULT_REVISION', payload: { key } });
+    }, []),
+    resetResultRevisions: useCallback(() => {
+      dispatch({ type: 'RESET_RESULT_REVISIONS' });
     }, []),
     
     // Transcription approval action

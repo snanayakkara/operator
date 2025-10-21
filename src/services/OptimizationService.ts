@@ -32,7 +32,9 @@ import type {
   OvernightJob,
   JobStatus,
   ServerHealthStatus,
-  ApiResponse
+  ApiResponse,
+  GoldenPairSaveRequest,
+  GoldenPairSaveResponse
 } from '@/types/optimization';
 
 import {
@@ -41,6 +43,8 @@ import {
   GEPAOptimizationError,
   OvernightOptimizationError
 } from '@/types/optimization';
+
+import { DSPyService } from './DSPyService';
 
 export class OptimizationService {
   private static instance: OptimizationService;
@@ -80,6 +84,20 @@ export class OptimizationService {
 
   private generateRequestId(): string {
     return `opt-${Date.now()}-${++this.requestIdCounter}`;
+  }
+
+  private slugifyId(input: string): string {
+    return input
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'example';
+  }
+
+  private generateGoldenPairId(agentId: string, workflowId?: string | null): string {
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const base = workflowId ? this.slugifyId(workflowId) : this.slugifyId(agentId);
+    return `${base}-${timestamp}`;
   }
 
   /**
@@ -475,6 +493,124 @@ export class OptimizationService {
       }
       if (err instanceof ASROptimizationError) throw err;
       throw new ASROptimizationError(`Failed to upload corrections: ${err.message}`);
+    }
+  }
+
+  /**
+   * Persist clinician revision as a golden pair example for DSPy training
+   */
+  async saveGoldenPair(request: GoldenPairSaveRequest): Promise<GoldenPairSaveResponse> {
+    const notes = request.notes?.trim() || '';
+    if (!request.agentId) {
+      throw new OptimizationError('Agent ID is required to save a golden pair', 'INVALID_INPUT', {
+        component: 'OptimizationService.saveGoldenPair'
+      });
+    }
+    if (!request.original?.trim()) {
+      throw new OptimizationError('Original output is required to save a golden pair', 'INVALID_INPUT', {
+        component: 'OptimizationService.saveGoldenPair',
+        agentId: request.agentId
+      });
+    }
+    if (!request.edited?.trim()) {
+      throw new OptimizationError('Edited revision is required to save a golden pair', 'INVALID_INPUT', {
+        component: 'OptimizationService.saveGoldenPair',
+        agentId: request.agentId
+      });
+    }
+    if (!notes) {
+      throw new OptimizationError('Scenario summary is required to save a golden pair', 'INVALID_INPUT', {
+        component: 'OptimizationService.saveGoldenPair',
+        agentId: request.agentId
+      });
+    }
+
+    const capturedAt = new Date().toISOString();
+    const exampleId = this.generateGoldenPairId(request.agentId, request.workflowId);
+    const tags = (request.tags || []).map(tag => tag.trim()).filter(Boolean);
+    const expectedElementsSource = notes.split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
+    const expectedElements = Array.from(new Set([...expectedElementsSource, ...tags]));
+
+    const payload = {
+      id: exampleId,
+      task: request.agentId,
+      transcript: request.original,
+      expected_output: request.edited,
+      expected_elements: expectedElements,
+      rubric_criteria: {
+        captured_at: capturedAt,
+        workflow_id: request.workflowId ?? null,
+        requires_revision: request.original.trim() !== request.edited.trim(),
+        min_score: 85
+      },
+      metadata: {
+        scenario_summary: notes,
+        workflow_id: request.workflowId ?? null,
+        tags,
+        revision_source: 'results-panel',
+        collection: 'result-edit-training',
+        origin: 'Edit & Train',
+        captured_at: capturedAt,
+        original_length: request.original.length,
+        edited_length: request.edited.length
+      }
+    };
+
+    try {
+      const response = await this.makeRequest<ApiResponse<{ file_path: string; example: unknown }>>(
+        `/v1/dspy/devset/${request.agentId}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (!response.success) {
+        throw new OptimizationError(response.error || 'Failed to save golden pair', 'SAVE_GOLDEN_PAIR_FAILED', {
+          agentId: request.agentId,
+          exampleId
+        });
+      }
+
+      const filePath = response.data?.file_path ?? `eval/devset/${request.agentId}/${exampleId}.json`;
+
+      logger.info('Golden pair saved for optimization', {
+        component: 'OptimizationService',
+        agentId: request.agentId,
+        exampleId,
+        filePath,
+        runEval: !!request.runEvaluationOnNewExample
+      });
+
+      if (request.runEvaluationOnNewExample) {
+        DSPyService.getInstance()
+          .runEvaluation(request.agentId, { runEvaluationOnNewExample: true })
+          .catch((error) => {
+            const err = toError(error);
+            logger.warn('Failed to trigger GEPA preview after saving golden pair', {
+              component: 'OptimizationService',
+              agentId: request.agentId,
+              exampleId,
+              error: err.message
+            });
+          });
+      }
+
+      return {
+        exampleId,
+        filePath,
+        agentId: request.agentId,
+        timestamp: capturedAt
+      };
+    } catch (error) {
+      if (error instanceof OptimizationError) {
+        throw error;
+      }
+      const err = toError(error);
+      throw new OptimizationError(`Failed to save golden pair: ${err.message}`, 'SAVE_GOLDEN_PAIR_FAILED', {
+        agentId: request.agentId,
+        exampleId
+      });
     }
   }
 

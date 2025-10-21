@@ -35,6 +35,7 @@ import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
 import { WhisperServerService } from '@/services/WhisperServerService';
+import { OptimizationService } from '@/services/OptimizationService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
@@ -45,6 +46,7 @@ import { MetricsService } from '@/services/MetricsService';
 import { useRecorder } from '@/hooks/useRecorder';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
+import { notifySuccess, notifyError } from '@/utils/notifications';
 import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
@@ -105,6 +107,8 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // State for auto-checked sessions (after EMR insertion)
   const [autoCheckedSessions, setAutoCheckedSessions] = useState<Set<string>>(new Set());
+  const [isSavingRevision, setIsSavingRevision] = useState(false);
+  const [isSavingGoldenPair, setIsSavingGoldenPair] = useState(false);
 
   // Store current audio blob for failed transcription storage
   const currentAudioBlobRef = useRef<Blob | null>(null);
@@ -121,6 +125,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const lmStudioService = useRef(LMStudioService.getInstance()).current;
   const whisperServerService = useRef(WhisperServerService.getInstance()).current;
   const patientCacheService = useRef(PatientDataCacheService.getInstance()).current;
+  const optimizationService = useRef(OptimizationService.getInstance()).current;
   const batchOrchestrator = useRef<BatchAIReviewOrchestrator | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
@@ -189,6 +194,114 @@ const OptimizedAppContent: React.FC = memo(() => {
     return session?.patient?.name;
   }, [stableSelectedSessionId, state.patientSessions]);
 
+  const activeWorkflowId = useMemo(() => {
+    if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
+      return state.displaySession.displaySessionId;
+    }
+    if (stableSelectedSessionId) {
+      return stableSelectedSessionId;
+    }
+    if (state.currentSessionId) {
+      return state.currentSessionId;
+    }
+    if (state.ui.modeContext.sessionId) {
+      return state.ui.modeContext.sessionId;
+    }
+    return null;
+  }, [
+    state.displaySession.isDisplayingSession,
+    state.displaySession.displaySessionId,
+    stableSelectedSessionId,
+    state.currentSessionId,
+    state.ui.modeContext.sessionId
+  ]);
+
+  const fallbackRevisionSession = useMemo(() => {
+    if (!activeWorkflowId) {
+      return null;
+    }
+    return state.patientSessions.find(session => session.id === activeWorkflowId) || null;
+  }, [state.patientSessions, activeWorkflowId]);
+
+  const activeAgentId = useMemo<AgentType | null>(() => {
+    if (state.displaySession.isDisplayingSession && state.displaySession.displayAgent) {
+      return state.displaySession.displayAgent;
+    }
+    if (state.currentAgent) {
+      return state.currentAgent;
+    }
+    return fallbackRevisionSession?.agentType ?? null;
+  }, [
+    state.displaySession.isDisplayingSession,
+    state.displaySession.displayAgent,
+    state.currentAgent,
+    fallbackRevisionSession
+  ]);
+
+  const activeAgentLabel = useMemo(() => {
+    if (state.displaySession.isDisplayingSession && state.displaySession.displayAgentName) {
+      return state.displaySession.displayAgentName;
+    }
+    if (state.currentAgentName) {
+      return state.currentAgentName;
+    }
+    return fallbackRevisionSession?.agentName ?? null;
+  }, [
+    state.displaySession.isDisplayingSession,
+    state.displaySession.displayAgentName,
+    state.currentAgentName,
+    fallbackRevisionSession
+  ]);
+
+  const activeRevisionKey = useMemo(() => {
+    return `${activeWorkflowId ?? 'active'}::${activeAgentId ?? 'unknown'}`;
+  }, [activeWorkflowId, activeAgentId]);
+
+  const activeRevision = useMemo(() => state.resultRevisions[activeRevisionKey], [state.resultRevisions, activeRevisionKey]);
+
+  const baseResultsForRevision = useMemo(() => {
+    if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId === (activeWorkflowId ?? state.displaySession.displaySessionId)) {
+      return state.displaySession.displayResults || '';
+    }
+    if (activeWorkflowId) {
+      const session = state.patientSessions.find(s => s.id === activeWorkflowId);
+      if (session) {
+        return session.results || '';
+      }
+    }
+    return state.results || '';
+  }, [
+    state.displaySession.isDisplayingSession,
+    state.displaySession.displaySessionId,
+    state.displaySession.displayResults,
+    state.patientSessions,
+    activeWorkflowId,
+    state.results
+  ]);
+
+  const revisionPanelData = useMemo(() => {
+    if (!activeRevision) {
+      return undefined;
+    }
+    return {
+      key: activeRevisionKey,
+      original: activeRevision.original,
+      edited: activeRevision.edited,
+      savedText: activeRevision.savedText,
+      notes: activeRevision.notes,
+      tags: activeRevision.tags,
+      runEvaluationOnSave: activeRevision.runEvaluationOnSave,
+      hasUnsavedChanges: activeRevision.hasUnsavedChanges,
+      lastSavedAt: activeRevision.lastSavedAt,
+      isEditing: activeRevision.isEditing
+    };
+  }, [activeRevision, activeRevisionKey]);
+
+  const revisionContext = useMemo(() => ({
+    workflowId: activeWorkflowId,
+    agentLabel: activeAgentLabel
+  }), [activeWorkflowId, activeAgentLabel]);
+
   // Streaming control
   const stopStreaming = useCallback(() => {
     if (processingAbortRef.current) {
@@ -200,6 +313,196 @@ const OptimizedAppContent: React.FC = memo(() => {
     // Clear any partial AI summary when cancelling
     actions.setAiGeneratedSummary(undefined);
   }, [actions]);
+
+  const handleRevisionToggle = useCallback((open: boolean) => {
+    if (!activeRevisionKey) {
+      return;
+    }
+    const existing = state.resultRevisions[activeRevisionKey];
+    if (open) {
+      if (existing) {
+        actions.updateResultRevision(activeRevisionKey, {
+          isEditing: true,
+          workflowId: activeWorkflowId ?? existing.workflowId
+        });
+      } else {
+        actions.setResultRevision(activeRevisionKey, {
+          original: baseResultsForRevision,
+          edited: baseResultsForRevision,
+          savedText: baseResultsForRevision,
+          notes: '',
+          tags: [],
+          workflowId: activeWorkflowId,
+          runEvaluationOnSave: true,
+          hasUnsavedChanges: false,
+          isEditing: true,
+          lastSavedAt: undefined
+        });
+      }
+    } else if (existing) {
+      actions.updateResultRevision(activeRevisionKey, { isEditing: false });
+    }
+  }, [actions, activeRevisionKey, state.resultRevisions, activeWorkflowId, baseResultsForRevision]);
+
+  const handleRevisionChange = useCallback((updates: Partial<{ edited: string; notes: string; tags: string[]; runEvaluationOnSave: boolean }>) => {
+    if (!activeRevisionKey) {
+      return;
+    }
+    const existing = state.resultRevisions[activeRevisionKey];
+    if (!existing) {
+      return;
+    }
+    const patch: Partial<typeof existing> = {};
+    if (updates.edited !== undefined) {
+      patch.edited = updates.edited;
+      patch.hasUnsavedChanges = updates.edited !== existing.savedText;
+    }
+    if (updates.notes !== undefined) {
+      patch.notes = updates.notes;
+    }
+    if (updates.tags !== undefined) {
+      patch.tags = updates.tags;
+    }
+    if (updates.runEvaluationOnSave !== undefined) {
+      patch.runEvaluationOnSave = updates.runEvaluationOnSave;
+    }
+    actions.updateResultRevision(activeRevisionKey, patch);
+  }, [actions, activeRevisionKey, state.resultRevisions]);
+
+  const handleRevisionDiscard = useCallback(() => {
+    if (!activeRevisionKey) {
+      return;
+    }
+    const existing = state.resultRevisions[activeRevisionKey];
+    if (!existing) {
+      return;
+    }
+    actions.updateResultRevision(activeRevisionKey, {
+      edited: existing.savedText,
+      hasUnsavedChanges: false
+    });
+  }, [actions, activeRevisionKey, state.resultRevisions]);
+
+  const handleRevisionSave = useCallback(async () => {
+    if (!activeRevision || !activeRevisionKey) {
+      return;
+    }
+    const nextText = activeRevision.edited;
+    setIsSavingRevision(true);
+    try {
+      actions.setResults(nextText);
+      if (activeWorkflowId) {
+        actions.updatePatientSession(activeWorkflowId, { results: nextText });
+        const session = state.patientSessions.find(s => s.id === activeWorkflowId);
+        if (session) {
+          const updatedSession: PatientSession = { ...session, results: nextText };
+          actions.setDisplaySession(updatedSession);
+        }
+      }
+      actions.updateResultRevision(activeRevisionKey, {
+        savedText: nextText,
+        hasUnsavedChanges: false,
+        lastSavedAt: Date.now()
+      });
+      notifySuccess('Revision saved', 'Updated result is ready for EMR actions.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to save revision', { error: message });
+      notifyError('Failed to save revision', message);
+    } finally {
+      setIsSavingRevision(false);
+    }
+  }, [
+    activeRevision,
+    activeRevisionKey,
+    activeWorkflowId,
+    actions,
+    state.patientSessions,
+    notifySuccess,
+    notifyError,
+    logger
+  ]);
+
+  const handleRevisionMarkGoldenPair = useCallback(async () => {
+    if (!activeRevision || !activeRevisionKey) {
+      return;
+    }
+    if (!activeAgentId) {
+      notifyError('Unable to save golden pair', 'Agent context is missing.');
+      return;
+    }
+    if (!activeRevision.notes.trim()) {
+      notifyError('Scenario summary required', 'Add a scenario summary before saving.');
+      return;
+    }
+    setIsSavingGoldenPair(true);
+    try {
+      const tags = Array.from(new Set([
+        ...(activeRevision.tags || []),
+        ...(activeAgentId ? [activeAgentId] : []),
+        ...(activeWorkflowId ? [activeWorkflowId] : [])
+      ]));
+      const response = await optimizationService.saveGoldenPair({
+        agentId: activeAgentId,
+        workflowId: activeWorkflowId,
+        original: activeRevision.original,
+        edited: activeRevision.edited,
+        notes: activeRevision.notes.trim(),
+        tags,
+        runEvaluationOnNewExample: activeRevision.runEvaluationOnSave
+      });
+      notifySuccess('Golden pair saved', `Captured as ${response.exampleId}`);
+      actions.updateResultRevision(activeRevisionKey, {
+        savedText: activeRevision.edited,
+        hasUnsavedChanges: false,
+        lastSavedAt: Date.now()
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Golden pair capture failed', { error: message });
+      notifyError('Failed to save golden pair', message);
+    } finally {
+      setIsSavingGoldenPair(false);
+    }
+  }, [
+    activeRevision,
+    activeRevisionKey,
+    activeWorkflowId,
+    activeAgentId,
+    optimizationService,
+    actions,
+    notifySuccess,
+    notifyError,
+    logger
+  ]);
+
+  useEffect(() => {
+    if (
+      state.ui.mode === 'idle' &&
+      !state.displaySession.isDisplayingSession &&
+      !state.currentSessionId &&
+      !stableSelectedSessionId &&
+      Object.keys(state.resultRevisions).length > 0
+    ) {
+      actions.resetResultRevisions();
+    }
+  }, [
+    state.ui.mode,
+    state.displaySession.isDisplayingSession,
+    state.currentSessionId,
+    stableSelectedSessionId,
+    state.resultRevisions,
+    actions
+  ]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+      (window as any).operatorTestHarness = {
+        actions,
+        getState: () => state
+      };
+    }
+  }, [actions, state]);
 
   const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
     try {
@@ -3069,6 +3372,15 @@ const OptimizedAppContent: React.FC = memo(() => {
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
+                revisionPanel={revisionPanelData}
+                revisionContext={revisionContext}
+                onRevisionToggle={handleRevisionToggle}
+                onRevisionChange={handleRevisionChange}
+                onRevisionSave={handleRevisionSave}
+                onRevisionDiscard={handleRevisionDiscard}
+                onRevisionMarkGoldenPair={handleRevisionMarkGoldenPair}
+                isSavingRevision={isSavingRevision}
+                isSavingGoldenPair={isSavingGoldenPair}
                   />
                 );
               })()}

@@ -195,6 +195,25 @@ export interface JobStatus {
   summary?: string;
 }
 
+// Golden pair capture
+
+export interface GoldenPairSaveRequest {
+  agentId: AgentType;
+  workflowId?: string | null;
+  original: string;
+  edited: string;
+  notes: string;
+  runEvaluationOnNewExample?: boolean;
+  tags?: string[];
+}
+
+export interface GoldenPairSaveResponse {
+  exampleId: string;
+  filePath: string;
+  agentId: AgentType;
+  timestamp: string;
+}
+
 // UI State Types
 
 export interface OptimizationState {

@@ -9,6 +9,16 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.15.1] - 2025-10-21
+
+### Fixed
+- **Chrome Side Panel Width Constraints** - Adjusted both importers to fit 320px side panel width
+  - LipidProfileImporter: Removed 600px max-width, reduced padding and font sizes for compact display
+  - TTETrendImporter: Removed 540px max-width, reduced padding and font sizes for compact display
+  - Shortened button labels ("Import from EMR" → "Import", "Load last capture" → "Load last")
+  - Reduced header text sizes and spacing for better space utilization
+  - All modals now use full available width (w-full) with responsive spacing
+
 ## [3.15.0] - 2025-10-21
 
 ### Added

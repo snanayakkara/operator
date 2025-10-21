@@ -471,12 +471,12 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-2">
-      <div className="flex h-[90vh] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-        <header className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+      <div className="flex h-[90vh] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <header className="flex items-start justify-between border-b border-slate-200 px-3 py-2.5">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Echo (TTE) Trends</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Import the Investigation summary, extract serial TTE metrics, visualise LVEF trends, and summarise clinical insights.
+            <h2 className="text-base font-semibold text-slate-900">Echo (TTE) Trends</h2>
+            <p className="mt-0.5 text-[11px] text-slate-600">
+              Import & visualize TTE metrics
             </p>
           </div>
           <button
@@ -489,27 +489,27 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
           </button>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-surface-secondary p-3">
-          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
+        <main className="flex-1 overflow-y-auto bg-surface-secondary p-2">
+          <section className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
                   onClick={handleCaptureFromEMR}
                   disabled={processingState === 'capturing'}
                 >
-                  {processingState === 'capturing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Import from EMR
+                  {processingState === 'capturing' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Import
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:border-slate-400"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:border-slate-400"
                   onClick={handleLoadLast}
                   disabled={isLoadingLast}
                 >
-                  {isLoadingLast ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Load last capture
+                  {isLoadingLast ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Load last
                 </button>
               </div>
               {processingState === 'capturing' && (
@@ -521,10 +521,10 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
             </div>
 
             {(capturedAt || showPasteFallback || rawSourceText) && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] text-slate-600">
                 <span className="font-semibold text-slate-700">
-                  Source: Investigation summary ·{' '}
-                  {capturedAt ? `captured ${new Date(capturedAt).toLocaleString()}` : sourceType === 'paste' ? 'manual' : 'unknown'}
+                  Source: Inv. summary ·{' '}
+                  {capturedAt ? new Date(capturedAt).toLocaleDateString() : sourceType === 'paste' ? 'manual' : 'unknown'}
                 </span>
                 <button type="button" className="text-slate-700 underline underline-offset-2" onClick={handleCaptureFromEMR}>
                   Refetch
@@ -604,7 +604,7 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
             )}
           </section>
 
-          <section className="mt-4 space-y-4">
+          <section className="mt-2 space-y-2">
             <TTETrendControls
               settings={settings}
               onToggleSeries={handleSeriesToggle}

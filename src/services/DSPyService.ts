@@ -285,6 +285,7 @@ export class DSPyService {
       devSetPath?: string;
       outputPath?: string;
       freshRun?: boolean;
+      runEvaluationOnNewExample?: boolean;
     } = {}
   ): Promise<DSPyResult> {
     const startTime = Date.now();
@@ -333,6 +334,17 @@ export class DSPyService {
         processing_time: Date.now() - startTime,
         score: result.score
       });
+
+      if (options.runEvaluationOnNewExample) {
+        this.runGEPAPreview(agentType).catch((error) => {
+          const err = toError(error);
+          logger.warn('GEPA preview trigger failed after saving golden pair', {
+            component: 'DSPyService',
+            agent_type: agentType,
+            error: err.message
+          });
+        });
+      }
 
       return {
         success: true,
@@ -432,6 +444,39 @@ export class DSPyService {
         processing_time: Date.now() - startTime
       };
     }
+  }
+
+  private async runGEPAPreview(agentType: string): Promise<void> {
+    const isHealthy = await this.checkServerHealth();
+    if (!isHealthy) {
+      throw new Error('DSPy server unavailable for GEPA preview');
+    }
+
+    const payload = {
+      tasks: [agentType],
+      iterations: 3,
+      with_human: false
+    };
+
+    const response = await fetch('http://localhost:8002/v1/dspy/optimize/preview', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`GEPA preview failed: HTTP ${response.status}`);
+    }
+
+    await response.json();
+
+    logger.info('GEPA preview triggered after golden pair save', {
+      component: 'DSPyService',
+      agent_type: agentType,
+      iterations: payload.iterations
+    });
   }
 
   /**

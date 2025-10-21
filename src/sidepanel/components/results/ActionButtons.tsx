@@ -1,8 +1,9 @@
 /**
  * Action Buttons Component
- * 
+ *
  * Focused component for report action buttons:
- * - Copy, Insert to EMR, Download actions
+ * - Copy, Insert to EMR actions
+ * - Optional Edit & Train for training data capture
  * - Visual feedback with success states
  * - Confidence scoring and quality indicators
  * - Memoized for performance
@@ -15,7 +16,7 @@ import {
   AlertCircleIcon
 } from '../icons/OptimizedIcons';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
-import { Download, Brain, HelpCircle } from 'lucide-react';
+import { Brain, Edit3, HelpCircle } from 'lucide-react';
 import type { AgentType, ReportMetadata } from '@/types/medical.types';
 
 // Lazy load the AI Reasoning Modal for better performance
@@ -40,6 +41,9 @@ interface ActionButtonsProps {
   agentName?: string;
   // Agent-specific custom actions
   customActions?: CustomAction[];
+  onEditAndTrain?: () => void;
+  editAndTrainActive?: boolean;
+  disableEditAndTrain?: boolean;
 }
 
 const ActionButtons: React.FC<ActionButtonsProps> = memo(({
@@ -50,7 +54,10 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   className = '',
   reportMetadata,
   agentName,
-  customActions = []
+  customActions = [],
+  onEditAndTrain,
+  editAndTrainActive = false,
+  disableEditAndTrain = false
 }) => {
   const [copiedRecently, setCopiedRecently] = useState(false);
   const [insertedRecently, setInsertedRecently] = useState(false);
@@ -59,7 +66,6 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   // Check if reasoning artifacts are available
   const hasReasoningArtifacts = reportMetadata?.reasoningArtifacts?.hasReasoningContent ||
                                  (reportMetadata?.rawAIOutput && reportMetadata.rawAIOutput.trim().length > 0);
-  const showDownloadButton = agentType !== 'angiogram-pci' && agentType !== 'investigation-summary';
 
   const handleCopy = async () => {
     try {
@@ -88,20 +94,8 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([results], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `medical-report-${agentType || 'report'}-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   // Calculate grid columns based on available actions
-  const totalActions = 2 + (showDownloadButton ? 1 : 0) + (hasReasoningArtifacts ? 1 : 0) + customActions.length;
+  const totalActions = 2 + (hasReasoningArtifacts ? 1 : 0) + (onEditAndTrain ? 1 : 0) + customActions.length;
   const gridCols = totalActions <= 4 ? `grid-cols-${totalActions}` : 'grid-cols-4';
 
   return (
@@ -150,14 +144,25 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
           </span>
         </button>
 
-        {/* Download Button */}
-        {showDownloadButton && (
+        {/* Edit & Train Button */}
+        {onEditAndTrain && (
           <button
-            onClick={handleDownload}
-            className="bg-white/60 border border-emerald-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-emerald-50/60 transition-colors btn-micro-press btn-micro-hover"
+            onClick={onEditAndTrain}
+            disabled={disableEditAndTrain}
+            className={`
+              p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+              ${editAndTrainActive
+                ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
+                : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
+              }
+              ${disableEditAndTrain ? 'opacity-60 cursor-not-allowed' : ''}
+            `}
+            title="Revise output and capture training example"
           >
-            <Download className="w-4 h-4 text-gray-700" />
-            <span className="text-xs text-gray-700">Download</span>
+            <Edit3 className={`w-4 h-4 ${editAndTrainActive ? 'text-white' : 'text-blue-700'}`} />
+            <span className={`text-xs ${editAndTrainActive ? 'text-white font-semibold' : 'text-blue-700'}`}>
+              {editAndTrainActive ? 'Editing…' : 'Edit & Train'}
+            </span>
           </button>
         )}
 

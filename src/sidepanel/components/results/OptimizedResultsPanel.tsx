@@ -11,7 +11,7 @@
 import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
-import { EyeOff, Eye, Download, Users } from 'lucide-react';
+import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag } from 'lucide-react';
 import { calculateWordCount, calculateReadTime, formatReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
   staggerContainer, 
@@ -109,6 +109,29 @@ interface OptimizedResultsPanelProps {
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
+  revisionPanel?: {
+    key: string;
+    original: string;
+    edited: string;
+    savedText: string;
+    notes: string;
+    tags: string[];
+    runEvaluationOnSave: boolean;
+    hasUnsavedChanges: boolean;
+    lastSavedAt?: number;
+    isEditing: boolean;
+  };
+  revisionContext?: {
+    workflowId?: string | null;
+    agentLabel?: string | null;
+  };
+  onRevisionToggle?: (open: boolean) => void;
+  onRevisionChange?: (updates: Partial<{ edited: string; notes: string; tags: string[]; runEvaluationOnSave: boolean }>) => void;
+  onRevisionSave?: () => void | Promise<void>;
+  onRevisionDiscard?: () => void;
+  onRevisionMarkGoldenPair?: () => void | Promise<void>;
+  isSavingRevision?: boolean;
+  isSavingGoldenPair?: boolean;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -169,7 +192,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   educationData,
   // Pipeline progress
   pipelineProgress,
-  processingStartTime
+  processingStartTime,
+  revisionPanel,
+  revisionContext,
+  onRevisionToggle,
+  onRevisionChange,
+  onRevisionSave,
+  onRevisionDiscard,
+  onRevisionMarkGoldenPair,
+  isSavingRevision = false,
+  isSavingGoldenPair = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -275,6 +307,89 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       URL.revokeObjectURL(url);
     }
   }, [patientVersion]);
+
+  const isRevisionOpen = !!(revisionPanel?.isEditing);
+  const canEditAndTrain = Boolean(onRevisionToggle);
+
+  const revisionTags = useMemo(() => {
+    if (!revisionPanel) {
+      return [];
+    }
+    const baseTags: string[] = [];
+    if (agentType) {
+      baseTags.push(agentType);
+    }
+    if (revisionContext?.workflowId) {
+      baseTags.push(revisionContext.workflowId);
+    }
+    if (revisionContext?.agentLabel) {
+      baseTags.push(revisionContext.agentLabel);
+    }
+    const userTags = revisionPanel.tags?.filter(Boolean) ?? [];
+    return Array.from(new Set([...baseTags, ...userTags]));
+  }, [revisionPanel, agentType, revisionContext?.workflowId]);
+
+  const revisionDiffStats = useMemo(() => {
+    if (!revisionPanel) {
+      return null;
+    }
+    const originalLength = revisionPanel.original?.length || 0;
+    const editedLength = revisionPanel.edited?.length || 0;
+    const deltaChars = editedLength - originalLength;
+    const originalWords = revisionPanel.original ? revisionPanel.original.trim().split(/\s+/).filter(Boolean).length : 0;
+    const editedWords = revisionPanel.edited ? revisionPanel.edited.trim().split(/\s+/).filter(Boolean).length : 0;
+    const deltaWords = editedWords - originalWords;
+    return {
+      originalLength,
+      editedLength,
+      deltaChars,
+      originalWords,
+      editedWords,
+      deltaWords
+    };
+  }, [revisionPanel]);
+
+  const revisionTagString = useMemo(() => {
+    if (!revisionPanel) {
+      return '';
+    }
+    return revisionPanel.tags?.join(', ') || '';
+  }, [revisionPanel]);
+
+  const formattedRevisionSavedAt = useMemo(() => {
+    if (!revisionPanel?.lastSavedAt) {
+      return null;
+    }
+    try {
+      return formatAbsoluteTime(new Date(revisionPanel.lastSavedAt));
+    } catch (error) {
+      console.warn('Failed to format revision saved timestamp', error);
+      return null;
+    }
+  }, [revisionPanel?.lastSavedAt]);
+
+  const isRevisionSaveDisabled = !revisionPanel?.hasUnsavedChanges || isSavingRevision;
+  const isGoldenPairDisabled = !revisionPanel?.notes?.trim() || isSavingGoldenPair;
+
+  const handleRevisionTextChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onRevisionChange?.({ edited: event.target.value });
+  }, [onRevisionChange]);
+
+  const handleRevisionNotesChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onRevisionChange?.({ notes: event.target.value });
+  }, [onRevisionChange]);
+
+  const handleRevisionTagsChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const tags = event.target.value
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+    onRevisionChange?.({ tags });
+  }, [onRevisionChange]);
+
+  const handleRevisionEvaluationToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    onRevisionChange?.({ runEvaluationOnSave: event.target.checked });
+  }, [onRevisionChange]);
 
   // Check if this is an AI Review result
   const isAIReview = agentType === 'ai-medical-review' && reviewData;
@@ -768,7 +883,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   </div>
                 </div>
                 <div className="p-3 border-t border-blue-200 bg-blue-50">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className={`grid gap-2 ${canEditAndTrain ? 'grid-cols-4' : 'grid-cols-3'}`}>
                     {/* Copy Letter Button */}
                     <button
                       onClick={handleLetterCopy}
@@ -810,6 +925,26 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                         {letterButtonStates.inserted ? 'Inserted!' : 'Insert'}
                       </span>
                     </button>
+
+                    {/* Edit & Train Button */}
+                    {canEditAndTrain && (
+                      <button
+                        onClick={() => onRevisionToggle?.(!isRevisionOpen)}
+                        className={`
+                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+                          ${isRevisionOpen
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                            : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
+                          }
+                        `}
+                        title="Revise output and capture training example"
+                      >
+                        <Sparkles className={`w-4 h-4 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />
+                        <span className={`text-xs ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
+                          {isRevisionOpen ? 'Editing…' : 'Edit & Train'}
+                        </span>
+                      </button>
+                    )}
 
                     {/* Generate Patient Version Button */}
                     <button
@@ -1133,6 +1268,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               agentType={agentType}
               onCopy={onCopy}
               onInsertToEMR={onInsertToEMR}
+              onEditAndTrain={onRevisionToggle ? () => onRevisionToggle(!isRevisionOpen) : undefined}
+              editAndTrainActive={isRevisionOpen}
+              disableEditAndTrain={isProcessing || !results}
               customActions={agentType === 'angiogram-pci' ? [
                 {
                   id: 'generate-patient-version',
@@ -1151,6 +1289,179 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 }
               ] : []}
             />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isRevisionOpen && revisionPanel && (
+          <motion.div
+            className="px-4 pb-2"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div
+              data-testid="result-revision-panel"
+              className="border border-blue-200 bg-blue-50/70 rounded-xl shadow-sm p-4 sm:p-5 space-y-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {revisionTags.length === 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
+                      <Tag className="w-3 h-3" />
+                      Training Capture
+                    </span>
+                  ) : (
+                    revisionTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-medium"
+                      >
+                        <Tag className="w-3 h-3" />
+                        {tag}
+                      </span>
+                    ))
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRevisionToggle?.(false)}
+                  className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900"
+                >
+                  <X className="w-3 h-3" />
+                  Close
+                </button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Original Output</p>
+                  <div className="p-3 bg-white border border-blue-100 rounded-lg max-h-64 overflow-auto text-sm whitespace-pre-wrap text-slate-700">
+                    {revisionPanel.original || 'No original output available.'}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Edited Revision</p>
+                    {revisionPanel.hasUnsavedChanges ? (
+                      <span className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
+                        <AlertCircleIcon className="w-3 h-3" />
+                        Unsaved changes
+                      </span>
+                    ) : formattedRevisionSavedAt ? (
+                      <span className="text-[11px] text-emerald-600 flex items-center gap-1">
+                        <CheckIcon className="w-3 h-3" />
+                        Saved {formattedRevisionSavedAt}
+                      </span>
+                    ) : null}
+                  </div>
+                  <textarea
+                    data-testid="revision-editor"
+                    value={revisionPanel.edited}
+                    onChange={handleRevisionTextChange}
+                    className="w-full min-h-[200px] max-h-[320px] resize-y border border-blue-200 rounded-lg px-3 py-2 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="Make clinician revisions here..."
+                  />
+                </div>
+              </div>
+
+              {revisionDiffStats && (
+                <div className="flex flex-wrap gap-4 text-xs text-blue-900">
+                  <span>
+                    Characters: {revisionDiffStats.editedLength}
+                    {' '}
+                    ({revisionDiffStats.deltaChars >= 0 ? '+' : ''}{revisionDiffStats.deltaChars})
+                  </span>
+                  <span>
+                    Words: {revisionDiffStats.editedWords}
+                    {' '}
+                    ({revisionDiffStats.deltaWords >= 0 ? '+' : ''}{revisionDiffStats.deltaWords})
+                  </span>
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
+                    Scenario Summary <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    data-testid="revision-notes"
+                    value={revisionPanel.notes}
+                    onChange={handleRevisionNotesChange}
+                    placeholder="Example: Normalize measurement spacing, abbreviations, ensure parentheses"
+                    className="w-full h-24 resize-y border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <p className="text-[11px] text-blue-700">
+                    Describe why this revision is a gold standard example for future optimization.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Tags</label>
+                    <input
+                      type="text"
+                      value={revisionTagString}
+                      onChange={handleRevisionTagsChange}
+                      placeholder="heart-failure, formatting, urgent"
+                      className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <p className="text-[11px] text-blue-700">Comma-separated tags help cluster similar training examples.</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-blue-900">
+                    <input
+                      type="checkbox"
+                      className="rounded border-blue-300 text-blue-600 focus:ring-blue-400"
+                      checked={revisionPanel.runEvaluationOnSave}
+                      onChange={handleRevisionEvaluationToggle}
+                    />
+                    Run GEPA preview after saving golden pair
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onRevisionDiscard}
+                  disabled={!revisionPanel.hasUnsavedChanges || isSavingRevision}
+                  className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
+                    ${revisionPanel.hasUnsavedChanges && !isSavingRevision
+                      ? 'border-blue-300 text-blue-700 hover:bg-blue-100'
+                      : 'border-blue-100 text-blue-400 cursor-not-allowed'}`}
+                >
+                  Reset
+                </button>
+                <button
+                  data-testid="save-revision-btn"
+                  type="button"
+                  onClick={onRevisionSave}
+                  disabled={isRevisionSaveDisabled}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
+                    ${isRevisionSaveDisabled
+                      ? 'bg-blue-200 border-blue-200 text-white cursor-not-allowed'
+                      : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  {isSavingRevision && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Save Revision
+                </button>
+                <button
+                  data-testid="mark-golden-pair-btn"
+                  type="button"
+                  onClick={onRevisionMarkGoldenPair}
+                  disabled={isGoldenPairDisabled}
+                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors
+                    ${isGoldenPairDisabled
+                      ? 'bg-emerald-200 border-emerald-200 text-white cursor-not-allowed'
+                      : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'}`}
+                >
+                  {isSavingGoldenPair ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Mark as Golden Pair
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
