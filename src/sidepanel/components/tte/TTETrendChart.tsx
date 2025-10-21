@@ -12,8 +12,7 @@ import {
   buildSeries,
   buildMonthTicks,
   applyContextPadding,
-  type SeriesPoint,
-  type ChartTick
+  type SeriesPoint
 } from './TTETrendChart.helpers';
 
 interface TooltipState {

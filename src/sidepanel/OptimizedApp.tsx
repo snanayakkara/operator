@@ -18,7 +18,6 @@ import { SidebarHeader } from './components/SidebarHeader';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
-import { UnifiedPipelineProgress } from './components/UnifiedPipelineProgress';
 import { RecordingPromptCard } from './components/RecordingPromptCard';
 import { hasRecordingPrompt } from '@/config/recordingPrompts';
 import { MetricsDashboard } from './components/MetricsDashboard';
@@ -107,6 +106,8 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // State for auto-checked sessions (after EMR insertion)
   const [autoCheckedSessions, setAutoCheckedSessions] = useState<Set<string>>(new Set());
+  // State for manually checked sessions (persistent across dropdown open/close)
+  const [checkedSessions, setCheckedSessions] = useState<Set<string>>(new Set());
   const [isSavingRevision, setIsSavingRevision] = useState(false);
   const [isSavingGoldenPair, setIsSavingGoldenPair] = useState(false);
 
@@ -115,7 +116,6 @@ const OptimizedAppContent: React.FC = memo(() => {
   const currentRecordingTimeRef = useRef<number>(0);
 
   // AbortController refs for cancellation
-  const transcriptionAbortRef = useRef<AbortController | null>(null);
   const processingAbortRef = useRef<AbortController | null>(null);
 
   // Timeout ref for progress indicator cleanup
@@ -417,10 +417,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     activeRevisionKey,
     activeWorkflowId,
     actions,
-    state.patientSessions,
-    notifySuccess,
-    notifyError,
-    logger
+    state.patientSessions
   ]);
 
   const handleRevisionMarkGoldenPair = useCallback(async () => {
@@ -470,10 +467,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     activeWorkflowId,
     activeAgentId,
     optimizationService,
-    actions,
-    notifySuccess,
-    notifyError,
-    logger
+    actions
   ]);
 
   useEffect(() => {
@@ -503,6 +497,36 @@ const OptimizedAppContent: React.FC = memo(() => {
       };
     }
   }, [actions, state]);
+
+  // Load checked sessions from Chrome storage on mount
+  useEffect(() => {
+    const loadCheckedSessions = async () => {
+      try {
+        const result = await chrome.storage.local.get('checkedSessionIds');
+        if (result.checkedSessionIds && Array.isArray(result.checkedSessionIds)) {
+          setCheckedSessions(new Set(result.checkedSessionIds));
+          console.log('✅ Loaded checked sessions from storage:', result.checkedSessionIds);
+        }
+      } catch (error) {
+        console.warn('Failed to load checked sessions from storage:', error);
+      }
+    };
+    loadCheckedSessions();
+  }, []);
+
+  // Save checked sessions to Chrome storage whenever they change
+  useEffect(() => {
+    const saveCheckedSessions = async () => {
+      try {
+        const sessionIds = Array.from(checkedSessions);
+        await chrome.storage.local.set({ checkedSessionIds: sessionIds });
+        console.log('💾 Saved checked sessions to storage:', sessionIds);
+      } catch (error) {
+        console.warn('Failed to save checked sessions to storage:', error);
+      }
+    };
+    saveCheckedSessions();
+  }, [checkedSessions]);
 
   const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
     try {
@@ -1708,6 +1732,20 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [actions, state.selectedSessionId]);
 
+  const handleToggleSessionCheck = useCallback((sessionId: string) => {
+    setCheckedSessions(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+        console.log('📋 Unchecked session:', sessionId);
+      } else {
+        next.add(sessionId);
+        console.log('✅ Checked session:', sessionId);
+      }
+      return next;
+    });
+  }, []);
+
   // Memoized smart summary generation for performance
   const generateSmartSummary = useCallback((content: string): string => {
     const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
@@ -2073,51 +2111,6 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
     }
   }, [actions, state.selectedSessionId]);
-
-  // Handle cancellation with proper cleanup
-  const handleCancel = useCallback(() => {
-    console.log('🛑 Cancellation requested');
-    actions.setCancelling(true);
-    
-    // Cancel transcription
-    if (transcriptionAbortRef.current) {
-      transcriptionAbortRef.current.abort();
-      transcriptionAbortRef.current = null;
-    }
-    
-    // Cancel processing
-    if (processingAbortRef.current) {
-      processingAbortRef.current.abort();
-      processingAbortRef.current = null;
-    }
-    
-    // Stop recording if active
-    if (recorder.isRecording) {
-      recorder.stopRecording();
-    }
-    
-    // Clean up current session if it exists
-    const currentSessionId = currentSessionIdRef.current || state.currentSessionId;
-    if (currentSessionId) {
-      console.log('🧹 Cleaning up current session:', currentSessionId);
-      actions.removePatientSession(currentSessionId);
-      actions.setCurrentSessionId(null);
-      currentSessionIdRef.current = null;
-    }
-    
-    // Reset state
-    actions.setActiveWorkflow(null);
-    actions.setProcessing(false);
-    actions.setProcessingStatus('idle');
-    actions.setWarnings([]);
-    actions.setErrors([]);
-    actions.setResults('');
-    actions.setResultsSummary(''); // Clear summary when cancelling
-    activeWorkflowRef.current = null;
-    actions.setUIMode('idle', { sessionId: null, origin: 'user' });
-
-    setTimeout(() => actions.setCancelling(false), 1000);
-  }, [recorder, actions]);
 
   // Clipboard operations
   const handleCopy = useCallback(async (text: string) => {
@@ -2954,6 +2947,13 @@ const OptimizedAppContent: React.FC = memo(() => {
     };
   }, []); // Run once on mount
 
+  // Merge manual and auto-checked sessions for display
+  const allCheckedSessions = useMemo(() => {
+    const merged = new Set(checkedSessions);
+    autoCheckedSessions.forEach(id => merged.add(id));
+    return merged;
+  }, [checkedSessions, autoCheckedSessions]);
+
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Two-Tier Sidebar Header */}
@@ -2971,7 +2971,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         onMarkSessionComplete={handleMarkSessionComplete}
         selectedSessionId={stableSelectedSessionId}
         currentSessionId={state.currentSessionId}
-        autoCheckedSessionIds={autoCheckedSessions}
+        checkedSessionIds={allCheckedSessions}
+        onToggleSessionCheck={handleToggleSessionCheck}
       />
 
 

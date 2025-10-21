@@ -5,7 +5,7 @@
  * preferences with search, filtering, import/export, and bulk operations.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -55,7 +55,7 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
   // Load entries on mount
   useEffect(() => {
     loadEntries();
-  }, []);
+  }, [loadEntries]);
 
   // Filter entries when search or filter changes
   useEffect(() => {
@@ -80,7 +80,7 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
     setFilteredEntries(filtered);
   }, [entries, searchQuery, typeFilter]);
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     try {
       setLoading(true);
       const loadedEntries = await phrasebookService.getAll();
@@ -92,7 +92,7 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
     } finally {
       setLoading(false);
     }
-  };
+  }, [phrasebookService]);
 
   const handleAddEntry = async () => {
     try {

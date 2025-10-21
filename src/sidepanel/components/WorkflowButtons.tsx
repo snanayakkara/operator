@@ -131,25 +131,25 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
     };
 
     // Handle expandable workflow hover states
-    const handleMouseEnter = useCallback(() => {
+    const handleMouseEnter = () => {
       if (isExpandable) {
         setHoveredExpandableId(workflow.id);
       }
-    }, [isExpandable, workflow.id]);
+    };
 
-    const handleMouseLeave = useCallback(() => {
+    const handleMouseLeave = () => {
       if (isExpandable) {
         setHoveredExpandableId(null);
       }
-    }, [isExpandable]);
+    };
 
-    const handleTypeClick = useCallback((e: React.MouseEvent) => {
+    const handleTypeClick = (e: React.MouseEvent) => {
       e.stopPropagation();
       if (onTypeClick) {
         onTypeClick(workflow.id);
       }
       setHoveredExpandableId(null);
-    }, [onTypeClick, workflow.id]);
+    };
 
     return (
       <motion.div

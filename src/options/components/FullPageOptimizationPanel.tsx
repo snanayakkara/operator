@@ -166,7 +166,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
     } finally {
       updateSectionState('review', { isLoading: false });
     }
-  }, [optimizationService]);
+  }, [optimizationService, updateSectionState]);
 
   const initializePanel = useCallback(async () => {
     logger.info('Initializing full-page optimization panel', {

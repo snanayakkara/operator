@@ -126,7 +126,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
         ];
         if (known.includes(upper)) return true;
         const isAllCaps = normalizedHeading === upper && upper.length <= 60 && !upper.includes('.');
-        const isTitleStyle = /^[A-Z][A-Za-z\s()\/-]{2,40}$/.test(normalizedHeading);
+        const isTitleStyle = /^[A-Z][A-Za-z\s()/-]{2,40}$/.test(normalizedHeading);
         return isAllCaps || isTitleStyle;
       })();
 

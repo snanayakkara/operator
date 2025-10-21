@@ -5,6 +5,7 @@
  * instead of importing entire Lucide React library
  */
 
+/* eslint-disable react-refresh/only-export-components */
 import React from 'react';
 
 interface IconProps {

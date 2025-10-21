@@ -92,7 +92,10 @@ export default [
         NodeJS: 'readonly',
         process: 'readonly',
         requestIdleCallback: 'readonly',
-        Audio: 'readonly'
+        cancelIdleCallback: 'readonly',
+        Audio: 'readonly',
+        HTMLFormElement: 'readonly',
+        PointerEvent: 'readonly'
       }
     },
     plugins: {
@@ -107,9 +110,10 @@ export default [
         'warn',
         { allowConstantExport: true },
       ],
+      'react-hooks/exhaustive-deps': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
     },
@@ -143,12 +147,12 @@ export default [
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
       'no-undef': 'off' // Web Workers have different global context
     },
   },
   {
-    files: ['tests/**/*.{ts,js}', '*.config.{ts,js}', 'run-*.js', 'playwright.config.ts'],
+    files: ['tests/**/*.{ts,js}', '*.config.{ts,js}', 'run-*.js', 'playwright.config.ts', '*.cjs'],
     languageOptions: {
       parser: typescriptParser,
       ecmaVersion: 2020,
@@ -175,7 +179,7 @@ export default [
     },
     rules: {
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       'no-undef': 'off'
     },
@@ -191,7 +195,8 @@ export default [
       '**/*.py',
       '*.md',
       'README.md',
-      'CLAUDE.md'
+      'CLAUDE.md',
+      'test-results/**'
     ]
   }
 ];

@@ -12,11 +12,9 @@ import type {
   ProcessingStatus,
   FailedAudioRecording,
   PatientAppointment,
-  BatchAIReviewReport,
   PatientSession,
   PatientInfo,
-  PipelineProgress,
-  PipelineStage
+  PipelineProgress
 } from '@/types/medical.types';
 import type { TranscriptionApprovalState } from '@/types/optimization';
 import type { PatientNameComparison } from '@/utils/PatientNameValidator';
@@ -827,7 +825,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
       return state;
     }
 
-    case 'RECOVER_STUCK_STATE':
+    case 'RECOVER_STUCK_STATE': {
       // Enhanced recovery from stuck processing states
       console.log('🔄 RECOVERING FROM STUCK STATE');
       const stuckOverlayActive = ['processing-phase', 'field-ingestion'].includes(state.ui.overlay);
@@ -867,6 +865,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
             : state.ui.modeContext
         }
       };
+    }
 
     case 'SET_DISPLAY_SESSION': {
       const session = action.payload.session;

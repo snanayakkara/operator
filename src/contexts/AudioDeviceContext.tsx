@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 interface AudioDeviceContextType {
@@ -11,7 +12,7 @@ interface AudioDeviceContextType {
 
 const AudioDeviceContext = createContext<AudioDeviceContextType | undefined>(undefined);
 
-export interface AudioDeviceProviderProps {
+interface AudioDeviceProviderProps {
   children: ReactNode;
 }
 

@@ -79,11 +79,13 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
   // Simulate Phase 3 processing phases if not provided
   useEffect(() => {
     if (isProcessing && !processingStatus) {
-      simulateEnhancedProcessing();
-    } else if (processingStatus) {
+      return simulateEnhancedProcessing();
+    }
+    if (processingStatus) {
       setCurrentStatus(processingStatus);
     }
-  }, [isProcessing, processingStatus, agentType]);
+    return undefined;
+  }, [isProcessing, processingStatus, simulateEnhancedProcessing]);
 
   // Simulate realistic enhanced processing phases
   const simulateEnhancedProcessing = useCallback(() => {
@@ -173,10 +175,10 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
     }, 800); // Update every 800ms for smooth progression
 
     return () => clearInterval(progressInterval);
-  }, [agentType, onPhaseUpdate]);
+  }, [agentType, onPhaseUpdate, createEnhancedPhases]);
 
   // Create enhanced processing phases
-  const createEnhancedPhases = (agentType: AgentType): ProcessingPhase[] => {
+  const createEnhancedPhases = useCallback((targetAgent: AgentType): ProcessingPhase[] => {
     const basePhases: ProcessingPhase[] = [
       {
         id: 'initialization',
@@ -191,8 +193,8 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
       }
     ];
 
-    if (isEnhancedAgent(agentType)) {
-      if (agentType === 'tavi-workup') {
+    if (isEnhancedAgent(targetAgent)) {
+      if (targetAgent === 'tavi-workup') {
         // TAVI-specific processing phases matching the 6 phases in TAVIWorkupAgent
         basePhases.push(
           {
@@ -314,7 +316,7 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
       {
         id: 'ai_processing',
         name: 'AI Model Processing',
-        description: `Processing with ${getModelName(agentType)} model`,
+        description: `Processing with ${getModelName(targetAgent)} model`,
         status: 'pending',
         progress: 0,
         subPhases: [
@@ -347,9 +349,8 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
         ]
       }
     );
-
     return basePhases;
-  };
+  }, []);
 
   // Helper functions
   const isEnhancedAgent = (agentType: AgentType): boolean => {

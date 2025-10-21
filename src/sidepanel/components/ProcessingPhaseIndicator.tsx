@@ -10,19 +10,16 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Search, Brain, FileCheck, Clock, TrendingUp } from 'lucide-react';
 import { VerticalStepper, type Step } from './VerticalStepper';
 import { formatElapsedTime } from '@/utils/formatting';
 import {
   progressVariants as _progressVariants,
-  listItemVariants,
   cardVariants as _cardVariants,
   textVariants,
-  staggerContainer,
   withReducedMotion,
   ANIMATION_DURATIONS as _ANIMATION_DURATIONS,
-  STAGGER_CONFIGS,
   createSpringTransition,
   SPRING_CONFIGS
 } from '@/utils/animations';

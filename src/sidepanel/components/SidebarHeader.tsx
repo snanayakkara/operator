@@ -42,7 +42,8 @@ export interface SidebarHeaderProps {
   onMarkSessionComplete?: (session: PatientSession) => void;
   selectedSessionId?: string | null;
   currentSessionId?: string | null;
-  autoCheckedSessionIds?: Set<string>; // Sessions to auto-check after EMR insertion
+  checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked)
+  onToggleSessionCheck?: (sessionId: string) => void; // Toggle session check state
 
   // Actions (none currently needed - settings opens extension options page)
 }
@@ -61,7 +62,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   onMarkSessionComplete,
   selectedSessionId,
   currentSessionId,
-  autoCheckedSessionIds
+  checkedSessionIds,
+  onToggleSessionCheck
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
@@ -206,7 +208,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           onMarkSessionComplete={onMarkSessionComplete}
           selectedSessionId={selectedSessionId}
           activeRecordingSessionId={currentSessionId}
-          autoCheckedSessionIds={autoCheckedSessionIds}
+          checkedSessionIds={checkedSessionIds}
+          onToggleSessionCheck={onToggleSessionCheck}
         />
       )}
     </header>

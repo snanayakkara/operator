@@ -9,6 +9,21 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.15.2] - 2025-10-22
+
+### Fixed
+- **Session Dropdown Checkbox Persistence** - Checkbox state now persists across dropdown open/close cycles and browser restarts
+  - Moved checkbox state from local component state to persistent Chrome storage
+  - Checkbox selections are saved automatically and restored on app reload
+  - Merged manual checkbox selections with auto-checked sessions (from EMR insertion)
+  - Fixed issue where checkbox selections were lost when closing the dropdown
+
+### Improved
+- **Session Dropdown UI Cleanup** - Removed redundant "Mark complete" button
+  - Eliminated duplicate functionality between checkbox and "Mark complete" button
+  - Cleaner session card layout with checkbox serving as the primary completion toggle
+  - Consistent UX with checkbox as the single source of truth for session completion status
+
 ## [3.15.1] - 2025-10-21
 
 ### Fixed

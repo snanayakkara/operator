@@ -447,7 +447,7 @@ export function useRecorder(options: RecorderOptions) {
       }));
       onError?.(error as Error);
     }
-  }, [selectedMicrophoneId, onRecordingComplete, onError, detectVoiceActivity, startTimer, state.recordingTime]);
+  }, [selectedMicrophoneId, onRecordingComplete, onError, detectVoiceActivity, startTimer, state.recordingTime, cleanup, getMicrophoneId]);
 
   // Stop recording
   const stopRecording = useCallback(() => {

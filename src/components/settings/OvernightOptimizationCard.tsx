@@ -15,9 +15,8 @@
  * - Schedule management and history
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Moon, Calendar } from 'lucide-react';
-import { OptimizationService } from '@/services/OptimizationService';
 import { OvernightOptimizationError } from '@/types/optimization';
 import type {
   OvernightJob,
@@ -33,8 +32,6 @@ export const OvernightOptimizationCard: React.FC<OvernightOptimizationCardProps>
   onError,
   onLoadingChange
 }) => {
-  // Service
-  const optimizationService = useMemo(() => OptimizationService.getInstance(), []);
 
   // State
   const [selectedTasks, setSelectedTasks] = useState<Set<AgentType>>(
@@ -75,7 +72,7 @@ export const OvernightOptimizationCard: React.FC<OvernightOptimizationCardProps>
       setIsScheduling(false);
       onLoadingChange(false);
     }
-  }, [selectedTasks, iterations, optimizationService, onError, onLoadingChange]);
+  }, [selectedTasks, iterations, onError, onLoadingChange]);
 
   const TASK_OPTIONS: Array<{
     id: AgentType;

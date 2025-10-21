@@ -12,11 +12,10 @@
  * Integrates with DSPy evaluation backend.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Play,
   TrendingUp,
-  TrendingDown,
   Minus,
   CheckCircle,
   XCircle,

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { LipidChartSettings, LipidOverlayConfig, LipidAnalyte, LipidTimeFilter } from '@/types/LipidTypes';
+import type { LipidChartSettings, LipidAnalyte, LipidTimeFilter } from '@/types/LipidTypes';
 import { DEFAULT_LIPID_FRAMEWORK_ID, LIPID_OVERLAY_FRAMEWORKS } from '@/config/lipidOverlays';
 
 interface LipidControlsPanelProps {
@@ -152,4 +152,3 @@ export const LipidControlsPanel: React.FC<LipidControlsPanelProps> = ({
     </div>
   );
 };
-

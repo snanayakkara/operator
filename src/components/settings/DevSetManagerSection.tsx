@@ -11,7 +11,7 @@
  * Dev sets are used by GEPA optimization to evaluate and improve agents.
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   FileText,
   Plus,
@@ -20,10 +20,8 @@ import {
   Save,
   X,
   Info,
-  FolderOpen,
-  CheckCircle
+  FolderOpen
 } from 'lucide-react';
-import { OptimizationService } from '@/services/OptimizationService';
 import type { AgentType } from '@/types/optimization';
 import { logger } from '@/utils/Logger';
 
@@ -59,8 +57,6 @@ export const DevSetManagerSection: React.FC<DevSetManagerSectionProps> = ({
   onError,
   onLoadingChange
 }) => {
-  const optimizationService = useMemo(() => OptimizationService.getInstance(), []);
-
   const [selectedAgent, setSelectedAgent] = useState<AgentType>('quick-letter');
   const [examples, setExamples] = useState<DevSetExample[]>([]);
   const [isLoading, setIsLoading] = useState(false);

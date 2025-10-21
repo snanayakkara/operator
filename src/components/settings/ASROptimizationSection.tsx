@@ -123,7 +123,7 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
     } finally {
       setIsCheckingServer(false);
     }
-  }, [optimizationService, asrLog]);
+  }, [optimizationService, asrLog, checkServerAvailability]);
 
   const checkServerAvailability = useCallback(async (): Promise<boolean> => {
     try {

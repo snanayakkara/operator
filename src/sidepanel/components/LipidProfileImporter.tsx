@@ -132,7 +132,7 @@ export const LipidProfileImporter: React.FC<LipidProfileImporterProps> = ({
 
     const filtered = applyTimeFilter(readings, settings.timeFilter);
     const context = buildLipidInsightsContext(filtered, metadata, overlay, selectedBandId, settings.timeFilter, rawSourceText);
-    const summary = buildLipidInsightsSummary(context, overlay);
+    const summary = buildLipidInsightsSummary(context);
     setInsights(summary);
   }, [readings, metadata, settings, rawSourceText]);
 

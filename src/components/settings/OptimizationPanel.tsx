@@ -75,7 +75,7 @@ export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
     if (isOpen && !isInitialized) {
       initializePanel();
     }
-  }, [isOpen, isInitialized]);
+  }, [isOpen, isInitialized, initializePanel]);
 
   // Load completed jobs when review section is expanded (will be added after function declaration)
 
@@ -108,7 +108,7 @@ export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
     } finally {
       updateSectionState('review', { isLoading: false });
     }
-  }, []);
+  }, [optimizationService, updateSectionState]);
 
   // Load completed jobs when review section is expanded
   useEffect(() => {

@@ -64,7 +64,7 @@ interface RawEntry {
 }
 
 const SAFE_ID = (): string => {
-  const globalCrypto: Crypto | undefined = typeof globalThis !== 'undefined' ? (globalThis.crypto as Crypto | undefined) : undefined;
+  const globalCrypto = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
   if (globalCrypto && typeof globalCrypto.randomUUID === 'function') {
     return globalCrypto.randomUUID();
   }
@@ -265,14 +265,14 @@ function parseEntries(text: string): RawEntry[] {
       continue;
     }
 
-    const normalized = trimmed.replace(/^[•·▪◦•\-]\s*/, '');
+    const normalized = trimmed.replace(/^[•·▪◦•-]\s*/, '');
 
     if (isTTEHeading(normalized)) {
       insideTTEList = true;
       continue;
     }
 
-    if (insideTTEList && /^[•·▪◦\-]/.test(rawLine.trim())) {
+    if (insideTTEList && /^[•·▪◦-]/.test(rawLine.trim())) {
       if (current) {
         entries.push(current);
       }
@@ -319,7 +319,6 @@ function parseHeaderForDateAndSite(header: string): {
   warnings: string[];
   label?: string;
 } {
-  let working = header;
   const { inner, remainder } = splitParenthetical(header);
   let site: string | undefined;
   let dateResult: DateParseResult = { precision: 'unknown', warnings: [] };
@@ -351,8 +350,6 @@ function parseHeaderForDateAndSite(header: string): {
       }
     }
   }
-
-  working = remainder;
 
   return {
     date: dateResult.iso,

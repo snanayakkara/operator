@@ -12,7 +12,6 @@ import type { ParsedNotes, MedEntry, MedDelta } from '@/types/pasteNotes.types';
 import {
   normalizeDrugName,
   extractFormulation,
-  isSameDrug,
   DRUG_SYNONYMS
 } from './MedicationLexicon';
 
@@ -169,7 +168,7 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Start
   for (const match of notes.matchAll(DELTA_PATTERNS.start)) {
-    const [, action, drug] = match;
+    const [, _action, drug] = match;
     const normalizedDrug = normalizeDrugNameWithSynonyms(drug);
     deltas.push({
       action: 'start',
@@ -179,7 +178,7 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Stop
   for (const match of notes.matchAll(DELTA_PATTERNS.stop)) {
-    const [, action, drug] = match;
+    const [, _action, drug] = match;
     const normalizedDrug = normalizeDrugNameWithSynonyms(drug);
     deltas.push({
       action: 'stop',
@@ -189,7 +188,7 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Hold
   for (const match of notes.matchAll(DELTA_PATTERNS.hold)) {
-    const [, action, drug] = match;
+    const [, _action, drug] = match;
     const normalizedDrug = normalizeDrugNameWithSynonyms(drug);
     deltas.push({
       action: 'hold',
@@ -199,7 +198,7 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Increase (↑)
   for (const match of notes.matchAll(DELTA_PATTERNS.increase)) {
-    const [, action, drug] = match;
+    const [, _action, drug] = match;
     const normalizedDrug = normalizeDrugNameWithSynonyms(drug);
 
     // Try to extract dose information
@@ -216,7 +215,7 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Decrease (↓)
   for (const match of notes.matchAll(DELTA_PATTERNS.decrease)) {
-    const [, action, drug] = match;
+    const [, _action, drug] = match;
     const normalizedDrug = normalizeDrugNameWithSynonyms(drug);
 
     // Try to extract dose information
@@ -233,9 +232,9 @@ function extractMedicationDeltas(notes: string): MedDelta[] {
 
   // Switch
   for (const match of notes.matchAll(DELTA_PATTERNS.switch)) {
-    const [, action, fromDrug, toDrug] = match;
+    const [, _action, fromDrug, toDrug] = match;
     const normalizedFrom = normalizeDrugNameWithSynonyms(fromDrug);
-    const normalizedTo = normalizeDrugNameWithSynonyms(toDrug);
+    const _normalizedTo = normalizeDrugNameWithSynonyms(toDrug);
     deltas.push({
       action: 'switch',
       drug: normalizedFrom,
@@ -304,7 +303,7 @@ function extractPlaceholders(notes: string): string[] {
  * Normalize drug name with synonym mapping
  */
 function normalizeDrugNameWithSynonyms(drug: string): string {
-  let normalized = drug.toLowerCase().trim();
+  let normalized = normalizeDrugName(drug);
 
   // Apply synonym mapping
   for (const [synonym, generic] of Object.entries(DRUG_SYNONYMS)) {

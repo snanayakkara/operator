@@ -273,7 +273,7 @@ export const useAudioDevices = (): UseAudioDevicesReturn => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedMicrophoneId, selectedSpeakerId, microphoneSelectionType, speakerSelectionType]);
+  }, [selectedMicrophoneId, selectedSpeakerId, microphoneSelectionType, speakerSelectionType, setContextMicrophoneId, setContextSpeakerId]);
 
   const requestPermission = useCallback(async () => {
     try {

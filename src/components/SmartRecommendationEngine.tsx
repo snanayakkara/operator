@@ -87,7 +87,7 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [sessionId, onAgentSuggestion]);
+  }, [sessionId, onAgentSuggestion, performInputAnalysis, generateSmartRecommendations]);
 
   // Debounced input analysis
   useEffect(() => {

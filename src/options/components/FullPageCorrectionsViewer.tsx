@@ -95,13 +95,13 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
   // Load corrections on mount
   useEffect(() => {
     loadCorrections();
-  }, []);
+  }, [loadCorrections]);
 
   // Apply filters and sorting when dependencies change
   useEffect(() => {
     applyFiltersAndSort();
     setCurrentPage(1); // Reset to first page when filters change
-  }, [corrections, filters, sortField, sortDirection]);
+  }, [corrections, filters, sortField, sortDirection, applyFiltersAndSort]);
 
   const loadCorrections = useCallback(async () => {
     try {

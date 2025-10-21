@@ -347,7 +347,6 @@ export const BPChart = forwardRef<BPChartHandle, BPChartProps>(({
     const rect = canvas.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
 
     const { width } = dimensions;
     const padding = { top: 30, right: 60, bottom: 60, left: 70 };

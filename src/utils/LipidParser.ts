@@ -6,20 +6,11 @@ import type {
 } from '@/types/LipidTypes';
 
 const BLOODS_LINE_REGEX = /bloods?\s*\(([^)]+)\)\s*:\s*(.+)$/i;
-const ANALYTE_REGEX = /(ldl\-?c?|total\s+chol(?:esterol)?|tchol|tc|hdl|tg|trig(?:lycerides)?|apob|apo\s*b|non[\-\s]*hdl)/i;
+const ANALYTE_REGEX = /(ldl-?c?|total\s+chol(?:esterol)?|tchol|tc|hdl|tg|trig(?:lycerides)?|apob|apo\s*b|non[-\s]*hdl)/i;
 const VALUE_REGEX = /([-+]?\d+(?:\.\d+)?)/;
 const THERAPY_NOTE_REGEX = /\(([^)]+)\)\s*$/;
 
 const PRE_THERAPY_KEYWORDS = /(off\s+statin|pre[-\s]?therapy|baseline|statin\s*naive|no\s+statin|untreated)/i;
-
-const DATE_FORMATS = [
-  'D MMM YYYY',
-  'DD MMM YYYY',
-  'D MMM YY',
-  'DD MMM YY',
-  'D MMMM YYYY',
-  'DD MMMM YYYY'
-];
 
 /**
  * Lightweight day-first date parsing without bringing moment.js.
@@ -70,7 +61,6 @@ function parseDateToISO(dateText: string): string | null {
   const monthIndex = monthMap[monthName];
   if (monthIndex === undefined) return null;
 
-  const paddedDay = String(day).padStart(2, '0');
   const year = yearNum < 100 ? 2000 + yearNum : yearNum;
 
   const date = new Date(Date.UTC(year, monthIndex, day));
@@ -88,7 +78,7 @@ function normaliseAnalyteToken(token: string): keyof Pick<LipidResult, 'ldl' | '
   if (/^hdl/.test(value)) return 'hdl';
   if (/^(tg|trig)/.test(value)) return 'tg';
   if (/apo\s*b|apob/.test(value)) return 'apob';
-  if (/non[\-\s]*hdl/.test(value)) return 'nonHDL';
+  if (/non[-\s]*hdl/.test(value)) return 'nonHDL';
   return null;
 }
 

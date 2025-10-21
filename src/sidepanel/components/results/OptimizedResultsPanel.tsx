@@ -8,7 +8,7 @@
  * - Better performance through focused updates
  */
 
-import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
+import React, { memo, useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
 import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag } from 'lucide-react';
@@ -96,12 +96,6 @@ interface OptimizedResultsPanelProps {
   isStreaming?: boolean;
   streamingTokens?: string;
   onCancelStreaming?: () => void;
-  // Progress tracking for long recordings (TAVI workup)
-  processingProgress?: {
-    phase: string;
-    progress: number;
-    details?: string;
-  };
   // TAVI Workup structured data
   taviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
   // Patient Education structured data
@@ -184,8 +178,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   isStreaming = false,
   streamingTokens = '',
   onCancelStreaming,
-  // Progress tracking
-  processingProgress,
   // TAVI structured data
   taviStructuredSections,
   // Patient Education structured data

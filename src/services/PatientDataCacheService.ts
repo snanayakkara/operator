@@ -137,7 +137,6 @@ export class PatientDataCacheService {
    * Perform the actual patient data extraction
    */
   private async performExtraction(): Promise<PatientInfo | null> {
-    let lastError = null;
 
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
@@ -173,13 +172,13 @@ export class PatientDataCacheService {
               extractedAt: patientData.extractedAt || Date.now()
             };
           } else {
-            lastError = new Error('Extracted data lacks name and ID');
+            console.warn('Extracted patient data lacked name and ID, skipping cache update.');
           }
         } else {
-          lastError = new Error(response?.error || 'No patient data found');
+          console.warn('Patient extraction succeeded without usable data', response?.error);
         }
-      } catch (attemptError: any) {
-        lastError = attemptError;
+      } catch (attemptError: unknown) {
+        console.warn('Patient extraction attempt failed:', attemptError);
 
         // Shorter delays for background extraction
         if (attempt < this.MAX_RETRIES) {

@@ -63,18 +63,22 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
   // Apply filters when corrections or filters change
   // Use requestIdleCallback to defer expensive filter operations
   useEffect(() => {
-    if ('requestIdleCallback' in window) {
-      const idleId = requestIdleCallback(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(() => {
         applyFilters();
       });
-      return () => cancelIdleCallback(idleId);
-    } else {
-      // Fallback for browsers without requestIdleCallback
-      const timeoutId = setTimeout(() => {
-        applyFilters();
-      }, 0);
-      return () => clearTimeout(timeoutId);
+      return () => {
+        if (typeof window.cancelIdleCallback === 'function') {
+          window.cancelIdleCallback(idleId);
+        }
+      };
     }
+
+    // Fallback for browsers without requestIdleCallback
+    const timeoutId = setTimeout(() => {
+      applyFilters();
+    }, 0);
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [corrections, selectedAgent, dateRange]);
 

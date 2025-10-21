@@ -11,7 +11,7 @@
  */
 
 import React, { useState, memo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   CheckSquare,
   Calendar,
@@ -20,7 +20,6 @@ import {
   Settings,
   ChevronRight,
   ChevronDown,
-  ChevronUp,
   Mic,
   Keyboard
 } from 'lucide-react';
@@ -498,7 +497,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             }}
           >
             <div className="grid grid-cols-4 gap-x-2 gap-y-2.5">
-              {SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).map((action, index, array) => (
+              {SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).map((action, index) => (
                 <motion.div
                   key={action.id}
                   variants={withReducedMotion(listItemVariants)}

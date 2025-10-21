@@ -2330,7 +2330,7 @@ If you have any questions about this information, please don't hesitate to call 
 
     } catch (error) {
       const processingTime = Date.now() - startTime;
-      console.error('❌ QuickLetterAgent.processPaste failed:', error);
+      console.error(`❌ QuickLetterAgent.processPaste failed after ${processingTime}ms:`, error);
 
       logPasteLetterEvent({
         mode: 'paste',

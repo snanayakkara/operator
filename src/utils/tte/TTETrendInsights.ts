@@ -2,7 +2,6 @@ import type {
   TTEInsightsMetricSnapshot,
   TTEInsightsSummary,
   TTETrendRow,
-  TTENumericValue,
   TTEFieldValue,
   TTETrendNote
 } from '@/types/TTETrendTypes';

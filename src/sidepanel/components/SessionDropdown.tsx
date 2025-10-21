@@ -10,7 +10,6 @@ import {
   ClipboardList,
   CheckCircle2,
   AlertTriangle,
-  FileText,
   Play,
   Copy,
   Check,
@@ -20,7 +19,7 @@ import {
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
 import type { PatientSession, SessionStatus } from '@/types/medical.types';
-import { getStateColors, sessionStatusToState, type ProcessingState } from '@/utils/stateColors';
+import { getStateColors, type ProcessingState } from '@/utils/stateColors';
 
 interface SessionDropdownProps {
   sessions: PatientSession[];
@@ -36,7 +35,8 @@ interface SessionDropdownProps {
   onClose: () => void;
   triggerRef?: React.RefObject<HTMLElement>;
   position?: { top: number; left?: number; right?: number };
-  autoCheckedSessionIds?: Set<string>; // Sessions to auto-check (e.g., after EMR insertion)
+  checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked, from parent state)
+  onToggleSessionCheck?: (sessionId: string) => void; // Callback to toggle check state in parent
 }
 
 // Performance constants
@@ -144,20 +144,6 @@ const formatClockTime = (timestamp?: number) => {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-const formatRelativeTime = (timestamp?: number) => {
-  if (!timestamp) return 'just now';
-  const diff = Date.now() - timestamp;
-  if (diff < 0) return 'just now';
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-};
-
 const deriveTimelineState = (session: PatientSession): TimelineState => {
   const baseStatus = session.status as SessionStatus | undefined;
 
@@ -177,16 +163,6 @@ const deriveTimelineState = (session: PatientSession): TimelineState => {
   }
 
   return 'needs_review';
-};
-
-const getLastUpdatedAt = (session: PatientSession): number | undefined => {
-  return (
-    session.completedTime ||
-    session.processingStartTime ||
-    session.transcriptionStartTime ||
-    session.recordingStartTime ||
-    session.timestamp
-  );
 };
 
 const getProcessingDuration = (session: PatientSession): number | null => {
@@ -245,7 +221,6 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   const isCopying = copiedSessionId === session.id;
   const dictationDuration = getDictationDuration(session);
   const processingDuration = getProcessingDuration(session);
-  const lastUpdate = getLastUpdatedAt(session);
 
   const handlePrimaryAction = useCallback(() => {
     if (onSessionSelect) {
@@ -438,16 +413,6 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
               </button>
             )}
 
-            {state === 'needs_review' && onMarkSessionComplete && (
-              <button
-                onClick={() => onMarkSessionComplete(session)}
-                className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-2 py-1 text-[10px] font-semibold uppercase text-emerald-600 hover:bg-emerald-50"
-                title="Mark complete"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-
             <button
               onClick={() => onRemoveSession(session.id)}
               className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
@@ -476,25 +441,14 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   onClose,
   triggerRef,
   position,
-  autoCheckedSessionIds
+  checkedSessionIds = new Set(),
+  onToggleSessionCheck
 }) => {
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
-  const [checkedSessions, setCheckedSessions] = useState<Set<string>>(new Set());
   // Local state for lazy loading
   const [showAllCompleted, setShowAllCompleted] = useState(false);
   const [showAllInProgress, setShowAllInProgress] = useState(false);
   const [showAllErrored, setShowAllErrored] = useState(false);
-
-  // Sync auto-checked sessions from parent
-  useEffect(() => {
-    if (autoCheckedSessionIds && autoCheckedSessionIds.size > 0) {
-      setCheckedSessions(prev => {
-        const next = new Set(prev);
-        autoCheckedSessionIds.forEach(id => next.add(id));
-        return next;
-      });
-    }
-  }, [autoCheckedSessionIds]);
 
   useEffect(() => {
     if (!copiedSessionId) return;
@@ -503,16 +457,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   }, [copiedSessionId]);
 
   const handleToggleCheck = useCallback((sessionId: string) => {
-    setCheckedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
-  }, []);
+    if (onToggleSessionCheck) {
+      onToggleSessionCheck(sessionId);
+    }
+  }, [onToggleSessionCheck]);
 
   const handleCopyResults = useCallback(async (session: PatientSession) => {
     if (!session.results || session.results.trim().length === 0) {
@@ -544,9 +492,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     return sessions.map((session) => ({
       session,
       state: deriveTimelineState(session),
-      isChecked: checkedSessions.has(session.id)
+      isChecked: checkedSessionIds.has(session.id)
     }));
-  }, [sessions, checkedSessions]);
+  }, [sessions, checkedSessionIds]);
 
   // Next review session
   const nextReviewSession = useMemo(() => {

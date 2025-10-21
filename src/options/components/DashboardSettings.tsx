@@ -58,7 +58,7 @@ export const DashboardSettings: React.FC = () => {
     refresh();
     const id = setInterval(() => refresh(), 30000);
     return () => clearInterval(id);
-  }, []);
+  }, [refresh]);
 
   const formatLatency = (latency: number) => {
     if (!latency) return 'N/A';

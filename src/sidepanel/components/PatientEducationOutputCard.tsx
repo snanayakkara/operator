@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import {
   GraduationCap,
   Copy,
-  ExternalLink,
   AlertTriangle,
   CheckCircle,
   Info,
@@ -11,7 +10,8 @@ import {
   BookOpen,
   Globe,
   FileText,
-  Download
+  Download,
+  Send
 } from 'lucide-react';
 import type { PatientEducationReport } from '@/types/medical.types';
 
@@ -32,6 +32,7 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
 }) => {
   const [copiedContent, setCopiedContent] = useState<string | null>(null);
   const [insertedContent, setInsertedContent] = useState<string | null>(null);
+  const jsonBoxRef = useRef<HTMLDivElement>(null);
 
   if (!isVisible) {
     return null;
@@ -227,8 +228,6 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
     );
   };
 
-  const jsonBoxRef = useRef<HTMLDivElement>(null);
-
   const handlePrintPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -300,6 +299,9 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
                   ${action.magnitude_note}
                 </p>
               ` : ''}
+              <p style="margin: 0 0 8px 0; color: ${colors.text}; opacity: 0.85; font-size: 13px;">
+                <strong>Impact level:</strong> ${impactLevel}
+              </p>
               ${action.reason ? `
                 <p style="margin: 0 0 8px 0; color: ${colors.text}; opacity: 0.8; font-size: 13px; font-style: italic;">
                   <strong>Why:</strong> ${action.reason}
@@ -430,22 +432,40 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
             <FileText className="w-4 h-4 text-emerald-600" />
             <h4 className="text-sm font-semibold text-gray-900">Patient Letter</h4>
           </div>
-          <button
-            onClick={() => handleCopy(letterContent, 'letter')}
-            className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
-          >
-            {isCopied ? (
-              <>
-                <CheckCircle className="w-3 h-3 text-green-600" />
-                <span className="text-green-600">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3 h-3" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleCopy(letterContent, 'letter')}
+              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+            >
+              {isCopied ? (
+                <>
+                  <CheckCircle className="w-3 h-3 text-green-600" />
+                  <span className="text-green-600">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => handleInsert(letterContent, 'letter')}
+              className="flex items-center space-x-1 px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-medium rounded-md transition-colors"
+            >
+              {insertedContent === 'letter' ? (
+                <>
+                  <CheckCircle className="w-3 h-3 text-emerald-600" />
+                  <span className="text-emerald-600">Inserted!</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3 h-3" />
+                  <span>Insert</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
           <div className="prose prose-sm max-w-none">
@@ -477,8 +497,6 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
 
     const isCopied = copiedContent === 'json';
     const priorityPlan = jsonMetadata.priority_plan || [];
-    const sections = jsonMetadata.sections || [];
-
     return (
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">

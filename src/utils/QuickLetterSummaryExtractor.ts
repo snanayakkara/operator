@@ -173,7 +173,7 @@ export function parseQuickLetterStructuredResponse(outputText: string): { summar
         .trim();
 
       // Remove any "---" separator if present
-      summaryRaw = summaryRaw.replace(/^[\-\s]+|[\-\s]+$/g, '').trim();
+      summaryRaw = summaryRaw.replace(/^[-\s]+|[-\s]+$/g, '').trim();
 
       // Extract letter content after LETTER:
       let letterContent = outputText

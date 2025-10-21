@@ -108,7 +108,7 @@ export const FieldIngestionOverlay: React.FC<FieldIngestionOverlayProps> = ({
 
   // Convert FieldStatus to Step[] for VerticalStepper
   const steps: Step[] = useMemo(() => {
-    return fields.map((field, index) => {
+    return fields.map(field => {
       // Map field status to StepStatus
       let stepStatus: StepStatus = 'queued';
       if (field.status === 'complete') {

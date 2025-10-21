@@ -36,10 +36,6 @@ function subMonths(date: Date, months: number): Date {
   return copy;
 }
 
-function formatNumber(value: number, decimals = 1): string {
-  return value.toFixed(decimals);
-}
-
 function percentage(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -294,7 +290,7 @@ export function buildLipidInsightsContext(
   };
 }
 
-export function buildLipidInsightsSummary(context: LipidInsightsContext, overlay: LipidOverlayConfig): LipidInsightsSummary {
+export function buildLipidInsightsSummary(context: LipidInsightsContext): LipidInsightsSummary {
   const formatDelta = (delta?: number, percent?: number) => {
     if (delta == null || percent == null) return 'Δ n/a';
     const sign = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
