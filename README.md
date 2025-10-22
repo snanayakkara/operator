@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.16.0-blue.svg)]()
+ [![Version](https://img.shields.io/badge/version-3.17.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -40,7 +40,8 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 | **Angiogram/PCI** | Interventional Cardiology | Vessel assessment, TIMI flow, stent deployment |
 | **mTEER** | Structural Cardiology | MitraClip/PASCAL procedures, mitral valve repair |
 | **PFO Closure** | Structural Cardiology | Device selection, deployment protocols |
-| **Right Heart Cath** | Invasive Cardiology | Pulmonary hypertension evaluation, hemodynamics |
+| **Right Heart Cath** | Invasive Cardiology | Pulmonary hypertension evaluation, haemodynamics |
+| **Pre-Op Plan** | Cath Lab Workflow | A5-ready pre-procedure cards plus structured JSON metadata for angiogram, RHC, TAVI, mTEER |
 
 #### Documentation & Review
 | Agent | Specialty | Features |

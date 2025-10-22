@@ -132,7 +132,13 @@ export class LazyAgentFactory {
           AgentClass = patientEducationModule.PatientEducationAgent;
           break;
         }
-          
+
+        case 'pre-op-plan': {
+          const preOpPlanModule = await import('@/agents/specialized/PreOpPlanAgent');
+          AgentClass = preOpPlanModule.PreOpPlanAgent;
+          break;
+        }
+
         default:
           throw new Error(`Unknown agent type: ${agentType}`);
       }

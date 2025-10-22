@@ -636,6 +636,17 @@ export const DEFAULT_VALIDATION_CONFIGS: Record<AgentType, Partial<MigrationVali
     },
     comparisonSamples: 5
   },
+
+  'pre-op-plan': {
+    validationLevel: 'clinical',
+    benchmarkThresholds: {
+      processingTime: 5000,
+      qualityScore: 0.75,
+      confidenceScore: 0.65,
+      contentLength: 220
+    },
+    comparisonSamples: 5
+  },
   
   'investigation-summary': {
     validationLevel: 'clinical',

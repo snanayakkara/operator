@@ -223,6 +223,7 @@ export type AgentType =
   | 'ai-medical-review'
   | 'batch-ai-review'
   | 'patient-education'
+  | 'pre-op-plan'
   | 'ohif-viewer'
   | 'aus-medical-review'
   | 'enhancement'
@@ -259,6 +260,8 @@ export interface AppState {
   taviStructuredSections?: TAVIWorkupStructuredSections;
   // Patient Education structured data
   educationData?: any;
+  // Pre-Op Plan structured data
+  preOpPlanData?: PreOpPlanReport['planData'];
   // Patient version generation
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
@@ -761,6 +764,7 @@ export interface PatientSession {
   summary?: string; // Summary for dual card display (especially for QuickLetter)
   taviStructuredSections?: TAVIWorkupStructuredSections; // TAVI structured data for specialized display
   educationData?: any; // Patient Education structured data (JSON metadata + letter content)
+  preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op plan card + structured JSON
   reviewData?: any; // AI Medical Review structured data (findings array with urgency levels)
   agentType: AgentType;
   agentName: string;
@@ -1335,4 +1339,122 @@ export interface TAVIMeasurementConfig {
     };
   };
   balloonVolumeOptions: number[];
+}
+
+// Pre-Op Plan specific types
+export type PreOpProcedureType =
+  | 'ANGIOGRAM_OR_PCI'
+  | 'RIGHT_HEART_CATH'
+  | 'TAVI'
+  | 'MITRAL_TEER';
+
+export interface PreOpPlanReport extends MedicalReport {
+  planData: {
+    procedureType: PreOpProcedureType;
+    cardMarkdown: string;
+    jsonData: PreOpPlanJSON;
+    completenessScore?: string;
+    warnings?: string[];
+  };
+}
+
+export interface PreOpPlanJSON {
+  procedure_type: PreOpProcedureType;
+  fields: Record<string, any>; // Dynamic fields based on procedure type
+}
+
+// Procedure-specific field interfaces
+export interface AngiogramFields {
+  procedure: string;
+  indication: string;
+  primary_access: string;
+  sheath_size_fr?: number;
+  catheters?: string[];
+  anticoagulation_plan?: string;
+  allergies?: string;
+  sedation?: string;
+  site_prep?: string;
+  recent_labs?: {
+    hb_g_per_l?: number;
+    creatinine_umol_per_l?: number;
+  };
+  planned_followup?: string;
+  nok_name?: string;
+  nok_relationship?: string;
+  nok_phone?: string;
+  attach_latest_labs?: boolean;
+}
+
+export interface RightHeartCathFields {
+  procedure: string;
+  indication: string;
+  access_site: string;
+  sheath_size_fr?: number;
+  catheters?: string[];
+  co_measurement?: string;
+  blood_gas_samples?: number;
+  sedation?: string;
+  anticoagulation_plan?: string;
+  site_prep?: string;
+  recent_labs?: {
+    hb_g_per_l?: number;
+    creatinine_umol_per_l?: number;
+  };
+  allergies?: string;
+  planned_followup?: string;
+  nok_name?: string;
+  nok_relationship?: string;
+  nok_phone?: string;
+  attach_latest_labs?: boolean;
+}
+
+export interface TAVIFields {
+  procedure: string;
+  indication: string;
+  primary_access: string;
+  secondary_access?: string;
+  valve_type_size: string;
+  wire?: string;
+  balloon_size_mm?: number;
+  pacing_wire_access?: string;
+  closure_plan: string;
+  protamine?: string;
+  goals_of_care: string;
+  sedation?: string;
+  anticoagulation_plan?: string;
+  site_prep?: string;
+  allergies?: string;
+  recent_labs?: {
+    hb_g_per_l?: number;
+    creatinine_umol_per_l?: number;
+  };
+  planned_followup?: string;
+  nok_name?: string;
+  nok_relationship?: string;
+  nok_phone?: string;
+  attach_latest_labs?: boolean;
+}
+
+export interface MitralTEERFields {
+  procedure: string;
+  indication: string;
+  access_site: string;
+  transeptal_catheter?: string;
+  wire?: string;
+  closure_plan: string;
+  echo_summary?: string;
+  device?: string;
+  sedation?: string;
+  anticoagulation_plan?: string;
+  site_prep?: string;
+  allergies?: string;
+  recent_labs?: {
+    hb_g_per_l?: number;
+    creatinine_umol_per_l?: number;
+  };
+  planned_followup?: string;
+  nok_name?: string;
+  nok_relationship?: string;
+  nok_phone?: string;
+  attach_latest_labs?: boolean;
 }

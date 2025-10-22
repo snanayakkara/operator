@@ -7,7 +7,7 @@
  * - Smart recommendations and context enhancement
  */
 
-import type { AgentType, MedicalCode, MedicalContext, MedicalReport } from '@/types/medical.types';
+import type { AgentType, MedicalCode, MedicalContext, MedicalReport, PreOpPlanReport } from '@/types/medical.types';
 import { LazyAgentFactory } from './LazyAgentFactory';
 import { LazyAgentLoader } from './LazyAgentLoader';
 import { CrossAgentIntelligence } from './CrossAgentIntelligence';
@@ -114,7 +114,7 @@ export class AgentFactory {
       usePhase4Enhancement?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any }> {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any; preOpPlanData?: PreOpPlanReport['planData'] }> {
     const startTime = Date.now();
     
     try {
@@ -176,6 +176,17 @@ export class AgentFactory {
           hasJsonMetadata: !!educationData.jsonMetadata
         });
       }
+
+      const preOpPlanData = (report as PreOpPlanReport).planData;
+      if (workflowId === 'pre-op-plan' && preOpPlanData) {
+        logger.info('Pre-Op Plan generated structured data', {
+          component: 'agent-factory',
+          operation: 'pre-op-plan',
+          procedureType: preOpPlanData.procedureType,
+          hasWarnings: !!preOpPlanData.warnings?.length,
+          completenessScore: preOpPlanData.completenessScore
+        });
+      }
       
       // Send completion notification (will check if user is focused automatically)
       if (!options?.skipNotification) {
@@ -217,7 +228,8 @@ export class AgentFactory {
         reviewData: batchPatientReviewData, // Include structured data for Batch Patient Review
         missingInfo: report.metadata?.missingInformation,
         taviStructuredSections: taviStructuredSections, // Include structured data for TAVI Workup
-        educationData: educationData // Include structured data for Patient Education
+        educationData: educationData, // Include structured data for Patient Education
+        preOpPlanData
       };
       
     } catch (error) {

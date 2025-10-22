@@ -58,6 +58,7 @@ const WORKFLOW_PRIORITIES: Partial<Record<AgentType, JobPriority>> = {
   'tavi-workup': 'urgent',    // TAVI workup - complex and critical
   'angiogram-pci': 'urgent',  // Critical cardiac procedure
   'consultation': 'high',     // Common consultation workflow
+  'pre-op-plan': 'high',      // Cath lab preparation workflow
   'mteer': 'high',            // Important cardiac procedure
   'pfo-closure': 'high',      // Important cardiac procedure
   'right-heart-cath': 'high', // Important diagnostic procedure

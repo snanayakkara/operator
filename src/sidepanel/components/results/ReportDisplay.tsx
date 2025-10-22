@@ -176,6 +176,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       'ai-medical-review': 'AI Medical Review',
       'batch-ai-review': 'Batch AI Review',
       'patient-education': 'Patient Education',
+      'pre-op-plan': 'Pre-Op Plan Summary',
       'ohif-viewer': 'Imaging Viewer Summary',
       'aus-medical-review': 'Australian Medical Review',
       'enhancement': 'Enhanced Report',

@@ -14,7 +14,8 @@ import type {
   PatientAppointment,
   PatientSession,
   PatientInfo,
-  PipelineProgress
+  PipelineProgress,
+  PreOpPlanReport
 } from '@/types/medical.types';
 import type { TranscriptionApprovalState } from '@/types/optimization';
 import type { PatientNameComparison } from '@/utils/PatientNameValidator';
@@ -88,6 +89,7 @@ interface DisplaySessionState {
   displaySummary?: string;
   displayTaviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
   displayEducationData?: any; // Patient Education structured data
+  displayPreOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan structured data
   displayReviewData?: any; // AI Medical Review structured data
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
@@ -180,6 +182,7 @@ type AppAction =
   | { type: 'SET_REVIEW_DATA'; payload: any }
   | { type: 'SET_TAVI_STRUCTURED_SECTIONS'; payload: any }
   | { type: 'SET_EDUCATION_DATA'; payload: any }
+  | { type: 'SET_PREOP_PLAN_DATA'; payload: PreOpPlanReport['planData'] | undefined }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
   | { type: 'SET_CANCELLING'; payload: boolean }
   | { type: 'SET_WARNINGS'; payload: string[] }
@@ -276,6 +279,7 @@ const initialState: CombinedAppState = {
   reviewData: null,
   taviStructuredSections: undefined,
   educationData: undefined,
+  preOpPlanData: undefined,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -321,9 +325,14 @@ const initialState: CombinedAppState = {
     displayResults: '',
     displaySummary: undefined,
     displayTaviStructuredSections: undefined,
+    displayEducationData: undefined,
+    displayPreOpPlanData: undefined,
+    displayReviewData: undefined,
     displayAgent: null,
     displayAgentName: null,
     displayPatientInfo: null,
+    displayProcessingTime: undefined,
+    displayModelUsed: null,
     displayPipelineProgress: null
   },
 
@@ -447,6 +456,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_EDUCATION_DATA':
       if (state.educationData === action.payload) return state;
       return { ...state, educationData: action.payload };
+
+    case 'SET_PREOP_PLAN_DATA':
+      if (state.preOpPlanData === action.payload) return state;
+      return { ...state, preOpPlanData: action.payload };
 
     case 'SET_ACTIVE_WORKFLOW':
       if (state.ui.activeWorkflow === action.payload) return state;
@@ -588,6 +601,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         processingStartTime: null,
         reviewData: null,
         taviStructuredSections: undefined,
+        educationData: undefined,
+        preOpPlanData: undefined,
         // Clear streaming state to allow record button access
         streaming: false,
         streamBuffer: '',
@@ -608,11 +623,16 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayResults: '',
           displaySummary: undefined,
           displayTaviStructuredSections: undefined,
+          displayEducationData: undefined,
+          displayPreOpPlanData: undefined,
+          displayReviewData: undefined,
           displayAgent: null,
           displayAgentName: null,
-        displayPatientInfo: null,
-        displayPipelineProgress: null
-      },
+          displayPatientInfo: null,
+          displayProcessingTime: undefined,
+          displayModelUsed: null,
+          displayPipelineProgress: null
+        },
         resultRevisions: {},
         transcriptionApproval: {
           status: 'pending',
@@ -899,6 +919,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         hasSummary: !!session.summary,
         summaryLength: session.summary?.length || 0,
         hasEducationData: !!session.educationData,
+        hasPreOpPlanData: !!session.preOpPlanData,
         hasReviewData: !!session.reviewData,
         hasTaviSections: !!session.taviStructuredSections,
         hasPipelineProgress: !!session.pipelineProgress,
@@ -917,6 +938,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displaySummary: session.summary,
           displayTaviStructuredSections: session.taviStructuredSections,
           displayEducationData: session.educationData,
+          displayPreOpPlanData: session.preOpPlanData,
           displayReviewData: session.reviewData,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
@@ -939,9 +961,14 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayResults: '',
           displaySummary: undefined,
           displayTaviStructuredSections: undefined,
+          displayEducationData: undefined,
+          displayPreOpPlanData: undefined,
+          displayReviewData: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null,
+          displayProcessingTime: undefined,
+          displayModelUsed: null,
           displayPipelineProgress: null
         }
       };
@@ -1088,6 +1115,10 @@ export function useAppState() {
 
     setEducationData: useCallback((data: any) => {
       dispatch({ type: 'SET_EDUCATION_DATA', payload: data });
+    }, []),
+
+    setPreOpPlanData: useCallback((data: PreOpPlanReport['planData'] | undefined) => {
+      dispatch({ type: 'SET_PREOP_PLAN_DATA', payload: data });
     }, []),
 
     setActiveWorkflow: useCallback((workflow: AgentType | null) => {

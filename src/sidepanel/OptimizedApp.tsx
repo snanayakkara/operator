@@ -40,7 +40,7 @@ import { OptimizationService } from '@/services/OptimizationService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { MetricsService } from '@/services/MetricsService';
@@ -61,6 +61,7 @@ interface CurrentDisplayData {
   summary?: string;
   taviStructuredSections?: any;
   educationData?: any;
+  preOpPlanData?: PreOpPlanReport['planData'];
   reviewData?: any;
   agent: AgentType | null;
   agentName: string | null;
@@ -1516,6 +1517,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
       };
 
+      sessionUpdate.preOpPlanData = result.preOpPlanData;
+
       // Add TAVI structured sections if available
       if (result.taviStructuredSections) {
         sessionUpdate.taviStructuredSections = result.taviStructuredSections;
@@ -1576,6 +1579,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       if (isCurrentlySelectedAtCompletion) {
         actions.setTranscription(transcriptionResult);
         actions.setResults(result.content);
+        actions.setPreOpPlanData(result.preOpPlanData);
         // Store missing info (if any) for interactive completion
         actions.setMissingInfo(result.missingInfo || null);
         // Store TAVI structured sections if available
@@ -1983,6 +1987,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         summary: state.displaySession.displaySummary,
         taviStructuredSections: state.displaySession.displayTaviStructuredSections,
         educationData: state.displaySession.displayEducationData,
+        preOpPlanData: state.displaySession.displayPreOpPlanData,
         reviewData: state.displaySession.displayReviewData,
         agent: state.displaySession.displayAgent ?? null,
         agentName: state.displaySession.displayAgentName ?? null,
@@ -2037,6 +2042,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         summary: state.aiGeneratedSummary,
         taviStructuredSections: state.taviStructuredSections,
         educationData: state.educationData,
+        preOpPlanData: state.preOpPlanData,
         reviewData: state.reviewData,
         agent: state.currentAgent,
         agentName: state.currentAgentName,
@@ -2056,6 +2062,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       summary: state.aiGeneratedSummary,
       taviStructuredSections: state.taviStructuredSections,
       educationData: state.educationData,
+      preOpPlanData: state.preOpPlanData,
       reviewData: state.reviewData,
       agent: state.currentAgent,
       agentName: state.currentAgentName,
@@ -3166,7 +3173,6 @@ const OptimizedAppContent: React.FC = memo(() => {
         onClearAllSessions={actions.clearPatientSessions}
         onSessionSelect={handleSessionSelect}
         onResumeRecording={handleResumeRecording}
-        onMarkSessionComplete={handleMarkSessionComplete}
         selectedSessionId={stableSelectedSessionId}
         currentSessionId={state.currentSessionId}
         checkedSessionIds={allCheckedSessions}
@@ -3683,6 +3689,12 @@ const OptimizedAppContent: React.FC = memo(() => {
                     actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                     return;
                   }
+                }
+
+                if (actionId === 'pre-op-plan') {
+                  console.log('🗂️ Starting Pre-Op Plan workflow from quick action');
+                  await handleWorkflowSelect('pre-op-plan');
+                  return;
                 }
                 
                 // Handle bloods prepare-modal action (opens modal before dictation)

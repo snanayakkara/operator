@@ -29,6 +29,7 @@ export const AGENT_TO_FIELD_MAPPING: Record<AgentType, string | null> = {
   'bypass-graft': null,
   'right-heart-cath': null,
   'tavi-workup': null,
+  'pre-op-plan': null,
   
   // Documentation agents - fallback to generic insertion  
   'quick-letter': null,

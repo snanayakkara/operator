@@ -30,7 +30,6 @@ interface SessionDropdownProps {
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
   onStopRecording?: () => void;
-  onMarkSessionComplete?: (session: PatientSession) => void;
   selectedSessionId?: string | null;
   activeRecordingSessionId?: string | null;
   isOpen: boolean;
@@ -199,7 +198,6 @@ interface EnhancedSessionItemProps {
   onResumeRecording?: (session: PatientSession) => void;
   onStopRecording?: () => void;
   onRemoveSession: (sessionId: string) => void;
-  onMarkSessionComplete?: (session: PatientSession) => void;
   onCopyResults: (session: PatientSession) => Promise<void>;
 }
 
@@ -218,7 +216,6 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   onResumeRecording,
   onStopRecording,
   onRemoveSession,
-  onMarkSessionComplete,
   onCopyResults
 }) => {
   const meta = timelineStateMeta[state];
@@ -465,7 +462,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   onSessionSelect,
   onResumeRecording,
   onStopRecording,
-  onMarkSessionComplete,
   selectedSessionId,
   activeRecordingSessionId = null,
   isOpen,
@@ -751,7 +747,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
-                    onMarkSessionComplete={onMarkSessionComplete}
                     onCopyResults={handleCopyResults}
                   />
                 );
@@ -795,7 +790,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
-                    onMarkSessionComplete={onMarkSessionComplete}
                     onCopyResults={handleCopyResults}
                   />
                 );
@@ -841,7 +835,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onResumeRecording={onResumeRecording}
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
-                    onMarkSessionComplete={onMarkSessionComplete}
                     onCopyResults={handleCopyResults}
                   />
                 );

@@ -100,6 +100,12 @@ export class ProcessingTimePredictor {
       modelComplexity: 'standard',
       expectedRange: { min: 2500, max: 8000 }
     },
+    'pre-op-plan': {
+      baselineMs: 4500,
+      lengthScalingFactor: 1.1,
+      modelComplexity: 'standard',
+      expectedRange: { min: 3000, max: 9000 }
+    },
     'consultation': {
       baselineMs: 5000,
       lengthScalingFactor: 1.4,

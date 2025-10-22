@@ -25,7 +25,7 @@ const MEDICAL_TEXT_SAMPLES = {
   CONSULTATION_NOTE: `
     67-year-old gentleman referred for cardiac consultation.
     History of hypertension, diabetes mellitus, and dyslipidemia.
-    Recent stress test positive for inducible ischemia.
+    Recent stress test positive for inducible ischaemia.
     Examination: BP 145/92, HR 72 regular, no murmurs.
     Plan: Coronary angiography and optimization of medical therapy.
   `,

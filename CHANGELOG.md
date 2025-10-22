@@ -9,6 +9,20 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.17.0] - 2025-10-23
+
+### Added
+- **Pre-Op Plan Agent** – new cath lab workflow producing A5-ready summary cards and structured JSON for angiogram, RHC, TAVI, and mTEER procedures
+  - Quick action hook opens the workflow directly from the footer launcher
+  - Lazy-loaded agent routes through standard LM Studio service with reasoning model defaults, timeout, and token limits tuned for procedure planning
+- **Structured Plan Persistence & Display**
+  - Session objects, persistence service, and dropdown state now retain `preOpPlanData`
+  - Optimized results panel renders dedicated `PreOpPlanDisplay` with print/export controls and warning surfacing
+- **Ecosystem Registration** – updated system prompt loader, processing predictor, notification service, metrics dashboards, and agent category helpers to recognise the new workflow across the app
+
+### Fixed
+- Removed unused "mark session complete" plumbing to keep lint passes clean after the session dropdown refactor
+
 ## [3.16.0] - 2025-10-22
 
 ### Added

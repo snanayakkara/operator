@@ -612,7 +612,7 @@ export class MedicalPatternService {
     }
 
     // High significance terms
-    const highSignificanceTerms = ['moderate stenosis', 'regurgitation', 'myocardial', 'infarction', 'ischemia'];
+    const highSignificanceTerms = ['moderate stenosis', 'regurgitation', 'myocardial', 'infarction', 'ischaemia'];
     if (highSignificanceTerms.some(high => term.term.toLowerCase().includes(high) || term.context.toLowerCase().includes(high))) {
       return 'high';
     }

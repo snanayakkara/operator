@@ -97,6 +97,7 @@ export class LMStudioService {
         'medication': MODEL_CONFIG.QUICK_MODEL, // Simple medication list formatting
         'background': MODEL_CONFIG.QUICK_MODEL, // Simple medical background/history formatting with ↪ arrows
         'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
+        'pre-op-plan': MODEL_CONFIG.REASONING_MODEL, // Structured pre-operative planning card generation
 
         // Vision tasks - Use vision-capable model (gemma-3n-e4b supports vision)
         'bp-diary-extraction': 'google/gemma-3n-e4b', // BP diary image OCR/extraction - requires vision support
@@ -126,6 +127,7 @@ export class LMStudioService {
         // Standard agents
         'consultation': 6000,
         'quick-letter': 5000,
+        'pre-op-plan': 5000,
 
         // Simple formatting tasks
         'investigation-summary': 2000,
@@ -153,6 +155,7 @@ export class LMStudioService {
         // Standard agents
         'consultation': 240000,      // 4 minutes
         'quick-letter': 180000,      // 3 minutes
+        'pre-op-plan': 240000,       // 4 minutes for structured planning output
 
         // Simple formatting tasks
         'investigation-summary': 60000, // 1 minute

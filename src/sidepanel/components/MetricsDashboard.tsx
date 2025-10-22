@@ -108,6 +108,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ isOpen, onCl
       'ai-medical-review': '🛡️',
       'batch-ai-review': '📋',
       'patient-education': '🎓',
+      'pre-op-plan': '📋',
       'background': '📋',
       'medication': '💊',
       'bloods': '🩸',

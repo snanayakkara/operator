@@ -39,7 +39,6 @@ export interface SidebarHeaderProps {
   onClearAllSessions?: () => void;
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
-  onMarkSessionComplete?: (session: PatientSession) => void;
   selectedSessionId?: string | null;
   currentSessionId?: string | null;
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked)
@@ -60,7 +59,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   onClearAllSessions,
   onSessionSelect,
   onResumeRecording,
-  onMarkSessionComplete,
   selectedSessionId,
   currentSessionId,
   checkedSessionIds,
@@ -206,9 +204,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           onRemoveSession={onRemoveSession}
           onClearAllSessions={onClearAllSessions}
           onSessionSelect={onSessionSelect}
-          onResumeRecording={onResumeRecording}
-          onMarkSessionComplete={onMarkSessionComplete}
-          selectedSessionId={selectedSessionId}
+              onResumeRecording={onResumeRecording}
+              selectedSessionId={selectedSessionId}
           activeRecordingSessionId={currentSessionId}
           checkedSessionIds={checkedSessionIds}
           onToggleSessionCheck={onToggleSessionCheck}

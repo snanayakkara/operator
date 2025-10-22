@@ -630,6 +630,7 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
       'ai-medical-review': 'Australian Medical Review',
       'batch-ai-review': 'Batch AI Review',
       'tavi-workup': 'TAVI Workup',
+      'pre-op-plan': 'Pre-Op Plan',
       'imaging': 'Imaging',
       'bloods': 'Bloods',
       'patient-education': 'Patient Education',

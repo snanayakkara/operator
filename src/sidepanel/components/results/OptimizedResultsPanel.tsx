@@ -36,7 +36,8 @@ import {
   RightHeartCathDisplay
 } from './index';
 import { PatientEducationOutputCard } from '../PatientEducationOutputCard';
-import type { AgentType, FailedAudioRecording, PipelineProgress } from '@/types/medical.types';
+import { PreOpPlanDisplay } from './PreOpPlanDisplay';
+import type { AgentType, FailedAudioRecording, PipelineProgress, PreOpPlanReport } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { UnifiedPipelineProgress } from '../UnifiedPipelineProgress';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
@@ -100,6 +101,8 @@ interface OptimizedResultsPanelProps {
   taviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
   // Patient Education structured data
   educationData?: any; // Patient Education JSON metadata and letter content
+  // Pre-Op Plan structured data
+  preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan card and JSON metadata
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
@@ -182,6 +185,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   taviStructuredSections,
   // Patient Education structured data
   educationData,
+  // Pre-Op Plan structured data
+  preOpPlanData,
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
@@ -398,6 +403,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
   // Check if this is a Patient Education with structured display
   const isPatientEducation = agentType === 'patient-education' && results;
+
+  // Check if this is a Pre-Op Plan with structured display
+  const isPreOpPlan = agentType === 'pre-op-plan' && results;
 
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
@@ -1121,6 +1129,41 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onCopy={async (text: string) => { await Promise.resolve(onCopy(text)); }}
               onInsert={async (text: string) => { await Promise.resolve(onInsertToEMR(text)); }}
               isVisible={true}
+            />
+          ) : isPreOpPlan ? (
+            // Pre-Op Plan with A5 card + JSON metadata display
+            <PreOpPlanDisplay
+              session={{
+                id: selectedSessionId || `session-${Date.now()}`,
+                patient: { name: selectedPatientName || 'Unknown', id: '', dob: '', age: '', extractedAt: Date.now() },
+                transcription: originalTranscription || '',
+                results,
+                agentType: 'pre-op-plan',
+                agentName: currentAgentName || 'Pre-Op Plan',
+                timestamp: Date.now(),
+                status: 'completed',
+                completed: true,
+                processingTime: totalProcessingTime || undefined,
+                modelUsed: modelUsed || undefined,
+                warnings: warnings || undefined,
+                errors: errors || undefined,
+                completedTime: Date.now(),
+                preOpPlanData: preOpPlanData || {
+                  procedureType: 'ANGIOGRAM_OR_PCI',
+                  cardMarkdown: results,
+                  jsonData: { procedure_type: 'ANGIOGRAM_OR_PCI', fields: {} }
+                },
+                audioBlob: audioBlob || undefined
+              }}
+              onCopy={onCopy}
+              onInsertToEMR={onInsertToEMR}
+              onTranscriptionCopy={onTranscriptionCopy}
+              onTranscriptionInsert={onTranscriptionInsert}
+              onTranscriptionEdit={onTranscriptionEdit}
+              onTranscriptionApprove={onTranscriptionApprove}
+              transcriptionApprovalState={approvalState}
+              onAgentReprocess={currentAgent ? () => onAgentReprocess?.(currentAgent) : undefined}
+              isProcessing={isProcessing}
             />
           ) : (
             // Fallback to ReportDisplay for other agents or QuickLetter without summary

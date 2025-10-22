@@ -29,6 +29,7 @@ const agentLabelMap: Partial<Record<AgentType, string>> = {
   'ai-medical-review': 'AI Medical Review',
   'batch-ai-review': 'Batch AI Review',
   'patient-education': 'Patient Education',
+  'pre-op-plan': 'Pre-Op Plan',
   'background': 'Background',
   'medication': 'Medication',
   'bloods': 'Bloods',

@@ -106,7 +106,8 @@ export const AGENT_CATEGORIES: Record<string, AgentCategory> = {
       'asd-closure',
       'pvl-plug',
       'bypass-graft',
-      'right-heart-cath'
+      'right-heart-cath',
+      'pre-op-plan'
     ],
     colors: {
       bg: 'bg-purple-50',

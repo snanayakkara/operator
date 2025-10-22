@@ -4,7 +4,7 @@
  * Types for local session storage with lifecycle management.
  */
 
-import type { PatientSession, PatientInfo, AgentType, SessionStatus } from './medical.types';
+import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport } from './medical.types';
 
 /**
  * Persisted session data structure
@@ -18,6 +18,7 @@ export interface PersistedSession {
   summary?: string;
   taviStructuredSections?: any;
   educationData?: any;
+  preOpPlanData?: PreOpPlanReport['planData'];
   reviewData?: any;
   agentType: AgentType;
   agentName: string;

@@ -56,7 +56,6 @@ interface StatusIndicatorProps {
   onClearAllSessions?: () => void;
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
-  onMarkSessionComplete?: (session: PatientSession) => void;
   selectedSessionId?: string | null;
   currentSessionId?: string | null;
   // Metrics dashboard
@@ -197,7 +196,6 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   onClearAllSessions,
   onSessionSelect,
   onResumeRecording,
-  onMarkSessionComplete,
   selectedSessionId,
   currentSessionId,
   onShowMetrics,
@@ -527,7 +525,6 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   onSessionSelect={onSessionSelect}
                   onResumeRecording={onResumeRecording}
                   onStopRecording={_onCompleteRecording}
-                  onMarkSessionComplete={onMarkSessionComplete}
                   selectedSessionId={selectedSessionId}
                   activeRecordingSessionId={currentSessionId}
                   isOpen={showSessionDropdown}

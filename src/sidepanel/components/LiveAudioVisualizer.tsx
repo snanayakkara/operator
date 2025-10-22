@@ -447,6 +447,12 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
                     // Create smooth path using Catmull-Rom splines
                     const createSmoothPath = (heights: number[], isBottom: boolean) => {
                       const centerY = 80;
+
+                      // Guard against empty or invalid arrays
+                      if (!heights || heights.length === 0) {
+                        return `M 0,${centerY} L 600,${centerY}`;
+                      }
+
                       const spacing = 600 / Math.max(1, heights.length - 1);
 
                       // Generate points
@@ -455,10 +461,14 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
                         y: isBottom ? centerY + (height / 2) * 0.8 : centerY - (height / 2) * 0.8
                       }));
 
-                      if (points.length < 2) return `M 0 ${centerY}`;
+                      if (points.length < 2) {
+                        return `M 0,${centerY} L 600,${centerY}`;
+                      }
 
-                      // Start path
-                      let path = `M ${points[0].x},${points[0].y}`;
+                      // Start path - ensure coordinates are valid numbers
+                      const startX = isFinite(points[0].x) ? points[0].x : 0;
+                      const startY = isFinite(points[0].y) ? points[0].y : centerY;
+                      let path = `M ${startX},${startY}`;
 
                       // Use Catmull-Rom spline for smooth curves
                       for (let i = 0; i < points.length - 1; i++) {
@@ -467,11 +477,11 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
                         const p2 = points[i + 1];
                         const p3 = points[Math.min(points.length - 1, i + 2)];
 
-                        // Calculate control points for cubic Bézier
-                        const cp1x = p1.x + (p2.x - p0.x) / 6;
-                        const cp1y = p1.y + (p2.y - p0.y) / 6;
-                        const cp2x = p2.x - (p3.x - p1.x) / 6;
-                        const cp2y = p2.y - (p3.y - p1.y) / 6;
+                        // Calculate control points for cubic Bézier with safety checks
+                        const cp1x = isFinite(p1.x + (p2.x - p0.x) / 6) ? p1.x + (p2.x - p0.x) / 6 : p1.x;
+                        const cp1y = isFinite(p1.y + (p2.y - p0.y) / 6) ? p1.y + (p2.y - p0.y) / 6 : p1.y;
+                        const cp2x = isFinite(p2.x - (p3.x - p1.x) / 6) ? p2.x - (p3.x - p1.x) / 6 : p2.x;
+                        const cp2y = isFinite(p2.y - (p3.y - p1.y) / 6) ? p2.y - (p3.y - p1.y) / 6 : p2.y;
 
                         path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
                       }
@@ -580,7 +590,7 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
               delay: 0.4
             }}
           >
-            <div className="icon-compact flex items-center justify-center rounded-full bg-white/15 p-2 text-white">
+            <div className="flex items-center justify-center rounded-full bg-white/15 p-2 text-white">
               <StopCircle className="h-5 w-5" />
             </div>
             <span>Stop recording</span>

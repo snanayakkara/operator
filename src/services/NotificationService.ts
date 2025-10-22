@@ -124,6 +124,7 @@ export class NotificationService {
       'ai-medical-review': '🔍 AI Medical Review Complete',
       'batch-ai-review': '📋 Batch AI Review Complete',
       'patient-education': '🎓 Patient Education Complete',
+      'pre-op-plan': '📋 Pre-Op Plan Ready',
       'enhancement': '✨ Enhancement Complete',
       'transcription': '🎤 Transcription Complete',
       'generation': '⚡ Generation Complete'
@@ -165,7 +166,8 @@ export class NotificationService {
       'quick-letter': 'Ready to copy or insert',
       'investigation-summary': 'Summary formatted for EMR',
       'tavi': 'Hemodynamics & valve assessment complete',
-      'angiogram-pci': 'Vessel analysis & intervention plan ready'
+      'angiogram-pci': 'Vessel analysis & intervention plan ready',
+      'pre-op-plan': 'Card prepared for cath lab handover'
     };
 
     return contexts[agent] || 'Click to view results';
@@ -198,6 +200,7 @@ export class NotificationService {
       'ai-medical-review': 'AI Medical Review',
       'batch-ai-review': 'Batch AI Review',
       'patient-education': 'Patient Education Agent',
+      'pre-op-plan': 'Pre-Op Plan Agent',
       'enhancement': 'Enhancement Agent',
       'transcription': 'Transcription Agent', 
       'generation': 'Generation Agent'

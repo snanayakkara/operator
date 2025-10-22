@@ -23,6 +23,7 @@ import {
   Scan,
   Activity,
   Droplet,
+  ClipboardList,
   type LucideIcon
 } from 'lucide-react';
 
@@ -147,6 +148,15 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     alias: 'Pt Ed',
     icon: GraduationCap,
     description: 'Generate lifestyle advice and education',
+    group: 'secondary',
+    category: 'documentation'
+  },
+  {
+    id: 'pre-op-plan',
+    label: 'Pre-Op Plan',
+    alias: 'Pre-Op',
+    icon: ClipboardList,
+    description: 'Generate A5 pre-procedure summary card for cath lab',
     group: 'secondary',
     category: 'documentation'
   },

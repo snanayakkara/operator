@@ -644,6 +644,109 @@ export const RECORDING_PROMPTS: readonly RecordingPromptConfig[] = [
       'mg, mcg, g, units, mL',
       'Commenced, ceased, increased, decreased'
     ]
+  },
+
+  {
+    id: 'pre-op-plan',
+    title: 'Pre-Op Plan Recording',
+    description: 'Pre-procedure planning card for cath lab staff - Select procedure type first',
+    estimatedTime: '1-3 minutes',
+    sections: [
+      {
+        title: 'ANGIOGRAM/PCI Checklist',
+        icon: '🩺',
+        items: [
+          '✅ Procedure type & indication (e.g., "Angiogram for NSTEMI")',
+          '✅ Primary access site (radial/femoral)',
+          '✅ Sheath size (Fr)',
+          '✅ Catheters planned (e.g., JL3.5, JR4)',
+          '✅ Allergies/precautions (iodine, latex)',
+          '✅ Antiplatelet plan (continue/hold)',
+          '⭕ Sedation level (light/moderate)',
+          '⭕ Site prep (which sites + antiseptic)',
+          '⭕ Recent labs (Hb, creatinine)',
+          '⭕ Planned follow-up (timing, location)',
+          '✅ Next-of-kin (name, relationship, phone)'
+        ]
+      },
+      {
+        title: 'RIGHT HEART CATH Checklist',
+        icon: '🩺',
+        items: [
+          '✅ Procedure type & indication',
+          '✅ Access site (basilic/jugular/femoral)',
+          '✅ Sheath size (Fr)',
+          '✅ Catheters planned (Swan-Ganz, etc.)',
+          '✅ CO measurement (Yes/No, method)',
+          '✅ Blood gas samples (count)',
+          '⭕ Sedation plan',
+          '⭕ Anticoagulation plan',
+          '⭕ Site prep details',
+          '⭕ Recent labs',
+          '⭕ Planned follow-up (timing, location)',
+          '✅ Next-of-kin (name, relationship, phone)'
+        ]
+      },
+      {
+        title: 'TAVI Checklist',
+        icon: '🫀',
+        items: [
+          '✅ Indication (e.g., severe AS)',
+          '✅ Primary access (femoral/other)',
+          '✅ Secondary access',
+          '✅ Valve type & size (Sapien/Evolut, mm)',
+          '✅ Wire (Safari/Confida/Lunderquist)',
+          '✅ Balloon size (mm, if planned)',
+          '✅ Pacing wire access',
+          '✅ Closure device plan (ProStyle/Angio-Seal)',
+          '✅ Protamine plan (yes/no, contraindications)',
+          '✅ Goals of care (theatre status, gradient)',
+          '⭕ Sedation plan',
+          '⭕ Site prep (both femorals + antiseptic)',
+          '⭕ Allergies',
+          '⭕ Recent labs',
+          '⭕ Planned follow-up (timing, location)',
+          '✅ Next-of-kin'
+        ]
+      },
+      {
+        title: 'MITRAL TEER Checklist',
+        icon: '🫀',
+        items: [
+          '✅ Indication (MR severity)',
+          '✅ Access site (femoral venous)',
+          '✅ Transeptal catheter(s)',
+          '✅ Wire (super-stiff for guide)',
+          '✅ Closure device plan (usually 2× ProStyle)',
+          '✅ Echo findings (key summary)',
+          '⭕ Device type (NTW/XT)',
+          '⭕ Sedation plan',
+          '⭕ Anticoagulation plan',
+          '⭕ Site prep',
+          '⭕ Allergies',
+          '⭕ Recent labs',
+          '⭕ Planned follow-up (timing, location)',
+          '✅ Next-of-kin'
+        ]
+      }
+    ],
+    tips: [
+      'Start by stating the procedure type clearly',
+      '✅ = REQUIRED field (must include)',
+      '⭕ = OPTIONAL field (include if mentioned)',
+      'Keep Next-of-Kin format: "Name (relationship) phone"',
+      'For TAVI: Always include Protamine plan and goals',
+      'For Angio/RHC: DO NOT mention Protamine or pacing wires'
+    ],
+    terminology: [
+      'Access: radial, femoral, basilic, jugular',
+      'Antiseptics: chlorhexidine, betadine',
+      'TAVI valves: Sapien 3 Ultra, Evolut R/Pro',
+      'Wires: Safari, Confida, Lunderquist',
+      'Closure: ProStyle, Angio-Seal, Perclose',
+      'Sedation: light, moderate, GA',
+      'Labs: Hb g/L, Creatinine µmol/L'
+    ]
   }
 ] as const;
 
