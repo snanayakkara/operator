@@ -148,6 +148,14 @@ interface CombinedAppState extends AppState {
     onConfirm: (() => void) | null;
     onCancel: (() => void) | null;
   };
+
+  // Session persistence
+  persistedSessionIds: Set<string>; // Track which sessions are persisted locally
+  storageMetadata: {
+    totalSessions: number;
+    storageUsedBytes: number;
+    usedPercentage: number;
+  } | null;
 }
 
 // Action types for state updates
@@ -229,7 +237,12 @@ type AppAction =
   | { type: 'SET_DISPLAY_SESSION'; payload: { session: PatientSession } }
   | { type: 'CLEAR_DISPLAY_SESSION' }
   // Enhanced UI state management to prevent freeze
-  | { type: 'FORCE_UI_READY_STATE' };
+  | { type: 'FORCE_UI_READY_STATE' }
+  // Session persistence actions
+  | { type: 'SET_PERSISTED_SESSION_IDS'; payload: Set<string> }
+  | { type: 'ADD_PERSISTED_SESSION_ID'; payload: string }
+  | { type: 'REMOVE_PERSISTED_SESSION_ID'; payload: string }
+  | { type: 'SET_STORAGE_METADATA'; payload: { totalSessions: number; storageUsedBytes: number; usedPercentage: number } | null };
 
 // Initial state
 const initialState: CombinedAppState = {
@@ -316,7 +329,11 @@ const initialState: CombinedAppState = {
 
   // Result revision tracking
   resultRevisions: {},
-  
+
+  // Session persistence
+  persistedSessionIds: new Set(),
+  storageMetadata: null,
+
   // UI state
   ui: {
     mode: 'idle',
@@ -956,6 +973,25 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         }
       };
 
+    // Session persistence actions
+    case 'SET_PERSISTED_SESSION_IDS':
+      return { ...state, persistedSessionIds: action.payload };
+
+    case 'ADD_PERSISTED_SESSION_ID': {
+      const newSet = new Set(state.persistedSessionIds);
+      newSet.add(action.payload);
+      return { ...state, persistedSessionIds: newSet };
+    }
+
+    case 'REMOVE_PERSISTED_SESSION_ID': {
+      const newSet = new Set(state.persistedSessionIds);
+      newSet.delete(action.payload);
+      return { ...state, persistedSessionIds: newSet };
+    }
+
+    case 'SET_STORAGE_METADATA':
+      return { ...state, storageMetadata: action.payload };
+
     default:
       return state;
   }
@@ -1259,6 +1295,23 @@ export function useAppState() {
     // Force UI into ready state when completion handlers fail to clear properly
     forceUIReadyState: useCallback(() => {
       dispatch({ type: 'FORCE_UI_READY_STATE' });
+    }, []),
+
+    // Session persistence actions
+    setPersistedSessionIds: useCallback((sessionIds: Set<string>) => {
+      dispatch({ type: 'SET_PERSISTED_SESSION_IDS', payload: sessionIds });
+    }, []),
+
+    addPersistedSessionId: useCallback((sessionId: string) => {
+      dispatch({ type: 'ADD_PERSISTED_SESSION_ID', payload: sessionId });
+    }, []),
+
+    removePersistedSessionId: useCallback((sessionId: string) => {
+      dispatch({ type: 'REMOVE_PERSISTED_SESSION_ID', payload: sessionId });
+    }, []),
+
+    setStorageMetadata: useCallback((metadata: { totalSessions: number; storageUsedBytes: number; usedPercentage: number } | null) => {
+      dispatch({ type: 'SET_STORAGE_METADATA', payload: metadata });
     }, [])
   };
 

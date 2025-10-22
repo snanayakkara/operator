@@ -92,17 +92,6 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
   const [showFilters, setShowFilters] = useState(false);
   const [_viewMode, _setViewMode] = useState<'table' | 'cards'>('table');
 
-  // Load corrections on mount
-  useEffect(() => {
-    loadCorrections();
-  }, [loadCorrections]);
-
-  // Apply filters and sorting when dependencies change
-  useEffect(() => {
-    applyFiltersAndSort();
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [corrections, filters, sortField, sortDirection, applyFiltersAndSort]);
-
   const loadCorrections = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -126,6 +115,11 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
       onLoadingChange(false);
     }
   }, [asrLog, onError, onLoadingChange]);
+
+  // Load corrections on mount
+  useEffect(() => {
+    loadCorrections();
+  }, [loadCorrections]);
 
   const applyFiltersAndSort = useCallback(() => {
     let filtered = [...corrections];
@@ -216,6 +210,12 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
 
     setFilteredCorrections(filtered);
   }, [corrections, filters, sortField, sortDirection]);
+
+  // Apply filters and sorting when dependencies change
+  useEffect(() => {
+    applyFiltersAndSort();
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [corrections, filters, sortField, sortDirection, applyFiltersAndSort]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {

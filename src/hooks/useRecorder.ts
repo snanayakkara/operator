@@ -225,6 +225,40 @@ export function useRecorder(options: RecorderOptions) {
     }
   }, []);
 
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    isRecordingRef.current = false; // Ensure ref is reset
+    stopTimer();
+    
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+    
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
+    setState(prev => ({
+      ...prev,
+      isRecording: false,
+      voiceActivityLevel: 0,
+      frequencyData: [],
+      activeDeviceInfo: null,
+      audioLevelHistory: []
+    }));
+  }, [stopTimer]);
+
   // Start recording
   const startRecording = useCallback(async () => {
     console.log('🎤 useRecorder.startRecording() called');
@@ -467,40 +501,6 @@ export function useRecorder(options: RecorderOptions) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = undefined;
     }
-  }, [stopTimer]);
-
-  // Cleanup function
-  const cleanup = useCallback(() => {
-    isRecordingRef.current = false; // Ensure ref is reset
-    stopTimer();
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = undefined;
-    }
-    
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-    
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
-    setState(prev => ({
-      ...prev,
-      isRecording: false,
-      voiceActivityLevel: 0,
-      frequencyData: [],
-      activeDeviceInfo: null,
-      audioLevelHistory: []
-    }));
   }, [stopTimer]);
 
   // Initialize on mount

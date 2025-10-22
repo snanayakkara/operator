@@ -70,6 +70,44 @@ export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
   const [completedJobs, setCompletedJobs] = useState<OvernightJob[]>([]);
   const [selectedReviewJob, setSelectedReviewJob] = useState<OvernightJob | null>(null);
 
+  const updateSectionState = useCallback((section: OptimizationSection, updates: Partial<SectionState>) => {
+    setSections(prev => ({
+      ...prev,
+      [section]: { ...prev[section], ...updates }
+    }));
+  }, []);
+
+  const initializePanel = useCallback(async () => {
+    logger.info('Initializing optimization panel', {
+      component: 'OptimizationPanel'
+    });
+
+    try {
+      setIsCheckingHealth(true);
+      setConnectionError(null);
+
+      const health = await optimizationService.checkHealth();
+      setServerHealth(health);
+      
+      if (health.status === 'healthy') {
+        setIsInitialized(true);
+        logger.info('Optimization panel initialized successfully', {
+          component: 'OptimizationPanel',
+          serverStatus: health.status
+        });
+      } else {
+        setConnectionError('DSPy server is unhealthy');
+      }
+
+    } catch (error) {
+      const errorMsg = error instanceof OptimizationError ? error.message : 'Failed to connect to DSPy server';
+      setConnectionError(errorMsg);
+      logger.error('Failed to initialize optimization panel', new Error(errorMsg), { component: 'OptimizationPanel' });
+    } finally {
+      setIsCheckingHealth(false);
+    }
+  }, [optimizationService]);
+
   // Initialize panel when opened
   useEffect(() => {
     if (isOpen && !isInitialized) {
@@ -116,44 +154,6 @@ export const OptimizationPanel: React.FC<OptimizationPanelProps> = ({
       loadCompletedJobs();
     }
   }, [sections.review.isExpanded, completedJobs.length, loadCompletedJobs]);
-
-  const initializePanel = useCallback(async () => {
-    logger.info('Initializing optimization panel', {
-      component: 'OptimizationPanel'
-    });
-
-    try {
-      setIsCheckingHealth(true);
-      setConnectionError(null);
-
-      const health = await optimizationService.checkHealth();
-      setServerHealth(health);
-      
-      if (health.status === 'healthy') {
-        setIsInitialized(true);
-        logger.info('Optimization panel initialized successfully', {
-          component: 'OptimizationPanel',
-          serverStatus: health.status
-        });
-      } else {
-        setConnectionError('DSPy server is unhealthy');
-      }
-
-    } catch (error) {
-      const errorMsg = error instanceof OptimizationError ? error.message : 'Failed to connect to DSPy server';
-      setConnectionError(errorMsg);
-      logger.error('Failed to initialize optimization panel', new Error(errorMsg), { component: 'OptimizationPanel' });
-    } finally {
-      setIsCheckingHealth(false);
-    }
-  }, [optimizationService]);
-
-  const updateSectionState = useCallback((section: OptimizationSection, updates: Partial<SectionState>) => {
-    setSections(prev => ({
-      ...prev,
-      [section]: { ...prev[section], ...updates }
-    }));
-  }, []);
 
   const toggleSection = useCallback((section: OptimizationSection) => {
     setSections(prev => ({

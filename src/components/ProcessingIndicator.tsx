@@ -5,7 +5,7 @@
  * with intelligent phase detection and quality monitoring.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AgentType } from '@/types/medical.types';
 
 export interface ProcessingPhase {
@@ -77,108 +77,7 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
   }, [isProcessing, currentStatus?.overallProgress]);
 
   // Simulate Phase 3 processing phases if not provided
-  useEffect(() => {
-    if (isProcessing && !processingStatus) {
-      return simulateEnhancedProcessing();
-    }
-    if (processingStatus) {
-      setCurrentStatus(processingStatus);
-    }
-    return undefined;
-  }, [isProcessing, processingStatus, simulateEnhancedProcessing]);
-
-  // Simulate realistic enhanced processing phases
-  const simulateEnhancedProcessing = useCallback(() => {
-    const phases = createEnhancedPhases(agentType);
-    
-    setCurrentStatus({
-      agentType,
-      isEnhanced: isEnhancedAgent(agentType),
-      currentPhase: phases[0].name,
-      overallProgress: 0,
-      phases,
-      estimatedTimeRemaining: getEstimatedProcessingTime(agentType),
-      warnings: [],
-      insights: []
-    });
-
-    // Simulate phase progression
-    let currentPhaseIndex = 0;
-    let phaseProgress = 0;
-
-    const progressInterval = setInterval(() => {
-      if (currentPhaseIndex >= phases.length) {
-        clearInterval(progressInterval);
-        return;
-      }
-
-      const currentPhase = phases[currentPhaseIndex];
-      phaseProgress += Math.random() * 15 + 5; // 5-20% progress per tick
-
-      if (phaseProgress >= 100) {
-        // Complete current phase
-        currentPhase.status = 'completed';
-        currentPhase.endTime = Date.now();
-        currentPhase.duration = currentPhase.endTime - (currentPhase.startTime || Date.now());
-        currentPhase.progress = 100;
-
-        currentPhaseIndex++;
-        phaseProgress = 0;
-
-        // Start next phase
-        if (currentPhaseIndex < phases.length) {
-          phases[currentPhaseIndex].status = 'active';
-          phases[currentPhaseIndex].startTime = Date.now();
-        }
-      } else {
-        currentPhase.progress = phaseProgress;
-        currentPhase.status = 'active';
-        if (!currentPhase.startTime) {
-          currentPhase.startTime = Date.now();
-        }
-      }
-
-      // Calculate overall progress
-      const overallProgress = phases.reduce((total, phase, index) => {
-        if (index < currentPhaseIndex) return total + (100 / phases.length);
-        if (index === currentPhaseIndex) return total + (phaseProgress / phases.length);
-        return total;
-      }, 0);
-
-      // Update status
-      setCurrentStatus(prev => prev ? {
-        ...prev,
-        currentPhase: phases[currentPhaseIndex]?.name || 'Completing',
-        overallProgress: Math.min(100, overallProgress),
-        phases: [...phases],
-        estimatedTimeRemaining: Math.max(0, prev.estimatedTimeRemaining - 500),
-        qualityMetrics: generateQualityMetrics(overallProgress),
-        insights: generateProcessingInsights(agentType, phases[currentPhaseIndex])
-      } : null);
-
-      // Notify parent of phase updates
-      if (onPhaseUpdate && phases[currentPhaseIndex]) {
-        onPhaseUpdate(phases[currentPhaseIndex].name, overallProgress);
-      }
-
-      // Complete processing
-      if (overallProgress >= 100) {
-        clearInterval(progressInterval);
-        setTimeout(() => {
-          setCurrentStatus(prev => prev ? {
-            ...prev,
-            overallProgress: 100,
-            currentPhase: 'Completed'
-          } : null);
-        }, 500);
-      }
-    }, 800); // Update every 800ms for smooth progression
-
-    return () => clearInterval(progressInterval);
-  }, [agentType, onPhaseUpdate, createEnhancedPhases]);
-
-  // Create enhanced processing phases
-  const createEnhancedPhases = useCallback((targetAgent: AgentType): ProcessingPhase[] => {
+  const createEnhancedPhases = (targetAgent: AgentType): ProcessingPhase[] => {
     const basePhases: ProcessingPhase[] = [
       {
         id: 'initialization',
@@ -350,7 +249,99 @@ export const ProcessingIndicator: React.FC<ProcessingIndicatorProps> = ({
       }
     );
     return basePhases;
-  }, []);
+  };
+
+  const simulateEnhancedProcessing = () => {
+    const phases = createEnhancedPhases(agentType);
+
+    setCurrentStatus({
+      agentType,
+      isEnhanced: isEnhancedAgent(agentType),
+      currentPhase: phases[0].name,
+      overallProgress: 0,
+      phases,
+      estimatedTimeRemaining: getEstimatedProcessingTime(agentType),
+      warnings: [],
+      insights: []
+    });
+
+    let currentPhaseIndex = 0;
+    let phaseProgress = 0;
+
+    const progressInterval = setInterval(() => {
+      if (currentPhaseIndex >= phases.length) {
+        clearInterval(progressInterval);
+        return;
+      }
+
+      const currentPhase = phases[currentPhaseIndex];
+      phaseProgress += Math.random() * 15 + 5;
+
+      if (phaseProgress >= 100) {
+        currentPhase.status = 'completed';
+        currentPhase.endTime = Date.now();
+        currentPhase.duration = currentPhase.endTime - (currentPhase.startTime || Date.now());
+        currentPhase.progress = 100;
+
+        currentPhaseIndex++;
+        phaseProgress = 0;
+
+        if (currentPhaseIndex < phases.length) {
+          phases[currentPhaseIndex].status = 'active';
+          phases[currentPhaseIndex].startTime = Date.now();
+        }
+      } else {
+        currentPhase.progress = phaseProgress;
+        currentPhase.status = 'active';
+        if (!currentPhase.startTime) {
+          currentPhase.startTime = Date.now();
+        }
+      }
+
+      const overallProgress = phases.reduce((total, phase, index) => {
+        if (index < currentPhaseIndex) return total + (100 / phases.length);
+        if (index === currentPhaseIndex) return total + (phaseProgress / phases.length);
+        return total;
+      }, 0);
+
+      setCurrentStatus(prev => prev ? {
+        ...prev,
+        currentPhase: phases[currentPhaseIndex]?.name || 'Completing',
+        overallProgress: Math.min(100, overallProgress),
+        phases: [...phases],
+        estimatedTimeRemaining: Math.max(0, prev.estimatedTimeRemaining - 500),
+        qualityMetrics: generateQualityMetrics(overallProgress),
+        insights: generateProcessingInsights(agentType, phases[currentPhaseIndex])
+      } : null);
+
+      if (onPhaseUpdate && phases[currentPhaseIndex]) {
+        onPhaseUpdate(phases[currentPhaseIndex].name, overallProgress);
+      }
+
+      if (overallProgress >= 100) {
+        clearInterval(progressInterval);
+        setTimeout(() => {
+          setCurrentStatus(prev => prev ? {
+            ...prev,
+            overallProgress: 100,
+            currentPhase: 'Completed'
+          } : null);
+        }, 500);
+      }
+    }, 800);
+
+    return () => clearInterval(progressInterval);
+  };
+
+  useEffect(() => {
+    if (isProcessing && !processingStatus) {
+      return simulateEnhancedProcessing();
+    }
+    if (processingStatus) {
+      setCurrentStatus(processingStatus);
+    }
+    return undefined;
+  }, [isProcessing, processingStatus, agentType, onPhaseUpdate]);
 
   // Helper functions
   const isEnhancedAgent = (agentType: AgentType): boolean => {

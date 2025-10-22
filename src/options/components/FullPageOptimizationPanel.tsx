@@ -139,6 +139,13 @@ export const FullPageOptimizationPanel: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sections.review.isExpanded, completedJobs.length]);
 
+  const updateSectionState = useCallback((section: OptimizationSection, updates: Partial<SectionState>) => {
+    setSections(prev => ({
+      ...prev,
+      [section]: { ...prev[section], ...updates }
+    }));
+  }, []);
+
   const loadCompletedJobs = useCallback(async () => {
     try {
       updateSectionState('review', { isLoading: true, lastError: null });
@@ -204,13 +211,6 @@ export const FullPageOptimizationPanel: React.FC = () => {
       setIsCheckingHealth(false);
     }
   }, [optimizationService]);
-
-  const updateSectionState = useCallback((section: OptimizationSection, updates: Partial<SectionState>) => {
-    setSections(prev => ({
-      ...prev,
-      [section]: { ...prev[section], ...updates }
-    }));
-  }, []);
 
   const toggleSection = useCallback((section: OptimizationSection) => {
     setSections(prev => ({

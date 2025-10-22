@@ -62,44 +62,6 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
   const [crossAgentIntelligence] = useState(() => CrossAgentIntelligence.getInstance());
   const [_agentLoader] = useState(() => LazyAgentLoader.getInstance());
 
-  // Analyze input and generate recommendations
-  const analyzeInput = useCallback(async (input: string) => {
-    if (!input || input.length < 10) return;
-
-    setIsAnalyzing(true);
-    
-    try {
-      // Analyze input content
-      const analysis = await performInputAnalysis(input);
-      setInputAnalysis(analysis);
-
-      // Generate smart recommendations
-      const smartRecs = await generateSmartRecommendations(input, analysis, sessionId);
-      setRecommendations(smartRecs);
-
-      // Suggest best agent if analysis is confident
-      if (analysis.suggestedAgents.length > 0 && analysis.suggestedAgents[0].confidence > 0.8) {
-        onAgentSuggestion(analysis.suggestedAgents[0].agentType, analysis.suggestedAgents[0].confidence);
-      }
-
-    } catch (error) {
-      console.error('Failed to analyze input:', error);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, [sessionId, onAgentSuggestion, performInputAnalysis, generateSmartRecommendations]);
-
-  // Debounced input analysis
-  useEffect(() => {
-    if (!currentInput) return;
-
-    const timeoutId = setTimeout(() => {
-      analyzeInput(currentInput);
-    }, 1000); // Debounce for 1 second
-
-    return () => clearTimeout(timeoutId);
-  }, [currentInput, analyzeInput]);
-
   // Perform comprehensive input analysis
   const performInputAnalysis = async (input: string): Promise<InputAnalysis> => {
     const medicalTerms = extractMedicalTerms(input);
@@ -217,6 +179,44 @@ export const SmartRecommendationEngine: React.FC<RecommendationEngineProps> = ({
       return priorityOrder[b.priority] - priorityOrder[a.priority];
     });
   };
+
+  // Analyze input and generate recommendations
+  const analyzeInput = useCallback(async (input: string) => {
+    if (!input || input.length < 10) return;
+
+    setIsAnalyzing(true);
+    
+    try {
+      // Analyze input content
+      const analysis = await performInputAnalysis(input);
+      setInputAnalysis(analysis);
+
+      // Generate smart recommendations
+      const smartRecs = await generateSmartRecommendations(input, analysis, sessionId);
+      setRecommendations(smartRecs);
+
+      // Suggest best agent if analysis is confident
+      if (analysis.suggestedAgents.length > 0 && analysis.suggestedAgents[0].confidence > 0.8) {
+        onAgentSuggestion(analysis.suggestedAgents[0].agentType, analysis.suggestedAgents[0].confidence);
+      }
+
+    } catch (error) {
+      console.error('Failed to analyze input:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [sessionId, onAgentSuggestion]);
+
+  // Debounced input analysis
+  useEffect(() => {
+    if (!currentInput) return;
+
+    const timeoutId = setTimeout(() => {
+      analyzeInput(currentInput);
+    }, 1000); // Debounce for 1 second
+
+    return () => clearTimeout(timeoutId);
+  }, [currentInput, analyzeInput]);
 
   // Extract medical terms from input
   const extractMedicalTerms = (input: string): string[] => {

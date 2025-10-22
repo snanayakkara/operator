@@ -14,12 +14,14 @@ import {
   Copy,
   Check,
   ArrowRight,
-  XCircle
+  XCircle,
+  HardDrive
 } from 'lucide-react';
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
 import type { PatientSession, SessionStatus } from '@/types/medical.types';
 import { getStateColors, type ProcessingState } from '@/utils/stateColors';
+import { getAgentColors, getAgentCategoryIcon } from '@/utils/agentCategories';
 
 interface SessionDropdownProps {
   sessions: PatientSession[];
@@ -37,6 +39,7 @@ interface SessionDropdownProps {
   position?: { top: number; left?: number; right?: number };
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked, from parent state)
   onToggleSessionCheck?: (sessionId: string) => void; // Callback to toggle check state in parent
+  persistedSessionIds?: Set<string>; // Sessions stored locally (for hard drive icon)
 }
 
 // Performance constants
@@ -190,6 +193,7 @@ interface EnhancedSessionItemProps {
   copiedSessionId: string | null;
   isChecked: boolean;
   isCompact: boolean;
+  isPersisted: boolean; // Session is stored locally
   onToggleCheck: (sessionId: string) => void;
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
@@ -208,6 +212,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   copiedSessionId,
   isChecked,
   isCompact,
+  isPersisted,
   onToggleCheck,
   onSessionSelect,
   onResumeRecording,
@@ -221,6 +226,10 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   const isCopying = copiedSessionId === session.id;
   const dictationDuration = getDictationDuration(session);
   const processingDuration = getProcessingDuration(session);
+
+  // Get category-based colors for this agent
+  const categoryColors = getAgentColors(session.agentType);
+  const categoryIcon = getAgentCategoryIcon(session.agentType);
 
   const handlePrimaryAction = useCallback(() => {
     if (onSessionSelect) {
@@ -237,9 +246,10 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   if (isCompact) {
     return (
       <div
-        className={`relative rounded-lg border transition-all duration-300 px-2 py-1.5 ${meta.cardClass} ${
-          isSelected ? 'border-accent-violet/70' : ''
-        } opacity-60 hover:opacity-80`}
+        className={`relative rounded-lg border-l-4 transition-all duration-300 px-2 py-1.5 ${categoryColors.bg} ${categoryColors.border} opacity-60 hover:opacity-80 ${
+          isSelected ? 'ring-2 ring-accent-violet/50' : ''
+        }`}
+        style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
       >
         <div className="flex items-center gap-2">
           {/* Checkbox */}
@@ -256,15 +266,23 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate font-medium text-xs text-slate-700">
-                {session.patient?.name || 'Unnamed patient'}
-              </p>
+              <div className="flex items-center gap-1">
+                <span className="text-xs">{categoryIcon}</span>
+                <p className="truncate font-medium text-xs text-slate-700">
+                  {session.patient?.name || 'Unnamed patient'}
+                </p>
+              </div>
               <span className="text-[9px] text-slate-500 whitespace-nowrap">
                 {formatClockTime(session.timestamp)}
               </span>
             </div>
-            <div className="text-[9px] text-slate-500 truncate">
-              {session.agentName || session.agentType}
+            <div className="flex items-center gap-1 text-[9px] text-slate-500 truncate">
+              {isPersisted && (
+                <span title="Stored locally">
+                  <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
+                </span>
+              )}
+              <span className="truncate">{session.agentName || session.agentType}</span>
             </div>
           </div>
 
@@ -284,11 +302,17 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   // Full mode
   return (
     <div
-      className={`relative rounded-xl border transition-all duration-300 px-3 py-2 ${meta.cardClass} ${
-        isSelected ? 'border-accent-violet/70' : ''
+      className={`relative rounded-xl border-l-4 transition-all duration-300 px-3 py-2 ${categoryColors.bg} ${categoryColors.border} ${
+        isSelected ? 'ring-2 ring-accent-violet/50' : ''
       }`}
+      style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
     >
       <div className="flex items-start gap-2">
+        {/* Category icon badge */}
+        <div className="absolute top-2 right-2 text-lg opacity-30">
+          {categoryIcon}
+        </div>
+
         {/* Larger checkbox */}
         <div
           className="flex-shrink-0 pt-0.5 cursor-pointer group"
@@ -336,7 +360,14 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
                 <Clock className="w-2.5 h-2.5 text-slate-400" />
                 {formatClockTime(session.timestamp)}
               </span>
-              <span>{session.agentName || session.agentType}</span>
+              <span className="flex items-center gap-0.5">
+                {isPersisted && (
+                  <span title="Stored locally">
+                    <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
+                  </span>
+                )}
+                <span>{session.agentName || session.agentType}</span>
+              </span>
               {dictationDuration !== null && (
                 <span className="flex items-center gap-0.5">
                   <Mic className="w-2.5 h-2.5 text-slate-400" />
@@ -442,7 +473,8 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   triggerRef,
   position,
   checkedSessionIds = new Set(),
-  onToggleSessionCheck
+  onToggleSessionCheck,
+  persistedSessionIds = new Set()
 }) => {
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   // Local state for lazy loading
@@ -713,6 +745,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     copiedSessionId={copiedSessionId}
                     isChecked={isChecked}
                     isCompact={isChecked}
+                    isPersisted={persistedSessionIds.has(session.id)}
                     onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}
@@ -756,6 +789,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     copiedSessionId={copiedSessionId}
                     isChecked={isChecked}
                     isCompact={isChecked}
+                    isPersisted={persistedSessionIds.has(session.id)}
                     onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}
@@ -801,6 +835,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     copiedSessionId={copiedSessionId}
                     isChecked={isChecked}
                     isCompact={isChecked}
+                    isPersisted={persistedSessionIds.has(session.id)}
                     onToggleCheck={handleToggleCheck}
                     onSessionSelect={onSessionSelect}
                     onResumeRecording={onResumeRecording}

@@ -353,7 +353,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       return null;
     }
     try {
-      return formatAbsoluteTime(new Date(revisionPanel.lastSavedAt));
+      return formatAbsoluteTime(revisionPanel.lastSavedAt);
     } catch (error) {
       console.warn('Failed to format revision saved timestamp', error);
       return null;

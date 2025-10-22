@@ -30,6 +30,8 @@ import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { SparsityStepperModal } from './components/SparsityStepperModal';
 import { LipidProfileImporter } from './components/LipidProfileImporter';
 import { TTETrendImporter } from './components/TTETrendImporter';
+import { StorageIndicator } from './components/StorageIndicator';
+import { StorageManagementModal } from './components/StorageManagementModal';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
@@ -50,6 +52,8 @@ import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
+import { SessionPersistenceService } from '@/services/SessionPersistenceService';
+import type { StorageStats } from '@/types/persistence.types';
 
 interface CurrentDisplayData {
   transcription: string;
@@ -126,8 +130,13 @@ const OptimizedAppContent: React.FC = memo(() => {
   const whisperServerService = useRef(WhisperServerService.getInstance()).current;
   const patientCacheService = useRef(PatientDataCacheService.getInstance()).current;
   const optimizationService = useRef(OptimizationService.getInstance()).current;
+  const persistenceService = useRef(SessionPersistenceService.getInstance()).current;
   const batchOrchestrator = useRef<BatchAIReviewOrchestrator | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
+
+  // Storage management state
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
 
   // Forward declare recorder hooks callbacks to avoid circular dependencies
   const handleRecordingCompleteRef = useRef<((audioBlob: Blob) => Promise<void>) | null>(null);
@@ -498,7 +507,188 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [actions, state]);
 
-  // Load checked sessions from Chrome storage on mount
+  // Initialize session persistence
+  useEffect(() => {
+    const initializePersistence = async () => {
+      try {
+        console.log('📦 Initializing session persistence...');
+
+        // Initialize the persistence service (starts background cleanup)
+        await persistenceService.initialize();
+
+        // Load persisted sessions
+        const loadedSessions = await persistenceService.loadSessions();
+        console.log(`✅ Loaded ${loadedSessions.length} persisted sessions`);
+
+        // Add loaded sessions to state
+        for (const session of loadedSessions) {
+          actions.addPatientSession(session);
+          actions.addPersistedSessionId(session.id);
+        }
+
+        // Get checked session IDs from storage
+        const checkedIds = await persistenceService.getCheckedSessionIds();
+        setCheckedSessions(checkedIds);
+
+        // Update storage stats
+        await updateStorageStats();
+
+        console.log('✅ Session persistence initialized');
+      } catch (error) {
+        console.error('❌ Failed to initialize session persistence:', error);
+      }
+    };
+
+    initializePersistence();
+
+    // Cleanup on unmount
+    return () => {
+      persistenceService.shutdown();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
+
+  // Helper function to update storage stats
+  const updateStorageStats = useCallback(async () => {
+    try {
+      const stats = await persistenceService.getStorageStats();
+      setStorageStats(stats);
+      actions.setStorageMetadata({
+        totalSessions: stats.sessionCount,
+        storageUsedBytes: stats.usedBytes,
+        usedPercentage: stats.usedPercentage
+      });
+    } catch (error) {
+      console.error('❌ Failed to update storage stats:', error);
+    }
+  }, [persistenceService, actions]);
+
+  // Save session to persistent storage
+  const saveSessionToPersistence = useCallback(async (session: PatientSession) => {
+    try {
+      await persistenceService.saveSession(session);
+      actions.addPersistedSessionId(session.id);
+      await updateStorageStats();
+      console.log('💾 Session saved to local storage:', session.id);
+    } catch (error) {
+      console.error('❌ Failed to save session to persistence:', error);
+      ToastService.getInstance().error('Failed to save session locally. Storage may be full.');
+    }
+  }, [persistenceService, actions, updateStorageStats]);
+
+  // Handle checkbox toggle with persistence
+  const handleToggleSessionCheck = useCallback(async (sessionId: string) => {
+    const isCurrentlyChecked = checkedSessions.has(sessionId);
+
+    if (isCurrentlyChecked) {
+      // Unchecking - remove from checked set and reset expiry timer
+      setCheckedSessions(prev => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+
+      try {
+        await persistenceService.unmarkSessionComplete(sessionId);
+        console.log('↩️ Session unchecked, expiry reset to 7 days:', sessionId);
+      } catch (error) {
+        console.error('❌ Failed to unmark session as complete:', error);
+      }
+    } else {
+      // Checking - add to checked set and start 24h deletion timer
+      setCheckedSessions(prev => {
+        const next = new Set(prev);
+        next.add(sessionId);
+        return next;
+      });
+
+      try {
+        await persistenceService.markSessionComplete(sessionId);
+        console.log('✅ Session checked, will delete in 24 hours:', sessionId);
+      } catch (error) {
+        console.error('❌ Failed to mark session as complete:', error);
+        ToastService.getInstance().error('Failed to mark session as complete');
+
+        // Revert checkbox state on error
+        setCheckedSessions(prev => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }
+    }
+
+    await updateStorageStats();
+  }, [checkedSessions, persistenceService, updateStorageStats]);
+
+  // Delete session from persistence
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    try {
+      await persistenceService.deleteSession(sessionId);
+      actions.removePatientSession(sessionId);
+      actions.removePersistedSessionId(sessionId);
+      setCheckedSessions(prev => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+      await updateStorageStats();
+      console.log('🗑️ Session deleted from persistence:', sessionId);
+    } catch (error) {
+      console.error('❌ Failed to delete session:', error);
+      ToastService.getInstance().error('Failed to delete session');
+    }
+  }, [persistenceService, actions, updateStorageStats]);
+
+  // Bulk delete operations for storage management
+  const handleDeleteAllChecked = useCallback(async () => {
+    try {
+      const result = await persistenceService.deleteAllCheckedSessions();
+      console.log(`🗑️ Deleted ${result.deletedCount} checked sessions`);
+
+      // Remove deleted sessions from state
+      state.patientSessions.forEach(session => {
+        if (session.completed) {
+          actions.removePatientSession(session.id);
+          actions.removePersistedSessionId(session.id);
+        }
+      });
+
+      setCheckedSessions(new Set());
+      await updateStorageStats();
+      ToastService.getInstance().success(`Deleted ${result.deletedCount} checked sessions`);
+    } catch (error) {
+      console.error('❌ Failed to delete checked sessions:', error);
+      ToastService.getInstance().error('Failed to delete checked sessions');
+    }
+  }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
+
+  const handleDeleteOldSessions = useCallback(async (daysOld: number) => {
+    try {
+      const result = await persistenceService.deleteOldSessions(daysOld);
+      console.log(`🗑️ Deleted ${result.deletedCount} sessions older than ${daysOld} days`);
+
+      // Reload sessions from persistence to sync state
+      const remainingSessions = await persistenceService.loadSessions();
+      const remainingIds = new Set(remainingSessions.map(s => s.id));
+
+      // Remove deleted sessions from state
+      state.patientSessions.forEach(session => {
+        if (!remainingIds.has(session.id)) {
+          actions.removePatientSession(session.id);
+          actions.removePersistedSessionId(session.id);
+        }
+      });
+
+      await updateStorageStats();
+      ToastService.getInstance().success(`Deleted ${result.deletedCount} old sessions`);
+    } catch (error) {
+      console.error('❌ Failed to delete old sessions:', error);
+      ToastService.getInstance().error('Failed to delete old sessions');
+    }
+  }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
+
+  // Load checked sessions from Chrome storage on mount (now handled by persistence service)
   useEffect(() => {
     const loadCheckedSessions = async () => {
       try {
@@ -681,7 +871,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       onToken: (t) => {
         actions.appendStreamChunk(t);
       },
-      onEnd: (final, usage) => {
+      onEnd: async (final, usage) => {
         streamingSucceeded = true;
         processingDuration = Date.now() - streamingStartTime;
         // Extract summary and letter content for QuickLetter agents to enable dual-card display
@@ -805,6 +995,19 @@ const OptimizedAppContent: React.FC = memo(() => {
             details: 'Streaming finished'
           }
         });
+
+        // Save completed session to persistence
+        const completedSession = state.patientSessions.find(s => s.id === sessionId);
+        if (completedSession) {
+          await saveSessionToPersistence({
+            ...completedSession,
+            results: letterContent,
+            summary: extractedSummary,
+            status: 'completed',
+            completed: true,
+            completedTime: Date.now()
+          });
+        }
 
         // Clear progress indicator after fade-out animation (300ms)
         // Clear any existing timeout to prevent race conditions
@@ -1320,6 +1523,15 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       actions.updatePatientSession(sessionId, sessionUpdate);
 
+      // Save completed session to persistence
+      const completedSession = state.patientSessions.find(s => s.id === sessionId);
+      if (completedSession) {
+        await saveSessionToPersistence({
+          ...completedSession,
+          ...sessionUpdate
+        });
+      }
+
       // Set UI progress to 100% for completion
       actions.setProcessingProgress(100);
 
@@ -1731,20 +1943,6 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setUIMode('idle', { sessionId: null, origin: 'user' });
     }
   }, [actions, state.selectedSessionId]);
-
-  const handleToggleSessionCheck = useCallback((sessionId: string) => {
-    setCheckedSessions(prev => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-        console.log('📋 Unchecked session:', sessionId);
-      } else {
-        next.add(sessionId);
-        console.log('✅ Checked session:', sessionId);
-      }
-      return next;
-    });
-  }, []);
 
   // Memoized smart summary generation for performance
   const generateSmartSummary = useCallback((content: string): string => {
@@ -2973,8 +3171,18 @@ const OptimizedAppContent: React.FC = memo(() => {
         currentSessionId={state.currentSessionId}
         checkedSessionIds={allCheckedSessions}
         onToggleSessionCheck={handleToggleSessionCheck}
+        persistedSessionIds={state.persistedSessionIds}
       />
 
+      {/* Storage Indicator */}
+      {storageStats && storageStats.sessionCount > 0 && (
+        <div className="px-4 pb-2">
+          <StorageIndicator
+            stats={storageStats}
+            onClick={() => setIsStorageModalOpen(true)}
+          />
+        </div>
+      )}
 
       {/* Main Content Area - Single Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -3363,11 +3571,6 @@ const OptimizedAppContent: React.FC = memo(() => {
                 streamBuffer={displayData.isDisplayingSession ? '' : state.streamBuffer || ''}
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
                 onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
-                processingProgress={displayData.isDisplayingSession ? undefined : (
-                  typeof state.ui.processingProgress === 'number'
-                    ? { phase: 'processing', progress: state.ui.processingProgress, details: undefined }
-                    : state.ui.processingProgress
-                )}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
@@ -4076,7 +4279,18 @@ const OptimizedAppContent: React.FC = memo(() => {
         isOpen={isOptimizationPanelOpen}
         onClose={() => setIsOptimizationPanelOpen(false)}
       />
-      
+
+      {/* Storage Management Modal */}
+      <StorageManagementModal
+        isOpen={isStorageModalOpen}
+        onClose={() => setIsStorageModalOpen(false)}
+        sessions={state.patientSessions}
+        persistedSessionIds={state.persistedSessionIds}
+        storageStats={storageStats}
+        onDeleteSession={handleDeleteSession}
+        onDeleteAllChecked={handleDeleteAllChecked}
+        onDeleteOldSessions={handleDeleteOldSessions}
+      />
 
       {/* Toast Notifications */}
       <ToastContainer />

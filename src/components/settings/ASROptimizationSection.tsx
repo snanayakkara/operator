@@ -84,6 +84,19 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const checkServerAvailability = useCallback(async (): Promise<boolean> => {
+    try {
+      const connection = await optimizationService.testConnection();
+      return connection;
+    } catch (error) {
+      logger.debug('ASR server connection test failed', {
+        component: 'ASROptimizationSection',
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return false;
+    }
+  }, [optimizationService]);
+
   const loadInitialData = useCallback(async () => {
     try {
       // Check server availability first
@@ -124,19 +137,6 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
       setIsCheckingServer(false);
     }
   }, [optimizationService, asrLog, checkServerAvailability]);
-
-  const checkServerAvailability = useCallback(async (): Promise<boolean> => {
-    try {
-      const connection = await optimizationService.testConnection();
-      return connection;
-    } catch (error) {
-      logger.debug('ASR server connection test failed', {
-        component: 'ASROptimizationSection',
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return false;
-    }
-  }, [optimizationService]);
 
   const uploadCorrections = useCallback(async () => {
     try {

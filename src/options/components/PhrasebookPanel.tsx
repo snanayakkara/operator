@@ -52,6 +52,20 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
 
   const phrasebookService = PhrasebookService.getInstance();
 
+  const loadEntries = useCallback(async () => {
+    try {
+      setLoading(true);
+      const loadedEntries = await phrasebookService.getAll();
+      setEntries(loadedEntries);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load phrasebook entries');
+      console.error('Error loading phrasebook:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [phrasebookService]);
+
   // Load entries on mount
   useEffect(() => {
     loadEntries();
@@ -79,20 +93,6 @@ export const PhrasebookPanel: React.FC<PhrasebookPanelProps> = ({ className = ''
 
     setFilteredEntries(filtered);
   }, [entries, searchQuery, typeFilter]);
-
-  const loadEntries = useCallback(async () => {
-    try {
-      setLoading(true);
-      const loadedEntries = await phrasebookService.getAll();
-      setEntries(loadedEntries);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load phrasebook entries');
-      console.error('Error loading phrasebook:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [phrasebookService]);
 
   const handleAddEntry = async () => {
     try {

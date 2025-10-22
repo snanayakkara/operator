@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.13.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.16.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -15,6 +15,7 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 - **🔒 Privacy-First Local AI** - Complete data privacy with MLX Whisper + LM Studio (no cloud calls)
 - **🧠 14+ Specialized Medical Agents** - Interventional cardiology, diagnostics, documentation, and patient care
 - **⚡ Intelligent Audio Processing Queue** - Priority-based concurrent processing with smart resource management
+- **💾 Session Persistence** - Local storage with category-based organization and intelligent expiry management
 - **🚀 Real-time Streaming** - Live token generation with progress tracking
 - **🎯 Few-shot Learning** - DSPy/GEPA optimized prompts with clinical exemplars
 - **📝 Smart ASR Corrections** - User phrasebook with medical terminology auto-correction
@@ -173,6 +174,19 @@ curl http://localhost:8002/health
 - **Patient Profiling** - Shared clinical context across all agents
 - **Drug Interactions** - Medication conflict detection across sessions
 - **Clinical Correlations** - Pattern recognition across multiple encounters
+
+#### Session Persistence & Organization
+- **Local Storage** - Sessions automatically persist to `chrome.storage.local` when completed
+- **Smart Expiry** - 7-day retention for unchecked sessions, 24-hour for checked sessions
+- **Category-Based Organization** - Visual color coding by agent type:
+  - **Letters** (Blue) - Quick Letter, Consultation, Patient Education
+  - **Clinical Data** (Emerald) - Background, Investigation Summary, Medication, Bloods, Imaging
+  - **Procedures** (Purple) - TAVI, PCI, mTEER, RHC, PFO, procedural reports
+  - **AI Review** (Amber) - AI Medical Review, Batch Review, Australian Review
+- **Storage Management** - Color-coded usage indicator with bulk delete operations
+- **Hard Drive Icon** - Visual indicator for locally-stored sessions
+- **Background Cleanup** - Hourly auto-deletion of expired sessions
+- **Auto-Pruning** - Intelligent quota management at 90% storage usage
 
 ### Keyboard Shortcuts
 - `Cmd+Shift+R` (Mac) / `Ctrl+Shift+R` (Win): Toggle recording

@@ -9,6 +9,56 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.16.0] - 2025-10-22
+
+### Added
+- **Session Persistence System** - Local storage persistence for sessions with intelligent expiry management
+  - Sessions automatically persist to `chrome.storage.local` when completed
+  - Smart expiry: 7 days for unchecked sessions, 24 hours for checked sessions
+  - Hourly background cleanup removes expired sessions automatically
+  - Hard drive icon indicates which sessions are stored locally
+  - Storage usage indicator with color-coded alerts (green <50%, blue 50-80%, amber 80-90%, red >90%)
+  - Storage management modal with bulk delete operations (Delete All Checked, Delete >7 days, Delete >3 days)
+  - Auto-pruning when storage reaches 90% quota
+  - Sessions persist across browser restarts and extension reloads
+
+- **Category-Based Session Organization** - Visual categorization of sessions by agent type
+  - 4 distinct categories with unique color schemes:
+    - **Letters** (Blue): Quick Letter, Consultation, Patient Education
+    - **Clinical Data** (Emerald): Background, Investigation Summary, Medication, Bloods, Imaging
+    - **Procedures** (Purple): TAVI, PCI, mTEER, RHC, PFO, and other procedural reports
+    - **AI Review** (Amber): AI Medical Review, Batch AI Review, Australian Medical Review
+  - Category icons and colored borders in session dropdown
+  - Gradient backgrounds and accent edges for quick visual identification
+
+- **New Persistence Service Infrastructure**
+  - `SessionPersistenceService`: Singleton service managing all storage operations
+  - `persistence.types.ts`: Comprehensive type definitions for persistence layer
+  - `agentCategories.ts`: Category definitions with color schemes and agent mappings
+  - `StorageIndicator` component: Compact clickable storage usage display
+  - `StorageManagementModal` component: Full storage management interface with session list and bulk actions
+
+### Improved
+- **Session State Management** - Enhanced state architecture for persistence
+  - Added `persistedSessionIds` to global app state
+  - Added `storageMetadata` tracking for real-time usage statistics
+  - New action creators: `setPersistedSessionIds`, `addPersistedSessionId`, `removePersistedSessionId`, `setStorageMetadata`
+  - Auto-save on session completion with proper error handling
+
+### Fixed
+- **TypeScript Type Safety** - Resolved all TypeScript errors
+  - Fixed `ToastService` static method calls (7 instances) to use `getInstance()`
+  - Removed duplicate `handleToggleSessionCheck` declaration
+  - Fixed await expression in `onEnd` callback by making it async
+  - Zero TypeScript errors in production build
+
+### Technical Details
+- Compression strategy: Stores transcriptions and results, excludes audio blobs to save space
+- Storage quota: 5MB limit with intelligent pruning
+- Persistence metadata: Tracks `persistedAt`, `lastAccessedAt`, `markedCompleteAt` timestamps
+- Background cleanup runs every 60 minutes
+- Warning thresholds: 80% (amber), 90% (red)
+
 ## [3.15.2] - 2025-10-22
 
 ### Fixed

@@ -44,6 +44,7 @@ export interface SidebarHeaderProps {
   currentSessionId?: string | null;
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked)
   onToggleSessionCheck?: (sessionId: string) => void; // Toggle session check state
+  persistedSessionIds?: Set<string>; // IDs of sessions stored in local storage
 
   // Actions (none currently needed - settings opens extension options page)
 }
@@ -63,7 +64,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   selectedSessionId,
   currentSessionId,
   checkedSessionIds,
-  onToggleSessionCheck
+  onToggleSessionCheck,
+  persistedSessionIds
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
@@ -210,6 +212,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           activeRecordingSessionId={currentSessionId}
           checkedSessionIds={checkedSessionIds}
           onToggleSessionCheck={onToggleSessionCheck}
+          persistedSessionIds={persistedSessionIds}
         />
       )}
     </header>
