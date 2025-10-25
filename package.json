@@ -1,6 +1,6 @@
 {
   "name": "operator",
-  "version": "3.17.0",
+  "version": "3.18.0",
   "description": "Operator - Advanced medical AI assistant Chrome extension with specialized agents and EMR integration",
   "type": "module",
   "scripts": {
@@ -43,6 +43,7 @@
     "@vitejs/plugin-react-swc": "^4.0.1",
     "@xenova/transformers": "^2.10.0",
     "framer-motion": "^12.23.12",
+    "html2canvas": "^1.4.1",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.300.0",
     "react": "^18.3.1",

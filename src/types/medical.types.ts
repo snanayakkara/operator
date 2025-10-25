@@ -973,6 +973,96 @@ export interface RightHeartCathReport extends MedicalReport {
   cardiacOutput: CardiacOutput;
   exerciseHaemodynamics: ExerciseHaemodynamics | null;
   complications: RHCComplication[];
+  calculations?: CalculatedHaemodynamics; // Auto-calculated derived values
+  patientData?: RHCPatientData; // Patient anthropometrics and vitals
+}
+
+/**
+ * Patient anthropometric and vital sign data for RHC calculations
+ */
+export interface RHCPatientData {
+  height?: number; // cm
+  weight?: number; // kg
+  bsa?: number; // m² (calculated)
+  bmi?: number; // kg/m² (calculated)
+  heartRate?: number; // bpm
+  systolicBP?: number; // mmHg
+  diastolicBP?: number; // mmHg
+  meanArterialPressure?: number; // mmHg (calculated)
+  // Blood gas values
+  sao2?: number; // Arterial O₂ saturation (%)
+  svo2?: number; // Mixed venous O₂ saturation (%)
+  pao2?: number; // Arterial PO₂ (mmHg)
+  haemoglobin?: number; // g/L
+  // Volume data (for elastance calculations)
+  lvesv?: number; // LV end-systolic volume (mL)
+  lvesp?: number; // LV end-systolic pressure (mmHg)
+  raesv?: number; // RA end-systolic volume (mL)
+  rapSystolic?: number; // RA systolic pressure (mmHg)
+  rapZero?: number; // RA pressure at zero volume (mmHg)
+}
+
+/**
+ * Comprehensive calculated haemodynamic values
+ * All calculations follow Australian/ESC 2022 guidelines and AHA 2021 standards
+ */
+export interface CalculatedHaemodynamics {
+  // ========== TIER 1: ESSENTIAL CALCULATIONS ==========
+  // Basic derived values
+  bsa?: number; // Body surface area (m²)
+  bmi?: number; // Body mass index (kg/m²)
+  map?: number; // Mean arterial pressure (mmHg)
+  strokeVolume?: number; // Stroke volume (mL)
+  cardiacIndex?: number; // Cardiac index (L/min/m²)
+  estimatedVO2?: number; // Estimated oxygen consumption (mL/min)
+
+  // Pulmonary haemodynamics
+  transpulmonaryGradient?: number; // TPG (mmHg)
+  diastolicPressureGradient?: number; // DPG (mmHg)
+  pulmonaryVascularResistance?: number; // PVR (Wood units)
+  pulmonaryVascularResistanceIndex?: number; // PVRI (Wood units·m²)
+
+  // Systemic haemodynamics
+  systemicVascularResistance?: number; // SVR (Wood units)
+  systemicVascularResistanceIndex?: number; // SVRI (Wood units·m²)
+
+  // ========== TIER 2: HIGH-VALUE CALCULATIONS ==========
+  // Fick method
+  fickCO?: number; // Fick cardiac output (L/min)
+  fickCI?: number; // Fick cardiac index (L/min/m²)
+
+  // Advanced metrics (AHA 2021)
+  cardiacPowerOutput?: number; // CPO (Watts)
+  cardiacPowerIndex?: number; // CPI (W/m²)
+  rvswi?: number; // RV stroke work index (mmHg·mL/m²)
+  lvswi?: number; // LV stroke work index (mmHg·mL/m²)
+  papi?: number; // Pulmonary artery pulsatility index
+  rapPawpRatio?: number; // RAP:PCWP ratio
+  strokeVolumeIndex?: number; // SVI (mL/m²)
+  rvCardiacPowerOutput?: number; // RV CPO (Watts)
+
+  // ========== TIER 3: ADVANCED CALCULATIONS ==========
+  // Oxygen transport
+  oxygenDelivery?: number; // DO₂ (mL/min)
+  oxygenExtractionRatio?: number; // O₂ER (%)
+
+  // Pulmonary vascular mechanics
+  pulmonaryArterialCompliance?: number; // PAC (mL/mmHg)
+  pulmonaryRCTime?: number; // RC time (seconds)
+  effectivePulmonaryEa?: number; // Effective pulmonary elastance (mmHg/mL)
+
+  // Ventricular elastance (requires PV loop data)
+  lvEes?: number; // LV end-systolic elastance (mmHg/mL)
+  raEes?: number; // RA end-systolic elastance (mmHg/mL)
+
+  // ========== CLINICAL ASSESSMENT ==========
+  clinicalAssessment?: string; // Narrative assessment
+  riskStratification?: 'Low' | 'Intermediate' | 'High'; // Risk level
+  phClassification?: { // Pulmonary hypertension classification
+    hasPH: boolean;
+    type?: 'Pre-capillary' | 'Post-capillary (Isolated)' | 'Post-capillary (Combined)';
+    severity?: 'Mild' | 'Moderate' | 'Severe';
+  };
 }
 
 export interface RightHeartCathData {

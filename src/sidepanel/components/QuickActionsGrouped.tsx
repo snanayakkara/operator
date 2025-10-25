@@ -26,7 +26,6 @@ import {
 import { QuickActionItem } from './QuickActionItem';
 import { RecordPanel } from './RecordPanel';
 import { AppointmentMatrixBuilder } from './AppointmentMatrixBuilder';
-import { APPOINTMENT_PRESETS, type AppointmentPreset } from '@/config/appointmentPresets';
 import { CORE_ACTIONS, SECONDARY_ACTIONS } from '@/config/quickActionsConfig';
 import type { AgentType } from '@/types/medical.types';
 import {
@@ -61,8 +60,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   onTypeClick
 }) => {
   const [processingAction, setProcessingAction] = useState<string | null>(null);
-  const [showPresets, setShowPresets] = useState(false);
-  const [showMatrixBuilder, setShowMatrixBuilder] = useState(false);
+  const [showAppointmentBuilder, setShowAppointmentBuilder] = useState(false);
   const [showInvestigationOptions, setShowInvestigationOptions] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // Load collapsed state from localStorage, default to true (collapsed)
@@ -82,9 +80,9 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   const BatchAiIcon = batchAiAction?.icon;
 
   const handleAction = async (actionId: string, data?: unknown) => {
-    // Show preset selection for appointment wrap-up
+    // Show appointment builder for appointment wrap-up
     if (actionId === 'appointment-wrap-up' && !data) {
-      setShowPresets(true);
+      setShowAppointmentBuilder(true);
       return;
     }
 
@@ -147,13 +145,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
     await handleAction(actionId, { type: 'manual' });
   };
 
-  const handlePresetSelect = async (preset: AppointmentPreset) => {
-    await handleAction('appointment-wrap-up', { preset });
-  };
-
   const handleBackToActions = () => {
-    setShowPresets(false);
-    setShowMatrixBuilder(false);
+    setShowAppointmentBuilder(false);
     setShowInvestigationOptions(false);
   };
 
@@ -235,7 +228,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   }
 
   // Appointment Wrap-Up - FULL PANEL TAKEOVER
-  if (showPresets) {
+  if (showAppointmentBuilder) {
     return (
       <div className="bg-white rounded-2xl overflow-hidden" style={{ zIndex: 20 }}>
         {/* Header */}
@@ -251,99 +244,31 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             <Calendar className="w-5 h-5 text-blue-600" />
             <div className="text-left flex-1">
               <h3 className="text-gray-900 font-medium text-sm">Appointment Wrap-up</h3>
-              <p className="text-gray-600 text-xs">Quick presets or custom builder</p>
+              <p className="text-gray-600 text-xs">Build your appointment</p>
             </div>
           </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="p-4 bg-gray-50 border-b border-gray-200">
-          <div className="flex rounded-lg bg-white border border-gray-200 p-1">
-            <button
-              onClick={() => setShowMatrixBuilder(false)}
-              className={`
-                flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all
-                ${!showMatrixBuilder
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-                }
-              `}
-            >
-              Quick Presets
-            </button>
-            <button
-              onClick={() => setShowMatrixBuilder(true)}
-              className={`
-                flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all flex items-center justify-center space-x-1
-                ${showMatrixBuilder
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-                }
-              `}
-            >
-              <Settings className="w-3 h-3" />
-              <span>Custom Builder</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
+        {/* Content - Matrix Builder Only */}
         <div className="p-4">
-          {showMatrixBuilder ? (
-            // Matrix Builder Interface
-            <AppointmentMatrixBuilder
-              onGenerate={async (preset) => {
-                await handleAction('appointment-wrap-up', {
-                  preset: {
-                    id: 'matrix-generated',
-                    displayName: preset.displayName,
-                    itemCode: preset.itemCode,
-                    notes: preset.notes
-                  }
-                });
-              }}
-            />
-          ) : (
-            // Quick Presets Grid
-            <div className="grid grid-cols-1 gap-3">
-              {APPOINTMENT_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  onClick={() => handlePresetSelect(preset)}
-                  disabled={processingAction === 'appointment-wrap-up'}
-                  className={`
-                    bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all rounded-lg p-4 text-left
-                    ${processingAction === 'appointment-wrap-up' ? 'opacity-50 cursor-not-allowed' : ''}
-                  `}
-                >
-                  <div className="flex items-start space-x-3">
-                    <Calendar className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-gray-900 text-sm font-semibold mb-1">
-                        {preset.displayName}
-                      </div>
-                      <div className="text-gray-600 text-xs mb-2">
-                        <span className="font-medium">Item Code:</span> {preset.itemCode}
-                      </div>
-                      <div className="text-gray-600 text-xs leading-tight">
-                        <span className="font-medium">Notes:</span> "{preset.notes}"
-                      </div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+          <AppointmentMatrixBuilder
+            onGenerate={async (preset) => {
+              await handleAction('appointment-wrap-up', {
+                preset: {
+                  id: 'matrix-generated',
+                  displayName: preset.displayName,
+                  itemCode: preset.itemCode,
+                  notes: preset.notes
+                }
+              });
+            }}
+          />
         </div>
 
         {/* Footer */}
         <div className="p-4 bg-gray-50">
           <p className="text-gray-600 text-xs">
-            💡 <strong>Tip:</strong> {showMatrixBuilder
-              ? 'Build any appointment combination by selecting options in each category'
-              : 'Choose a quick preset or switch to Custom Builder for more options'
-            }
+            💡 <strong>Tip:</strong> Use keyboard shortcuts (1-4) to quickly navigate and cycle through options
           </p>
         </div>
       </div>

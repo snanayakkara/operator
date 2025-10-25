@@ -30,7 +30,6 @@ import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { SparsityStepperModal } from './components/SparsityStepperModal';
 import { LipidProfileImporter } from './components/LipidProfileImporter';
 import { TTETrendImporter } from './components/TTETrendImporter';
-import { StorageIndicator } from './components/StorageIndicator';
 import { StorageManagementModal } from './components/StorageManagementModal';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
@@ -3178,17 +3177,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         checkedSessionIds={allCheckedSessions}
         onToggleSessionCheck={handleToggleSessionCheck}
         persistedSessionIds={state.persistedSessionIds}
+        storageStats={storageStats}
+        onStorageClick={() => setIsStorageModalOpen(true)}
       />
-
-      {/* Storage Indicator */}
-      {storageStats && storageStats.sessionCount > 0 && (
-        <div className="px-4 pb-2">
-          <StorageIndicator
-            stats={storageStats}
-            onClick={() => setIsStorageModalOpen(true)}
-          />
-        </div>
-      )}
 
       {/* Main Content Area - Single Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">

@@ -17,6 +17,7 @@ interface IndividualFindingCardProps {
   isCompleted: boolean;
   onToggleComplete: (index: number) => void;
   className?: string;
+  useBrightDesign?: boolean; // Toggle between subtle and bright design
 }
 
 export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
@@ -24,7 +25,8 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
   index,
   isCompleted,
   onToggleComplete,
-  className = ''
+  className = '',
+  useBrightDesign = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -43,17 +45,35 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
 
   const getUrgencyColor = (urgency: string) => {
     if (isCompleted) {
-      return 'border-gray-200 bg-gray-50 opacity-60';
+      return useBrightDesign
+        ? 'border-white bg-gradient-bright opacity-60'
+        : 'border-gray-200 bg-gray-50 opacity-60';
     }
-    switch (urgency) {
-      case 'Immediate':
-        return 'border-red-200 bg-red-50';
-      case 'Soon':
-        return 'border-orange-200 bg-orange-50';
-      case 'Routine':
-        return 'border-green-200 bg-green-50';
-      default:
-        return 'border-gray-200 bg-gray-50';
+
+    if (useBrightDesign) {
+      // Bright design: white card with colored border
+      switch (urgency) {
+        case 'Immediate':
+          return 'border-rose-300 bg-gradient-bright-rose';
+        case 'Soon':
+          return 'border-amber-300 bg-gradient-bright-amber';
+        case 'Routine':
+          return 'border-emerald-300 bg-gradient-bright-emerald';
+        default:
+          return 'border-white bg-gradient-bright';
+      }
+    } else {
+      // Subtle design (original)
+      switch (urgency) {
+        case 'Immediate':
+          return 'border-red-200 bg-red-50';
+        case 'Soon':
+          return 'border-orange-200 bg-orange-50';
+        case 'Routine':
+          return 'border-green-200 bg-green-50';
+        default:
+          return 'border-gray-200 bg-gray-50';
+      }
     }
   };
 
@@ -77,9 +97,13 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
     onToggleComplete(index);
   };
 
+  const borderWidth = useBrightDesign ? 'border-bright' : 'border-2';
+  const borderRadius = useBrightDesign ? 'rounded-bright' : 'rounded-lg';
+  const shadow = useBrightDesign ? 'shadow-bright-card hover:shadow-bright-elevated' : '';
+
   return (
     <div
-      className={`border-2 rounded-lg transition-all duration-200 ${getUrgencyColor(finding.urgency)} ${className} ${isCompleted ? 'transform scale-[0.98]' : ''}`}
+      className={`${borderWidth} ${borderRadius} ${shadow} transition-all duration-200 ${getUrgencyColor(finding.urgency)} ${className} ${isCompleted ? 'transform scale-[0.98]' : ''}`}
     >
       {/* Finding Header */}
       <div className="p-4">

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Sparkles } from 'lucide-react';
-import type { 
-  AppointmentMatrix, 
-  AppointmentComplexity, 
-  AppointmentModality, 
-  AppointmentType, 
-  FollowUpPeriod 
+import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX } from 'lucide-react';
+import type {
+  AppointmentMatrix,
+  AppointmentComplexity,
+  AppointmentModality,
+  AppointmentType,
+  FollowUpPeriod
 } from '../../config/appointmentPresets';
 import { generatePresetFromMatrix, getItemCodeFromMatrix, getNotesFromMatrix } from '../../config/appointmentPresets';
 
@@ -18,27 +18,30 @@ interface OptionButton {
   value: string;
   label: string;
   sublabel?: string;
+  icon: React.ComponentType<{ className?: string }>;
 }
 
 const COMPLEXITY_OPTIONS: OptionButton[] = [
-  { value: 'simple', label: 'Simple', sublabel: 'Standard consult' },
-  { value: 'complex', label: 'Complex', sublabel: 'Extended time' }
+  { value: 'simple', label: 'Simple', sublabel: 'Standard consult', icon: Clock },
+  { value: 'complex', label: 'Complex', sublabel: 'Extended time', icon: Zap }
 ];
 
 const MODALITY_OPTIONS: OptionButton[] = [
-  { value: 'f2f', label: 'Face to Face', sublabel: 'In-person' },
-  { value: 'telehealth', label: 'Telehealth', sublabel: 'Phone/video' }
+  { value: 'f2f', label: 'Face to Face', sublabel: 'In-person', icon: User },
+  { value: 'telehealth', label: 'Telehealth', sublabel: 'Video call', icon: Video },
+  { value: 'phone', label: 'Phone Call', sublabel: 'Voice only', icon: Phone }
 ];
 
 const TYPE_OPTIONS: OptionButton[] = [
-  { value: 'new', label: 'New', sublabel: 'First visit' },
-  { value: 'review', label: 'Review', sublabel: 'Follow-up visit' }
+  { value: 'new', label: 'New', sublabel: 'First visit', icon: UserPlus },
+  { value: 'review', label: 'Review', sublabel: 'Follow-up visit', icon: RotateCcw }
 ];
 
 const FOLLOWUP_OPTIONS: OptionButton[] = [
-  { value: '3mth', label: '3 Months', sublabel: 'Standard' },
-  { value: '12mth', label: '12 Months', sublabel: 'Extended' },
-  { value: 'none', label: 'No Follow-up', sublabel: 'Discharged' }
+  { value: '6wk', label: '6 Weeks', sublabel: 'Early review', icon: Calendar },
+  { value: '3mth', label: '3 Months', sublabel: 'Standard', icon: Calendar },
+  { value: '12mth', label: '12 Months', sublabel: 'Extended', icon: Calendar },
+  { value: 'none', label: 'No Follow-up', sublabel: 'Discharged', icon: CalendarX }
 ];
 
 export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> = ({ onGenerate }) => {
@@ -55,6 +58,53 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
   ) => {
     setMatrix(prev => ({ ...prev, [key]: value }));
   };
+
+  // Keyboard navigation - cycle through options
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only handle numeric keys 1-4
+      if (!['1', '2', '3', '4'].includes(event.key)) {
+        return;
+      }
+
+      // Prevent default behavior
+      event.preventDefault();
+
+      switch (event.key) {
+        case '1': {
+          // Cycle complexity: simple <-> complex
+          const newComplexity = matrix.complexity === 'simple' ? 'complex' : 'simple';
+          updateMatrix('complexity', newComplexity);
+          break;
+        }
+        case '2': {
+          // Cycle modality: f2f -> telehealth -> phone -> f2f
+          const modalityOrder: AppointmentModality[] = ['f2f', 'telehealth', 'phone'];
+          const currentIndex = modalityOrder.indexOf(matrix.modality);
+          const nextIndex = (currentIndex + 1) % modalityOrder.length;
+          updateMatrix('modality', modalityOrder[nextIndex]);
+          break;
+        }
+        case '3': {
+          // Cycle type: new <-> review
+          const newType = matrix.type === 'new' ? 'review' : 'new';
+          updateMatrix('type', newType);
+          break;
+        }
+        case '4': {
+          // Cycle follow-up: 6wk -> 3mth -> 12mth -> none -> 6wk
+          const followUpOrder: FollowUpPeriod[] = ['6wk', '3mth', '12mth', 'none'];
+          const currentIndex = followUpOrder.indexOf(matrix.followUp);
+          const nextIndex = (currentIndex + 1) % followUpOrder.length;
+          updateMatrix('followUp', followUpOrder[nextIndex]);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [matrix]);
 
   const handleGenerate = () => {
     const preset = generatePresetFromMatrix(matrix);
@@ -74,7 +124,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
       {/* Step 1: Complexity */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-2">
-          1. Complexity
+          1. Complexity <span className="text-gray-500 font-normal">(Press 1)</span>
         </label>
         <div className="grid grid-cols-2 gap-2">
           {COMPLEXITY_OPTIONS.map((option) => (
@@ -82,22 +132,21 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               key={option.value}
               onClick={() => updateMatrix('complexity', option.value as AppointmentComplexity)}
               className={`
-                relative p-3 rounded-lg border-2 text-left transition-all
+                relative p-3 rounded-lg border-2 text-center transition-all
                 ${matrix.complexity === option.value
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{option.sublabel}</div>
-                </div>
-                {matrix.complexity === option.value && (
-                  <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                )}
+              <div className="flex flex-col items-center space-y-2">
+                <option.icon className={`w-5 h-5 flex-shrink-0 ${matrix.complexity === option.value ? 'text-blue-600' : 'text-gray-400'}`} />
+                <div className="text-sm font-medium text-gray-900">{option.label}</div>
+                <div className="text-xs text-gray-500">{option.sublabel}</div>
               </div>
+              {matrix.complexity === option.value && (
+                <Check className="w-4 h-4 text-blue-600 absolute top-2 right-2" />
+              )}
             </button>
           ))}
         </div>
@@ -106,30 +155,29 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
       {/* Step 2: Modality */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-2">
-          2. Modality
+          2. Modality <span className="text-gray-500 font-normal">(Press 2)</span>
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {MODALITY_OPTIONS.map((option) => (
             <button
               key={option.value}
               onClick={() => updateMatrix('modality', option.value as AppointmentModality)}
               className={`
-                relative p-3 rounded-lg border-2 text-left transition-all
+                relative p-3 rounded-lg border-2 text-center transition-all
                 ${matrix.modality === option.value
                   ? 'border-emerald-500 bg-emerald-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{option.sublabel}</div>
-                </div>
-                {matrix.modality === option.value && (
-                  <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                )}
+              <div className="flex flex-col items-center space-y-2">
+                <option.icon className={`w-5 h-5 flex-shrink-0 ${matrix.modality === option.value ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <div className="text-sm font-medium text-gray-900">{option.label}</div>
+                <div className="text-xs text-gray-500">{option.sublabel}</div>
               </div>
+              {matrix.modality === option.value && (
+                <Check className="w-4 h-4 text-emerald-600 absolute top-2 right-2" />
+              )}
             </button>
           ))}
         </div>
@@ -138,7 +186,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
       {/* Step 3: Type */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-2">
-          3. Appointment Type
+          3. Appointment Type <span className="text-gray-500 font-normal">(Press 3)</span>
         </label>
         <div className="grid grid-cols-2 gap-2">
           {TYPE_OPTIONS.map((option) => (
@@ -146,22 +194,21 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               key={option.value}
               onClick={() => updateMatrix('type', option.value as AppointmentType)}
               className={`
-                relative p-3 rounded-lg border-2 text-left transition-all
+                relative p-3 rounded-lg border-2 text-center transition-all
                 ${matrix.type === option.value
                   ? 'border-purple-500 bg-purple-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{option.sublabel}</div>
-                </div>
-                {matrix.type === option.value && (
-                  <Check className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                )}
+              <div className="flex flex-col items-center space-y-2">
+                <option.icon className={`w-5 h-5 flex-shrink-0 ${matrix.type === option.value ? 'text-purple-600' : 'text-gray-400'}`} />
+                <div className="text-sm font-medium text-gray-900">{option.label}</div>
+                <div className="text-xs text-gray-500">{option.sublabel}</div>
               </div>
+              {matrix.type === option.value && (
+                <Check className="w-4 h-4 text-purple-600 absolute top-2 right-2" />
+              )}
             </button>
           ))}
         </div>
@@ -170,7 +217,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
       {/* Step 4: Follow-up */}
       <div>
         <label className="block text-xs font-medium text-gray-700 mb-2">
-          4. Follow-up Period
+          4. Follow-up Period <span className="text-gray-500 font-normal">(Press 4)</span>
         </label>
         <div className="grid grid-cols-3 gap-2">
           {FOLLOWUP_OPTIONS.map((option) => (
@@ -178,20 +225,21 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               key={option.value}
               onClick={() => updateMatrix('followUp', option.value as FollowUpPeriod)}
               className={`
-                relative p-3 rounded-lg border-2 text-left transition-all
+                relative p-3 rounded-lg border-2 text-center transition-all
                 ${matrix.followUp === option.value
                   ? 'border-orange-500 bg-orange-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex flex-col">
+              <div className="flex flex-col items-center space-y-2">
+                <option.icon className={`w-5 h-5 flex-shrink-0 ${matrix.followUp === option.value ? 'text-orange-600' : 'text-gray-400'}`} />
                 <div className="text-sm font-medium text-gray-900">{option.label}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{option.sublabel}</div>
-                {matrix.followUp === option.value && (
-                  <Check className="w-3 h-3 text-orange-600 mt-1" />
-                )}
+                <div className="text-xs text-gray-500">{option.sublabel}</div>
               </div>
+              {matrix.followUp === option.value && (
+                <Check className="w-4 h-4 text-orange-600 absolute top-2 right-2" />
+              )}
             </button>
           ))}
         </div>

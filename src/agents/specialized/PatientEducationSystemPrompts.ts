@@ -256,6 +256,40 @@ export const PATIENT_EDUCATION_CONFIG: PatientEducationConfig = {
       keywords: ['alcohol', 'drinking', 'moderation', 'limits', 'standard drinks', 'cardiac']
     },
     {
+      id: 'hydration',
+      label: 'Hydration',
+      description: 'Daily fluid goals and timing to support cardiovascular & cognitive health',
+      tooltip: 'Aim ~2.5 L/day fluids for many adults, front-load ~1.5 L before midday; adjust for fluid restriction (HF/CKD)',
+      keywords: ['hydration', 'water', 'fluids', 'dehydration', 'urine colour', 'nocturia', 'WaterMinder'],
+      subFocusPoints: [
+        {
+          id: 'front_load_morning',
+          label: 'Front-load fluids in the morning',
+          description: 'Target ~1.5 L in the first half of the day to avoid late-evening catch-up'
+        },
+        {
+          id: 'urine_colour_check',
+          label: 'Urine colour self-check',
+          description: 'Use a urine colour chart – aim for pale straw most of the day'
+        },
+        {
+          id: 'hydration_for_activity',
+          label: 'Hydration for activity/heat',
+          description: 'Plan extra fluids for exercise or hot weather'
+        },
+        {
+          id: 'track_intake',
+          label: 'Track intake (optional)',
+          description: 'Use a measured bottle or an app (e.g., WaterMinder) to tally daily totals'
+        },
+        {
+          id: 'clinical_caveats',
+          label: 'Clinical caveats',
+          description: 'If on fluid restriction or diuretics, confirm targets with your care team'
+        }
+      ]
+    },
+    {
       id: 'stress_management',
       label: 'Stress Management',
       description: 'Stress reduction techniques, mental health, relaxation methods',
@@ -638,6 +672,31 @@ There is **no completely safe level** of alcohol for health. The **safest choice
 • Choose lower‑alcohol options where possible
 
 If alcohol is a challenge or you’re unsure what’s right for your condition, speak with your GP. National supports include **DirectLine** (Victoria) and local alcohol and other drug services.`,
+
+    hydration: `## Hydration (simple daily target)
+
+Aim for **~2.5 L of fluids per day**, with roughly **1.5 L in the first half of the day**. This suits many healthy adults; adjust for body size, heat, and activity.
+
+**Why it matters (plain English):**
+• **Heart:** Low fluid levels reduce blood volume, making the heart work harder (faster pulse, lower stroke volume). Keeping well hydrated supports smoother circulation and is linked with better long‑term heart markers.  
+• **Brain:** Even mild dehydration can drag on attention, memory and mood; consistent fluids help you think and feel better.
+
+**How to hit it:**
+• **Front‑load:** Get **~1.5 L before midday** (e.g., 500 mL at breakfast, 500 mL mid‑morning, 500 mL at lunch).  
+• **Carry a bottle:** Keep a 1 L bottle visible; finish it before lunch and refill.  
+• **Track (optional):** Use an app such as **WaterMinder** or phone reminders.  
+• **Check colour:** Aim for **pale straw** urine; dark yellow often means you need more.  
+• **Evening:** If night‑time trips are an issue, taper fluids 2–3 h before bed.
+
+**Caveats:**
+• If you have **heart failure**, **kidney disease**, or have been told to **limit fluids**, follow your team’s personalised limit.
+
+**Habit supports:**
+• **If/When‑Then:** When I put the kettle on in the morning, then I’ll drink a full glass of water.  
+• **Friction‑cut:** Pre‑fill two 500 mL bottles the night before and leave them where you’ll see them.  
+• **Streak:** Hit 1.5 L by midday on **5 days in a row**, then keep the streak alive.
+
+**Because:** Smoother circulation and a clearer head make daily life easier — hydration is a low‑effort win.`,
 
     stress_management: `## Managing Stress for Heart Health
 

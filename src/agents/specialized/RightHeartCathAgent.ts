@@ -1,8 +1,8 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
-import type { 
-  MedicalContext, 
-  ChatMessage, 
-  ReportSection, 
+import type {
+  MedicalContext,
+  ChatMessage,
+  ReportSection,
   RightHeartCathReport,
   RightHeartCathData,
   HaemodynamicPressures,
@@ -10,11 +10,14 @@ import type {
   ExerciseHaemodynamics,
   RHCComplication,
   VenousAccess,
-  RHCIndication
+  RHCIndication,
+  RHCPatientData,
+  CalculatedHaemodynamics
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { RightHeartCathSystemPrompts, RightHeartCathMedicalPatterns, RightHeartCathValidationRules } from './RightHeartCathSystemPrompts';
+import * as RHCCalc from '@/services/RHCCalculationService';
 
 /**
  * Specialized agent for processing Right Heart Catheterisation (RHC) procedures.
@@ -111,21 +114,31 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // Correct RHC-specific terminology with Australian spelling
       const correctedInput = this.correctRHCTerminology(input);
-      
+
       // Extract RHC data from input
       const rhcData = this.extractRHCData(correctedInput);
-      
+
       // Analyze haemodynamic pressures
       const haemodynamicPressures = this.extractHaemodynamicPressures(correctedInput);
-      
+
       // Assess cardiac output
       const cardiacOutput = this.extractCardiacOutput(correctedInput);
-      
+
+      // Extract patient anthropometric data and vitals
+      const patientData = this.extractPatientData(correctedInput);
+
       // Extract exercise data if present
       const exerciseHaemodynamics = this.extractExerciseHaemodynamics(correctedInput);
-      
+
       // Identify complications
       const complications = this.identifyComplications(correctedInput);
+
+      // Calculate all derived haemodynamic values
+      const calculations = this.calculateDerivedHaemodynamics(
+        haemodynamicPressures,
+        cardiacOutput,
+        patientData
+      );
 
       // Generate structured report content
       const reportContent = await this.generateStructuredReport(
@@ -149,7 +162,9 @@ export class RightHeartCathAgent extends MedicalAgent {
         haemodynamicPressures,
         cardiacOutput,
         exerciseHaemodynamics,
-        complications
+        complications,
+        calculations,
+        patientData
       }, null, 2);
 
       // Combine report content with JSON data for backward compatibility
@@ -163,7 +178,9 @@ export class RightHeartCathAgent extends MedicalAgent {
         haemodynamicPressures,
         cardiacOutput,
         exerciseHaemodynamics,
-        complications
+        complications,
+        calculations,
+        patientData
       };
 
       // Store procedure in memory
@@ -542,6 +559,295 @@ Note: This report was generated with limited AI processing. Clinical review is r
       return managementMatch ? managementMatch[0] : undefined;
     }
     return undefined;
+  }
+
+  /**
+   * Extract patient anthropometric and vital sign data from dictation
+   */
+  private extractPatientData(input: string): RHCPatientData {
+    const patientData: RHCPatientData = {};
+
+    // Extract height (cm)
+    const heightMatch = input.match(/height[:\s]+(\d+)\s*(?:cm|centimeters?)?/i);
+    if (heightMatch) {
+      patientData.height = parseFloat(heightMatch[1]);
+    }
+
+    // Extract weight (kg)
+    const weightMatch = input.match(/weight[:\s]+(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)?/i);
+    if (weightMatch) {
+      patientData.weight = parseFloat(weightMatch[1]);
+    }
+
+    // Extract heart rate (bpm)
+    const hrMatch = input.match(/heart\s+rate[:\s]+(\d+)|HR[:\s]+(\d+)/i);
+    if (hrMatch) {
+      patientData.heartRate = parseFloat(hrMatch[1] || hrMatch[2]);
+    }
+
+    // Extract blood pressure
+    const bpMatch = input.match(/blood\s+pressure[:\s]+(\d+)\/(\d+)|BP[:\s]+(\d+)\/(\d+)/i);
+    if (bpMatch) {
+      patientData.systolicBP = parseFloat(bpMatch[1] || bpMatch[3]);
+      patientData.diastolicBP = parseFloat(bpMatch[2] || bpMatch[4]);
+    }
+
+    // Extract arterial oxygen saturation
+    const sao2Match = input.match(/arterial\s+(?:oxygen\s+)?saturation[:\s]+(\d+)|SaO2[:\s]+(\d+)|arterial\s+sat[:\s]+(\d+)/i);
+    if (sao2Match) {
+      patientData.sao2 = parseFloat(sao2Match[1] || sao2Match[2] || sao2Match[3]);
+    }
+
+    // Extract mixed venous oxygen saturation
+    const svo2Match = input.match(/mixed\s+venous\s+(?:oxygen\s+)?saturation[:\s]+(\d+)|SvO2[:\s]+(\d+)|mixed\s+venous\s+sat[:\s]+(\d+)/i);
+    if (svo2Match) {
+      patientData.svo2 = parseFloat(svo2Match[1] || svo2Match[2] || svo2Match[3]);
+    }
+
+    // Extract PaO2
+    const pao2Match = input.match(/PaO2[:\s]+(\d+)|arterial\s+(?:partial\s+)?pressure\s+(?:of\s+)?oxygen[:\s]+(\d+)/i);
+    if (pao2Match) {
+      patientData.pao2 = parseFloat(pao2Match[1] || pao2Match[2]);
+    }
+
+    // Extract haemoglobin (g/L) - already extracted in laboratory values, but also check here
+    const hbMatch = input.match(/h(?:ae|e)moglobin[:\s]+(\d+)|Hb[:\s]+(\d+)/i);
+    if (hbMatch) {
+      patientData.haemoglobin = parseFloat(hbMatch[1] || hbMatch[2]);
+    }
+
+    // Calculate BSA if height and weight available
+    if (patientData.height && patientData.weight) {
+      patientData.bsa = RHCCalc.calculateBSA(patientData.height, patientData.weight);
+      patientData.bmi = RHCCalc.calculateBMI(patientData.height, patientData.weight);
+    }
+
+    // Calculate MAP if BP available
+    if (patientData.systolicBP && patientData.diastolicBP) {
+      patientData.meanArterialPressure = RHCCalc.calculateMAP(patientData.systolicBP, patientData.diastolicBP);
+    }
+
+    return patientData;
+  }
+
+  /**
+   * Calculate all derived haemodynamic values using the RHC Calculation Service
+   * Implements all three tiers of calculations following Australian/ESC 2022 guidelines
+   */
+  private calculateDerivedHaemodynamics(
+    pressures: HaemodynamicPressures,
+    cardiacOutput: CardiacOutput,
+    patientData: RHCPatientData
+  ): CalculatedHaemodynamics {
+    const calculations: CalculatedHaemodynamics = {};
+
+    // Convert string values to numbers for calculations
+    const parseValue = (val: string | null | undefined): number | undefined => {
+      if (!val) return undefined;
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? undefined : parsed;
+    };
+
+    // Extract numeric values from pressure data
+    const rapMean = parseValue(pressures.ra.mean);
+    const rvSys = parseValue(pressures.rv.systolic);
+    const rvDia = parseValue(pressures.rv.diastolic);
+    const paSys = parseValue(pressures.pa.systolic);
+    const paDia = parseValue(pressures.pa.diastolic);
+    const paMean = parseValue(pressures.pa.mean);
+    const pcwpMean = parseValue(pressures.pcwp.mean);
+
+    // Extract cardiac output values
+    const thermodilutionCO = parseValue(cardiacOutput.thermodilution.co);
+    const thermodilutionCI = parseValue(cardiacOutput.thermodilution.ci);
+    const mixedVenousO2 = parseValue(cardiacOutput.mixedVenousO2);
+
+    // ========== TIER 1: ESSENTIAL CALCULATIONS ==========
+    // Copy calculated patient data
+    if (patientData.bsa) calculations.bsa = patientData.bsa;
+    if (patientData.bmi) calculations.bmi = patientData.bmi;
+    if (patientData.meanArterialPressure) calculations.map = patientData.meanArterialPressure;
+
+    // Calculate stroke volume
+    if (thermodilutionCO && patientData.heartRate) {
+      calculations.strokeVolume = RHCCalc.calculateStrokeVolume(thermodilutionCO, patientData.heartRate);
+    }
+
+    // Calculate cardiac index
+    if (thermodilutionCO && patientData.bsa) {
+      calculations.cardiacIndex = RHCCalc.calculateCardiacIndex(thermodilutionCO, patientData.bsa);
+    }
+
+    // Estimate VO2
+    if (patientData.bsa) {
+      calculations.estimatedVO2 = RHCCalc.estimateVO2(patientData.bsa);
+    }
+
+    // Transpulmonary gradient
+    calculations.transpulmonaryGradient = RHCCalc.calculateTPG(paMean, pcwpMean);
+
+    // Diastolic pressure gradient
+    calculations.diastolicPressureGradient = RHCCalc.calculateDPG(paDia, pcwpMean);
+
+    // Pulmonary vascular resistance
+    calculations.pulmonaryVascularResistance = RHCCalc.calculatePVR(paMean, pcwpMean, thermodilutionCO);
+    if (calculations.pulmonaryVascularResistance && patientData.bsa) {
+      calculations.pulmonaryVascularResistanceIndex = RHCCalc.calculatePVRI(
+        calculations.pulmonaryVascularResistance,
+        patientData.bsa
+      );
+    }
+
+    // Systemic vascular resistance
+    if (patientData.meanArterialPressure && thermodilutionCO) {
+      calculations.systemicVascularResistance = RHCCalc.calculateSVR(
+        patientData.meanArterialPressure,
+        rapMean || 0,
+        thermodilutionCO
+      );
+      if (calculations.systemicVascularResistance && patientData.bsa) {
+        calculations.systemicVascularResistanceIndex = RHCCalc.calculateSVRI(
+          calculations.systemicVascularResistance,
+          patientData.bsa
+        );
+      }
+    }
+
+    // ========== TIER 2: HIGH-VALUE CALCULATIONS ==========
+    // Fick cardiac output
+    if (calculations.estimatedVO2 && patientData.haemoglobin && patientData.sao2 && patientData.svo2) {
+      calculations.fickCO = RHCCalc.calculateFickCO(
+        calculations.estimatedVO2,
+        patientData.haemoglobin,
+        patientData.sao2,
+        patientData.svo2
+      );
+      if (calculations.fickCO && patientData.bsa) {
+        calculations.fickCI = RHCCalc.calculateCardiacIndex(calculations.fickCO, patientData.bsa);
+      }
+    }
+
+    // Cardiac power output
+    if (patientData.meanArterialPressure && thermodilutionCO) {
+      calculations.cardiacPowerOutput = RHCCalc.calculateCPO(patientData.meanArterialPressure, thermodilutionCO);
+    }
+
+    // Cardiac power index
+    if (patientData.meanArterialPressure && calculations.cardiacIndex) {
+      calculations.cardiacPowerIndex = RHCCalc.calculateCPI(patientData.meanArterialPressure, calculations.cardiacIndex);
+    }
+
+    // Stroke volume index
+    if (calculations.cardiacIndex && patientData.heartRate) {
+      calculations.strokeVolumeIndex = RHCCalc.calculateSVI(calculations.cardiacIndex, patientData.heartRate);
+    }
+
+    // RVSWI
+    if (paMean && calculations.strokeVolumeIndex) {
+      calculations.rvswi = RHCCalc.calculateRVSWI(paMean, rapMean || 0, calculations.strokeVolumeIndex);
+    }
+
+    // LVSWI
+    if (patientData.meanArterialPressure && pcwpMean && calculations.strokeVolumeIndex) {
+      calculations.lvswi = RHCCalc.calculateLVSWI(
+        patientData.meanArterialPressure,
+        pcwpMean,
+        calculations.strokeVolumeIndex
+      );
+    }
+
+    // PAPi
+    calculations.papi = RHCCalc.calculatePAPi(paSys, paDia, rapMean);
+
+    // RAP:PCWP ratio
+    calculations.rapPawpRatio = RHCCalc.calculateRAPPCWPRatio(rapMean, pcwpMean);
+
+    // RV cardiac power output
+    if (paMean && thermodilutionCO) {
+      calculations.rvCardiacPowerOutput = RHCCalc.calculateRVCPO(paMean, thermodilutionCO);
+    }
+
+    // ========== TIER 3: ADVANCED CALCULATIONS ==========
+    // Oxygen delivery
+    if (thermodilutionCO && patientData.haemoglobin && patientData.sao2) {
+      calculations.oxygenDelivery = RHCCalc.calculateOxygenDelivery(
+        thermodilutionCO,
+        patientData.haemoglobin,
+        patientData.sao2,
+        patientData.pao2
+      );
+    }
+
+    // Oxygen extraction ratio
+    if (patientData.sao2 && patientData.svo2) {
+      calculations.oxygenExtractionRatio = RHCCalc.calculateOxygenExtractionRatio(
+        patientData.sao2,
+        patientData.svo2
+      );
+    }
+
+    // Pulmonary arterial compliance
+    if (calculations.strokeVolume && paSys && paDia) {
+      calculations.pulmonaryArterialCompliance = RHCCalc.calculatePAC(
+        calculations.strokeVolume,
+        paSys,
+        paDia
+      );
+
+      // Pulmonary RC time
+      if (calculations.pulmonaryVascularResistance && calculations.pulmonaryArterialCompliance) {
+        calculations.pulmonaryRCTime = RHCCalc.calculatePulmonaryRCTime(
+          calculations.pulmonaryVascularResistance,
+          calculations.pulmonaryArterialCompliance
+        );
+      }
+    }
+
+    // Effective pulmonary Ea
+    if (paMean && pcwpMean && calculations.strokeVolume) {
+      calculations.effectivePulmonaryEa = RHCCalc.calculateEffectivePulmonaryEa(
+        paMean,
+        pcwpMean,
+        calculations.strokeVolume
+      );
+    }
+
+    // LV end-systolic elastance (if volume data available)
+    if (patientData.lvesp && patientData.lvesv) {
+      calculations.lvEes = RHCCalc.calculateLVEes(patientData.lvesp, patientData.lvesv);
+    }
+
+    // RA end-systolic elastance (if volume data available)
+    if (patientData.rapSystolic && patientData.raesv) {
+      calculations.raEes = RHCCalc.calculateRAEes(
+        patientData.rapSystolic,
+        patientData.rapZero,
+        patientData.raesv
+      );
+    }
+
+    // ========== CLINICAL ASSESSMENT ==========
+    // Pulmonary hypertension classification
+    calculations.phClassification = RHCCalc.classifyPulmonaryHypertension(
+      paMean,
+      pcwpMean,
+      calculations.pulmonaryVascularResistance
+    );
+
+    // Generate comprehensive clinical assessment
+    const clinicalAssessment = RHCCalc.generateClinicalAssessment({
+      paMean,
+      pcwp: pcwpMean,
+      pvr: calculations.pulmonaryVascularResistance,
+      cardiacIndex: calculations.cardiacIndex,
+      rap: rapMean,
+      svr: calculations.systemicVascularResistance
+    });
+
+    calculations.clinicalAssessment = clinicalAssessment.assessment;
+    calculations.riskStratification = clinicalAssessment.riskStratification;
+
+    return calculations;
   }
 
   // Helper methods for empty data structures

@@ -16,10 +16,12 @@
 import React, { useState, useRef } from 'react';
 import { Settings, ChevronRight, Bell } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, PatientSession } from '@/types/medical.types';
+import type { StorageStats } from '@/types/persistence.types';
 import { StateChip } from './StateChip';
 import { DevicePopover } from './DevicePopover';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
+import { StorageIconButton } from './StorageIconButton';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { formatDeviceSummary } from '@/utils/deviceNameUtils';
 
@@ -45,6 +47,10 @@ export interface SidebarHeaderProps {
   onToggleSessionCheck?: (sessionId: string) => void; // Toggle session check state
   persistedSessionIds?: Set<string>; // IDs of sessions stored in local storage
 
+  // Storage management
+  storageStats?: StorageStats | null;
+  onStorageClick?: () => void;
+
   // Actions (none currently needed - settings opens extension options page)
 }
 
@@ -63,7 +69,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   currentSessionId,
   checkedSessionIds,
   onToggleSessionCheck,
-  persistedSessionIds
+  persistedSessionIds,
+  storageStats,
+  onStorageClick
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
@@ -143,6 +151,14 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 </span>
               )}
             </button>
+          )}
+
+          {/* Storage Indicator */}
+          {storageStats && storageStats.sessionCount > 0 && (
+            <StorageIconButton
+              stats={storageStats}
+              onClick={onStorageClick}
+            />
           )}
 
           {/* Settings */}

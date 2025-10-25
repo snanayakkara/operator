@@ -51,11 +51,13 @@ interface ReviewData {
 interface AIReviewCardsProps {
   reviewData: ReviewData;
   className?: string;
+  useBrightCards?: boolean; // Enable bright card design
 }
 
 const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
   reviewData,
-  className = ''
+  className = '',
+  useBrightCards = false
 }) => {
   // Debug logging
   console.log('🎴 AI REVIEW CARDS: Rendering with data:', {
@@ -92,6 +94,7 @@ const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
         therapyTargets={reviewData?.therapyTargets}
         clinicalNotes={reviewData?.clinicalNotes}
         isProcessing={false}
+        useBrightCards={useBrightCards}
       />
     </div>
   );

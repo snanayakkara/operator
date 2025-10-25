@@ -110,6 +110,7 @@ export default {
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'recording': 'recording 1.5s ease-in-out infinite alternate',
+        'click-feedback': 'clickFeedback 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       },
       keyframes: {
         fadeIn: {
@@ -124,18 +125,38 @@ export default {
           '0%': { transform: 'scale(1)', opacity: '0.8' },
           '100%': { transform: 'scale(1.05)', opacity: '1' },
         },
+        clickFeedback: {
+          '0%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(168, 85, 247, 0)' },
+          '50%': { transform: 'scale(0.98)', boxShadow: '0 0 0 4px rgba(168, 85, 247, 0.3)' },
+          '100%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(168, 85, 247, 0)' },
+        },
       },
       borderRadius: {
         'fluent-sm': '6px',    // Default for cards, buttons, inputs (softened from 4px)
         'fluent-md': '8px',    // Overlays, dialogs, flyouts
         'fluent-lg': '12px',   // Major containers, session cards
+        'bright': '16px',      // Bright card design (macOS Big Sur style)
+        'bright-sm': '12px',   // Smaller bright cards
       },
       borderWidth: {
         'fluent': '1px',       // Stroke-based layer separation
+        'bright': '2px',       // Bright card prominent borders
+        'bright-thick': '3px', // Extra prominent borders
       },
       boxShadow: {
         'fluent-card': '0 0 2px rgba(0, 0, 0, 0.12)',          // Subtle card elevation (use sparingly)
         'fluent-flyout': '0 8px 16px rgba(0, 0, 0, 0.14)',     // Dialogs, menus, tooltips only
+        'bright-card': '0 1px 3px rgba(0, 0, 0, 0.08)',        // Minimal shadow for bright cards
+        'bright-elevated': '0 4px 12px rgba(0, 0, 0, 0.1)',    // Elevated bright cards
+      },
+      backgroundImage: {
+        // Bright card gradient backgrounds (subtle, light)
+        'gradient-bright': 'linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%)',
+        'gradient-bright-blue': 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+        'gradient-bright-purple': 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
+        'gradient-bright-emerald': 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+        'gradient-bright-amber': 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+        'gradient-bright-rose': 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
       },
     },
   },

@@ -1,0 +1,239 @@
+/**
+ * RHC Card Export Utility
+ *
+ * Generates high-resolution 13×13cm PNG cards from Right Heart Catheterisation data.
+ * Uses html2canvas to render React components to canvas, then exports as PNG.
+ *
+ * Technical Specifications:
+ * - Card Size: 13cm × 13cm (492px × 492px at 96 DPI)
+ * - Export Resolution: 300 DPI (1535px × 1535px)
+ * - Scale Factor: 3.125 (300 DPI / 96 DPI)
+ * - File Format: PNG with optimal compression
+ *
+ * Workflow:
+ * 1. Create temporary DOM container
+ * 2. Render RHCCardLayout component
+ * 3. Capture with html2canvas at 300 DPI
+ * 4. Convert canvas to blob
+ * 5. Trigger download
+ * 6. Clean up temporary elements
+ */
+
+import html2canvas from 'html2canvas';
+import { createRoot } from 'react-dom/client';
+import { RHCCardLayout } from '@/sidepanel/components/results/RHCCardLayout';
+import type { RightHeartCathReport } from '@/types/medical.types';
+
+interface ExportOptions {
+  patientInfo?: {
+    name?: string;
+    mrn?: string;
+    dob?: string;
+  };
+  operatorInfo?: {
+    operator?: string;
+    institution?: string;
+    date?: string;
+  };
+  filename?: string;
+}
+
+/**
+ * Exports RHC data as a high-resolution 13×13cm PNG card
+ */
+export async function exportRHCCard(
+  rhcData: RightHeartCathReport,
+  options: ExportOptions = {}
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      // 1. Create temporary container
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px'; // Move off-screen
+      container.style.top = '0';
+      container.style.zIndex = '-1';
+      document.body.appendChild(container);
+
+      // 2. Render RHCCardLayout component
+      const root = createRoot(container);
+      root.render(
+        RHCCardLayout({
+          rhcData,
+          patientInfo: options.patientInfo,
+          operatorInfo: options.operatorInfo
+        })
+      );
+
+      // 3. Wait for rendering to complete, then capture with html2canvas
+      // Use setTimeout to ensure React has finished rendering
+      setTimeout(async () => {
+        try {
+          const cardElement = container.querySelector('div') as HTMLElement;
+
+          if (!cardElement) {
+            throw new Error('Card element not found after rendering');
+          }
+
+          // Capture at 300 DPI (scale factor: 3.125)
+          // 13cm at 96 DPI = 492px
+          // 13cm at 300 DPI = 1535px
+          // Scale factor = 300 / 96 = 3.125
+          const canvas = await html2canvas(cardElement, {
+            scale: 3.125, // 300 DPI resolution
+            backgroundColor: '#FFFFFF',
+            logging: false, // Disable console logs
+            useCORS: true, // Handle cross-origin images if any
+            allowTaint: false,
+            width: 492, // 13cm at 96 DPI
+            height: 492
+          });
+
+          // 4. Convert canvas to blob
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error('Failed to create image blob'));
+                return;
+              }
+
+              // 5. Trigger download
+              const url = URL.createObjectURL(blob);
+              const downloadLink = document.createElement('a');
+              const timestamp = new Date().toISOString().split('T')[0];
+              const defaultFilename = `RHC_Card_${options.patientInfo?.mrn || timestamp}.png`;
+
+              downloadLink.href = url;
+              downloadLink.download = options.filename || defaultFilename;
+              downloadLink.style.display = 'none';
+              document.body.appendChild(downloadLink);
+              downloadLink.click();
+
+              // Clean up download link
+              setTimeout(() => {
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+              }, 100);
+
+              // 6. Clean up temporary elements
+              root.unmount();
+              document.body.removeChild(container);
+
+              resolve();
+            },
+            'image/png',
+            1.0 // Maximum quality
+          );
+        } catch (error) {
+          // Clean up on error
+          root.unmount();
+          document.body.removeChild(container);
+          reject(error);
+        }
+      }, 100); // 100ms delay for React rendering
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Validates that RHC data is suitable for card export
+ */
+export function validateRHCDataForExport(rhcData: RightHeartCathReport): {
+  valid: boolean;
+  missingFields: string[];
+} {
+  const missingFields: string[] = [];
+
+  // Check essential pressure data
+  if (!rhcData.haemodynamicPressures.ra.mean) {
+    missingFields.push('Right Atrial Pressure (mean)');
+  }
+  if (!rhcData.haemodynamicPressures.rv.systolic || !rhcData.haemodynamicPressures.rv.diastolic) {
+    missingFields.push('Right Ventricular Pressure');
+  }
+  if (!rhcData.haemodynamicPressures.pa.systolic || !rhcData.haemodynamicPressures.pa.diastolic || !rhcData.haemodynamicPressures.pa.mean) {
+    missingFields.push('Pulmonary Artery Pressure');
+  }
+  if (!rhcData.haemodynamicPressures.pcwp.mean) {
+    missingFields.push('PCWP (mean)');
+  }
+
+  // Check cardiac output
+  if (!rhcData.cardiacOutput.thermodilution.co && !rhcData.cardiacOutput.fick.co) {
+    missingFields.push('Cardiac Output (Thermodilution or Fick)');
+  }
+
+  return {
+    valid: missingFields.length === 0,
+    missingFields
+  };
+}
+
+/**
+ * Generates a preview of the card without downloading
+ * Useful for showing users what the card will look like
+ */
+export async function previewRHCCard(
+  rhcData: RightHeartCathReport,
+  options: ExportOptions = {}
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      // Create temporary container
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.zIndex = '-1';
+      document.body.appendChild(container);
+
+      // Render RHCCardLayout component
+      const root = createRoot(container);
+      root.render(
+        RHCCardLayout({
+          rhcData,
+          patientInfo: options.patientInfo,
+          operatorInfo: options.operatorInfo
+        })
+      );
+
+      // Wait for rendering, then capture
+      setTimeout(async () => {
+        try {
+          const cardElement = container.querySelector('div') as HTMLElement;
+
+          if (!cardElement) {
+            throw new Error('Card element not found after rendering');
+          }
+
+          const canvas = await html2canvas(cardElement, {
+            scale: 1, // Lower resolution for preview
+            backgroundColor: '#FFFFFF',
+            logging: false,
+            useCORS: true,
+            allowTaint: false,
+            width: 492,
+            height: 492
+          });
+
+          // Convert to data URL for preview
+          const dataUrl = canvas.toDataURL('image/png');
+
+          // Clean up
+          root.unmount();
+          document.body.removeChild(container);
+
+          resolve(dataUrl);
+        } catch (error) {
+          root.unmount();
+          document.body.removeChild(container);
+          reject(error);
+        }
+      }, 100);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}

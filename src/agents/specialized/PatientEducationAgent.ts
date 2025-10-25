@@ -39,6 +39,8 @@ export interface PatientEducationReport extends MedicalReport {
     patientResources: string[];
     jsonMetadata?: any; // Structured JSON metadata from the LLM
     letterContent?: string; // Plain text patient letter
+    richHTML?: string; // Minimal, sanitized HTML version for rich-clipboard copy
+    plainText?: string; // Clean plain-text version (no Markdown markers)
   };
 }
 
@@ -123,6 +125,10 @@ export class PatientEducationAgent extends MedicalAgent {
       const sections = this.parseResponse(letterContent, context);
       const cleanedContent = this.cleanAndValidateEducationContent(letterContent, educationInput);
 
+      // Generate alternate surfaces for copy/paste
+      const richHTML = this.markdownToMinimalHTML(cleanedContent);
+      const plainText = this.markdownToPlainText(cleanedContent);
+
       // Extract Australian guidelines and resources mentioned
       const australianGuidelines = this.extractAustralianGuidelines(cleanedContent);
       const patientResources = this.extractPatientResources(cleanedContent);
@@ -178,7 +184,9 @@ export class PatientEducationAgent extends MedicalAgent {
         australianGuidelines,
         patientResources,
         jsonMetadata, // Store the parsed JSON metadata
-        letterContent: cleanedContent // Store the plain text letter separately
+        letterContent: cleanedContent, // Store the plain text letter separately
+        richHTML,
+        plainText
       };
 
       // Add missing information to metadata
@@ -681,5 +689,124 @@ Additional Context: ${input.patientContext || 'Not provided'}`;
    */
   public static getPriorityOptions(): Array<{ value: string; label: string; description: string }> {
     return PATIENT_EDUCATION_CONFIG.priorities;
+  }
+  /**
+   * Convert a limited Markdown subset (##, **bold**, *em*, lists, paragraphs) to minimal HTML
+   * using only tags that paste well into word processors: <h2>, <p>, <ul>, <li>, <strong>, <em>.
+   * This is intentionally conservative and dependency-free.
+   */
+  private markdownToMinimalHTML(md: string): string {
+    const lines = md.split(/\r?\n/);
+    const html: string[] = [];
+    let inList = false;
+
+    const formatInline = (s: string) => {
+      // Escape HTML special chars first
+      let t = this.escapeHTML(s);
+      // Bold **text**
+      t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      // Italic _text_ or *text*
+      t = t.replace(/_(.+?)_/g, '<em>$1</em>');
+      t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      return t;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      const line = raw || '';
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        if (inList) {
+          html.push('</ul>');
+          inList = false;
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('## ')) {
+        if (inList) {
+          html.push('</ul>');
+          inList = false;
+        }
+        const text = trimmed.slice(3).trim();
+        html.push(`<h2>${this.escapeHTML(text)}</h2>`);
+        continue;
+      }
+
+      if (/^(\*|\-|\u2022)\s+/.test(trimmed)) {
+        if (!inList) {
+          html.push('<ul>');
+          inList = true;
+        }
+        const item = trimmed.replace(/^(\*|\-|\u2022)\s+/, '');
+        html.push(`<li>${formatInline(item)}</li>`);
+        continue;
+      }
+
+      if (inList) {
+        html.push('</ul>');
+        inList = false;
+      }
+      html.push(`<p>${formatInline(line)}</p>`);
+    }
+
+    if (inList) html.push('</ul>');
+    return html.join('\n');
+  }
+
+  /**
+   * Produce a neat plain-text rendition:
+   * - '## Heading' → uppercase + underline
+   * - bullets → '• ' prefix
+   * - removes Markdown markers (** _ *)
+   */
+  private markdownToPlainText(md: string): string {
+    const lines = md.split(/\r?\n/);
+    const out: string[] = [];
+
+    const stripInline = (s: string) =>
+      s
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/_(.+?)_/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1');
+
+    for (const raw of lines) {
+      const line = raw || '';
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        out.push('');
+        continue;
+      }
+
+      if (trimmed.startsWith('## ')) {
+        const text = stripInline(trimmed.slice(3).trim()).toUpperCase();
+        out.push(text);
+        out.push('—'.repeat(Math.min(60, text.length)));
+        continue;
+      }
+
+      if (/^(\*|\-|\u2022)\s+/.test(trimmed)) {
+        const item = stripInline(trimmed.replace(/^(\*|\-|\u2022)\s+/, ''));
+        out.push(`• ${item}`);
+        continue;
+      }
+
+      out.push(stripInline(line));
+    }
+
+    return out.join('\n');
+  }
+
+  /** Escape HTML special characters to prevent accidental tag injection */
+  private escapeHTML(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

@@ -9,6 +9,60 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.18.0] - 2025-10-26
+
+### Added
+- **Bright Card Design System** - New high-contrast card design inspired by macOS Big Sur
+  - Created reusable `BrightCard` component with 6 color variants (default, blue, purple, emerald, amber, rose)
+  - Three sizes (sm, md, lg) with composable sub-components (Icon, Title, Description, Badge)
+  - Tailwind utilities: `rounded-bright` (16px), `border-bright` (2-3px), gradient backgrounds
+  - Minimal shadow utilities (`shadow-bright-card`, `shadow-bright-elevated`) for border-focused elevation
+  - Added `useBrightDesign` prop to `IndividualFindingCard` for toggling between subtle and bright styles
+  - Pass-through `useBrightCards` prop in `BatchPatientReviewResults` and `AIReviewCards`
+  - White backgrounds with subtle gradients instead of pastel fills
+  - Prominent borders (2-3px) with larger corner radius (12-16px)
+  - Higher contrast for improved readability in medical contexts
+  - Comprehensive documentation in `BRIGHT_CARD_DESIGN.md`
+
+- **RHC (Right Heart Catheterization) Enhancements**
+  - New `RHCCalculationService` with comprehensive hemodynamic calculations (PA pressures, PCWP, CO/CI, PVR, transpulmonary gradient)
+  - `CalculatedHaemodynamicsDisplay` component for showing calculated values with units and reference ranges
+  - `RHCCardLayout` for printable RHC summary cards with calculated hemodynamics
+  - Card export functionality (`rhcCardExport.ts`) for PDF/print outputs
+  - Detailed reference documentation (`RHC_CALCULATION_REFERENCE.md`, `RHC_CARD_EXPORT_README.md`)
+  - Updated `RightHeartCathAgent` and `RightHeartCathDisplay` to integrate calculated hemodynamics
+
+- **Patient Education Agent Improvements**
+  - Enhanced system prompts with more comprehensive lifestyle modification guidance
+  - Improved action plan generation with specific, actionable recommendations
+  - Better handling of habit cues and behavioral change strategies
+  - Added structured JSON output for education data tracking
+
+- **Session Management UI Enhancements**
+  - New `StorageIconButton` for session storage management
+  - Improved `SessionDropdown` with better state handling and persistence indicators
+  - Enhanced visual feedback for stored sessions with hard drive icons
+  - Better organization of session categories and status indicators
+
+- **Appointment Matrix Builder Updates**
+  - Redesigned keyboard navigation with numeric shortcuts (1-4 for categories)
+  - Improved visual hierarchy with clearer category selection
+  - Enhanced UX with better focus states and transitions
+  - Added accessibility improvements for keyboard-only navigation
+
+### Changed
+- Enhanced Tailwind config with bright card utilities (border radius, width, shadows, gradients)
+- Design system now supports two visual styles: subtle (existing) and bright (new, opt-in)
+- Updated `QuickActionsGrouped` with improved expandable action handling
+- Refined Investigation Summary system prompts for better clinical formatting
+- Quick Letter exemplar updates for improved output quality
+- SidebarHeader enhancements for better storage status visibility
+
+### Fixed
+- Improved medical terminology formatting in Investigation Summary (spacing around measurements)
+- Better handling of abbreviations and severity descriptors (e.g., "mod" for moderate)
+- Enhanced patient education JSON parsing and display reliability
+
 ## [3.17.0] - 2025-10-23
 
 ### Added

@@ -102,7 +102,7 @@ Examples:
   - Orange: Follow-up Period
 - **Live preview** of generated item code and notes
 - **Apply button** to confirm selection
-- Supports all possible combinations (2×2×2×3 = 24 possibilities)
+- Supports all possible combinations (2×3×2×4 = 48 possibilities)
 
 ## User Experience
 
@@ -127,7 +127,7 @@ Examples:
 - `AppointmentComplexity`: 'simple' | 'complex'
 - `AppointmentModality`: 'f2f' | 'telehealth'
 - `AppointmentType`: 'new' | 'review'
-- `FollowUpPeriod`: '3mth' | '12mth' | 'none'
+- `FollowUpPeriod`: '6wk' | '3mth' | '12mth' | 'none'
 
 ### Functions:
 - `getItemCodeFromMatrix()` - Maps matrix selections to item codes

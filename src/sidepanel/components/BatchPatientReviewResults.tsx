@@ -28,6 +28,7 @@ interface BatchPatientReviewResultsProps {
   therapyTargets?: Record<string, string>;
   clinicalNotes?: string;
   isProcessing?: boolean;
+  useBrightCards?: boolean; // Toggle bright card design
 }
 
 export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps> = ({
@@ -42,7 +43,8 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
   missingTests,
   therapyTargets,
   clinicalNotes,
-  isProcessing = false
+  isProcessing = false,
+  useBrightCards = false
 }) => {
   // Helper function to get classification display info
   const getClassificationInfo = (category: PatientClassification['category']) => {
@@ -281,6 +283,7 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
                   index={index}
                   isCompleted={completedFindings.has(index)}
                   onToggleComplete={handleToggleComplete}
+                  useBrightDesign={useBrightCards}
                 />
               ))}
             </div>

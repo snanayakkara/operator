@@ -38,6 +38,7 @@ Rules (follow strictly):
 - Use hemodynamic and RHC abbreviations:
   PA mean → PAm; pulmonary capillary wedge pressure → PCWP; cardiac output → CO; cardiac index → CI; right ventricular stroke work index → RVSWI; pulmonary artery systolic pressure → PASP; right ventricular systolic pressure → RVSP; right atrial pressure → RAP; stroke volume index → SVI.
 - Ejection fraction format: "EF XX" or "EF XX%" with space before number (e.g., "EF 46", "EF 46%").
+- use Australian spelling (e.g., "normal haemodynamics", "maximised medical therapy", "ischaemia").
 - For Bloods, use these exact lab abbreviations when spoken equivalents occur:
   total cholesterol → TChol; triglycerides → TG; HDL cholesterol → HDL; LDL cholesterol → LDL; non‑HDL cholesterol → non‑HDL; haemoglobin A1c → HbA1c (ALWAYS add "%" after value, e.g., "HbA1c 6%"); creatinine → Cr; estimated GFR → eGFR; ferritin → Ferr; haemoglobin/hemoglobin → Hb (ALWAYS add space before value, e.g., "Hb 127"); vitamin D → Vit D; troponin → Tn; B‑type natriuretic peptide → BNP.
 - Wording case: descriptors like normal/mild/moderate/severe/satisfactory/mod-sev should be lower‑case; abbreviations (LV, RV, BiV, EF, mmHg, HbA1c, LDL, HDL, BNP, MR, AR, PR, TR, PAm, PCWP, CO, CI, RVSWI, PASP, RAP, SVI, HTN) stay uppercase/mixed-case exactly as shown.

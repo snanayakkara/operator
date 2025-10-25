@@ -18,9 +18,11 @@ import {
   ChevronDownIcon as _ChevronDownIcon,
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2 } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
 import { TranscriptionSection } from './TranscriptionSection';
+import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
+import { exportRHCCard, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import type {
   RightHeartCathReport,
   RightHeartCathData as _RightHeartCathData,
@@ -71,6 +73,7 @@ const SECTION_CONFIGS: SectionConfig[] = [
   { key: 'procedure', title: 'Procedure Details', icon: ActivityIcon, color: 'green', priority: 'high' },
   { key: 'pressures', title: 'Haemodynamic Pressures', icon: HeartIcon, color: 'red', priority: 'high' },
   { key: 'cardiac_output', title: 'Cardiac Output Assessment', icon: TrendingUp, color: 'purple', priority: 'high' },
+  { key: 'calculations', title: 'Calculated Haemodynamics', icon: TrendingUp, color: 'emerald', priority: 'high' },
   { key: 'exercise', title: 'Exercise Testing', icon: Activity, color: 'orange', priority: 'medium' },
   { key: 'complications', title: 'Complications', icon: AlertCircleIcon, color: 'red', priority: 'high' },
   { key: 'conclusions', title: 'Conclusions & Follow-up', icon: FileTextIcon, color: 'indigo', priority: 'high' }
@@ -97,9 +100,9 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   onTranscriptionApprove
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['indication', 'pressures', 'cardiac_output', 'complications'])
+    new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
   );
-  const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false });
+  const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
 
   // Parse RHC report data or fall back to results string
   const effectiveRHCData = useMemo(() => {
@@ -180,6 +183,53 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     setButtonStates(prev => ({ ...prev, inserted: true }));
     setTimeout(() => setButtonStates(prev => ({ ...prev, inserted: false })), 2000);
   }, [effectiveRHCData, results, onInsertToEMR]);
+
+  const handleExportCard = useCallback(async () => {
+    if (!effectiveRHCData) {
+      alert('No RHC data available to export');
+      return;
+    }
+
+    // Validate data completeness
+    const validation = validateRHCDataForExport(effectiveRHCData);
+    if (!validation.valid) {
+      const missingFieldsList = validation.missingFields.join('\n• ');
+      alert(`Cannot export card: Missing essential data\n\nMissing fields:\n• ${missingFieldsList}\n\nPlease ensure all haemodynamic measurements are recorded.`);
+      return;
+    }
+
+    // Set exporting state
+    setButtonStates(prev => ({ ...prev, exporting: true }));
+
+    try {
+      // Extract patient info from context or report metadata
+      const patientInfo = {
+        name: effectiveRHCData.rhcData.clinicalPresentation ? undefined : undefined, // TODO: Add patient name to context
+        mrn: effectiveRHCData.id || undefined,
+        dob: undefined
+      };
+
+      const operatorInfo = {
+        operator: undefined, // TODO: Add operator info to context
+        institution: undefined,
+        date: new Date().toLocaleDateString('en-AU', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      };
+
+      await exportRHCCard(effectiveRHCData, { patientInfo, operatorInfo });
+
+      // Set success state
+      setButtonStates(prev => ({ ...prev, exporting: false, exported: true }));
+      setTimeout(() => setButtonStates(prev => ({ ...prev, exported: false })), 3000);
+    } catch (error) {
+      console.error('Failed to export RHC card:', error);
+      alert('Failed to generate card image. Please try again.');
+      setButtonStates(prev => ({ ...prev, exporting: false }));
+    }
+  }, [effectiveRHCData]);
 
   // Helper functions for section rendering
   const _renderPressuresSection = (pressures: HaemodynamicPressures) => (
@@ -294,6 +344,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
             <div className="flex items-center space-x-2">
               <button
+                type="button"
                 onClick={handleCopy}
                 disabled={!onCopy}
                 className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -302,8 +353,34 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 {buttonStates.copied ? 'Copied' : 'Copy'}
               </button>
 
+              <button
+                type="button"
+                onClick={handleExportCard}
+                disabled={buttonStates.exporting || !effectiveRHCData}
+                className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export 13×13cm PNG card (300 DPI)"
+              >
+                {buttonStates.exporting ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Generating...
+                  </>
+                ) : buttonStates.exported ? (
+                  <>
+                    <Image className="w-3 h-3 mr-1" />
+                    Downloaded!
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-3 h-3 mr-1" />
+                    13×13 Card
+                  </>
+                )}
+              </button>
+
               {onInsertToEMR && (
                 <button
+                  type="button"
                   onClick={handleInsertToEMR}
                   className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
                 >
@@ -323,6 +400,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
             return (
               <div key={key}>
                 <button
+                  type="button"
                   onClick={() => toggleSection(key)}
                   className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50"
                 >
@@ -485,6 +563,12 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
 
     case 'cardiac_output':
       return renderCardiacOutputSection(cardiacOutput);
+
+    case 'calculations':
+      if (!rhcData.calculations) {
+        return <div className="text-gray-500 italic">No calculated haemodynamics available</div>;
+      }
+      return <CalculatedHaemodynamicsDisplay calculations={rhcData.calculations} />;
 
     case 'exercise':
       if (!exerciseHaemodynamics) {

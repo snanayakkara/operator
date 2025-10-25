@@ -223,6 +223,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   const isCopying = copiedSessionId === session.id;
   const dictationDuration = getDictationDuration(session);
   const processingDuration = getProcessingDuration(session);
+  const [isClicking, setIsClicking] = useState(false);
 
   // Get category-based colors for this agent
   const categoryColors = getAgentColors(session.agentType);
@@ -233,6 +234,14 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
       onSessionSelect(session);
     }
   }, [onSessionSelect, session]);
+
+  const handleCardClick = useCallback(() => {
+    if (state !== 'recording' && onSessionSelect) {
+      setIsClicking(true);
+      setTimeout(() => setIsClicking(false), 200);
+      handlePrimaryAction();
+    }
+  }, [state, onSessionSelect, handlePrimaryAction]);
 
   const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -245,8 +254,9 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
       <div
         className={`relative rounded-lg border-l-4 transition-all duration-300 px-2 py-1.5 ${categoryColors.bg} ${categoryColors.border} opacity-60 hover:opacity-80 ${
           isSelected ? 'ring-2 ring-accent-violet/50' : ''
-        }`}
+        } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''} ${isClicking ? 'animate-click-feedback' : ''}`}
         style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
+        onClick={handleCardClick}
       >
         <div className="flex items-center gap-2">
           {/* Checkbox */}
@@ -285,7 +295,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
           {/* Minimal actions */}
           <button
-            onClick={() => onRemoveSession(session.id)}
+            onClick={(e) => { e.stopPropagation(); onRemoveSession(session.id); }}
             className="flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
             title="Remove"
           >
@@ -301,14 +311,11 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
     <div
       className={`relative rounded-xl border-l-4 transition-all duration-300 px-3 py-2 ${categoryColors.bg} ${categoryColors.border} ${
         isSelected ? 'ring-2 ring-accent-violet/50' : ''
-      }`}
+      } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''} ${isClicking ? 'animate-click-feedback' : ''}`}
       style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
+      onClick={handleCardClick}
     >
       <div className="flex items-start gap-2">
-        {/* Category icon badge */}
-        <div className="absolute top-2 right-2 text-lg opacity-30">
-          {categoryIcon}
-        </div>
 
         {/* Larger checkbox */}
         <div
@@ -331,6 +338,9 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
         <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
+              <span className="text-base opacity-40 flex-shrink-0">
+                {categoryIcon}
+              </span>
               <p className="truncate font-semibold text-sm text-slate-900">
                 {session.patient?.name || 'Unnamed patient'}
               </p>
@@ -398,7 +408,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
           <div className="flex flex-col gap-1">
             {state === 'recording' && isActiveRecording && onStopRecording && (
               <button
-                onClick={onStopRecording}
+                onClick={(e) => { e.stopPropagation(); onStopRecording(); }}
                 className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-50"
                 title="Stop recording"
               >
@@ -408,7 +418,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
             {state === 'recording' && !isActiveRecording && onResumeRecording && (
               <button
-                onClick={() => onResumeRecording(session)}
+                onClick={(e) => { e.stopPropagation(); onResumeRecording(session); }}
                 className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-red-50/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-100"
                 title="Resume recording"
               >
@@ -418,7 +428,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
             {state !== 'recording' && onSessionSelect && (
               <button
-                onClick={handlePrimaryAction}
+                onClick={(e) => { e.stopPropagation(); handlePrimaryAction(); }}
                 className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
                 title="View session"
               >
@@ -428,7 +438,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
             {(state === 'needs_review' || state === 'completed') && (
               <button
-                onClick={() => onCopyResults(session)}
+                onClick={(e) => { e.stopPropagation(); onCopyResults(session); }}
                 disabled={!hasResults}
                 className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
                   hasResults
@@ -442,7 +452,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
             )}
 
             <button
-              onClick={() => onRemoveSession(session.id)}
+              onClick={(e) => { e.stopPropagation(); onRemoveSession(session.id); }}
               className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
               title="Remove"
             >
