@@ -10,10 +10,12 @@
 
 import React, { memo, useState } from 'react';
 import { ResultsContainer } from './ResultsContainer';
-import { Printer, Download, ChevronDown, ChevronRight, ClipboardList } from 'lucide-react';
+import { Printer, Download, ChevronDown, ChevronRight, ClipboardList, Clipboard, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PatientSession, PreOpProcedureType } from '@/types/medical.types';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
+import { copyPreOpCardToClipboard, downloadPreOpCard, validatePreOpDataForExport } from '@/utils/preOpCardExport';
+import { ToastService } from '@/services/ToastService';
 
 interface PreOpPlanDisplayProps {
   session: PatientSession;
@@ -48,6 +50,8 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
   isProcessing = false
 }) => {
   const [showJSON, setShowJSON] = useState(false);
+  const [copyCardState, setCopyCardState] = useState<'idle' | 'copying' | 'success' | 'error'>('idle');
+  const [downloadCardState, setDownloadCardState] = useState<'idle' | 'downloading' | 'success' | 'error'>('idle');
 
   // Extract pre-op plan data
   const preOpData = session.preOpPlanData;
@@ -154,6 +158,118 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
     URL.revokeObjectURL(url);
   };
 
+  // Copy A5 Card to Clipboard handler
+  const handleCopyCard = async () => {
+    // Validate data before export
+    const validation = validatePreOpDataForExport({
+      procedureType,
+      cardMarkdown,
+      jsonData,
+      completenessScore
+    });
+
+    if (!validation.valid) {
+      ToastService.getInstance().error(
+        `Cannot copy card: Missing essential data\n\n${validation.missingFields.map(f => `• ${f}`).join('\n')}`
+      );
+      setCopyCardState('error');
+      setTimeout(() => setCopyCardState('idle'), 2000);
+      return;
+    }
+
+    setCopyCardState('copying');
+
+    try {
+      await copyPreOpCardToClipboard(
+        {
+          procedureType,
+          cardMarkdown,
+          jsonData,
+          completenessScore
+        },
+        {
+          // Optional: Could pull patient info from session context if available
+          operatorInfo: {
+            date: new Date().toLocaleDateString('en-AU', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+            })
+          }
+        }
+      );
+
+      setCopyCardState('success');
+      ToastService.getInstance().success('A5 card copied to clipboard! Ready to paste into documents.');
+
+      // Reset to idle after 3 seconds
+      setTimeout(() => setCopyCardState('idle'), 3000);
+    } catch (error) {
+      console.error('Failed to copy card to clipboard:', error);
+      setCopyCardState('error');
+      ToastService.getInstance().error(
+        error instanceof Error ? error.message : 'Failed to copy card to clipboard'
+      );
+
+      setTimeout(() => setCopyCardState('idle'), 2000);
+    }
+  };
+
+  // Download A5 Card handler
+  const handleDownloadCard = async () => {
+    // Validate data before export
+    const validation = validatePreOpDataForExport({
+      procedureType,
+      cardMarkdown,
+      jsonData,
+      completenessScore
+    });
+
+    if (!validation.valid) {
+      ToastService.getInstance().error(
+        `Cannot download card: Missing essential data\n\n${validation.missingFields.map(f => `• ${f}`).join('\n')}`
+      );
+      setDownloadCardState('error');
+      setTimeout(() => setDownloadCardState('idle'), 2000);
+      return;
+    }
+
+    setDownloadCardState('downloading');
+
+    try {
+      await downloadPreOpCard(
+        {
+          procedureType,
+          cardMarkdown,
+          jsonData,
+          completenessScore
+        },
+        {
+          operatorInfo: {
+            date: new Date().toLocaleDateString('en-AU', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+            })
+          }
+        }
+      );
+
+      setDownloadCardState('success');
+      ToastService.getInstance().success('A5 card downloaded successfully!');
+
+      setTimeout(() => setDownloadCardState('idle'), 3000);
+    } catch (error) {
+      console.error('Failed to download card:', error);
+      setDownloadCardState('error');
+      ToastService.getInstance().error(
+        error instanceof Error ? error.message : 'Failed to download card'
+      );
+
+      setTimeout(() => setDownloadCardState('idle'), 2000);
+    }
+  };
+
   return (
     <ResultsContainer
       agentType="pre-op-plan"
@@ -256,16 +372,93 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
 
         {/* Custom Action Buttons */}
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Copy A5 Card to Clipboard */}
+          <button
+            onClick={handleCopyCard}
+            disabled={copyCardState === 'copying'}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              copyCardState === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : copyCardState === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : copyCardState === 'copying'
+                ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
+                : 'bg-teal-50 hover:bg-teal-100 border-teal-200 text-teal-700'
+            } border`}
+          >
+            {copyCardState === 'copying' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Copying...
+              </>
+            ) : copyCardState === 'success' ? (
+              <>
+                <Check className="w-4 h-4" />
+                Copied!
+              </>
+            ) : copyCardState === 'error' ? (
+              <>
+                <AlertCircle className="w-4 h-4" />
+                Failed
+              </>
+            ) : (
+              <>
+                <Clipboard className="w-4 h-4" />
+                Copy A5 Card
+              </>
+            )}
+          </button>
+
+          {/* Download A5 Card */}
+          <button
+            onClick={handleDownloadCard}
+            disabled={downloadCardState === 'downloading'}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              downloadCardState === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : downloadCardState === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : downloadCardState === 'downloading'
+                ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
+                : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
+            } border`}
+          >
+            {downloadCardState === 'downloading' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : downloadCardState === 'success' ? (
+              <>
+                <Check className="w-4 h-4" />
+                Downloaded!
+              </>
+            ) : downloadCardState === 'error' ? (
+              <>
+                <AlertCircle className="w-4 h-4" />
+                Failed
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Download A5 Card
+              </>
+            )}
+          </button>
+
+          {/* Print A5 Card */}
           <button
             onClick={handlePrint}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-all"
           >
             <Printer className="w-4 h-4" />
-            Print A5 Card
+            Print
           </button>
+
+          {/* Export JSON */}
           <button
             onClick={handleExportJSON}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-all"
           >
             <Download className="w-4 h-4" />
             Export JSON

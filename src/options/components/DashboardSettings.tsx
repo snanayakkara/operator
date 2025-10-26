@@ -5,6 +5,7 @@ import type { ModelStatus } from '@/types/medical.types';
 import { AgentFactory } from '@/services/AgentFactory';
 import { logger } from '@/utils/Logger';
 import { PerformanceMetricsSection } from './PerformanceMetricsSection';
+import { UIPreferencesSection } from './UIPreferencesSection';
 
 export const DashboardSettings: React.FC = () => {
   const lmStudioService = useMemo(() => LMStudioService.getInstance(), []);
@@ -77,7 +78,7 @@ export const DashboardSettings: React.FC = () => {
             <div className="text-sm text-ink-secondary">All services and intelligence at a glance</div>
           </div>
         </div>
-        <button onClick={refresh} className="mono-button-secondary flex items-center space-x-2">
+        <button type="button" onClick={refresh} className="mono-button-secondary flex items-center space-x-2">
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'motion-safe:animate-spin' : ''}`} />
           <span>Refresh</span>
         </button>
@@ -181,10 +182,10 @@ export const DashboardSettings: React.FC = () => {
             <span className="font-medium text-ink-primary">Quick Actions</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <button className="mono-button-secondary">Clear Cache</button>
-            <button className="mono-button-secondary">Export Settings</button>
-            <button className="mono-button-secondary">Reset Defaults</button>
-            <button className="mono-button-secondary" onClick={() => window.close()}>Close</button>
+            <button type="button" className="mono-button-secondary">Clear Cache</button>
+            <button type="button" className="mono-button-secondary">Export Settings</button>
+            <button type="button" className="mono-button-secondary">Reset Defaults</button>
+            <button type="button" className="mono-button-secondary" onClick={() => window.close()}>Close</button>
           </div>
         </div>
 
@@ -206,6 +207,9 @@ export const DashboardSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* UI Preferences Section */}
+      <UIPreferencesSection />
 
       <PerformanceMetricsSection />
     </div>

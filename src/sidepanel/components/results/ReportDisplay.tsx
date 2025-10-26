@@ -102,6 +102,16 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       }
     };
 
+    // For angiogram-pci, only split on main section headers
+    const isAngiogramPCI = agentType === 'angiogram-pci';
+    const mainSectionHeaders = [
+      'PREAMBLE',
+      'FINDINGS',
+      'FINDINGS/PROCEDURE',
+      'PROCEDURE',
+      'CONCLUSION'
+    ];
+
     for (const rawLine of lines) {
       const trimmedLine = rawLine.trim();
       if (!trimmedLine) continue;
@@ -115,6 +125,13 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       const isHeading = (() => {
         if (!normalizedHeading) return false;
         const upper = normalizedHeading.toUpperCase();
+
+        // For angiogram-pci, only treat main section headers as headings
+        if (isAngiogramPCI) {
+          return mainSectionHeaders.includes(upper);
+        }
+
+        // For other agents, use original logic
         const known = [
           'PREAMBLE',
           'FINDINGS',
@@ -149,7 +166,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
     }
 
     return sections;
-  }, []);
+  }, [agentType]);
 
   const fullReportSections = useMemo(() => parseSections(results), [results, parseSections]);
   const displaySections = useMemo(() => parseSections(displayContent), [displayContent, parseSections]);
@@ -188,11 +205,38 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
 
   const handleCopy = async (content: string, type: string) => {
     try {
-      await navigator.clipboard.writeText(content);
+      // Convert markdown bold (**text**) to HTML <strong> tags
+      const convertMarkdownToHtml = (text: string): string => {
+        // Replace **text** with <strong>text</strong>
+        let html = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // Preserve line breaks
+        html = html.replace(/\n/g, '<br>');
+
+        return html;
+      };
+
+      const htmlContent = convertMarkdownToHtml(content);
+
+      // Try to copy both HTML and plain text for maximum compatibility
+      const clipboardItem = new ClipboardItem({
+        'text/html': new Blob([htmlContent], { type: 'text/html' }),
+        'text/plain': new Blob([content], { type: 'text/plain' })
+      });
+
+      await navigator.clipboard.write([clipboardItem]);
       setCopiedContent(type);
       setTimeout(() => setCopiedContent(null), 2000);
     } catch (error) {
-      console.error('Failed to copy:', error);
+      // Fallback to plain text if HTML copy fails
+      console.warn('HTML copy failed, falling back to plain text:', error);
+      try {
+        await navigator.clipboard.writeText(content);
+        setCopiedContent(type);
+        setTimeout(() => setCopiedContent(null), 2000);
+      } catch (fallbackError) {
+        console.error('Failed to copy:', fallbackError);
+      }
     }
   };
 

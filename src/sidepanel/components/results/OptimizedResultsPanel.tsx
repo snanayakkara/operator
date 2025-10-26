@@ -54,6 +54,7 @@ interface OptimizedResultsPanelProps {
   selectedSessionId?: string | null;
   selectedPatientName?: string;
   originalTranscription?: string;
+  audioDuration?: number; // Audio duration in seconds for ETA prediction
   onTranscriptionCopy?: (text: string) => void;
   onTranscriptionInsert?: (text: string) => void;
   onTranscriptionEdit?: (text: string) => void;
@@ -103,6 +104,8 @@ interface OptimizedResultsPanelProps {
   educationData?: any; // Patient Education JSON metadata and letter content
   // Pre-Op Plan structured data
   preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan card and JSON metadata
+  // Right Heart Cath structured data
+  rhcReport?: any; // RightHeartCathReport with haemodynamic calculations
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
@@ -142,6 +145,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   selectedSessionId = null,
   selectedPatientName = '',
   originalTranscription,
+  audioDuration,
   onTranscriptionCopy,
   onTranscriptionInsert,
   onTranscriptionEdit,
@@ -187,6 +191,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   educationData,
   // Pre-Op Plan structured data
   preOpPlanData,
+  // Right Heart Cath structured data
+  rhcReport,
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
@@ -590,6 +596,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               progress={pipelineProgress}
               startTime={processingStartTime || undefined}
               agentType={agentType}
+              audioDuration={audioDuration}
               showTimeEstimate={true}
             />
           </motion.div>
@@ -611,6 +618,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               startTime={processingStartTime || undefined}
               agentType={agentType || undefined}
               transcriptionLength={originalTranscription?.length}
+              audioDuration={audioDuration}
               showTimeEstimate={true}
             />
           </motion.div>
@@ -771,7 +779,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           ) : isAIReview ? (
             <>
               {console.log('🖼️ RESULTS PANEL: Rendering AIReviewCards with data:', reviewData)}
-              <AIReviewCards reviewData={reviewData} />
+              <AIReviewCards reviewData={reviewData} storageKey="ui_preferences_card_theme" />
             </>
           ) : agentType === 'quick-letter' && results && !streaming ? (
             // Quick Letter dual cards display - only show when not streaming and results are ready
@@ -1084,6 +1092,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           ) : isRightHeartCath ? (
             // Right Heart Cath with transcription section + structured display
             <RightHeartCathDisplay
+              rhcReport={rhcReport}
               results={results}
               onCopy={onCopy}
               onInsertToEMR={onInsertToEMR}
@@ -1100,6 +1109,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               collapseTranscriptionWhen={resultsReady}
               approvalState={approvalState}
               onTranscriptionApprove={onTranscriptionApprove}
+              onReprocessWithAnswers={onReprocessWithAnswers}
+              onDismissMissingInfo={onDismissMissingInfo}
             />
           ) : isPatientEducation ? (
             // Patient Education with structured JSON metadata + letter display

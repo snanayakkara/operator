@@ -18,6 +18,7 @@ import { SidebarHeader } from './components/SidebarHeader';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
+import { PatientContextHeader } from './components/PatientContextHeader';
 import { RecordingPromptCard } from './components/RecordingPromptCard';
 import { hasRecordingPrompt } from '@/config/recordingPrompts';
 import { MetricsDashboard } from './components/MetricsDashboard';
@@ -39,10 +40,11 @@ import { OptimizationService } from '@/services/OptimizationService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { MetricsService } from '@/services/MetricsService';
+import { ProcessingTimePredictor } from '@/services/ProcessingTimePredictor';
 import { useRecorder } from '@/hooks/useRecorder';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
@@ -62,11 +64,13 @@ interface CurrentDisplayData {
   educationData?: any;
   preOpPlanData?: PreOpPlanReport['planData'];
   reviewData?: any;
+  rhcReport?: any;
   agent: AgentType | null;
   agentName: string | null;
   patientInfo: PatientInfo | null;
   processingTime?: number | null;
   modelUsed?: string | null;
+  audioDuration?: number | null; // Audio duration in seconds for ETA prediction
   pipelineProgress?: PipelineProgress | null;
   processingStatus: ProcessingStatus;
   isDisplayingSession: boolean;
@@ -1381,6 +1385,23 @@ const OptimizedAppContent: React.FC = memo(() => {
           } catch (error) {
             console.error('Failed to store performance metrics (streaming):', error);
           }
+
+          // Record actual processing time for intelligent ETA prediction (learning loop - streaming)
+          try {
+            const predictor = ProcessingTimePredictor.getInstance();
+            const currentSession = state.patientSessions.find(s => s.id === sessionId);
+            if (currentSession && streamingResult.processingDuration) {
+              predictor.recordActualProcessingTime(
+                workflowId,
+                transcriptionResult.length,
+                streamingResult.processingDuration,
+                currentSession.audioDuration // Use audio duration if available
+              );
+              console.log(`📊 Recorded processing time for ${workflowId} (streaming): ${streamingResult.processingDuration}ms (transcription: ${transcriptionResult.length} chars, audio: ${currentSession.audioDuration?.toFixed(1)}s)`);
+            }
+          } catch (error) {
+            console.warn('Failed to record processing time for prediction (streaming):', error);
+          }
         }
         return;
       }
@@ -1523,6 +1544,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         sessionUpdate.taviStructuredSections = result.taviStructuredSections;
       }
 
+      // Add RHC structured report if available (for Right Heart Cath agent)
+      if ('rhcData' in result) {
+        sessionUpdate.rhcReport = result as any; // Store full RHC report with structured data
+      }
+
       actions.updatePatientSession(sessionId, sessionUpdate);
 
       // Save completed session to persistence
@@ -1571,6 +1597,23 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
       } catch (error) {
         console.error('Failed to store performance metrics:', error);
+      }
+
+      // Record actual processing time for intelligent ETA prediction (learning loop)
+      try {
+        const predictor = ProcessingTimePredictor.getInstance();
+        const currentSession = state.patientSessions.find(s => s.id === sessionId);
+        if (currentSession) {
+          predictor.recordActualProcessingTime(
+            workflowId,
+            transcriptionResult.length,
+            processingDuration,
+            currentSession.audioDuration // Use audio duration if available
+          );
+          console.log(`📊 Recorded processing time for ${workflowId}: ${processingDuration}ms (transcription: ${transcriptionResult.length} chars, audio: ${currentSession.audioDuration?.toFixed(1)}s)`);
+        }
+      } catch (error) {
+        console.warn('Failed to record processing time for prediction:', error);
       }
 
       // Surface output to main results panel only if this session is currently selected at completion time
@@ -1790,7 +1833,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const handleRecordingComplete = useCallback(async (audioBlob: Blob) => {
     // Store current audio blob for potential failed transcription storage
     currentAudioBlobRef.current = audioBlob;
-    
+
     // Check if cancellation is in progress
     if (state.ui.isCancelling) {
       console.log('🛑 Recording completed but cancellation in progress - ignoring');
@@ -1801,19 +1844,33 @@ const OptimizedAppContent: React.FC = memo(() => {
     // Get active workflow and current session
     const workflowId = activeWorkflowRef.current || state.ui.activeWorkflow;
     const currentSessionId = currentSessionIdRef.current || state.currentSessionId;
-    
+
     if (!workflowId) {
       console.error('❌ No active workflow selected');
       actions.setErrors(['No workflow selected. Please select a workflow type before recording.']);
       return;
     }
-    
+
     if (!currentSessionId) {
       console.error('❌ No current session found');
       actions.setErrors(['No active session. Please start a new recording.']);
       return;
     }
-    
+
+    // Calculate audio duration from blob
+    let audioDuration: number | undefined;
+    try {
+      const audioContext = new AudioContext();
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      audioDuration = audioBuffer.duration; // in seconds
+      await audioContext.close();
+      console.log(`🎵 Audio duration calculated: ${audioDuration.toFixed(1)}s`);
+    } catch (error) {
+      console.warn('⚠️ Failed to calculate audio duration:', error);
+      // Continue without audio duration - predictor will fall back to transcription length
+    }
+
     console.log('🎤 Recording completed, starting background processing for session:', currentSessionId);
 
     // Initialize unified pipeline progress - Audio Processing phase
@@ -1828,6 +1885,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.updatePatientSession(currentSessionId, {
       status: 'transcribing',
       audioBlob: audioBlob,
+      audioDuration, // Store audio duration for ETA prediction
       pipelineProgress: {
         stage: 'audio-processing',
         progress: 5,
@@ -1988,11 +2046,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         educationData: state.displaySession.displayEducationData,
         preOpPlanData: state.displaySession.displayPreOpPlanData,
         reviewData: state.displaySession.displayReviewData,
+        rhcReport: state.displaySession.displayRhcReport,
         agent: state.displaySession.displayAgent ?? null,
         agentName: state.displaySession.displayAgentName ?? null,
         patientInfo: state.displaySession.displayPatientInfo ?? null,
         processingTime: state.displaySession.displayProcessingTime ?? null,
         modelUsed: state.displaySession.displayModelUsed ?? null,
+        audioDuration: state.displaySession.displayAudioDuration ?? null,
         pipelineProgress: state.displaySession.displayPipelineProgress ?? null,
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
         isDisplayingSession: true
@@ -2043,11 +2103,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         educationData: state.educationData,
         preOpPlanData: state.preOpPlanData,
         reviewData: state.reviewData,
+        rhcReport: state.rhcReport,
         agent: state.currentAgent,
         agentName: state.currentAgentName,
         patientInfo: state.currentPatientInfo,
         processingTime: state.totalProcessingTime,
         modelUsed: null,
+        audioDuration: state.patientSessions.find(s => s.id === state.currentSessionId)?.audioDuration ?? null,
         pipelineProgress: state.pipelineProgress,
         processingStatus: state.processingStatus,
         isDisplayingSession: false
@@ -2063,11 +2125,13 @@ const OptimizedAppContent: React.FC = memo(() => {
       educationData: state.educationData,
       preOpPlanData: state.preOpPlanData,
       reviewData: state.reviewData,
+      rhcReport: state.rhcReport,
       agent: state.currentAgent,
       agentName: state.currentAgentName,
       patientInfo: state.currentPatientInfo,
       processingTime: state.totalProcessingTime,
       modelUsed: null,
+      audioDuration: null,
       pipelineProgress: state.pipelineProgress,
       processingStatus: state.processingStatus,
       isDisplayingSession: false
@@ -2880,12 +2944,14 @@ const OptimizedAppContent: React.FC = memo(() => {
         console.log('📝 Text inserted to EMR (generic)');
       }
 
-      // Auto-mark current session as complete when user inserts to EMR
-      if (state.currentSessionId) {
-        const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
+      // Auto-mark session as complete when user inserts to EMR
+      // Check both active recording session AND displayed session (for viewing completed sessions)
+      const sessionToComplete = state.currentSessionId || state.displaySession.displaySessionId;
+      if (sessionToComplete) {
+        const currentSession = state.patientSessions.find(s => s.id === sessionToComplete);
         if (currentSession && currentSession.status === 'completed' && !currentSession.reviewedAt) {
           handleMarkSessionComplete(currentSession);
-          console.log('✅ Auto-marked session as complete after EMR insertion');
+          console.log('✅ Auto-marked session as complete after EMR insertion:', sessionToComplete);
         }
       }
 
@@ -3186,8 +3252,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         
         {/* Main Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
-          
-          
+
+          {/* Patient Context Header - Show during recording and processing */}
+          {state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing') && (
+            <PatientContextHeader
+              patientInfo={state.currentPatientInfo}
+              agentType={state.ui.activeWorkflow}
+              processingStatus={state.processingStatus}
+              isRecording={recorder.isRecording}
+            />
+          )}
+
           {/* Unified Recording Interface - Show both LiveAudioVisualizer and RecordingPromptCard together */}
           {recorder.isRecording && (
             <div className="flex flex-col space-y-4 p-4">
@@ -3523,6 +3598,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     onCopy={handleCopy}
                     onInsertToEMR={(text: string, targetField?: string) => { handleInsertToEMR(text, targetField, displayData.agent || null); }}
                     originalTranscription={displayData.transcription}
+                    audioDuration={displayData.audioDuration ?? undefined}
                     onTranscriptionCopy={handleCopy}
                     onTranscriptionInsert={(text: string) => { handleInsertToEMR(text, undefined, displayData.agent || null); }}
                     onTranscriptionEdit={handleTranscriptionEdit}
@@ -3571,6 +3647,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
+                rhcReport={displayData.isDisplayingSession ? displayData.rhcReport : state.rhcReport}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                 revisionPanel={revisionPanelData}

@@ -4,7 +4,7 @@
  * Types for local session storage with lifecycle management.
  */
 
-import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport } from './medical.types';
+import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport, RightHeartCathReport } from './medical.types';
 
 /**
  * Persisted session data structure
@@ -20,12 +20,14 @@ export interface PersistedSession {
   educationData?: any;
   preOpPlanData?: PreOpPlanReport['planData'];
   reviewData?: any;
+  rhcReport?: RightHeartCathReport;
   agentType: AgentType;
   agentName: string;
   timestamp: number;
   status: SessionStatus;
   processingTime?: number;
   modelUsed?: string;
+  audioDuration?: number; // Audio duration in seconds for ETA prediction
   completedTime?: number;
   quickActionField?: string;
 

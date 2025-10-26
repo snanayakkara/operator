@@ -23,7 +23,7 @@ MEDICAL LANGUAGE ELEVATION:
 
 PATIENT DEMOGRAPHICS HANDLING:
 - If patient demographics (name, age, DOB, gender) are provided separately, you MAY use them for proper identification and salutations
-- **Use FIRST NAME ONLY in greetings** for natural, warm tone (e.g., "It was a pleasure to speak with Nicholas today" NOT "Mr Nicholas Avery")
+- **Use FIRST NAME ONLY in greetings** for natural, warm tone (e.g., "I had the pleasure of seeing Bruce today" NOT "I had the pleasure of seeing Mr Bruce Taylor today")
 - For subsequent references within the letter body, you may use formal titles with surnames when appropriate (e.g., "this 65-year-old gentleman, Mr Avery")
 - If demographics conflict with dictated content, prioritize what was explicitly dictated
 - Never invent or assume demographic information that wasn't provided
@@ -73,7 +73,7 @@ PUNCTUATION AND STYLE:
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format. Do NOT deviate from this structure:
 
-SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "CT coronary angiogram showing zero calcium score and no CAD. Reassured regarding chest discomfort. Advised on lipid monitoring."]
+SUMMARY: [Write a concise third-person clinical summary in 100 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "CT coronary angiogram showing zero calcium score and no CAD. Reassured regarding chest discomfort. Advised on lipid monitoring."]
 ---
 LETTER: [The full rewritten letter content as polished prose paragraphs]
 
@@ -81,7 +81,7 @@ CRITICAL REQUIREMENTS:
 - You MUST use exactly "SUMMARY:" followed by the summary text
 - You MUST use exactly "---" as the separator 
 - You MUST use exactly "LETTER:" followed by the letter content
-- The summary MUST be 150 characters or less
+- The summary MUST be 100 characters or less
 - The letter MUST be formatted with proper paragraphs separated by blank lines
 - **Do NOT add any other text, headers, or formatting outside this structure**
 - **Your response must START with "SUMMARY:" - no introductory text, analysis, or reasoning before this**
@@ -162,7 +162,7 @@ MEDICAL LANGUAGE ELEVATION:
 
 PATIENT DEMOGRAPHICS HANDLING:
 - If patient demographics (name, age, DOB, gender) are provided in the JSON envelope EMR context, you MAY use them for proper identification
-- **Use FIRST NAME ONLY in greetings** for natural, warm tone (e.g., "It was a pleasure to speak with Nicholas today" NOT "Mr Nicholas Avery")
+- **Use FIRST NAME ONLY in greetings** for natural, warm tone (e.g., "I saw Bruce today" NOT "I saw Mr Bruce Taylor today")
 - For subsequent references within the letter body, you may use formal titles with surnames when appropriate (e.g., "this 65-year-old gentleman, Mr Avery")
 - If demographics conflict with typed content, prioritize what was explicitly typed
 - Never invent or assume demographic information that wasn't provided
@@ -187,7 +187,7 @@ HANDLING TYPED NOTES SPECIFICS:
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format:
 
-SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "FU hypertension. Perindopril increased to 5 mg od. Amlodipine ceased. BP improving. Review in 4 weeks."]
+SUMMARY: [Write a concise third-person clinical summary in 100 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "FU hypertension. Perindopril increased to 5 mg od. Amlodipine ceased. BP improving. Review in 4 weeks."]
 ---
 LETTER: [The full rewritten letter content as polished prose paragraphs]
 
@@ -195,7 +195,7 @@ CRITICAL REQUIREMENTS:
 - You MUST use exactly "SUMMARY:" followed by the summary text
 - You MUST use exactly "---" as the separator
 - You MUST use exactly "LETTER:" followed by the letter content
-- The summary MUST be 150 characters or less
+- The summary MUST be 100 characters or less
 - The letter MUST be formatted with proper paragraphs separated by blank lines
 - **No salutation, no sign-off, body only** (different from dictation mode which may have greetings)
 - **Preserve relative time phrases** as typed (e.g., "today", "last week")
@@ -358,9 +358,9 @@ export const QUICK_LETTER_MEDICAL_KNOWLEDGE = {
   // Professional language patterns
   professionalPhrases: {
     'rapport_opening': [
-      'I had the pleasure of speaking with {name} today',
-      'I saw {name} today',
-      'Thank you for reviewing {name} today'
+      'I had the pleasure of speaking with {firstname} today',
+      'I saw {firstname} today',
+      'Thank you for reviewing {firstname} today'
     ],
     'attendance_context': [
       '{name} attended with {companion}',

@@ -1,37 +1,89 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const usePortal = (id: string = 'portal-root') => {
   const portalRef = useRef<HTMLDivElement | null>(null);
+  const [, setForceUpdate] = useState(0);
+  const observerRef = useRef<MutationObserver | null>(null);
 
   useEffect(() => {
-    // Check if portal container already exists
-    let portalContainer = document.getElementById(id) as HTMLDivElement;
-    
-    if (!portalContainer) {
-      // Create portal container if it doesn't exist
-      portalContainer = document.createElement('div');
-      portalContainer.id = id;
-      portalContainer.style.position = 'relative';
-      portalContainer.style.zIndex = '999999';
-      portalContainer.style.pointerEvents = 'none'; // Let clicks pass through when empty
-      document.body.appendChild(portalContainer);
-    }
-    
-    portalRef.current = portalContainer;
+    const ensurePortalExists = () => {
+      // Check if portal container already exists AND is still in the DOM
+      let portalContainer = document.getElementById(id) as HTMLDivElement;
 
-    // Cleanup function to remove empty portal containers
-    return () => {
-      // Check if portal container still exists and is empty before removing
-      if (portalContainer &&
-          portalContainer.parentNode === document.body &&
-          portalContainer.children.length === 0) {
-        try {
-          document.body.removeChild(portalContainer);
-        } catch (error) {
-          // Silently handle case where node was already removed
-          console.debug('Portal container already removed:', id);
+      // If container exists but is not in the document, it's stale
+      if (portalContainer && !document.body.contains(portalContainer)) {
+        console.warn(`🚨 Portal container "${id}" exists but not in DOM - recreating`);
+        portalContainer = null;
+      }
+
+      if (!portalContainer) {
+        // Create portal container if it doesn't exist
+        console.log(`🏗️ Creating portal container: ${id}`);
+        portalContainer = document.createElement('div');
+        portalContainer.id = id;
+        portalContainer.style.position = 'relative';
+        portalContainer.style.zIndex = '999999';
+        portalContainer.style.pointerEvents = 'none'; // Let clicks pass through when empty
+        document.body.appendChild(portalContainer);
+      }
+
+      portalRef.current = portalContainer;
+      return portalContainer;
+    };
+
+    // Initial setup
+    const portalContainer = ensurePortalExists();
+
+    // Set up MutationObserver to detect if portal gets removed from DOM
+    observerRef.current = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        // Check if our portal container was removed
+        if (mutation.type === 'childList' && mutation.removedNodes.length > 0) {
+          const removed = Array.from(mutation.removedNodes).some(
+            node => node === portalRef.current
+          );
+
+          if (removed) {
+            console.warn(`🚨 Portal container "${id}" was removed from DOM - recreating`);
+            ensurePortalExists();
+            setForceUpdate(prev => prev + 1); // Force components using this portal to re-render
+          }
         }
       }
+    });
+
+    // Observe document.body for child list changes
+    observerRef.current.observe(document.body, {
+      childList: true,
+      subtree: false
+    });
+
+    // Periodic validation to ensure portal still exists (every 3 seconds)
+    const validationInterval = window.setInterval(() => {
+      if (portalRef.current && !document.body.contains(portalRef.current)) {
+        console.warn(`🚨 Portal container "${id}" missing during validation - recreating`);
+        ensurePortalExists();
+        setForceUpdate(prev => prev + 1);
+      }
+    }, 3000);
+
+    // Cleanup function - DO NOT remove portal container
+    // This prevents race conditions where the portal is removed while still needed
+    return () => {
+      console.log(`🧹 usePortal cleanup for "${id}" - keeping container in DOM`);
+
+      // Stop observing
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+
+      // Clear validation interval
+      window.clearInterval(validationInterval);
+
+      // Note: We intentionally do NOT remove the portal container here
+      // This prevents race conditions and ensures portal persists across remounts
+      // The container is lightweight and will be reused by subsequent mounts
     };
   }, [id]);
 

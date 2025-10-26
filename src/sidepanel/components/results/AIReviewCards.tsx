@@ -6,10 +6,11 @@
  * - Handles data transformation from reviewData to component props
  * - Supports patient classification display
  * - Australian medical guidelines integration
+ * - Reads bright card preference from Chrome storage
  * - Memoized for performance
  */
 
-import React, { memo } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { BatchPatientReviewResults } from '../BatchPatientReviewResults';
 import type { PatientClassification } from '@/types/medical.types';
 
@@ -51,14 +52,53 @@ interface ReviewData {
 interface AIReviewCardsProps {
   reviewData: ReviewData;
   className?: string;
-  useBrightCards?: boolean; // Enable bright card design
+  useBrightCards?: boolean; // Enable bright card design (overrides storage)
+  storageKey?: string; // Chrome storage key to read preference from
 }
 
 const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
   reviewData,
   className = '',
-  useBrightCards = false
+  useBrightCards: useBrightCardsProp,
+  storageKey = 'ui_preferences_card_theme'
 }) => {
+  const [useBrightCardsFromStorage, setUseBrightCardsFromStorage] = useState(false);
+  const [storageLoaded, setStorageLoaded] = useState(false);
+
+  // Load preference from Chrome storage on mount
+  useEffect(() => {
+    const loadPreference = async () => {
+      try {
+        const result = await chrome.storage.local.get(storageKey);
+        const theme = result[storageKey] as string;
+        // Convert theme to boolean: 'bright' = true, anything else = false
+        setUseBrightCardsFromStorage(theme === 'bright');
+      } catch (error) {
+        console.error('Failed to load card theme preference:', error);
+      } finally {
+        setStorageLoaded(true);
+      }
+    };
+
+    loadPreference();
+
+    // Listen for storage changes
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes[storageKey]) {
+        const newTheme = changes[storageKey].newValue as string;
+        setUseBrightCardsFromStorage(newTheme === 'bright');
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, [storageKey]);
+
+  // Use prop if provided, otherwise use storage value
+  const useBrightCards = useBrightCardsProp !== undefined ? useBrightCardsProp : useBrightCardsFromStorage;
   // Debug logging
   console.log('🎴 AI REVIEW CARDS: Rendering with data:', {
     hasReviewData: !!reviewData,

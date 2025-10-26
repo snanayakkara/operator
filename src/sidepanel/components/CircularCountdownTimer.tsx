@@ -1,0 +1,196 @@
+/**
+ * Circular Countdown Timer Component
+ *
+ * Lightweight custom SVG-based circular timer that shows real-time countdown
+ * with pipeline stage colors and current stage name.
+ *
+ * Features:
+ * - Pure SVG implementation (~2 kB vs 15-20 kB for external library)
+ * - Matches pipeline stage colors from design system
+ * - Smooth CSS-based animations
+ * - Responsive sizing
+ * - Accessible with ARIA labels
+ */
+
+import React, { useMemo } from 'react';
+import { motion } from 'framer-motion';
+import type { PipelineStage } from '@/types/medical.types';
+import { getStateColors, pipelineStageToState } from '@/utils/stateColors';
+
+interface CircularCountdownTimerProps {
+  /** Countdown time remaining in milliseconds */
+  remainingMs: number;
+  /** Current progress percentage (0-100) */
+  progress: number;
+  /** Current pipeline stage for color matching */
+  stage: PipelineStage;
+  /** Size in pixels (diameter) */
+  size?: number;
+  /** Optional className for container */
+  className?: string;
+}
+
+// Stage display names
+const STAGE_LABELS: Record<PipelineStage, string> = {
+  'audio-processing': 'Processing',
+  'transcribing': 'Transcribing',
+  'ai-analysis': 'AI Analysis',
+  'generation': 'Generating'
+};
+
+/**
+ * Format milliseconds to countdown string
+ * Examples: "23.4s", "2m 34s", "0.8s"
+ */
+function formatCountdown(ms: number): string {
+  const totalSeconds = ms / 1000;
+
+  if (totalSeconds < 60) {
+    // Show precise seconds with 1 decimal for times under 60s
+    return `${totalSeconds.toFixed(1)}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+
+  // Show minutes and seconds for longer times
+  return `${minutes}m ${seconds}s`;
+}
+
+/**
+ * Extract primary color from gradient definition
+ * Gradients are in format: "from-red-500 to-red-600" -> extract red-500
+ */
+function extractPrimaryColorFromGradient(gradient: string): string {
+  // Map Tailwind gradient classes to hex colors
+  const colorMap: Record<string, string> = {
+    'from-red-500': '#ef4444',
+    'from-blue-500': '#3b82f6',
+    'from-purple-500': '#a855f7',
+    'from-emerald-500': '#10b981',
+    'from-indigo-500': '#6366f1',
+    'from-rose-500': '#f43f5e',
+    'from-teal-500': '#14b8a6'
+  };
+
+  // Extract the "from-*" class
+  const fromClass = gradient.split(' ').find(c => c.startsWith('from-'));
+  return fromClass && colorMap[fromClass] ? colorMap[fromClass] : '#6366f1'; // Default indigo
+}
+
+export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
+  remainingMs,
+  progress,
+  stage,
+  size = 200,
+  className = ''
+}) => {
+  // Get stage colors from design system
+  const stageColors = useMemo(() => {
+    const state = pipelineStageToState(stage);
+    return getStateColors(state);
+  }, [stage]);
+
+  // Extract primary color from gradient
+  const primaryColor = useMemo(() => {
+    return extractPrimaryColorFromGradient(stageColors.progressGradient.active);
+  }, [stageColors]);
+
+  // Calculate SVG circle properties
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  // Calculate stroke-dashoffset for progress (inverted - counts down)
+  const progressOffset = circumference - (progress / 100) * circumference;
+
+  // Format countdown text
+  const countdownText = useMemo(() => formatCountdown(remainingMs), [remainingMs]);
+  const stageLabel = STAGE_LABELS[stage];
+
+  // Calculate center point
+  const center = size / 2;
+
+  return (
+    <motion.div
+      className={`flex items-center justify-center ${className}`}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.3 }}
+      role="timer"
+      aria-live="polite"
+      aria-label={`${countdownText} remaining, ${stageLabel}`}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${size} ${size}`}
+        className="transform -rotate-90"
+        style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))' }}
+      >
+        {/* Background circle (trail) */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="#e5e7eb"
+          strokeWidth={strokeWidth}
+          fill="none"
+          className="opacity-30"
+        />
+
+        {/* Progress circle */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={primaryColor}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={progressOffset}
+          strokeLinecap="round"
+          style={{
+            transition: 'stroke-dashoffset 0.5s ease, stroke 0.3s ease',
+          }}
+        />
+
+        {/* Center content - rotated back to normal */}
+        <g transform={`rotate(90 ${center} ${center})`}>
+          {/* Countdown time */}
+          <text
+            x={center}
+            y={center - 5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="font-bold"
+            style={{
+              fontSize: size * 0.18, // Responsive font size
+              fill: primaryColor,
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}
+          >
+            {countdownText}
+          </text>
+
+          {/* Stage label */}
+          <text
+            x={center}
+            y={center + (size * 0.12)}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="text-gray-600"
+            style={{
+              fontSize: size * 0.07, // Smaller font for label
+              fill: '#4b5563',
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}
+          >
+            {stageLabel}
+          </text>
+        </g>
+      </svg>
+    </motion.div>
+  );
+};

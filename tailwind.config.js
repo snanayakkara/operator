@@ -126,9 +126,9 @@ export default {
           '100%': { transform: 'scale(1.05)', opacity: '1' },
         },
         clickFeedback: {
-          '0%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(168, 85, 247, 0)' },
-          '50%': { transform: 'scale(0.98)', boxShadow: '0 0 0 4px rgba(168, 85, 247, 0.3)' },
-          '100%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(168, 85, 247, 0)' },
+          '0%': { transform: 'scale(1)', boxShadow: '0 0 0 0 var(--click-shadow-color, rgba(168, 85, 247, 0))' },
+          '50%': { transform: 'scale(0.98)', boxShadow: '0 0 0 4px var(--click-shadow-color, rgba(168, 85, 247, 0.3))' },
+          '100%': { transform: 'scale(1)', boxShadow: '0 0 0 0 var(--click-shadow-color, rgba(168, 85, 247, 0))' },
         },
       },
       borderRadius: {

@@ -262,6 +262,8 @@ export interface AppState {
   educationData?: any;
   // Pre-Op Plan structured data
   preOpPlanData?: PreOpPlanReport['planData'];
+  // Right Heart Cath structured data
+  rhcReport?: RightHeartCathReport;
   // Patient version generation
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
@@ -766,6 +768,7 @@ export interface PatientSession {
   educationData?: any; // Patient Education structured data (JSON metadata + letter content)
   preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op plan card + structured JSON
   reviewData?: any; // AI Medical Review structured data (findings array with urgency levels)
+  rhcReport?: RightHeartCathReport; // Right Heart Cath structured data with haemodynamic calculations
   agentType: AgentType;
   agentName: string;
   timestamp: number;
@@ -773,6 +776,7 @@ export interface PatientSession {
   completed: boolean; // Kept for backward compatibility
   processingTime?: number;
   modelUsed?: string; // LLM model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
+  audioDuration?: number; // Audio duration in seconds for ETA prediction
   warnings?: string[];
   errors?: string[];
   // Quick Action field tracking for EMR insertion
@@ -975,6 +979,7 @@ export interface RightHeartCathReport extends MedicalReport {
   complications: RHCComplication[];
   calculations?: CalculatedHaemodynamics; // Auto-calculated derived values
   patientData?: RHCPatientData; // Patient anthropometrics and vitals
+  missingCalculationFields?: string[]; // Fields needed for complete calculations
 }
 
 /**
@@ -1073,6 +1078,11 @@ export interface RightHeartCathData {
   vascularAccess: VenousAccess;
   catheterDetails: string;
   laboratoryValues: RHCLaboratoryValues;
+  // Radiation safety and contrast data
+  fluoroscopyTime?: string; // minutes
+  fluoroscopyDose?: string; // mGy
+  doseAreaProduct?: string; // DAP in Gy·cm²
+  contrastVolume?: string; // mL
   immediateOutcomes: string;
   recommendations: string;
   followUp: string;

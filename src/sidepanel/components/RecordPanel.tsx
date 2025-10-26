@@ -69,6 +69,21 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
       isRecording,
       activeWorkflow
     });
+
+    // Force clean state on mount to prevent stale state from previous sessions
+    setIsExpanded(false);
+    setIsHovering(false);
+    isHoveringRef.current = false;
+    setHoveredExpandableId(null);
+
+    if (hoverTimeoutRef.current) {
+      console.log('🧹 Clearing stale timeout on mount');
+      window.clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+
+    console.log('✅ RecordPanel state reset on mount');
+
     return () => console.log('🎬 RecordPanel unmounted');
   }, []);
 
@@ -104,6 +119,15 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
       return;
     }
 
+    // Defensive check: ensure triggerRef is still connected
+    if (triggerRef.current && !triggerRef.current.isConnected) {
+      console.warn('🚨 handleMouseEnter: triggerRef is stale, resetting state');
+      setIsExpanded(false);
+      setIsHovering(false);
+      isHoveringRef.current = false;
+      return;
+    }
+
     console.log('🖱️ Mouse entered record button', {
       isExpanded,
       hasTimeout: !!hoverTimeoutRef.current,
@@ -111,7 +135,8 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
       whisperServerRunning,
       disabled,
       isRecording,
-      activeWorkflow
+      activeWorkflow,
+      triggerConnected: triggerRef.current?.isConnected
     });
 
     isHoveringRef.current = true;
@@ -338,7 +363,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     };
   }, [isRecording, disabled, whisperServerRunning, activeWorkflow]);
 
-  // Periodic state recovery to fix stuck states (runs every 5 seconds)
+  // Periodic state recovery to fix stuck states (runs every 2 seconds for faster recovery)
   useEffect(() => {
     const recoveryInterval = window.setInterval(() => {
       // Only attempt recovery when not recording and button should be accessible
@@ -348,6 +373,24 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           console.warn('🔧 PERIODIC RECOVERY: Detected stuck expanded state, resetting', {
             isExpanded,
             isHoveringRefCurrent: isHoveringRef.current,
+            triggerConnected: triggerRef.current?.isConnected,
+            timestamp: Date.now()
+          });
+
+          setIsExpanded(false);
+          setIsHovering(false);
+          isHoveringRef.current = false;
+
+          if (hoverTimeoutRef.current) {
+            window.clearTimeout(hoverTimeoutRef.current);
+            hoverTimeoutRef.current = null;
+          }
+        }
+
+        // Additional check: ensure triggerRef is still valid
+        if (triggerRef.current && !triggerRef.current.isConnected) {
+          console.warn('🔧 PERIODIC RECOVERY: Detected stale triggerRef, resetting state', {
+            triggerConnected: false,
             timestamp: Date.now()
           });
 
@@ -361,7 +404,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           }
         }
       }
-    }, 5000); // Check every 5 seconds
+    }, 2000); // Check every 2 seconds (reduced from 5s for faster recovery)
 
     return () => {
       window.clearInterval(recoveryInterval);

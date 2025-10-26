@@ -466,22 +466,22 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     const vesselSections = [
       {
         key: 'lm',
-        heading: 'Left Main',
+        heading: '**LM (left main)**',
         fallback: this.describeLMFindings(procedureData)
       },
       {
         key: 'lad',
-        heading: 'Left Anterior Descending (LAD)',
+        heading: '**LAD (left anterior descending)**',
         fallback: this.describeLADFindings(procedureData)
       },
       {
         key: 'lcx',
-        heading: 'Left Circumflex (LCx)',
+        heading: '**LCx (left circumflex)**',
         fallback: this.describeLCxFindings(procedureData)
       },
       {
         key: 'rca',
-        heading: 'Right Coronary Artery (RCA)',
+        heading: '**RCA (right coronary artery)**',
         fallback: this.describeRCAFindings(procedureData)
       }
     ];
@@ -617,16 +617,16 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     // FINDINGS - coronary anatomy
     const findings = `Coronary anatomy and dominance: [Not specified in dictation]
 
-Left Main
+**LM (left main)**
 ${this.describeLMFindings(procedureData) || '[Not specified in dictation]'}
 
-Left Anterior Descending (LAD)
+**LAD (left anterior descending)**
 ${this.describeLADFindings(procedureData) || '[Not specified in dictation]'}
 
-Left Circumflex (LCx)
+**LCx (left circumflex)**
 ${this.describeLCxFindings(procedureData) || '[Not specified in dictation]'}
 
-Right Coronary Artery (RCA)
+**RCA (right coronary artery)**
 ${this.describeRCAFindings(procedureData) || '[Not specified in dictation]'}
 
 Left ventricle/valves/hemodynamics: ${procedureData.hemodynamics || '[Not specified in dictation]'}`;

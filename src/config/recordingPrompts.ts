@@ -436,25 +436,39 @@ export const RECORDING_PROMPTS: readonly RecordingPromptConfig[] = [
     estimatedTime: '6-10 minutes',
     sections: [
       {
-        title: 'Haemodynamic Assessment',
+        title: 'Patient Data (REQUIRED for calculations)',
+        icon: '👤',
+        items: [
+          'Height (cm) and Weight (kg)',
+          'Heart rate (bpm) and rhythm',
+          'Systemic blood pressure (mmHg)',
+          'Haemoglobin (g/L) and Lactate (mmol/L)',
+          'Arterial oxygen saturation (%)'
+        ]
+      },
+      {
+        title: 'Haemodynamic Pressures',
         icon: '📊',
         items: [
-          'Right atrial pressure measurements',
-          'Right ventricular pressures',
-          'Pulmonary artery pressures',
-          'Pulmonary capillary wedge pressure',
-          'Cardiac output and index',
-          'Pulmonary vascular resistance',
-          'TPG, RVSWI'
+          'Right atrial pressure (a/v/mean mmHg)',
+          'Right ventricular pressures (systolic/diastolic mmHg)',
+          'RVEDP (mmHg)',
+          'Pulmonary artery (systolic/diastolic/mean mmHg)',
+          'PCWP (a/v/mean mmHg)',
+          'Cardiac output (L/min) & index (L/min/m²)',
+          'Mixed venous O₂ saturation (%)'
         ]
       },
       {
         title: 'Technical Details',
         icon: '🔧',
         items: [
-          'Vascular access approach',
-          'Catheter selection and positioning',
-          'Measurement technique and validation',
+          'Vascular access approach (basilic/jugular/femoral)',
+          'Catheter type and size (e.g., 7F Swan-Ganz)',
+          'Fluoroscopy time (minutes)',
+          'Fluoroscopy dose (mGy)',
+          'DAP (dose area product, Gy·cm²)',
+          'Contrast volume (mL) if used',
           'Thermodilution or Fick method',
           'Complications if any'
         ]
@@ -472,16 +486,19 @@ export const RECORDING_PROMPTS: readonly RecordingPromptConfig[] = [
       }
     ],
     tips: [
-      'Include precise pressure measurements',
-      'Document calculation methods used',
-      'Note any technical challenges',
+      'MUST dictate: Height, Weight, HR, BP for auto-calculations',
+      'TPG, DPG, PVR are AUTO-CALCULATED - no need to dictate',
+      'Include precise pressure measurements with units',
+      'Dictate fluoroscopy dose/time/DAP for radiation safety',
+      'Note contrast volume for nephrotoxicity assessment',
       'Correlate with clinical presentation'
     ],
     terminology: [
       'Pulmonary vascular resistance, cardiac index',
       'Thermodilution, Fick equation',
       'Pulmonary hypertension, right heart failure',
-      'Haemodynamic profile, pressure gradients'
+      'Haemodynamic profile, pressure gradients',
+      'BSA, TPG, DPG, PVR (auto-calculated from raw values)'
     ]
   },
 

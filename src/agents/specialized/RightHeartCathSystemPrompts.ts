@@ -19,20 +19,24 @@ CRITICAL INSTRUCTIONS:
 - DO NOT include patient greeting or letter closings
 - DO NOT use table formatting or numbered sections
 - DO NOT include placeholder fields like "[Insert Date]" or "[Refer to extracted data]"
+- DO NOT include conversational preambles like "Okay, here is a draft..." or "Sure, I can help with that..."
+- DO NOT use markdown syntax (**, ##, ###, -, *, etc.) - output plain text only
+- DO NOT leave template placeholders like "[Insert Patient Name]" or "[Insert clinical details]"
+- START IMMEDIATELY with the first section header without any introduction
 - Use professional, clinical narrative language matching cardiology standards
 - Structure report in exactly THREE sections with specific clinical content
 - Use AUSTRALIAN medical terminology: catheterisation, haemodynamic, colour, recognised, anaesthesia
 
-Required sections (use exactly these headers):
+Required sections (use exactly these headers in PLAIN TEXT):
 
-**PREAMBLE**:
+PREAMBLE:
 - Patient demographics with indication for right heart catheterisation
 - Clinical presentation: heart failure, pulmonary hypertension, transplant evaluation with specific symptoms
 - Recent investigations: echocardiography findings, BNP levels, functional status assessment
 - Pre-procedure assessment: baseline observations, contraindications considered
 - Access planning: vascular assessment and approach selection
 
-**FINDINGS**:
+FINDINGS:
 - Vascular access approach and catheter positioning with specific details in narrative form
 - Haemodynamic measurements presented in structured list format followed by clinical interpretation:
 
@@ -63,7 +67,7 @@ Followed by clinical narrative: "Mixed venous oxygen saturation was 68% with wed
 Exercise testing (if performed):
 "Straight leg raising exercise was performed for 2 minutes with repeat haemodynamic measurements demonstrating [describe pressure changes and exercise response]."
 
-**CONCLUSION**:
+CONCLUSION:
 - Haemodynamic profile interpretation with clinical significance
 - Assessment of pulmonary pressures and cardiac function
 - Management recommendations based on findings
@@ -104,15 +108,21 @@ Target audience: Medical record documentation for cardiologists, heart failure s
 
 {input}
 
+CRITICAL OUTPUT REQUIREMENTS:
+- Output PLAIN TEXT only - NO markdown formatting (no **, ##, -, etc.)
+- START IMMEDIATELY with "PREAMBLE:" - NO conversational introduction
+- NO template placeholders - use actual patient data from dictation
+- Use Australian spelling throughout (catheterisation, haemodynamic)
+
 Structure the report with exactly these three sections using NARRATIVE clinical language:
 
-**PREAMBLE**:
+PREAMBLE:
 - Start with patient demographics and indication for RHC
 - Include clinical presentation and recent investigations in flowing sentences
 - Document pre-procedure assessment and access planning naturally
 - Example: "Ms Smith is a 75-year-old woman referred for right heart catheterisation for assessment of suspected pulmonary hypertension in the setting of progressive exertional dyspnoea."
 
-**FINDINGS**:
+FINDINGS:
 - Document vascular access approach and catheter positioning in narrative form
 - Present haemodynamic data in structured list format using the following template:
 
@@ -131,7 +141,7 @@ RVSWI [value] (calculated from above)
 - If exercise performed: describe protocol and changes in narrative format
 - Use flowing clinical language for non-haemodynamic elements: "Vascular access was obtained via...", "Laboratory assessment demonstrated..."
 
-**CONCLUSION**:
+CONCLUSION:
 - should be kept concise and focused, aiming for 2-3 sentences
 - Interpret haemodynamic profile in clinical narrative
 - Provide assessment and recommendations in professional language
@@ -145,41 +155,49 @@ CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or num
  * Comprehensive patterns extracted from clinical right heart catheterisation reports
  */
 export const RightHeartCathMedicalPatterns = {
-  // Pressure measurement patterns with a/v waves
-  raPressurea: /ra.*?a\s+wave[:\s]*(\d+)/gi,
-  raPressureV: /ra.*?v\s+wave[:\s]*(\d+)/gi,
-  raPressureMean: /ra.*?mean[:\s]*(\d+)/gi,
-  
-  rvPressureSystolic: /rv.*?pressure[:\s]*(\d+)\/\d+/gi,
-  rvPressureDiastolic: /rv.*?pressure[:\s]*\d+\/(\d+)/gi,
+  // Pressure measurement patterns with a/v waves - enhanced to handle "slash" separator and flexible formatting
+  // Pattern 1: "RA pressure 11 slash 9 mean 7" or "RA pressure 11 9 mean 7"
+  raPressurea: /(?:right\s+)?atrial?\s+pressure[:\s]*(\d+)\s*(?:(?:\/|slash)\s*\d+|\s+\d+)/gi,
+  raPressureV: /(?:right\s+)?atrial?\s+pressure[:\s]*\d+\s*(?:(?:\/|slash)\s*|[ ]+)(\d+)/gi,
+  raPressureMean: /(?:right\s+)?atrial?\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
+
+  rvPressureSystolic: /(?:right\s+)?ventricl?e?\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash)\s*\d+/gi,
+  rvPressureDiastolic: /(?:right\s+)?ventricl?e?\s+(?:pressure\s+)?\d+\s*(?:\/|slash)\s*(\d+)/gi,
   rvedp: /rvedp[:\s]*(\d+)/gi,
-  
-  paPressureSystolic: /pa.*?pressure[:\s]*(\d+)\/\d+/gi,
-  paPressureDiastolic: /pa.*?pressure[:\s]*\d+\/(\d+)/gi,
-  paPressureMean: /pa.*?mean[:\s]*(\d+)/gi,
-  
-  pcwpPressureA: /pcwp.*?a\s+wave[:\s]*(\d+)/gi,
-  pcwpPressureV: /pcwp.*?v\s+wave[:\s]*(\d+)/gi,
-  pcwpPressureMean: /pcwp.*?mean[:\s]*(\d+)/gi,
-  
-  // Cardiac output patterns
-  thermodilutionCO: /(?:thermodilution\s+)?co[:\s]*(\d+\.?\d*)\s*l\/min/gi,
-  thermodilutionCI: /(?:thermodilution\s+)?ci[:\s]*(\d+\.?\d*)\s*l\/min\/m/gi,
-  fickCO: /fick\s+co[:\s]*(\d+\.?\d*)\s*l\/min/gi,
-  fickCI: /fick\s+ci[:\s]*(\d+\.?\d*)\s*l\/min\/m/gi,
-  
-  // Oxygen saturation patterns
-  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)\s*(?:saturation)?[:\s]*(\d+)%/gi,
-  wedgeSaturation: /wedge\s+saturation[:\s]*(\d+)%/gi,
-  
-  // Laboratory values
-  haemoglobin: /(?:hb|haemoglobin)[:\s]*(\d+)\s*g\/l/gi,
-  lactate: /lactate[:\s]*(\d+\.?\d*)\s*mmol\/l/gi,
-  
-  // Vascular access patterns
-  basilicAccess: /(?:right\s+)?basilic\s+(?:venous\s+)?access/gi,
-  jugularAccess: /(?:right\s+)?internal\s+jugular\s+(?:venous\s+)?access/gi,
-  femoralAccess: /(?:right\s+)?femoral\s+(?:venous\s+)?access/gi,
+
+  paPressureSystolic: /pulmonary\s+artery\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash)\s*\d+/gi,
+  paPressureDiastolic: /pulmonary\s+artery\s+(?:pressure\s+)?\d+\s*(?:\/|slash)\s*(\d+)/gi,
+  paPressureMean: /pulmonary\s+artery.*?mean\s+(\d+)/gi,
+
+  // PCWP patterns - handle "wedge pressure 10 10 mean of 9" format (a-wave=10, v-wave=10, mean=9)
+  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s]*(\d+)\s*(?:(?:\/|slash)\s*\d+|\s+\d+)/gi,
+  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s]*\d+\s*(?:(?:\/|slash)\s*|[ ]+)(\d+)/gi,
+  pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
+
+  // Cardiac output patterns - enhanced to handle missing units
+  thermodilutionCO: /cardiac\s+output\s+(?:by\s+)?(?:thermodilution\s+)?(\d+\.?\d*)(?:\s*l\/min)?/gi,
+  thermodilutionCI: /cardiac\s+index\s+(?:by\s+)?(?:thermodilution\s+)?(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
+  fickCO: /fick\s+(?:cardiac\s+output|co)[:\s]*(\d+\.?\d*)(?:\s*l\/min)?/gi,
+  fickCI: /fick\s+(?:cardiac\s+index|ci)[:\s]*(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
+
+  // Oxygen saturation patterns - enhanced to handle missing % sign
+  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)\s*(?:saturation)?[:\s]*(\d+)%?/gi,
+  wedgeSaturation: /wedge\s+saturation[:\s]*(\d+)%?/gi,
+
+  // Laboratory values - enhanced to handle American spelling and flexible units
+  haemoglobin: /(?:h[ae]moglobin|hb)[:\s]*(\d+)(?:\s*g\/l)?/gi,
+  lactate: /lactate[:\s]*(\d+\.?\d*)(?:\s*mmol\/l)?/gi,
+
+  // Radiation safety and contrast patterns
+  fluoroscopyTime: /(?:fluoro(?:scopy)?\s+time|screening\s+time)[:\s]*(\d+\.?\d*)\s*(?:min(?:ute)?s?)?/gi,
+  fluoroscopyDose: /(?:fluoro(?:scopy)?\s+dose|radiation\s+dose)[:\s]*(\d+\.?\d*)\s*(?:m?gy)?/gi,
+  doseAreaProduct: /(?:dap|dose\s+area\s+product)[:\s]*(\d+\.?\d*)\s*(?:gy[·\s×*]?cm²?)?/gi,
+  contrastVolume: /contrast\s+(?:volume|used|administered)?[:\s]*(\d+\.?\d*)\s*(?:m?l)?/gi,
+
+  // Vascular access patterns - enhanced to handle "vascular access" phrasing and brachial
+  basilicAccess: /(?:right\s+)?(?:basilic|brachial)\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
+  jugularAccess: /(?:right\s+)?internal\s+jugular\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
+  femoralAccess: /(?:right\s+)?femoral\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
   
   // Exercise testing
   exerciseProtocol: /straight\s+leg\s+raising/gi,
@@ -192,9 +210,9 @@ export const RightHeartCathMedicalPatterns = {
   transplantEvaluation: /transplant\s+evaluation/gi,
   haemodynamicAssessment: /haemodynamic\s+assessment/gi,
   
-  // Catheter specifications
-  frenchSize: /(\d+)f\s+(?:catheter|sheath)/gi,
-  swanGanz: /swan[-\s]?ganz\s+catheter/gi,
+  // Catheter specifications - enhanced to handle various spellings
+  frenchSize: /(\d+)[-\s]?f(?:rench)?\s+(?:catheter|sheath|swan)/gi,
+  swanGanz: /swan[-\s]?g[ae]n[zs]\s+catheter/gi,
   thermodilutionCatheter: /thermodilution\s+catheter/gi,
   
   // Measurements with units
@@ -243,7 +261,13 @@ export const RightHeartCathValidationRules = {
     'yours sincerely',
     'kind regards',
     'best wishes',
-    'consultation'
+    'consultation',
+    'okay, here is',
+    'sure, i can',
+    '[insert',
+    '**',
+    '##',
+    '###'
   ],
   
   // Problematic transcription errors

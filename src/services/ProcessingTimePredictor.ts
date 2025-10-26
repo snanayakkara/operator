@@ -42,6 +42,7 @@ export interface AgentPerformanceProfile {
 export interface HistoricalDataPoint {
   agentType: AgentType;
   transcriptionLength: number;
+  audioDuration?: number; // Audio duration in seconds
   actualProcessingTime: number;
   timestamp: number;
   systemPerformance?: number; // 0-100 scale
@@ -239,6 +240,7 @@ export class ProcessingTimePredictor {
     agentType: AgentType,
     transcriptionLength: number,
     options?: {
+      audioDuration?: number; // Audio duration in seconds
       systemPerformance?: number; // 0-100 scale
       includeTranscriptionTime?: boolean;
     }
@@ -254,12 +256,17 @@ export class ProcessingTimePredictor {
 
     // Calculate base estimate from profile
     const baseEstimate = profile.baselineMs;
-    const lengthFactor = this.calculateLengthFactor(transcriptionLength, profile.lengthScalingFactor);
-    
+
+    // Use audio duration as primary factor if available, otherwise use transcription length
+    const lengthFactor = options?.audioDuration
+      ? this.calculateAudioDurationFactor(options.audioDuration, profile.lengthScalingFactor)
+      : this.calculateLengthFactor(transcriptionLength, profile.lengthScalingFactor);
+
     // Apply historical adjustments
     const historicalAdjustment = this.calculateHistoricalAdjustment(
       agentType,
       transcriptionLength,
+      options?.audioDuration,
       historicalForAgent
     );
 
@@ -376,9 +383,24 @@ export class ProcessingTimePredictor {
     // Scale based on character count with diminishing returns
     const baseLength = 500; // Reference length
     const lengthRatio = length / baseLength;
-    
+
     // Apply scaling factor with logarithmic curve to prevent extreme scaling
     return 1 + (Math.log(lengthRatio + 1) * scalingFactor * 0.3);
+  }
+
+  /**
+   * Calculate audio duration scaling factor
+   * Audio duration is more reliable than transcription length for predicting processing time
+   */
+  private calculateAudioDurationFactor(durationSeconds: number, scalingFactor: number): number {
+    // Scale based on audio duration with logarithmic curve
+    // Typical dictation is 30-60 seconds
+    const baseDuration = 45; // Reference duration in seconds
+    const durationRatio = durationSeconds / baseDuration;
+
+    // Apply scaling factor with logarithmic curve
+    // Audio duration has stronger correlation than text length, so use a higher multiplier (0.5 vs 0.3)
+    return 1 + (Math.log(durationRatio + 1) * scalingFactor * 0.5);
   }
 
   /**
@@ -387,18 +409,32 @@ export class ProcessingTimePredictor {
   private calculateHistoricalAdjustment(
     agentType: AgentType,
     transcriptionLength: number,
+    audioDuration: number | undefined,
     historicalData: HistoricalDataPoint[]
   ): number {
     if (historicalData.length < 3) {
       return 1.0; // Not enough data for adjustment
     }
 
-    // Find similar sessions (±50% length)
-    const lengthRange = { min: transcriptionLength * 0.5, max: transcriptionLength * 1.5 };
-    const similarSessions = historicalData.filter(d => 
-      d.transcriptionLength >= lengthRange.min && 
-      d.transcriptionLength <= lengthRange.max
-    );
+    // Find similar sessions based on audio duration (if available) or transcription length
+    let similarSessions: HistoricalDataPoint[];
+
+    if (audioDuration !== undefined) {
+      // Match by audio duration (±50% range)
+      const durationRange = { min: audioDuration * 0.5, max: audioDuration * 1.5 };
+      similarSessions = historicalData.filter(d =>
+        d.audioDuration !== undefined &&
+        d.audioDuration >= durationRange.min &&
+        d.audioDuration <= durationRange.max
+      );
+    } else {
+      // Fall back to matching by transcription length
+      const lengthRange = { min: transcriptionLength * 0.5, max: transcriptionLength * 1.5 };
+      similarSessions = historicalData.filter(d =>
+        d.transcriptionLength >= lengthRange.min &&
+        d.transcriptionLength <= lengthRange.max
+      );
+    }
 
     if (similarSessions.length < 2) {
       // Use all sessions if not enough similar ones
@@ -510,11 +546,13 @@ export class ProcessingTimePredictor {
     agentType: AgentType,
     transcriptionLength: number,
     actualProcessingTimeMs: number,
+    audioDuration?: number,
     systemPerformance?: number
   ): void {
     const dataPoint: HistoricalDataPoint = {
       agentType,
       transcriptionLength,
+      audioDuration,
       actualProcessingTime: actualProcessingTimeMs,
       timestamp: Date.now(),
       systemPerformance
@@ -535,6 +573,7 @@ export class ProcessingTimePredictor {
       operation: 'record-time',
       agentType,
       transcriptionLength,
+      audioDuration,
       processingTime: actualProcessingTimeMs
     });
   }

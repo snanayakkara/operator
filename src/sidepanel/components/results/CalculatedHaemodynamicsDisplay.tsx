@@ -26,6 +26,8 @@ interface MetricCardProps {
   description?: string;
   priority?: 'high' | 'medium' | 'low';
   decimalPlaces?: number;
+  prerequisites?: string[]; // What raw values are needed to calculate this
+  showWhenMissing?: boolean; // Show card even when value is undefined
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -35,9 +37,31 @@ const MetricCard: React.FC<MetricCardProps> = ({
   normalRange,
   description,
   priority = 'medium',
-  decimalPlaces = 1
+  decimalPlaces = 1,
+  prerequisites = [],
+  showWhenMissing = false
 }) => {
-  if (value === undefined) return null;
+  // Show missing value card if requested
+  if (value === undefined) {
+    if (!showWhenMissing || prerequisites.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="bg-gray-50 border-l-2 border-gray-300 rounded-lg p-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="text-xs font-medium text-gray-600 mb-1">{label}</div>
+            <div className="text-sm text-gray-500 italic">Not calculated</div>
+            <div className="text-xs text-gray-500 mt-2">
+              <span className="font-medium">Needs:</span> {prerequisites.join(', ')}
+            </div>
+          </div>
+          <AlertCircle className="w-4 h-4 text-gray-400 ml-2" />
+        </div>
+      </div>
+    );
+  }
 
   // Determine if value is within normal range
   let status: 'normal' | 'abnormal' | 'borderline' = 'normal';
@@ -255,12 +279,16 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
                     normalRange={{ max: 3 }}
                     priority="high"
                     description="Pulmonary Vascular Resistance"
+                    prerequisites={['PA mean', 'PCWP', 'CO']}
+                    showWhenMissing={true}
                   />
                   <MetricCard
                     label="PVRI"
                     value={calculations.pulmonaryVascularResistanceIndex}
                     unit="Wood·m²"
                     normalRange={{ max: 5 }}
+                    prerequisites={['PVR', 'BSA']}
+                    showWhenMissing={true}
                   />
                   <MetricCard
                     label="TPG"
@@ -268,6 +296,8 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
                     unit="mmHg"
                     normalRange={{ max: 12 }}
                     description="Transpulmonary Gradient"
+                    prerequisites={['PA mean', 'PCWP']}
+                    showWhenMissing={true}
                   />
                   <MetricCard
                     label="DPG"
@@ -275,6 +305,8 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
                     unit="mmHg"
                     normalRange={{ max: 7 }}
                     description="Diastolic Pressure Gradient"
+                    prerequisites={['PA diastolic', 'PCWP']}
+                    showWhenMissing={true}
                   />
                 </div>
               </div>

@@ -38,23 +38,43 @@ SECTION REQUIREMENTS:
 - Do **not** include technique details here.
 
 **PROCEDURE**
-- Access site and sheath size (Fr).
-- Diagnostic/guide catheters used.
-- Medications with doses: anticoagulation and radial spasm prophylaxis.
-  - If the dictation contains the phrase **“usual cocktail”**, expand to **verapamil 0.5 mg intra-arterial, GTN 100 mcg intra-arterial, heparin 5000 units IV**, unless contradictory doses are explicitly dictated.
-- Radiation & contrast: contrast (mL), fluoroscopy time (min), **DAP (Gy·cm²)** and **Air Kerma (mGy)** if available.
-- Brief procedural course and challenges (e.g., calcified/tortuous radial, wiring/escalation).
-- Closure method (e.g., TR-Band, Perclose, Angio-Seal).
-- **Complications:** state **“None”** explicitly if none.
+Write this section as a **flowing narrative** describing the procedure chronologically, NOT as a list. Use complete sentences that connect smoothly. Structure the narrative flow as:
+
+1. **Patient preparation and sedation** (if dictated) — e.g., "The patient was brought to the cardiac catheterisation laboratory and intravenous sedation provided with [dose] midazolam and [dose] fentanyl."
+
+2. **Vascular access** — e.g., "Right radial access was gained using a 6 French sheath." OR "Access was obtained via the right radial artery using a 6 French sheath."
+
+3. **Anticoagulation and radial cocktail** (when applicable) — Integrate medication administration naturally into the narrative flow, e.g., "5000 units of heparin was administered intra-arterially; an additional 2000 units was given intravenously mid-case." OR "Following access, the radial cocktail was administered comprising verapamil 0.5 mg and GTN 100 mcg intra-arterially."
+   - If the dictation contains **"usual cocktail"**, expand to **verapamil 0.5 mg intra-arterial, GTN 100 mcg intra-arterial, heparin 5000 units IV** unless contradictory doses are explicitly dictated.
+
+4. **Catheter selection and engagement** — e.g., "Diagnostic catheterisation was performed using a 5 French TIG catheter" OR "A 6 French JL4 guide catheter was used to engage the left coronary system."
+
+5. **Procedural course** (if relevant) — Describe any challenges, escalations, or technical nuances, e.g., "The radial artery was moderately tortuous requiring gentle wire manipulation" OR "Wire escalation to a Fielder XT was required for the occluded vessel."
+
+6. **Radiation and contrast** — Integrate naturally, e.g., "Total contrast volume was 85 mL with a fluoroscopy time of 8.2 minutes" OR if not documented: "[Radiation dose not documented]" or omit entirely.
+
+7. **Closure and haemostasis** — e.g., "Haemostasis was achieved with a TR-Band at 15 mL" OR "The access site was closed with a Perclose device."
+
+8. **Complications** — State explicitly, e.g., "There were no complications" OR "Complications: None."
+
+**CRITICAL**: Avoid bullet points, dashes, or list-like formatting. Each element should flow into the next as cohesive prose that reads naturally when spoken aloud.
 
 **FINDINGS**
 - Begin with coronary anatomy/dominance if mentioned.
-- Provide subsections in this exact order:
-  1. Left Main
-  2. Left Anterior Descending (LAD)
-  3. Left Circumflex (LCx)
-  4. Right Coronary Artery (RCA)
+- Provide subsections in this exact order with **bold abbreviation** followed by full name in parentheses:
+  1. **LM (left main)**
+  2. **LAD (left anterior descending)**
+  3. **LCx (left circumflex)**
+  4. **RCA (right coronary artery)**
   5. **Grafts** — only when bypass grafts are present; use LIMA, RIMA, RAD (radial artery), SVG and specify targets.
+- Each vessel heading must be on its own line in bold with the format: **ABBREVIATION (full name)**
+- The findings for each vessel should be narrative text on the following line(s), NOT bulleted lists.
+- Example format:
+  **LAD (left anterior descending)**
+  Moderate (50%) proximal stenosis. Severe (70%) ostial stenosis of the first diagonal. Diffuse distal LAD disease.
+
+  **LCx (left circumflex)**
+  Minor irregularities in the proximal vessel. OM1 and OM2 are patent without significant disease.
 - Within each subsection describe stenosis severity, morphology, flow, grafts/branches, and any PCI result relevant to that vessel.
 - Include a brief "Additional Notes" or "Left Ventricle" paragraph only if extra findings remain (hemodynamics, FFR/iFR, collaterals) that do not belong in the vessel subsections.
 
@@ -77,9 +97,11 @@ PROCEDURE TYPE DETECTION GUIDANCE:
 - Combined: contains both diagnostic findings and intervention narrative.
 
 TERMINOLOGY & FORMATTING:
-- Use LM, LAD, LCx, RCA for native vessels; **LIMA, RIMA, RAD, SVG** for grafts.
-- Maintain spacing in measurements (e.g., “stent 3.0 x 28 mm”, “TIMI III flow”).
-- Present stent dimensions with decimals where supplied (e.g., “3.0 x 28 mm Xience DES”).
+- Use **LM, LAD, LCx, RCA** for native vessels in bold headings: **LAD (left anterior descending)**; **LIMA, RIMA, RAD, SVG** for grafts.
+- Vessel headings must be bold with abbreviation first: **ABBREVIATION (full name)** (e.g., **LAD (left anterior descending)**)
+- Findings under each vessel heading should be narrative prose, not lists or bullet points.
+- Maintain spacing in measurements (e.g., "stent 3.0 x 28 mm", "TIMI III flow").
+- Present stent dimensions with decimals where supplied (e.g., "3.0 x 28 mm Xience DES").
 
 STENT AND DEVICE DOCUMENTATION:
 - Capture manufacturer names, device dimensions, imaging guidance, and adjunctive techniques (IVUS, OCT, IVL) exactly as dictated. **Do not include device lot/model numbers here.**

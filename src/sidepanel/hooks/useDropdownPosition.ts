@@ -30,9 +30,34 @@ export const useDropdownPosition = (options: UseDropdownPositionOptions) => {
   const [position, setPosition] = useState<DropdownPosition>({ top: 0, left: 0 });
 
   const calculatePosition = useCallback(() => {
-    if (!triggerRef.current || !isOpen) return;
+    if (!isOpen) return;
+
+    // Validate triggerRef before using it
+    if (!triggerRef.current) {
+      console.warn('🚨 useDropdownPosition: triggerRef.current is null - cannot calculate position');
+      return;
+    }
+
+    // Check if trigger element is still connected to the DOM
+    if (!triggerRef.current.isConnected) {
+      console.warn('🚨 useDropdownPosition: triggerRef element is not connected to DOM - stale ref detected');
+      return;
+    }
+
+    // Additional safety check: ensure element is in document
+    if (!document.body.contains(triggerRef.current)) {
+      console.warn('🚨 useDropdownPosition: triggerRef element not in document body - stale ref detected');
+      return;
+    }
 
     const triggerRect = triggerRef.current.getBoundingClientRect();
+
+    // Validate bounding rect (detect detached elements)
+    if (triggerRect.width === 0 && triggerRect.height === 0) {
+      console.warn('🚨 useDropdownPosition: trigger element has zero dimensions - possibly detached');
+      return;
+    }
+
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight

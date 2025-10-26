@@ -120,12 +120,15 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // Analyze haemodynamic pressures
       const haemodynamicPressures = this.extractHaemodynamicPressures(correctedInput);
+      console.log('📊 Extracted haemodynamic pressures:', JSON.stringify(haemodynamicPressures, null, 2));
 
       // Assess cardiac output
       const cardiacOutput = this.extractCardiacOutput(correctedInput);
+      console.log('💓 Extracted cardiac output:', JSON.stringify(cardiacOutput, null, 2));
 
       // Extract patient anthropometric data and vitals
       const patientData = this.extractPatientData(correctedInput);
+      console.log('👤 Extracted patient data:', JSON.stringify(patientData, null, 2));
 
       // Extract exercise data if present
       const exerciseHaemodynamics = this.extractExerciseHaemodynamics(correctedInput);
@@ -139,6 +142,7 @@ export class RightHeartCathAgent extends MedicalAgent {
         cardiacOutput,
         patientData
       );
+      console.log('🧮 Calculated haemodynamics:', JSON.stringify(calculations, null, 2));
 
       // Generate structured report content
       const reportContent = await this.generateStructuredReport(
@@ -172,6 +176,13 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       const baseReport = this.createReport(combinedContent, sections, context, processingTime, 0.95);
 
+      // Identify missing fields required for calculations
+      const missingCalculationFields = this.identifyMissingCalculationFields(
+        haemodynamicPressures,
+        cardiacOutput,
+        patientData
+      );
+
       const report: RightHeartCathReport = {
         ...baseReport,
         rhcData,
@@ -180,7 +191,8 @@ export class RightHeartCathAgent extends MedicalAgent {
         exerciseHaemodynamics,
         complications,
         calculations,
-        patientData
+        patientData,
+        missingCalculationFields
       };
 
       // Store procedure in memory
@@ -297,6 +309,11 @@ export class RightHeartCathAgent extends MedicalAgent {
       vascularAccess: this.extractVascularAccess(input),
       catheterDetails: this.extractCatheterDetails(input),
       laboratoryValues: this.extractLaboratoryValues(input),
+      // Extract radiation safety and contrast data
+      fluoroscopyTime: this.extractMeasurement(input, RightHeartCathMedicalPatterns.fluoroscopyTime) || undefined,
+      fluoroscopyDose: this.extractMeasurement(input, RightHeartCathMedicalPatterns.fluoroscopyDose) || undefined,
+      doseAreaProduct: this.extractMeasurement(input, RightHeartCathMedicalPatterns.doseAreaProduct) || undefined,
+      contrastVolume: this.extractMeasurement(input, RightHeartCathMedicalPatterns.contrastVolume) || undefined,
       immediateOutcomes: this.extractImmediateOutcomes(input),
       recommendations: this.extractRecommendations(input),
       followUp: this.extractFollowUp(input)
@@ -440,10 +457,13 @@ ${JSON.stringify(extractedData, null, 2)}
 
 Generate a comprehensive right heart catheterisation procedural report using the above extracted data and the following dictation. Include all relevant pressure measurements, cardiac output calculations, and haemodynamic assessments. Use proper Australian medical terminology (catheterisation, haemodynamic, colour) and structured formatting with precise units.`;
 
-      const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
-      
+      const rawReport = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
+
+      // Post-process the report to clean output and enforce Australian spelling
+      const cleanedReport = this.postProcessReport(rawReport);
+
       console.log('✅ RHC report generated successfully');
-      return report;
+      return cleanedReport;
       
     } catch (error) {
       console.error('❌ Error generating RHC report:', error);
@@ -468,10 +488,121 @@ Note: This report was generated with limited AI processing. Clinical review is r
     }
   }
 
+  /**
+   * Identify missing fields required for haemodynamic calculations
+   */
+  private identifyMissingCalculationFields(
+    pressures: HaemodynamicPressures,
+    cardiacOutput: CardiacOutput,
+    patientData: RHCPatientData
+  ): string[] {
+    const missing: string[] = [];
+
+    // Essential patient data for calculations
+    if (!patientData.height) {
+      missing.push('Height (cm) - required for BSA and cardiac index calculations');
+    }
+    if (!patientData.weight) {
+      missing.push('Weight (kg) - required for BSA, BMI, and cardiac index calculations');
+    }
+    if (!patientData.heartRate) {
+      missing.push('Heart rate (bpm) - required for stroke volume calculation');
+    }
+    if (!patientData.systolicBP || !patientData.diastolicBP) {
+      missing.push('Blood pressure (mmHg) - required for MAP and SVR calculations');
+    }
+
+    // Pressure measurements for TPG, DPG, PVR
+    if (!pressures.pa.mean) {
+      missing.push('PA mean pressure (mmHg) - required for TPG and PVR calculations');
+    }
+    if (!pressures.pa.diastolic) {
+      missing.push('PA diastolic pressure (mmHg) - required for DPG calculation');
+    }
+    if (!pressures.pcwp.mean) {
+      missing.push('PCWP mean pressure (mmHg) - required for TPG, DPG, and PVR calculations');
+    }
+
+    // Cardiac output for PVR and other indices
+    if (!cardiacOutput.thermodilution.co) {
+      missing.push('Cardiac output (L/min) - required for PVR, CI, and resistance calculations');
+    }
+
+    // Additional data for Fick calculations
+    if (!patientData.haemoglobin) {
+      missing.push('Haemoglobin (g/L) - required for Fick cardiac output calculation');
+    }
+    if (!patientData.sao2) {
+      missing.push('Arterial oxygen saturation (%) - required for Fick calculation');
+    }
+    if (!patientData.svo2 && !cardiacOutput.mixedVenousO2) {
+      missing.push('Mixed venous oxygen saturation (%) - required for Fick calculation and O2 extraction ratio');
+    }
+
+    return missing;
+  }
+
+  /**
+   * Post-process LLM output to remove markdown, conversational preambles, and enforce Australian spelling
+   */
+  private postProcessReport(rawReport: string): string {
+    let cleaned = rawReport;
+
+    // Remove conversational preambles
+    const preamblePatterns = [
+      /^Okay,?\s+here\s+is\s+(?:a\s+)?(?:draft\s+)?.*?:\s*/i,
+      /^Sure,?\s+I\s+can\s+(?:help\s+)?(?:with\s+)?.*?:\s*/i,
+      /^Let\s+me\s+(?:generate|create|draft).*?:\s*/i,
+      /^Here\s+is\s+(?:a\s+)?(?:the\s+)?.*?:\s*/i
+    ];
+
+    for (const pattern of preamblePatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+
+    // Remove markdown bold syntax
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1');
+
+    // Remove markdown headers (## or ###)
+    cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+
+    // Remove markdown bullet points (convert to plain text)
+    cleaned = cleaned.replace(/^[\*\-]\s+/gm, '');
+
+    // Remove template placeholders
+    cleaned = cleaned.replace(/\[Insert\s+[^\]]+\]/gi, '');
+
+    // Enforce Australian spelling
+    for (const { us, au } of RightHeartCathValidationRules.australianSpelling) {
+      const regex = new RegExp(`\\b${us}\\b`, 'gi');
+      cleaned = cleaned.replace(regex, au);
+    }
+
+    // Additional American to Australian conversions
+    cleaned = cleaned.replace(/\bhemoglobin\b/gi, 'haemoglobin');
+    cleaned = cleaned.replace(/\bhemodynamic\b/gi, 'haemodynamic');
+    cleaned = cleaned.replace(/\bcatheterization\b/gi, 'catheterisation');
+    cleaned = cleaned.replace(/\banalyze\b/gi, 'analyse');
+    cleaned = cleaned.replace(/\borganize\b/gi, 'organise');
+
+    // Trim excess whitespace
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n'); // Max 2 consecutive newlines
+    cleaned = cleaned.trim();
+
+    return cleaned;
+  }
+
   // Helper methods for data extraction
   private extractMeasurement(text: string, pattern: RegExp): string | null {
-    const matches = text.match(pattern);
-    return matches ? matches[matches.length - 1] : null;
+    // Reset regex lastIndex to ensure fresh search
+    pattern.lastIndex = 0;
+
+    const match = pattern.exec(text);
+    if (match && match[1]) {
+      // Return the first captured group (the numeric value)
+      return match[1];
+    }
+    return null;
   }
 
   private extractIndication(input: string): RHCIndication {
@@ -863,6 +994,10 @@ Note: This report was generated with limited AI processing. Clinical review is r
         haemoglobin: null,
         lactate: null
       },
+      fluoroscopyTime: undefined,
+      fluoroscopyDose: undefined,
+      doseAreaProduct: undefined,
+      contrastVolume: undefined,
       immediateOutcomes: '',
       recommendations: '',
       followUp: ''

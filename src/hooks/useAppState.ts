@@ -91,11 +91,13 @@ interface DisplaySessionState {
   displayEducationData?: any; // Patient Education structured data
   displayPreOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan structured data
   displayReviewData?: any; // AI Medical Review structured data
+  displayRhcReport?: any; // Right Heart Cath structured data
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
   displayProcessingTime?: number; // Processing time in milliseconds
   displayModelUsed?: string | null; // Model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
+  displayAudioDuration?: number | null; // Audio duration in seconds for ETA prediction
   displayPipelineProgress?: PipelineProgress | null; // Pipeline progress for sessions still processing
 }
 
@@ -280,6 +282,7 @@ const initialState: CombinedAppState = {
   taviStructuredSections: undefined,
   educationData: undefined,
   preOpPlanData: undefined,
+  rhcReport: undefined,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -328,6 +331,7 @@ const initialState: CombinedAppState = {
     displayEducationData: undefined,
     displayPreOpPlanData: undefined,
     displayReviewData: undefined,
+    displayRhcReport: undefined,
     displayAgent: null,
     displayAgentName: null,
     displayPatientInfo: null,
@@ -603,6 +607,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         taviStructuredSections: undefined,
         educationData: undefined,
         preOpPlanData: undefined,
+        rhcReport: undefined,
         // Clear streaming state to allow record button access
         streaming: false,
         streamBuffer: '',
@@ -626,6 +631,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayEducationData: undefined,
           displayPreOpPlanData: undefined,
           displayReviewData: undefined,
+          displayRhcReport: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null,
@@ -940,11 +946,13 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayEducationData: session.educationData,
           displayPreOpPlanData: session.preOpPlanData,
           displayReviewData: session.reviewData,
+          displayRhcReport: session.rhcReport,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null,
           displayProcessingTime: session.processingTime,
           displayModelUsed: session.modelUsed || null,
+          displayAudioDuration: session.audioDuration || null,
           displayPipelineProgress: session.pipelineProgress || null
         }
       };
@@ -964,10 +972,12 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayEducationData: undefined,
           displayPreOpPlanData: undefined,
           displayReviewData: undefined,
+          displayRhcReport: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null,
           displayProcessingTime: undefined,
+          displayAudioDuration: null,
           displayModelUsed: null,
           displayPipelineProgress: null
         }

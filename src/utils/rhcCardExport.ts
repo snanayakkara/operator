@@ -139,34 +139,54 @@ export async function exportRHCCard(
 
 /**
  * Validates that RHC data is suitable for card export
+ * More lenient validation - requires at least SOME key haemodynamic data to be present
  */
 export function validateRHCDataForExport(rhcData: RightHeartCathReport): {
   valid: boolean;
   missingFields: string[];
 } {
   const missingFields: string[] = [];
+  let hasAnyPressureData = false;
+  let hasCardiacOutput = false;
 
-  // Check essential pressure data
-  if (!rhcData.haemodynamicPressures.ra.mean) {
-    missingFields.push('Right Atrial Pressure (mean)');
+  // Check pressure data - track if ANY pressure is present
+  if (!rhcData.haemodynamicPressures.ra.mean && !rhcData.haemodynamicPressures.ra.aWave && !rhcData.haemodynamicPressures.ra.vWave) {
+    missingFields.push('Right Atrial Pressure');
+  } else {
+    hasAnyPressureData = true;
   }
-  if (!rhcData.haemodynamicPressures.rv.systolic || !rhcData.haemodynamicPressures.rv.diastolic) {
+
+  if (!rhcData.haemodynamicPressures.rv.systolic && !rhcData.haemodynamicPressures.rv.diastolic) {
     missingFields.push('Right Ventricular Pressure');
+  } else {
+    hasAnyPressureData = true;
   }
-  if (!rhcData.haemodynamicPressures.pa.systolic || !rhcData.haemodynamicPressures.pa.diastolic || !rhcData.haemodynamicPressures.pa.mean) {
+
+  if (!rhcData.haemodynamicPressures.pa.systolic && !rhcData.haemodynamicPressures.pa.diastolic && !rhcData.haemodynamicPressures.pa.mean) {
     missingFields.push('Pulmonary Artery Pressure');
+  } else {
+    hasAnyPressureData = true;
   }
-  if (!rhcData.haemodynamicPressures.pcwp.mean) {
-    missingFields.push('PCWP (mean)');
+
+  if (!rhcData.haemodynamicPressures.pcwp.mean && !rhcData.haemodynamicPressures.pcwp.aWave && !rhcData.haemodynamicPressures.pcwp.vWave) {
+    missingFields.push('PCWP');
+  } else {
+    hasAnyPressureData = true;
   }
 
   // Check cardiac output
   if (!rhcData.cardiacOutput.thermodilution.co && !rhcData.cardiacOutput.fick.co) {
-    missingFields.push('Cardiac Output (Thermodilution or Fick)');
+    missingFields.push('Cardiac Output');
+  } else {
+    hasCardiacOutput = true;
   }
 
+  // Valid if we have at least some pressure data OR cardiac output
+  // This allows partial data cards to be exported
+  const valid = hasAnyPressureData || hasCardiacOutput;
+
   return {
-    valid: missingFields.length === 0,
+    valid,
     missingFields
   };
 }

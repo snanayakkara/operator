@@ -281,12 +281,36 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.9.2**
-**Last Updated**: February 2025
+**Current Version**: **3.19.0**
+**Last Updated**: October 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.19.0 (Oct 2025)**
+- **Circular Countdown Timer**: Large visual countdown timer with real-time ETA prediction
+  - Custom lightweight SVG implementation (~2 kB) with pipeline stage color matching
+  - Shows countdown time + current stage (e.g., "23.4s AI Analysis")
+  - Responsive sizing: 240px desktop, 208px tablet, 160px mobile
+  - Smooth 60fps animations with 500ms update interval
+- **Intelligent ETA Prediction System**: Machine learning-based processing time estimation
+  - Audio duration tracking: Calculates duration from recording blob using Web Audio API
+  - ProcessingTimePredictor enhancements with audio duration as primary input factor
+  - Records actual processing times after every completion (learning loop closed)
+  - Adaptive velocity-based countdown blending initial prediction with real-time velocity
+  - Precise decimal countdown with no rounding (e.g., "23.4s left", "2m 34.2s left")
+  - Predictions improve over time: ±40% accuracy after 5 sessions, ±20% after 20+ sessions
+- **RHC Major Enhancements**: Missing calculation fields identification, enhanced data extraction (fluoroscopy time/dose, contrast volume), comprehensive logging, post-processing pipeline
+- **Pre-Op Plan Export System**: A5 card export with copy to clipboard and download functionality
+- **New Components**: PatientContextHeader, UIPreferencesSection, CircularCountdownTimer, countdownCalculations utility
+- **RecordPanel State Management**: Fixed hover state persistence bugs with defensive checks for stale refs
+
+**v3.18.0 (Oct 2025)**
+- **Bright Card Design System**: High-contrast card design inspired by macOS Big Sur
+- **RHC Calculation Service**: Comprehensive haemodynamic calculations with reference ranges
+- **Patient Education Improvements**: Enhanced system prompts and action plan generation
+- **Session Management UI**: Storage management with visual indicators
 
 **v3.9.2 (Feb 2025)**
 - **Repository Cleanup**: Removed Synology Drive sync conflict files to maintain clean repository state

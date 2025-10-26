@@ -182,6 +182,19 @@ const getDictationDuration = (session: PatientSession): number | null => {
   return null;
 };
 
+// Helper to extract RGB color from Tailwind indicator class for animations
+const getIndicatorRgb = (indicatorClass: string): string => {
+  // Map Tailwind classes to RGB values
+  const colorMap: Record<string, string> = {
+    'bg-blue-500': '59, 130, 246',      // Letters & Correspondence
+    'bg-emerald-500': '16, 185, 129',   // Clinical Data
+    'bg-purple-500': '168, 85, 247',    // Procedures
+    'bg-amber-500': '245, 158, 11',     // AI Review
+  };
+
+  return colorMap[indicatorClass] || '168, 85, 247'; // Default to purple
+};
+
 // Enhanced Session Item Component with timeline features
 interface EnhancedSessionItemProps {
   session: PatientSession;
@@ -199,6 +212,7 @@ interface EnhancedSessionItemProps {
   onStopRecording?: () => void;
   onRemoveSession: (sessionId: string) => void;
   onCopyResults: (session: PatientSession) => Promise<void>;
+  onClose?: () => void; // Function to close the dropdown
 }
 
 const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
@@ -216,7 +230,8 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   onResumeRecording,
   onStopRecording,
   onRemoveSession,
-  onCopyResults
+  onCopyResults,
+  onClose
 }) => {
   const meta = timelineStateMeta[state];
   const hasResults = Boolean(session.results && session.results.trim().length > 0);
@@ -240,8 +255,12 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
       setIsClicking(true);
       setTimeout(() => setIsClicking(false), 200);
       handlePrimaryAction();
+      // Close dropdown after opening session
+      if (onClose) {
+        setTimeout(onClose, 250); // Slight delay to allow animation to complete
+      }
     }
-  }, [state, onSessionSelect, handlePrimaryAction]);
+  }, [state, onSessionSelect, handlePrimaryAction, onClose]);
 
   const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -249,13 +268,22 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   }, [onToggleCheck, session.id]);
 
   // Compact mode: smaller padding, hide details
+  const agentRgb = getIndicatorRgb(categoryColors.indicator);
+
   if (isCompact) {
     return (
       <div
         className={`relative rounded-lg border-l-4 transition-all duration-300 px-2 py-1.5 ${categoryColors.bg} ${categoryColors.border} opacity-60 hover:opacity-80 ${
-          isSelected ? 'ring-2 ring-accent-violet/50' : ''
-        } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''} ${isClicking ? 'animate-click-feedback' : ''}`}
-        style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
+          isSelected ? `ring-2` : ''
+        } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''}`}
+        style={{
+          borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})`,
+          ...(isSelected ? { '--tw-ring-color': `rgba(${agentRgb}, 0.5)` } as React.CSSProperties : {}),
+          ...(isClicking ? {
+            animation: 'clickFeedback 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            '--click-shadow-color': `rgba(${agentRgb}, 0.3)`
+          } as React.CSSProperties : {})
+        }}
         onClick={handleCardClick}
       >
         <div className="flex items-center gap-2">
@@ -310,9 +338,16 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   return (
     <div
       className={`relative rounded-xl border-l-4 transition-all duration-300 px-3 py-2 ${categoryColors.bg} ${categoryColors.border} ${
-        isSelected ? 'ring-2 ring-accent-violet/50' : ''
-      } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''} ${isClicking ? 'animate-click-feedback' : ''}`}
-      style={{ borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})` }}
+        isSelected ? 'ring-2' : ''
+      } ${state !== 'recording' && onSessionSelect ? 'cursor-pointer' : ''}`}
+      style={{
+        borderLeftColor: `var(--${categoryColors.indicator.replace('bg-', '')})`,
+        ...(isSelected ? { '--tw-ring-color': `rgba(${agentRgb}, 0.5)` } as React.CSSProperties : {}),
+        ...(isClicking ? {
+          animation: 'clickFeedback 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          '--click-shadow-color': `rgba(${agentRgb}, 0.3)`
+        } as React.CSSProperties : {})
+      }}
       onClick={handleCardClick}
     >
       <div className="flex items-start gap-2">
@@ -405,34 +440,24 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
             )}
           </div>
 
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             {state === 'recording' && isActiveRecording && onStopRecording && (
               <button
                 onClick={(e) => { e.stopPropagation(); onStopRecording(); }}
-                className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-50"
+                className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-white px-2 py-1 text-[11px] font-semibold uppercase text-red-600 hover:bg-red-50"
                 title="Stop recording"
               >
-                <XCircle className="w-2.5 h-2.5" />
+                <XCircle className="w-3.5 h-3.5" />
               </button>
             )}
 
             {state === 'recording' && !isActiveRecording && onResumeRecording && (
               <button
                 onClick={(e) => { e.stopPropagation(); onResumeRecording(session); }}
-                className="inline-flex items-center gap-0.5 rounded border border-red-200/80 bg-red-50/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-600 hover:bg-red-100"
+                className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-50/80 px-2 py-1 text-[11px] font-semibold uppercase text-red-600 hover:bg-red-100"
                 title="Resume recording"
               >
-                <Play className="w-2.5 h-2.5" />
-              </button>
-            )}
-
-            {state !== 'recording' && onSessionSelect && (
-              <button
-                onClick={(e) => { e.stopPropagation(); handlePrimaryAction(); }}
-                className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-700 hover:bg-slate-50"
-                title="View session"
-              >
-                <ArrowRight className="w-2.5 h-2.5" />
+                <Play className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -440,23 +465,23 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
               <button
                 onClick={(e) => { e.stopPropagation(); onCopyResults(session); }}
                 disabled={!hasResults}
-                className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-semibold uppercase ${
                   hasResults
                     ? 'border-emerald-200/80 bg-white text-emerald-600 hover:bg-emerald-50'
                     : 'border-slate-200/80 bg-white text-slate-400 cursor-not-allowed'
                 }`}
                 title="Copy letter"
               >
-                {isCopying ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+                {isCopying ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             )}
 
             <button
               onClick={(e) => { e.stopPropagation(); onRemoveSession(session.id); }}
-              className="inline-flex items-center gap-0.5 rounded border border-slate-200/80 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+              className="inline-flex items-center gap-1 rounded border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
               title="Remove"
             >
-              <Trash2 className="w-2.5 h-2.5" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -758,6 +783,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
                     onCopyResults={handleCopyResults}
+                    onClose={onClose}
                   />
                 );
               })}
@@ -801,6 +827,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
                     onCopyResults={handleCopyResults}
+                    onClose={onClose}
                   />
                 );
               })}
@@ -846,6 +873,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                     onStopRecording={onStopRecording}
                     onRemoveSession={onRemoveSession}
                     onCopyResults={handleCopyResults}
+                    onClose={onClose}
                   />
                 );
               })}

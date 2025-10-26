@@ -17,13 +17,17 @@ import { formatElapsedTime } from '@/utils/formatting';
 import { ProcessingTimePredictor, type ProcessingTimeEstimate } from '@/services/ProcessingTimePredictor';
 import type { PipelineProgress, PipelineStage, AgentType } from '@/types/medical.types';
 import { getStateColors, pipelineStageToState } from '@/utils/stateColors';
+import { CircularCountdownTimer } from './CircularCountdownTimer';
+import { calculateAdaptiveRemainingTime, formatRemainingTime } from '@/utils/countdownCalculations';
 
 interface UnifiedPipelineProgressProps {
   progress: PipelineProgress;
   startTime?: number;
   agentType?: AgentType;
   transcriptionLength?: number;
+  audioDuration?: number; // Audio duration in seconds for improved prediction
   showTimeEstimate?: boolean;
+  showCircularTimer?: boolean; // Show circular countdown timer (default true)
   className?: string;
 }
 
@@ -76,32 +80,42 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   startTime,
   agentType,
   transcriptionLength,
+  audioDuration,
   showTimeEstimate = true,
+  showCircularTimer = true,
   className = ''
 }) => {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [prediction, setPrediction] = useState<ProcessingTimeEstimate | null>(null);
+  const [velocity, setVelocity] = useState<number>(0); // Progress per millisecond
   const [predictor] = useState(() => ProcessingTimePredictor.getInstance());
 
   const effectiveStartTime = startTime || Date.now();
 
-  // Update elapsed time
+  // Update elapsed time and velocity every 500ms for smooth countdown
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       const elapsed = Date.now() - effectiveStartTime;
       if (elapsed >= 0 && elapsed < 86400000) {
         setElapsedTime(elapsed);
+
+        // Calculate velocity (progress per millisecond)
+        if (elapsed > 0 && progress.progress > 0) {
+          const currentVelocity = progress.progress / elapsed;
+          setVelocity(currentVelocity);
+        }
       }
-    }, 100);
+    }, 500); // Update every 500ms for smooth countdown without excessive CPU usage
 
     return () => clearInterval(intervalId);
-  }, [effectiveStartTime]);
+  }, [effectiveStartTime, progress.progress]);
 
   // Generate time prediction
   useEffect(() => {
     if (agentType && transcriptionLength && showTimeEstimate && !prediction) {
       try {
         const estimate = predictor.predictProcessingTime(agentType, transcriptionLength, {
+          audioDuration,
           includeTranscriptionTime: true
         });
         setPrediction(estimate);
@@ -109,7 +123,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
         console.warn('Failed to generate time prediction:', error);
       }
     }
-  }, [agentType, transcriptionLength, showTimeEstimate, prediction, predictor]);
+  }, [agentType, transcriptionLength, audioDuration, showTimeEstimate, prediction, predictor]);
 
   // Calculate segment status
   const getSegmentStatus = (segment: PipelineSegment): 'inactive' | 'active' | 'complete' => {
@@ -135,33 +149,14 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
     return PIPELINE_SEGMENTS.find(seg => getSegmentStatus(seg) === 'active');
   }, [progress.progress]);
 
-  // Calculate remaining time
-  const getRemainingTime = (): number | null => {
-    if (!prediction || progress.progress >= 100) return null;
-
-    const remainingProgress = (100 - progress.progress) / 100;
-    const estimatedRemaining = prediction.estimatedDurationMs * remainingProgress;
-
-    // Adjust based on actual progress
-    const predictedTimeForCurrentProgress = prediction.estimatedDurationMs * (progress.progress / 100);
-    const actualTimeRatio = elapsedTime / Math.max(predictedTimeForCurrentProgress, 100);
-
-    return Math.max(0, estimatedRemaining * actualTimeRatio);
-  };
-
-  const formatRemainingTime = (ms: number): string => {
-    const totalSeconds = Math.ceil(ms / 1000);
-    if (totalSeconds < 60) return `~${totalSeconds}s left`;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `~${minutes}m ${seconds}s left`;
-  };
-
-  const remainingTime = getRemainingTime();
+  // Calculate remaining time using shared utility
+  const remainingTime = useMemo(() => {
+    return calculateAdaptiveRemainingTime(prediction, progress.progress, velocity, elapsedTime);
+  }, [prediction, progress.progress, velocity, elapsedTime]);
 
   return (
     <motion.div
-      className={`bg-white rounded-lg border border-gray-200 p-4 shadow-sm ${className}`}
+      className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -170,7 +165,25 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       aria-live="polite"
       aria-label="Processing pipeline progress"
     >
-      {/* Header */}
+      {/* Circular Timer (Large, Prominent) - Responsive sizing */}
+      {showCircularTimer && remainingTime !== null && remainingTime > 500 && (
+        <div className="flex justify-center py-6 border-b border-gray-100">
+          {/* Desktop: 240px, Tablet: 200px, Mobile: 160px */}
+          <div className="w-40 h-40 sm:w-52 sm:h-52 md:w-60 md:h-60">
+            <CircularCountdownTimer
+              remainingMs={remainingTime}
+              progress={progress.progress}
+              stage={progress.stage}
+              size={240}
+              className="w-full h-full"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Horizontal Progress Bar Section */}
+      <div className="p-4">
+        {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
           {activeSegment && <activeSegment.icon className="w-4 h-4 text-gray-700" />}
@@ -190,7 +203,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
               {formatElapsedTime(elapsedTime)}
             </span>
           </div>
-          {remainingTime !== null && remainingTime > 1000 && (
+          {remainingTime !== null && remainingTime > 2000 && (
             <div className="flex items-center space-x-1 text-purple-600">
               <TrendingUp className="w-3 h-3" />
               <span className="text-xs font-medium">
@@ -293,6 +306,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
             ? `🤖 ${progress.modelName}`
             : '🔄 Local processing - privacy-first'}
         </p>
+      </div>
       </div>
     </motion.div>
   );

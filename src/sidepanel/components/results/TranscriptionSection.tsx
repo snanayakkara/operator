@@ -150,11 +150,6 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
           <span className={`font-medium text-sm leading-none ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
             Original Transcription
           </span>
-          {isProcessing && (
-            <span className="inline-flex items-center h-6 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium leading-none">
-              Processing...
-            </span>
-          )}
           <span className="text-xs text-gray-500 leading-none">
             {(editedTranscription || '').split(' ').filter(w => w.trim()).length} words
             {editedTranscription !== originalTranscription && (

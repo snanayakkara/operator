@@ -22,6 +22,7 @@ import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, L
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
+import { MissingInfoPanel } from './MissingInfoPanel';
 import { exportRHCCard, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import type {
   RightHeartCathReport,
@@ -58,6 +59,9 @@ interface RightHeartCathDisplayProps {
   collapseTranscriptionWhen?: boolean;
   approvalState?: TranscriptionApprovalState;
   onTranscriptionApprove?: (status: TranscriptionApprovalStatus) => void;
+  // Missing info handling
+  onReprocessWithAnswers?: (answers: Record<string, string>) => void;
+  onDismissMissingInfo?: () => void;
 }
 
 interface SectionConfig {
@@ -97,7 +101,9 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   defaultTranscriptionExpanded = false,
   collapseTranscriptionWhen,
   approvalState,
-  onTranscriptionApprove
+  onTranscriptionApprove,
+  onReprocessWithAnswers,
+  onDismissMissingInfo
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
@@ -328,6 +334,28 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
         />
       )}
 
+      {/* Missing Calculation Fields Panel */}
+      {effectiveRHCData?.missingCalculationFields && effectiveRHCData.missingCalculationFields.length > 0 && (
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            <MissingInfoPanel
+              missingInfo={{
+                missing_structured: effectiveRHCData.missingCalculationFields,
+                completeness_score: `${Math.round((1 - effectiveRHCData.missingCalculationFields.length / 10) * 100)}%`
+              }}
+              onSubmit={(answers) => onReprocessWithAnswers && onReprocessWithAnswers(answers)}
+              onDismiss={onDismissMissingInfo}
+              agentType="right-heart-cath"
+            />
+          </motion.div>
+        </AnimatePresence>
+      )}
+
       {/* Right Heart Cath Report Content */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -342,12 +370,12 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
               <h3 className="text-lg font-semibold text-gray-900">Right Heart Catheterisation Report</h3>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={handleCopy}
                 disabled={!onCopy}
-                className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <AnimatedCopyIcon className="w-3 h-3 mr-1" />
                 {buttonStates.copied ? 'Copied' : 'Copy'}
@@ -357,7 +385,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 type="button"
                 onClick={handleExportCard}
                 disabled={buttonStates.exporting || !effectiveRHCData}
-                className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 title="Export 13×13cm PNG card (300 DPI)"
               >
                 {buttonStates.exporting ? (
@@ -382,7 +410,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 <button
                   type="button"
                   onClick={handleInsertToEMR}
-                  className="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
                 >
                   <FileTextIcon className="w-3 h-3 mr-1" />
                   {buttonStates.inserted ? 'Inserted' : 'Insert to EMR'}
@@ -402,17 +430,17 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 <button
                   type="button"
                   onClick={() => toggleSection(key)}
-                  className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50"
+                  className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 max-w-full overflow-hidden"
                 >
-                  <div className="flex items-center space-x-2">
-                    <IconComponent className={`w-4 h-4 text-${color}-600`} />
-                    <span className="font-medium text-gray-900">{title}</span>
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    <IconComponent className={`w-4 h-4 text-${color}-600 flex-shrink-0`} />
+                    <span className="font-medium text-gray-900 truncate">{title}</span>
                   </div>
 
                   {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-gray-400" />
+                    <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                    <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
                   )}
                 </button>
 
@@ -548,6 +576,21 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
         <div className="space-y-3 text-sm">
           <div><span className="font-medium">Vascular Access:</span> {data.vascularAccess.replace('_', ' ')}</div>
           <div><span className="font-medium">Catheter Details:</span> {data.catheterDetails}</div>
+
+          {/* Radiation Safety & Contrast */}
+          {(data.fluoroscopyTime || data.fluoroscopyDose || data.doseAreaProduct || data.contrastVolume) && (
+            <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+              <span className="font-medium text-blue-900">Radiation Safety & Contrast:</span>
+              <div className="mt-1 space-y-1">
+                {data.fluoroscopyTime && <div>Fluoroscopy Time: {data.fluoroscopyTime} min</div>}
+                {data.fluoroscopyDose && <div>Fluoroscopy Dose: {data.fluoroscopyDose} mGy</div>}
+                {data.doseAreaProduct && <div>DAP: {data.doseAreaProduct} Gy·cm²</div>}
+                {data.contrastVolume && <div>Contrast Volume: {data.contrastVolume} mL</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Laboratory Values */}
           {(data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
             <div className="bg-gray-50 p-3 rounded">
               <span className="font-medium">Laboratory Values:</span>
@@ -626,13 +669,31 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
 
 // Helper functions for content formatting
 function formatForClipboard(rhcData: RightHeartCathReport | null, fallbackResults?: string): string {
-  if (rhcData) {
-    return `Right Heart Catheterisation Report\n\nIndication: ${rhcData.rhcData.indication}\nAccess: ${rhcData.rhcData.vascularAccess}\nImmediate Outcomes: ${rhcData.rhcData.immediateOutcomes || 'Not specified'}\nRecommendations: ${rhcData.rhcData.recommendations || 'None specified'}`;
+  if (rhcData && rhcData.content) {
+    // Extract the clean report content (already post-processed to remove markdown)
+    // Remove the JSON data marker if present
+    let content = rhcData.content;
+    const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
+    if (jsonMarkerIndex !== -1) {
+      content = content.substring(0, jsonMarkerIndex).trim();
+    }
+    return content;
   }
 
-  return fallbackResults || 'No report data available';
+  // Fallback to results if no structured data
+  if (fallbackResults) {
+    let content = fallbackResults;
+    const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
+    if (jsonMarkerIndex !== -1) {
+      content = content.substring(0, jsonMarkerIndex).trim();
+    }
+    return content;
+  }
+
+  return 'No report data available';
 }
 
 function formatForEMR(rhcData: RightHeartCathReport | null, fallbackResults?: string): string {
+  // Same formatting for EMR as clipboard (clean narrative text)
   return formatForClipboard(rhcData, fallbackResults);
 }
