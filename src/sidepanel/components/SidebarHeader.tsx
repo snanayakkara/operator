@@ -110,6 +110,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     chrome.runtime.openOptionsPage();
   };
 
+  // Calculate unchecked (active) sessions
+  const uncheckedCount = patientSessions.filter(s => !checkedSessionIds?.has(s.id)).length;
+
   return (
     <header className="flex-shrink-0 bg-white border-b border-gray-200">
       {/* Row 1: Primary header (≤ 40px) */}
@@ -133,7 +136,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           <QueueStatusDisplay isCompact={true} />
 
           {/* Session Notifications */}
-          {patientSessions.length > 0 && (
+          {uncheckedCount > 0 && (
             <button
               ref={sessionButtonRef}
               onClick={handleSessionDropdownToggle}
@@ -141,13 +144,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 relative p-1.5 rounded hover:bg-gray-100 transition-colors
                 focus:outline-none focus:ring-2 focus:ring-blue-500
               "
-              aria-label={`${patientSessions.length} session${patientSessions.length !== 1 ? 's' : ''} in queue`}
-              title="View sessions"
+              aria-label={`${uncheckedCount} active session${uncheckedCount !== 1 ? 's' : ''}`}
+              title="View active sessions"
             >
               <Bell className="w-4 h-4 text-gray-600" />
-              {patientSessions.length > 0 && (
+              {uncheckedCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {patientSessions.length > 9 ? '9+' : patientSessions.length}
+                  {uncheckedCount > 9 ? '9+' : uncheckedCount}
                 </span>
               )}
             </button>

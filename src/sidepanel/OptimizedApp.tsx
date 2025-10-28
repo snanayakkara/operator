@@ -1999,11 +1999,9 @@ const OptimizedAppContent: React.FC = memo(() => {
       status: 'completed'
     });
 
-    if (state.selectedSessionId === session.id) {
-      actions.clearDisplaySession();
-      actions.setUIMode('idle', { sessionId: null, origin: 'user' });
-    }
-  }, [actions, state.selectedSessionId]);
+    // Don't automatically clear the display session - let the user decide when to switch
+    // The session will remain visible until the user explicitly selects a different session
+  }, [actions]);
 
   // Memoized smart summary generation for performance
   const generateSmartSummary = useCallback((content: string): string => {
@@ -3779,7 +3777,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                 
                 // Handle EMR field actions
                 if (['investigation-summary', 'background', 'medications', 'social-history', 'bloods', 'bloods-insert', 'imaging', 'quick-letter', 'appointment-wrap-up', 'profile-photo', 'create-task'].includes(actionId)) {
-                  const messageData: any = {};
+                  // Start with the data parameter to preserve preset data for appointment-wrap-up
+                  const messageData: any = { ...data };
 
                   // Show field ingestion overlay for data extraction actions
                   if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId) && data?.type !== 'manual') {

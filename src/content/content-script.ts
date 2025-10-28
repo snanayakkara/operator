@@ -2034,46 +2034,294 @@ class ContentScriptHandler {
     }
   }
 
+  /**
+   * Helper method to find an input/textarea field by its associated label text
+   */
+  private findFieldByLabelText(labelText: string): HTMLInputElement | HTMLTextAreaElement | null {
+    console.log(`🔍 Looking for field with label containing: "${labelText}"`);
+
+    // Strategy 1: Find label element and get its associated input via 'for' attribute
+    const labels = Array.from(document.querySelectorAll('label'));
+    for (const label of labels) {
+      if (label.textContent?.toLowerCase().includes(labelText.toLowerCase())) {
+        console.log(`✅ Found label: "${label.textContent?.trim()}"`);
+
+        // Try 'for' attribute
+        const forAttr = label.getAttribute('for');
+        if (forAttr) {
+          const input = document.getElementById(forAttr) as HTMLInputElement | HTMLTextAreaElement;
+          if (input) {
+            console.log(`✅ Found field via label 'for' attribute: #${forAttr}`);
+            return input;
+          }
+        }
+
+        // Try next sibling
+        let sibling = label.nextElementSibling;
+        while (sibling) {
+          if (sibling instanceof HTMLInputElement || sibling instanceof HTMLTextAreaElement) {
+            console.log(`✅ Found field as next sibling of label`);
+            return sibling;
+          }
+          // Check children
+          const childInput = sibling.querySelector('input, textarea') as HTMLInputElement | HTMLTextAreaElement;
+          if (childInput) {
+            console.log(`✅ Found field as child of element after label`);
+            return childInput;
+          }
+          sibling = sibling.nextElementSibling;
+        }
+
+        // Try parent's next input/textarea
+        const parent = label.parentElement;
+        if (parent) {
+          const input = parent.querySelector('input, textarea') as HTMLInputElement | HTMLTextAreaElement;
+          if (input) {
+            console.log(`✅ Found field in same parent as label`);
+            return input;
+          }
+        }
+      }
+    }
+
+    console.log(`❌ No field found for label: "${labelText}"`);
+    return null;
+  }
+
+  /**
+   * Helper method to find element by XPath
+   */
+  private findByXPath(xpath: string): HTMLElement | null {
+    try {
+      const result = document.evaluate(
+        xpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      return result.singleNodeValue as HTMLElement | null;
+    } catch (error) {
+      console.error(`❌ Error evaluating XPath: ${xpath}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Dispatch comprehensive events to ensure UI frameworks detect the change
+   */
+  private triggerAllEvents(element: HTMLElement, value: string) {
+    // Set value using multiple methods
+    const inputElement = element as HTMLInputElement | HTMLTextAreaElement;
+
+    // Native setter
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value'
+    )?.set;
+    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+
+    if (inputElement instanceof HTMLInputElement && nativeInputValueSetter) {
+      nativeInputValueSetter.call(inputElement, value);
+    } else if (inputElement instanceof HTMLTextAreaElement && nativeTextAreaValueSetter) {
+      nativeTextAreaValueSetter.call(inputElement, value);
+    }
+
+    // Trigger all relevant events
+    const events = [
+      new Event('input', { bubbles: true, cancelable: true }),
+      new Event('change', { bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', { bubbles: true, cancelable: true }),
+      new KeyboardEvent('keyup', { bubbles: true, cancelable: true }),
+      new FocusEvent('focus', { bubbles: true }),
+      new FocusEvent('blur', { bubbles: true })
+    ];
+
+    events.forEach(event => element.dispatchEvent(event));
+  }
+
   private async populateAppointmentPreset(preset: any) {
     try {
+      console.log('📋 Starting appointment preset population...');
+      console.log('📋 Preset data:', { itemCode: preset.itemCode, notes: preset.notes, displayName: preset.displayName });
+
       // Wait for the appointment wrap-up modal to be fully loaded
       await this.wait(500);
 
       // Find and populate Item Codes field
       if (preset.itemCode) {
-        const itemCodesInput = await this.findElement(
-          'input.item-codes-autocomplete, input.ui-autocomplete-input'
-        );
+        console.log('🔍 Searching for Item Codes field...');
+
+        let itemCodesInput: HTMLInputElement | null = null;
+
+        // Strategy 0: Try exact XPath first (most reliable for Xestro)
+        const itemCodesXPath = '/html/body/div[2]/div[7]/div/div[3]/div/div/div[1]/div/ul/li';
+        const xpathElement = this.findByXPath(itemCodesXPath);
+        if (xpathElement) {
+          // The XPath points to an <li> element, need to find the input inside or nearby
+          const input = xpathElement.querySelector('input') as HTMLInputElement;
+          if (input) {
+            console.log('✅ Found Item Codes field via XPath (inside li element)');
+            itemCodesInput = input;
+          } else {
+            // Check if the li itself is focusable/editable (some UI frameworks use contenteditable)
+            console.log('🔍 XPath element found but no input inside, checking element type...');
+            console.log('Element details:', {
+              tagName: xpathElement.tagName,
+              className: xpathElement.className,
+              contentEditable: (xpathElement as any).contentEditable
+            });
+          }
+        }
+
+        // Strategy 1: Try specific selectors
+        if (!itemCodesInput) {
+          const itemCodeSelectors = [
+            'input.item-codes-autocomplete',
+            'input.ui-autocomplete-input',
+            'input[name*="item"]',
+            'input[name*="code"]',
+            'input[id*="item"]',
+            'input[id*="code"]',
+            'input[placeholder*="Item"]',
+            'input[placeholder*="Code"]'
+          ];
+
+          for (const selector of itemCodeSelectors) {
+            const element = document.querySelector(selector) as HTMLInputElement;
+            if (element && element.offsetParent !== null) { // Check if visible
+              console.log(`✅ Found Item Codes field via selector: ${selector}`);
+              itemCodesInput = element;
+              break;
+            }
+          }
+        }
+
+        // Strategy 2: Try label-based search
+        if (!itemCodesInput) {
+          itemCodesInput = this.findFieldByLabelText('item code') as HTMLInputElement;
+        }
+
+        // Strategy 3: Find all visible inputs in the modal and guess
+        if (!itemCodesInput) {
+          console.log('🔍 Trying to find visible inputs in modal...');
+          const allInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])')) as HTMLInputElement[];
+          const visibleInputs = allInputs.filter(input => input.offsetParent !== null);
+          console.log(`Found ${visibleInputs.length} visible text inputs`);
+
+          // The first visible text input in a modal is often the first field
+          if (visibleInputs.length > 0) {
+            itemCodesInput = visibleInputs[0];
+            console.log(`⚠️ Using first visible input as Item Codes field (fallback strategy)`);
+          }
+        }
+
         if (itemCodesInput) {
-          // Clear existing value and set new value
-          (itemCodesInput as HTMLInputElement).value = '';
-          (itemCodesInput as HTMLInputElement).value = preset.itemCode;
-          
-          // Trigger input events to activate autocomplete
-          itemCodesInput.dispatchEvent(new Event('input', { bubbles: true }));
-          itemCodesInput.dispatchEvent(new Event('change', { bubbles: true }));
-          
+          console.log(`✅ Found Item Codes field, setting value to: ${preset.itemCode}`);
+
+          // Clear and set value
+          itemCodesInput.value = '';
+          itemCodesInput.focus();
+          itemCodesInput.value = preset.itemCode;
+
+          // Trigger comprehensive events
+          this.triggerAllEvents(itemCodesInput, preset.itemCode);
+
           console.log(`✅ Populated Item Code: ${preset.itemCode}`);
         } else {
-          console.warn('⚠️ Item codes input field not found');
+          console.warn('⚠️ Item codes input field not found after trying all strategies');
+          console.log('💡 Available inputs:', Array.from(document.querySelectorAll('input')).map(i => ({
+            type: i.type,
+            name: i.getAttribute('name'),
+            id: i.id,
+            class: i.className,
+            placeholder: i.placeholder
+          })));
         }
       }
 
       // Find and populate Appointment Notes field
       if (preset.notes) {
-        const notesTextarea = await this.findElement('textarea.Notes, textarea.form-control');
+        console.log('🔍 Searching for Appointment Notes field...');
+
+        let notesTextarea: HTMLTextAreaElement | null = null;
+
+        // Strategy 0: Try exact XPath first (most reliable for Xestro)
+        const notesXPath = '/html/body/div[2]/div[7]/div/div[3]/div/div/div[2]/textarea';
+        const xpathTextarea = this.findByXPath(notesXPath) as HTMLTextAreaElement;
+        if (xpathTextarea && xpathTextarea instanceof HTMLTextAreaElement) {
+          console.log('✅ Found Appointment Notes field via XPath');
+          notesTextarea = xpathTextarea;
+        }
+
+        // Strategy 1: Try specific selectors
+        if (!notesTextarea) {
+          const notesSelectors = [
+            'textarea.Notes',
+            'textarea.form-control',
+            'textarea[name*="note"]',
+            'textarea[name*="comment"]',
+            'textarea[id*="note"]',
+            'textarea[id*="comment"]',
+            'textarea[placeholder*="Note"]',
+            'textarea[placeholder*="Comment"]'
+          ];
+
+          for (const selector of notesSelectors) {
+            const element = document.querySelector(selector) as HTMLTextAreaElement;
+            if (element && element.offsetParent !== null) { // Check if visible
+              console.log(`✅ Found Appointment Notes field via selector: ${selector}`);
+              notesTextarea = element;
+              break;
+            }
+          }
+        }
+
+        // Strategy 2: Try label-based search
+        if (!notesTextarea) {
+          notesTextarea = this.findFieldByLabelText('appointment note') as HTMLTextAreaElement;
+        }
+        if (!notesTextarea) {
+          notesTextarea = this.findFieldByLabelText('note') as HTMLTextAreaElement;
+        }
+
+        // Strategy 3: Find all visible textareas in the modal
+        if (!notesTextarea) {
+          console.log('🔍 Trying to find visible textareas in modal...');
+          const allTextareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+          const visibleTextareas = allTextareas.filter(textarea => textarea.offsetParent !== null);
+          console.log(`Found ${visibleTextareas.length} visible textareas`);
+
+          // The first visible textarea in the appointment modal is likely the notes field
+          if (visibleTextareas.length > 0) {
+            notesTextarea = visibleTextareas[0];
+            console.log(`⚠️ Using first visible textarea as Appointment Notes field (fallback strategy)`);
+          }
+        }
+
         if (notesTextarea) {
-          // Clear existing content and set new content
-          (notesTextarea as HTMLTextAreaElement).value = '';
-          (notesTextarea as HTMLTextAreaElement).value = preset.notes;
-          
-          // Trigger events to ensure the change is registered
-          notesTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-          notesTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-          
+          console.log(`✅ Found Appointment Notes field, setting value to: ${preset.notes}`);
+
+          // Clear and set value
+          notesTextarea.value = '';
+          notesTextarea.focus();
+          notesTextarea.value = preset.notes;
+
+          // Trigger comprehensive events
+          this.triggerAllEvents(notesTextarea, preset.notes);
+
           console.log(`✅ Populated Appointment Notes: ${preset.notes}`);
         } else {
-          console.warn('⚠️ Appointment notes textarea not found');
+          console.warn('⚠️ Appointment notes textarea not found after trying all strategies');
+          console.log('💡 Available textareas:', Array.from(document.querySelectorAll('textarea')).map(t => ({
+            name: t.getAttribute('name'),
+            id: t.id,
+            class: t.className,
+            placeholder: t.placeholder
+          })));
         }
       }
 

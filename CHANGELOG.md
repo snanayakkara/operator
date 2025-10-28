@@ -9,6 +9,51 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.20.0] - 2025-10-28
+
+### Added
+
+- **BP Diary Vision Extraction Enhancements**
+  - Enhanced vision model diagnostics with detailed logging (image type, size, encoding, token usage)
+  - Empty response detection with helpful troubleshooting messages
+  - Image validation (format and size) before processing to prevent unnecessary API calls
+  - Better error messages guiding users to correct vision model setup in LM Studio
+  - Improved extraction prompts for more accurate BP reading detection
+  - Temperature adjustment for vision models (0.3 → 0.5) to improve image interpretation
+
+- **BP Review Grid Interactive Features**
+  - Add new BP readings manually with validation and auto-sorting by date/time
+  - Delete individual readings with confirmation dialog
+  - Enhanced UI with "Add New Reading" button and inline form
+  - Better guidance text for users reviewing extracted readings
+  - Manually entered readings marked with 100% confidence
+
+- **Content Script EMR Field Detection Improvements**
+  - New `findFieldByLabelText()` helper for robust field detection across EMR systems
+  - New `findByXPath()` helper for advanced field targeting
+  - Enhanced `triggerAllEvents()` for better UI framework compatibility (React, Vue, Angular)
+  - Improved field insertion reliability across different EMR implementations
+
+- **LM Studio Service Vision Diagnostics**
+  - Comprehensive vision request logging with image metadata
+  - Token usage tracking for vision requests (prompt tokens, completion tokens)
+  - Warning detection for improperly loaded vision models (low token usage)
+  - Better error messages when vision models fail to process images
+
+### Changed
+
+- **Session Management UX Improvements**
+  - Session notification badge now shows only unchecked (active) sessions instead of all sessions
+  - Sessions remain visible after completion until user explicitly switches views
+  - Better session persistence and state management
+  - Appointment wrap-up data preservation through state management
+
+### Fixed
+
+- **TypeScript Error** - Fixed type error in `usePortal.ts` where null assignment wasn't properly typed
+- **Vision Model Empty Responses** - Added detection and user-friendly error messages for empty vision model responses
+- **BP Diary Importer UX** - Improved description text to clarify editing and manual addition capabilities
+
 ## [3.19.0] - 2025-10-27
 
 ### Added

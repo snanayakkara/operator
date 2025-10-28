@@ -513,6 +513,21 @@ export class LMStudioService {
     console.log(`🤖 Using vision model: ${modelToUse} for agent: ${agentType || 'default'}`);
     console.log(`🎯 Token limit: ${tokenLimit} tokens for optimal response length`);
 
+    // Analyze image data URL for diagnostics
+    const imagePrefix = imageDataUrl.substring(0, 50);
+    const imageSizeKB = (imageDataUrl.length / 1024).toFixed(2);
+    const imageSizeMB = (imageDataUrl.length / (1024 * 1024)).toFixed(2);
+    const imageType = imageDataUrl.substring(5, imageDataUrl.indexOf(';'));
+    const isBase64 = imageDataUrl.includes(';base64,');
+
+    console.log('📊 VISION DIAGNOSTICS:');
+    console.log(`   Image Type: ${imageType}`);
+    console.log(`   Image Size: ${imageSizeKB} KB (${imageSizeMB} MB)`);
+    console.log(`   Base64 Encoded: ${isBase64 ? 'Yes' : 'No'}`);
+    console.log(`   Image Prefix: ${imagePrefix}...`);
+    console.log(`   System Prompt Length: ${systemPrompt.length} chars`);
+    console.log(`   Text Prompt Length: ${textPrompt.length} chars`);
+
     // Build OpenAI-compatible vision request
     // Format: https://platform.openai.com/docs/guides/vision
     const request: LMStudioRequest = {
@@ -538,11 +553,17 @@ export class LMStudioService {
           ]
         }
       ],
-      temperature: 0.3,
+      temperature: 0.5, // Higher temperature for vision models to improve image interpretation
       max_tokens: tokenLimit
     };
 
-    console.log('🖼️ Vision request prepared with image and text prompt');
+    console.log('🖼️ Vision request prepared with:');
+    console.log(`   - System message (${systemPrompt.length} chars)`);
+    console.log(`   - User message with 2 content blocks:`);
+    console.log(`     1. Text block (${textPrompt.length} chars)`);
+    console.log(`     2. Image block (${imageDataUrl.length} chars)`);
+    console.log(`   - Temperature: ${request.temperature}`);
+    console.log(`   - Max tokens: ${request.max_tokens}`);
 
     const result = await this.makeRequest(request, signal, agentType);
 
@@ -928,7 +949,12 @@ export class LMStudioService {
         }
 
         const data: LMStudioResponse = await response.json();
-        
+
+        // Check if this was a vision request
+        const isVisionRequest = preparedRequest.messages?.some(m =>
+          Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
+        );
+
         // Debug logging for LMStudio response
         const responseContent = this.normalizeMessageContent(data.choices?.[0]?.message?.content);
 
@@ -941,14 +967,38 @@ export class LMStudioService {
           contentLength: responseContent.length,
           contentPreview: responseContent.substring(0, 100) + '...'
         });
-        
+
+        // Enhanced diagnostics for vision requests
+        if (isVisionRequest) {
+          console.log('🔍 VISION RESPONSE DIAGNOSTICS:');
+          console.log(`   Model actually used: ${(data as any).model || 'unknown'}`);
+          console.log(`   Prompt tokens: ${data.usage?.prompt_tokens || 'unknown'}`);
+          console.log(`   Completion tokens: ${data.usage?.completion_tokens || 'unknown'}`);
+          console.log(`   Total tokens: ${data.usage?.total_tokens || 'unknown'}`);
+          console.log(`   Finish reason: ${data.choices?.[0]?.finish_reason}`);
+          console.log(`   Response length: ${responseContent.length} chars`);
+          console.log(`   Response is empty array: ${responseContent.trim() === '[]'}`);
+          console.log(`   Response preview: "${responseContent.substring(0, 200)}"`);
+
+          // Check for signs of vision processing
+          if (data.usage?.prompt_tokens && data.usage.prompt_tokens < 100) {
+            console.warn('⚠️ WARNING: Very few prompt tokens used. Image may not have been processed!');
+            console.warn('   This often indicates the vision model is not properly loaded.');
+          }
+
+          if (data.usage?.completion_tokens && data.usage.completion_tokens < 5) {
+            console.warn('⚠️ WARNING: Very few completion tokens generated (${data.usage.completion_tokens}).');
+            console.warn('   Model may not be seeing/understanding the image.');
+          }
+        }
+
         const content = responseContent;
 
         if (!content) {
           console.error('❌ No content in LMStudio response:', data);
           throw new Error('No content in response');
         }
-        
+
         // Check if response was truncated
         const finishReason = data.choices?.[0]?.finish_reason;
         if (finishReason === 'length') {
@@ -958,7 +1008,7 @@ export class LMStudioService {
         } else {
           console.warn('⚠️ Unexpected finish reason:', finishReason);
         }
-        
+
         console.log('📄 Full response content:', content);
         
         // Clear timeout warning since request completed

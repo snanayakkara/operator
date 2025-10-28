@@ -311,13 +311,13 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">BP Diary Importer</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Upload a photo of the blood pressure diary for analysis
+              Upload a photo of your BP diary for automatic extraction, then review, edit, add, or delete readings
             </p>
           </div>
           <button
@@ -590,7 +590,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
 
               {/* Review Grid */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Review Readings</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Review & Edit Readings</h3>
+                  {readings.length < 15 && (
+                    <p className="text-xs text-gray-500">
+                      Tip: Use "Add New Reading" button below to manually add any missed readings
+                    </p>
+                  )}
+                </div>
                 <BPReviewGrid
                   readings={readings}
                   onReadingsChange={handleReadingsChange}
@@ -654,59 +661,59 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+        <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             {processingState === 'ready' && (
               <button
                 onClick={handleClear}
-                className="flex items-center gap-2 px-3 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
               >
-                <Trash2 className="w-4 h-4" />
-                <span className="text-sm">Clear</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="text-xs">Clear</span>
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {processingState === 'ready' && readings.length > 0 && (
               <>
                 <button
                   onClick={handleExportJSON}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <FileJson className="w-4 h-4" />
-                  <span className="text-sm">Export JSON</span>
+                  <FileJson className="w-3.5 h-3.5" />
+                  <span className="text-xs">Export JSON</span>
                 </button>
 
                 <button
                   onClick={handleExportCSV}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <FileText className="w-4 h-4" />
-                  <span className="text-sm">Export CSV</span>
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="text-xs">Export CSV</span>
                 </button>
 
                 <button
                   onClick={handleCopyChart}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <Clipboard className="w-4 h-4" />
-                  <span className="text-sm">Copy Chart</span>
+                  <Clipboard className="w-3.5 h-3.5" />
+                  <span className="text-xs">Copy Chart</span>
                 </button>
 
                 <button
                   onClick={handleAcceptAll}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm">Accept & Save</span>
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Accept & Save</span>
                 </button>
               </>
             )}
 
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 transition-colors"
             >
               Close
             </button>

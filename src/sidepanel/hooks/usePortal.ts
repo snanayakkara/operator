@@ -13,7 +13,7 @@ export const usePortal = (id: string = 'portal-root') => {
       // If container exists but is not in the document, it's stale
       if (portalContainer && !document.body.contains(portalContainer)) {
         console.warn(`🚨 Portal container "${id}" exists but not in DOM - recreating`);
-        portalContainer = null;
+        portalContainer = null as unknown as HTMLDivElement;
       }
 
       if (!portalContainer) {

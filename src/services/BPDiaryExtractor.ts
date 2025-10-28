@@ -38,9 +38,21 @@ export class BPDiaryExtractor {
     const startTime = Date.now();
 
     try {
+      // Validate image format and size
+      const validationError = this.validateImage(imageDataUrl);
+      if (validationError) {
+        return {
+          success: false,
+          readings: [],
+          error: validationError,
+          processingTime: Date.now() - startTime
+        };
+      }
+
       logger.info('Starting BP diary extraction', {
         component: 'bp-extractor',
         imageSize: imageDataUrl.length,
+        imageSizeMB: (imageDataUrl.length / (1024 * 1024)).toFixed(2),
         model: modelOverride || 'default'
       });
 
@@ -59,11 +71,56 @@ export class BPDiaryExtractor {
 
       logger.info('Received LM Studio response', {
         component: 'bp-extractor',
-        responseLength: response.length
+        responseLength: response.length,
+        responsePreview: response.substring(0, 100)
       });
+
+      // Check for empty response (model returned [] or empty string)
+      const trimmedResponse = response.trim();
+      if (trimmedResponse === '[]' || trimmedResponse === '' || trimmedResponse.length < 3) {
+        logger.warn('Vision model returned empty response', {
+          component: 'bp-extractor',
+          response: trimmedResponse,
+          modelUsed: modelOverride || 'default'
+        });
+
+        return {
+          success: false,
+          readings: [],
+          error: `Vision model could not extract any readings from the image. This may indicate:\n\n` +
+                 `1. The model (${modelOverride || 'default'}) may not be properly loaded with vision support in LM Studio\n` +
+                 `2. The image quality may be too poor for the model to read\n` +
+                 `3. The model may not support vision tasks (ensure you're using a vision-capable model like Qwen3-VL, LLaVA, or Gemma with vision)\n\n` +
+                 `Troubleshooting:\n` +
+                 `- Verify your vision model is loaded in LM Studio with the correct GGUF files (including -mmproj files for vision support)\n` +
+                 `- Try a different vision model from the dropdown\n` +
+                 `- Use the "Load Sample Data" button to test the chart and editing features`,
+          processingTime: Date.now() - startTime
+        };
+      }
 
       // Parse response into structured readings
       const readings = this.parseResponse(response);
+
+      // Additional check: if parsing succeeded but returned no readings
+      if (readings.length === 0) {
+        logger.warn('Parsing returned no readings', {
+          component: 'bp-extractor',
+          responseLength: response.length
+        });
+
+        return {
+          success: false,
+          readings: [],
+          error: `Could not extract BP readings from the vision model response. The model may have misunderstood the task or the image may not contain recognizable BP diary data.\n\n` +
+                 `Try:\n` +
+                 `- Ensuring the image shows a clear BP diary table\n` +
+                 `- Using a different vision model\n` +
+                 `- Using the "Load Sample Data" button to test the features`,
+          rawResponse: response,
+          processingTime: Date.now() - startTime
+        };
+      }
 
       // Generate clinical insights if we have readings
       let insights: BPInsights | undefined;
@@ -119,43 +176,114 @@ export class BPDiaryExtractor {
    * Returns the text instruction for the vision model
    */
   private buildExtractionPrompt(): string {
-    return `Analyze this blood pressure diary image and extract all BP readings. The dates will usually be consecutive days, and all numbers will be whole integers in mmHg, no decimals.
+    return `VISION TASK: You are analyzing a blood pressure diary photograph/screenshot. You must LOOK AT THE IMAGE and extract tabular data.
 
-CRITICAL RULES:
-1. BOTTOM-NUMBER RULE: When a cell contains two stacked values (e.g., "160\\n156" or "160/156"),
-   you MUST select the BOTTOM value only. This is non-negotiable.
-2. Extract ALL readings visible in the image, including date, EXACT TIME, SBP, DBP, and heart rate
-3. For dates: Convert to YYYY-MM-DD format
-4. For time: Extract the EXACT time shown (HH:MM format, 24-hour clock). Examples: "19:21", "06:44", "08:24"
-5. Confidence: Estimate 0.0-1.0 based on image clarity
+STEP 1: EXAMINE THE IMAGE COMPLETELY
+- Look for a table with columns: Date, Time, Systolic BP (SBP), Diastolic BP (DBP), Heart Rate (HR)
+- The table may be handwritten or printed
+- Numbers are whole integers in mmHg (no decimals)
+- SCAN THE ENTIRE IMAGE FROM TOP TO BOTTOM - do not stop early
+- Count the number of rows visible in the table
+- Dates may appear in various formats: DD/MM (e.g., "5/9", "16/10"), DD/MM/YYYY, or written out
 
-IMPORTANT: Preserve the EXACT timestamps visible in the image. Do NOT simplify to morning/evening.
+STEP 2: EXTRACTION RULES (CRITICAL)
+1. BOTTOM-NUMBER RULE: When a cell contains two stacked values (e.g., "160\\n156" or "160/156"), you MUST select the BOTTOM value only. This is non-negotiable.
 
+2. READ EACH CELL INDEPENDENTLY: This is CRITICAL to avoid duplication errors.
+   - Do NOT copy dates/times from previous rows
+   - Look at EACH cell individually and read what you see
+   - If two rows look similar, double-check - they should have different dates or times
+   - Common mistake: copying "16 Oct" and "23:49" to multiple rows - AVOID THIS!
+
+3. EXTRACT EVERY ROW: Extract ALL readings visible in the image, even if some values are slightly unclear. Make your BEST GUESS rather than skipping a row.
+
+4. HANDWRITING TOLERANCE: For handwritten diaries:
+   - If a number could be 5 or 6, pick the most likely
+   - If a date format is abbreviated (e.g., "5/9"), assume current or previous year
+   - If time is partially unclear, use context (am/pm notation)
+   - Confidence should reflect uncertainty (0.6-0.8 for unclear values)
+   - IMPORTANT: Each row should have DIFFERENT date or time values
+
+5. DATE FORMATS: Accept and convert all these formats to YYYY-MM-DD:
+   - "16/10" → "2025-10-16" (assume current year if not specified)
+   - "5/9" → "2025-09-05" (DD/MM format, assume September 5th)
+   - "14/9/2025" → "2025-09-14"
+   - Written dates → convert to YYYY-MM-DD
+   - WATCH OUT: Dates often change between rows - don't duplicate!
+
+6. TIME FORMATS: Extract EXACT time in HH:MM (24-hour clock)
+   - "4:22 am" → "04:22"
+   - "10.16 am" → "10:16"
+   - "3:21 pm" → "15:21"
+   - "9:55" → assume context (am/pm)
+   - WARNING: Times should vary between readings - check each cell carefully!
+
+7. COMPLETE SCAN: Do not stop until you have checked every visible row in the table, even if you've already found 10+ readings
+
+STEP 3: OUTPUT FORMAT
 Return ONLY a JSON array with this exact structure (no markdown, no code blocks, no explanations):
+
+EXAMPLE OUTPUT (if image shows these readings):
 [
   {
     "date": "2025-10-16",
-    "time": "19:21",
-    "sbp": 132,
-    "dbp": 74,
-    "hr": 72,
+    "time": "04:22",
+    "sbp": 150,
+    "dbp": 94,
+    "hr": 95,
     "confidence": 0.95
+  },
+  {
+    "date": "2025-10-16",
+    "time": "10:16",
+    "sbp": 146,
+    "dbp": 91,
+    "hr": 89,
+    "confidence": 0.90
+  },
+  {
+    "date": "2025-10-16",
+    "time": "13:40",
+    "sbp": 130,
+    "dbp": 82,
+    "hr": 91,
+    "confidence": 0.85
   }
 ]
 
-If the image is unclear or contains no BP readings, return an empty array: []`;
+CRITICAL REMINDERS:
+- Extract EVERY row you can see - aim for 100% coverage
+- READ EACH CELL INDEPENDENTLY - do not copy values from nearby rows
+- Dates and times should be DIFFERENT for each row (unless truly identical in the image)
+- Make your best guess for unclear values rather than skipping them
+- Lower confidence (0.6-0.8) for uncertain readings is better than no reading
+- Scan the ENTIRE image before returning results
+- If you see duplicate dates/times in your output, GO BACK and re-read those cells carefully
+- If the image is completely unreadable or contains no BP table, ONLY THEN return an empty array: []
+
+Now, examine the provided image and extract ALL visible blood pressure readings following the rules above.`;
   }
 
   /**
    * System prompt for the extraction agent
    */
   private getSystemPrompt(): string {
-    return `You are a medical data extraction specialist focused on blood pressure diaries.
-Your task is to accurately extract BP readings from images, following these strict rules:
-1. When a cell contains two stacked values, select the BOTTOM value only
-2. Extract EXACT timestamps (HH:MM format) - do not simplify to morning/evening
-3. Maintain chronological order
-Return structured JSON data without any markdown formatting or explanatory text.`;
+    return `You are a medical data extraction specialist with vision capabilities, specialized in analyzing blood pressure diary images.
+
+Your task is to:
+1. LOOK AT the provided image carefully and SCAN THE ENTIRE IMAGE from top to bottom
+2. Identify tabular data containing BP readings (Date, Time, SBP, DBP, HR)
+3. Extract EVERY SINGLE visible reading - do not skip rows even if handwriting is unclear
+4. Make your best guess for unclear values rather than omitting them (use lower confidence scores for uncertainty)
+5. Apply the BOTTOM-NUMBER RULE when cells contain stacked values
+6. Preserve EXACT timestamps (HH:MM format) - never simplify to morning/evening
+7. Handle various date formats: DD/MM, DD/MM/YYYY, written dates
+8. Maintain chronological order
+
+CRITICAL: Aim for 100% extraction coverage. Extract every row you can identify, even if values are partially unclear.
+
+Return ONLY structured JSON array data without any markdown formatting, code blocks, or explanatory text.
+If you cannot see or process the image at all, return an empty array [].`;
   }
 
   /**
@@ -432,5 +560,46 @@ Guidelines:
     // Single number
     const match = str.match(/\d+/);
     return match ? parseInt(match[0], 10) : 0;
+  }
+
+  /**
+   * Validate image format and size
+   * Returns error message if validation fails, null if valid
+   */
+  private validateImage(imageDataUrl: string): string | null {
+    // Check if empty
+    if (!imageDataUrl || imageDataUrl.length === 0) {
+      return 'No image data provided';
+    }
+
+    // Check if it's a valid data URL
+    if (!imageDataUrl.startsWith('data:image/')) {
+      return 'Invalid image format. Expected data URL starting with "data:image/"';
+    }
+
+    // Check image type (should be jpeg, png, or webp)
+    const imageType = imageDataUrl.substring(5, imageDataUrl.indexOf(';'));
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(imageType)) {
+      return `Unsupported image type: ${imageType}. Supported types: JPEG, PNG, WebP`;
+    }
+
+    // Check image size (warn if > 5MB, error if > 10MB)
+    const sizeInBytes = imageDataUrl.length;
+    const sizeInMB = sizeInBytes / (1024 * 1024);
+
+    if (sizeInMB > 10) {
+      return `Image too large (${sizeInMB.toFixed(1)}MB). Maximum size is 10MB. Please compress or resize the image.`;
+    }
+
+    if (sizeInMB > 5) {
+      logger.warn('Large image detected', {
+        component: 'bp-extractor',
+        sizeMB: sizeInMB.toFixed(2),
+        message: 'Image is large and may take longer to process or fail with some models'
+      });
+    }
+
+    return null; // Validation passed
   }
 }
