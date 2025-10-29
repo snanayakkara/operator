@@ -9,6 +9,32 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.7] - 2025-10-29
+
+### Fixed
+
+- **Microphone Texture Aspect Ratio**
+  - Recreated microphone icon with correct aspect ratio (1024x1440) to match card dimensions (1.6 x 2.25)
+  - Previous 512x768 texture was stretched and distorted on the card
+  - New texture properly fills card without stretching
+  - Microphone now centered and properly proportioned
+  - Increased from 39KB to 72KB for better quality
+  - Added rounded corners to card background for polish
+
+- **Lanyard Band Texture Proportions**
+  - Adjusted texture repeat from `[-4, 1]` to `[-3, 1]`
+  - Reduced stretching of logos/pattern on lanyard rope
+  - Better visual balance along the band
+  - Stripe pattern now displays at correct aspect ratio
+
+### Technical Details
+
+- Microphone texture dimensions changed from 512x768 to 1024x1440
+- Aspect ratio now matches card geometry (0.711 vs 0.711)
+- SVG source updated with proper viewBox and scaling
+- Card background uses light gray (#f3f4f6) with 40px rounded corners
+- Lanyard material repeat parameter optimized for texture dimensions (1025x250)
+
 ## [3.21.6] - 2025-10-29
 
 ### Changed

@@ -359,7 +359,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
           resolution={isSmall ? [1000, 2000] : [1000, 1000]}
           useMap={lanyardTexture ? 1 : 0}
           map={lanyardTexture}
-          repeat={[-4, 1]}
+          repeat={[-3, 1]}
           lineWidth={1}
         />
       </mesh>
