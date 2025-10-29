@@ -169,37 +169,28 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
     linearDamping: 4
   };
 
-  // Try to load 3D model, with graceful fallback
-  let nodes: any = {};
-  let materials: any = {};
-  try {
-    const gltf = useGLTF('/assets/lanyard/card.glb') as any;
-    nodes = gltf.nodes || {};
-    materials = gltf.materials || {};
-  } catch (error) {
-    console.warn('Failed to load card.glb, using fallback geometry');
-  }
+  // Load 3D model - React hooks must be called unconditionally
+  const gltf = useGLTF('/assets/lanyard/card.glb', true) as any;
+  const nodes = gltf?.nodes || {};
+  const materials = gltf?.materials || {};
 
-  // Try to load lanyard texture, with graceful fallback
-  let texture: THREE.Texture | null = null;
-  try {
-    texture = useTexture('/assets/lanyard/lanyard.png');
+  // Load lanyard texture - React hooks must be called unconditionally
+  const texture = useTexture('/assets/lanyard/lanyard.png');
+  if (texture) {
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  } catch (error) {
-    console.warn('Failed to load lanyard.png, using fallback color');
   }
 
   // Create curve for lanyard band
-  const [curve] = useState(
-    () =>
-      new THREE.CatmullRomCurve3([
-        new THREE.Vector3(),
-        new THREE.Vector3(),
-        new THREE.Vector3(),
-        new THREE.Vector3()
-      ])
-  );
-  curve.curveType = 'chordal';
+  const curve = useState(() => {
+    const c = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+      new THREE.Vector3(),
+      new THREE.Vector3()
+    ]);
+    c.curveType = 'chordal';
+    return c;
+  })[0];
 
   // Interaction state
   const [dragged, drag] = useState<false | THREE.Vector3>(false);
@@ -368,6 +359,6 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
   );
 }
 
-// Preload assets (optional optimization)
-// useGLTF.preload('/assets/lanyard/card.glb');
-// useTexture.preload('/assets/lanyard/lanyard.png');
+// Preload assets for faster initial render
+useGLTF.preload('/assets/lanyard/card.glb');
+useTexture.preload('/assets/lanyard/lanyard.png');

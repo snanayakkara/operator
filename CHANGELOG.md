@@ -9,6 +9,38 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.4] - 2025-10-29
+
+### Fixed
+
+- **Lanyard React Hooks Rules Violation**
+  - Fixed `useGLTF` and `useTexture` being called inside try-catch blocks (violates React Rules of Hooks)
+  - React hooks must be called unconditionally at the top level of components
+  - Previous try-catch approach caused `TypeError: Cannot create property 'curveType' on boolean 'false'`
+  - Hooks now called unconditionally with optional chaining for safety (`gltf?.nodes`)
+
+- **Curve Initialization Error**
+  - Fixed curve initialization by setting `curveType` inside useState initializer
+  - Ensures curve object is fully configured before first render
+  - Prevents property assignment errors on undefined/boolean values
+
+### Changed
+
+- **Asset Loading Strategy**
+  - Assets now loaded with `useGLTF('/path', true)` for graceful degradation
+  - Optional chaining used for safe property access (`gltf?.nodes || {}`)
+  - Texture wrap mode set conditionally after successful load
+  - Enabled asset preloading for faster initial renders
+  - Fallback geometry still renders correctly if assets fail to load
+
+### Technical Details
+
+- Removed try-catch blocks around `useGLTF` and `useTexture` calls
+- Curve object now properly initialized with `curveType = 'chordal'` in useState callback
+- Build completes without errors in 6.98s
+- Console no longer shows "Cannot create property 'curveType'" error
+- 3D lanyard renders successfully with physics-based rope simulation
+
 ## [3.21.3] - 2025-10-29
 
 ### Fixed
