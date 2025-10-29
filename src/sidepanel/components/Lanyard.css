@@ -1,9 +1,15 @@
 /* Lanyard Component Styles */
 .lanyard-wrapper {
-  width: 100%;
-  height: 400px;
   position: relative;
-  overflow: hidden;
+  z-index: 0;
+  width: 100%;
+  height: 500px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transform: scale(1);
+  transform-origin: center;
+  overflow: visible;
   background: transparent;
 }
 
@@ -20,7 +26,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 400px;
+  height: 500px;
   color: var(--color-text-secondary);
   font-size: 0.875rem;
 }
@@ -28,10 +34,10 @@
 /* Responsive adjustments */
 @media (max-width: 400px) {
   .lanyard-wrapper {
-    height: 300px;
+    height: 350px;
   }
 
   .lanyard-loading {
-    height: 300px;
+    height: 350px;
   }
 }

@@ -9,6 +9,32 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.1] - 2025-10-29
+
+### Fixed
+
+- **Lanyard Component Text Display**
+  - Added "Ready to Record" text directly on 3D lanyard card using Three.js Text component
+  - Added microphone emoji icon (🎤) below text for visual clarity
+  - Text renders at center of card with proper sizing and positioning
+  - Dark gray text color (#1f2937) with medium font weight for readability
+
+- **Lanyard Layout and Spacing**
+  - Increased lanyard container height from 400px to 500px (350px on mobile)
+  - Changed layout from `justify-center` to `justify-start` with `pt-4` for better vertical positioning
+  - Reduced text section spacing to prevent cutting off lanyard swing
+  - Added React Bits centering styles (flexbox with transform origin)
+  - Changed overflow from `hidden` to `visible` to prevent clipping
+  - Reduced padding and font sizes in instruction text section
+
+### Changed
+
+- **Idle State UX Improvements**
+  - Lanyard now has more room to swing naturally without being cut off
+  - Text below lanyard is more compact and doesn't crowd the 3D component
+  - Improved visual hierarchy with smaller, less prominent instruction text
+  - Background processing status card is more compact
+
 ## [3.21.0] - 2025-10-29
 
 ### Added

@@ -3801,7 +3801,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           
           {/* Default State - Ready for Recording with 3D Lanyard */}
           {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center dot-grid-background-light">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-start dot-grid-background-light pt-4">
               {/* 3D Interactive Lanyard */}
               <div className="w-full max-w-md">
                 <Lanyard
@@ -3814,27 +3814,26 @@ const OptimizedAppContent: React.FC = memo(() => {
               </div>
 
               {/* Instructions and Status */}
-              <div className="max-w-md text-center space-y-4 px-8 pb-8">
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600 leading-relaxed">
+              <div className="max-w-md text-center space-y-3 px-8 pb-6">
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-600 leading-relaxed">
                     Select a workflow below to start recording for your next patient.
-                    Recordings will process in the background, allowing you to continue with other patients.
+                    Recordings will process in the background.
                   </p>
                 </div>
 
                 {/* Background Sessions Status */}
                 {state.patientSessions.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-1">
                       <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-sm font-medium text-blue-900">Background Processing</span>
+                      <span className="text-xs font-medium text-blue-900">Background Processing</span>
                     </div>
                     <p className="text-xs text-blue-800">
-                      {state.patientSessions.filter(s => ['transcribing', 'processing'].includes(s.status)).length} sessions processing, {' '}
+                      {state.patientSessions.filter(s => ['transcribing', 'processing'].includes(s.status)).length} processing, {' '}
                       {state.patientSessions.filter(s => s.status === 'completed').length} completed.
-                      Click the notification bell to view results.
                     </p>
                   </div>
                 )}
