@@ -51,13 +51,32 @@ export default function Lanyard({
   transparent = true,
   cardText = 'Ready to Record'
 }: LanyardProps) {
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    // Log when component mounts
+    console.log('🎨 Lanyard component mounted');
+  }, []);
+
+  if (error) {
+    console.error('🎨 Lanyard error:', error);
+    return <LanyardFallback text={cardText} />;
+  }
+
   return (
     <div className="lanyard-wrapper">
       <Suspense fallback={<LanyardFallback text={cardText} />}>
         <Canvas
           camera={{ position, fov }}
           gl={{ alpha: transparent }}
-          onCreated={({ gl }) => gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1)}
+          onCreated={({ gl }) => {
+            console.log('🎨 Canvas created successfully');
+            gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1);
+          }}
+          onError={(error) => {
+            console.error('🎨 Canvas error:', error);
+            setError(error as Error);
+          }}
         >
           <ambientLight intensity={Math.PI} />
           <Physics gravity={gravity} timeStep={1 / 60}>
@@ -325,8 +344,6 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
               anchorY="middle"
               maxWidth={1.4}
               textAlign="center"
-              font="/fonts/inter-medium.woff"
-              fontWeight={600}
             >
               {cardText || 'Ready to Record'}
             </Text>
