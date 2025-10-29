@@ -9,6 +9,44 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.3] - 2025-10-29
+
+### Fixed
+
+- **Lanyard Component Rendering Issue**
+  - Removed Text component from @react-three/drei that was causing async loading conflicts
+  - Text component async font loading combined with Rapier physics worker errors prevented 3D render
+  - Replaced 3D Text with HTML overlay positioned absolutely over the lanyard card
+  - HTML text is non-interactive (pointer-events: none) so 3D lanyard remains draggable
+  - Lanyard now renders successfully with "Ready to Record" text and microphone emoji visible
+
+### Added
+
+- **Actual Lanyard Assets from React Bits**
+  - Downloaded card.glb (2.4MB) - official 3D model with clip and clamp details
+  - Downloaded lanyard.png (7.4KB) - striped band texture for realistic appearance
+  - Assets sourced from https://github.com/DavidHDev/react-bits
+  - Lanyard will now show proper 3D model instead of fallback geometry
+
+### Changed
+
+- **Text Display Method**
+  - Text now rendered as HTML overlay instead of 3D Text component
+  - Better performance (no async font loading)
+  - Easier to style and maintain
+  - No additional Three.js dependencies
+  - Text positioned with CSS (absolute centering over card)
+
+### Technical Details
+
+- Removed `Text` import from @react-three/drei in Lanyard.tsx
+- Removed two Text components (text + emoji) from 3D scene
+- Added HTML div overlay with absolute positioning in OptimizedApp.tsx
+- Text uses Tailwind classes: text-lg, font-semibold, text-gray-800
+- Overlay has pointer-events-none to maintain lanyard interactivity
+- Build successful with no errors
+- 3D lanyard now renders with actual assets (no more fallback warnings)
+
 ## [3.21.1] - 2025-10-29
 
 ### Fixed

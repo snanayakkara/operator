@@ -10,7 +10,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas, extend, useFrame } from '@react-three/fiber';
-import { useGLTF, useTexture, Environment, Lightformer, Text } from '@react-three/drei';
+import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei';
 import {
   BallCollider,
   CuboidCollider,
@@ -334,30 +334,6 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
                 />
               </mesh>
             )}
-
-            {/* Text on card - "Ready to Record" */}
-            <Text
-              position={[0, 0.2, 0.02]}
-              fontSize={0.18}
-              color="#1f2937"
-              anchorX="center"
-              anchorY="middle"
-              maxWidth={1.4}
-              textAlign="center"
-            >
-              {cardText || 'Ready to Record'}
-            </Text>
-
-            {/* Microphone icon (using text emoji for simplicity) */}
-            <Text
-              position={[0, -0.2, 0.02]}
-              fontSize={0.4}
-              color="#3b82f6"
-              anchorX="center"
-              anchorY="middle"
-            >
-              🎤
-            </Text>
 
             {/* Clip and clamp meshes - fallback if not loaded */}
             {nodes.clip && nodes.clip.geometry && materials.metal ? (
