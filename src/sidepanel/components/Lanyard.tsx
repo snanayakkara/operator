@@ -338,6 +338,39 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
                 <meshStandardMaterial color="#888888" metalness={0.8} roughness={0.2} />
               </mesh>
             )}
+
+            {/* 3D Microphone Icon on Card */}
+            <group position={[0, 0, 0.02]}>
+              {/* Microphone head (capsule) */}
+              <mesh position={[0, 0.3, 0]}>
+                <capsuleGeometry args={[0.08, 0.15, 8, 16]} />
+                <meshStandardMaterial color="#1f2937" metalness={0.6} roughness={0.3} />
+              </mesh>
+
+              {/* Microphone body/handle */}
+              <mesh position={[0, 0, 0]}>
+                <cylinderGeometry args={[0.04, 0.05, 0.3, 16]} />
+                <meshStandardMaterial color="#374151" metalness={0.7} roughness={0.4} />
+              </mesh>
+
+              {/* Microphone base */}
+              <mesh position={[0, -0.18, 0]}>
+                <cylinderGeometry args={[0.06, 0.055, 0.05, 16]} />
+                <meshStandardMaterial color="#1f2937" metalness={0.8} roughness={0.2} />
+              </mesh>
+
+              {/* Microphone mesh/grille detail (top sphere) */}
+              <mesh position={[0, 0.375, 0]}>
+                <sphereGeometry args={[0.08, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshStandardMaterial
+                  color="#111827"
+                  metalness={0.5}
+                  roughness={0.5}
+                  transparent={true}
+                  opacity={0.8}
+                />
+              </mesh>
+            </group>
           </group>
         </RigidBody>
       </group>

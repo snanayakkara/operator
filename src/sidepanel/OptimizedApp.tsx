@@ -3801,32 +3801,20 @@ const OptimizedAppContent: React.FC = memo(() => {
           
           {/* Default State - Ready for Recording with 3D Lanyard */}
           {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-start dot-grid-background-light pt-4">
-              {/* 3D Interactive Lanyard with Text Overlay */}
-              <div className="w-full max-w-md relative">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-between dot-grid-background-light">
+              {/* 3D Interactive Lanyard - takes up most of the screen */}
+              <div className="w-full flex-1 flex items-start justify-center pt-4">
                 <Lanyard
                   position={[0, 0, 20]}
                   gravity={[0, -40, 0]}
                   fov={20}
                   transparent={true}
-                  cardText="Ready to Record"
+                  cardText=""
                 />
-
-                {/* HTML Text Overlay - positioned over the 3D card */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="text-center">
-                    <div className="text-lg font-semibold text-gray-800 mb-1">
-                      Ready to Record
-                    </div>
-                    <div className="text-4xl">
-                      🎤
-                    </div>
-                  </div>
-                </div>
               </div>
 
-              {/* Instructions and Status */}
-              <div className="max-w-md text-center space-y-3 px-8 pb-6">
+              {/* Instructions and Status - anchored to bottom */}
+              <div className="w-full max-w-md text-center space-y-3 px-8 pb-6">
                 <div className="space-y-1">
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Select a workflow below to start recording for your next patient.

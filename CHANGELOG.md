@@ -9,6 +9,39 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.5] - 2025-10-29
+
+### Changed
+
+- **Lanyard Layout Redesign**
+  - Increased lanyard height from 500px to 75vh (75% of viewport height)
+  - Lanyard now hangs down most of the screen for more dramatic visual effect
+  - Mobile responsive: 60vh height on screens < 400px width
+
+- **Added 3D Microphone Icon to Lanyard Card**
+  - Replaced text overlay with 3D microphone geometry directly on the card
+  - Microphone built with Three.js primitives (capsule, cylinders, sphere)
+  - Dark gray metallic finish with realistic shading and materials
+  - Icon positioned at center of card, rendered as part of 3D scene
+  - Fully integrated with physics simulation (swings with card)
+
+- **Improved Layout Structure**
+  - Removed "Ready to Record" text overlay from lanyard
+  - Moved instructions text to bottom of window (anchored)
+  - Changed layout from `justify-start` to `justify-between` for better spacing
+  - Instructions section now includes:
+    - "Select a workflow below to start recording..." message
+    - Background processing status card (when active)
+  - Clean, minimalist design with lanyard as primary visual focus
+
+### Technical Details
+
+- Lanyard.css: height changed to 75vh (60vh on mobile)
+- Lanyard.tsx: Added 4-part microphone geometry group (capsule head, cylinder body, base, grille detail)
+- OptimizedApp.tsx: Restructured flex layout with `justify-between` and bottom-anchored instructions
+- Microphone materials use Tailwind gray palette (#1f2937, #374151, #111827) with metalness/roughness
+- All changes maintain physics simulation and interactive dragging
+
 ## [3.21.4] - 2025-10-29
 
 ### Fixed
