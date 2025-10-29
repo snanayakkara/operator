@@ -9,6 +9,51 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.0] - 2025-10-29
+
+### Added
+
+- **3D Interactive Lanyard Component for Idle State**
+  - Replaced static "Ready to Record" screen with physics-based 3D lanyard component
+  - Interactive draggable ID card with realistic rope physics simulation
+  - Built with Three.js, React Three Fiber, and Rapier physics engine
+  - Graceful fallbacks for missing 3D assets (placeholder geometry)
+  - Lazy-loaded only when in idle state for optimal performance
+  - Dependencies: three@^0.168.0, @react-three/fiber@^8.17.0, @react-three/drei@^9.114.0, @react-three/rapier@^1.4.0, meshline@^3.3.1
+
+- **Dot Grid Background Pattern**
+  - Professional, subtle dot grid background for idle state
+  - Four CSS variants: light, standard, dark, dense
+  - Pure CSS implementation (no images required)
+  - Matches medical app aesthetic with minimal visual noise
+
+- **Build System Enhancements**
+  - Added .glb (3D model) file support in Vite configuration
+  - Automatic copying of lanyard assets to dist folder during build
+  - Separate vendor-3d chunk for Three.js libraries (~1MB gzipped)
+  - TypeScript declarations for 3D assets and MeshLine library
+
+- **Global TypeScript Declarations**
+  - New src/global.d.ts for .glb, .png, .jpg asset imports
+  - MeshLine library type definitions
+  - JSX intrinsic elements for Three.js custom components
+
+### Changed
+
+- **Idle State UX Enhancement**
+  - More engaging and interactive home screen experience
+  - Reduced visual clutter with cleaner layout
+  - Improved spacing and typography for instructions text
+  - Background processing status now integrated below lanyard
+
+### Technical Details
+
+- Bundle size impact: +~1MB gzipped for 3D libraries (lazy-loaded)
+- No CSP violations - fully compatible with Chrome extension policies
+- WebGL-accelerated rendering with 60fps physics simulation
+- Responsive design adapts to different screen sizes
+- Code splitting ensures 3D libraries only load when needed
+
 ## [3.20.0] - 2025-10-28
 
 ### Added

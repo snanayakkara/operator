@@ -281,12 +281,22 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.19.0**
+**Current Version**: **3.21.0**
 **Last Updated**: October 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.21.0 (Oct 2025)**
+- **3D Interactive Lanyard Component**: Physics-based 3D lanyard replaces static "Ready to Record" screen
+  - Built with Three.js, React Three Fiber, and Rapier physics engine
+  - Interactive draggable ID card with realistic rope physics simulation
+  - Lazy-loaded only when in idle state (~1MB gzipped, code-split into vendor-3d chunk)
+  - Graceful fallbacks for missing 3D assets (placeholder geometry)
+  - WebGL-accelerated 60fps rendering with full CSP compliance
+- **Dot Grid Background Pattern**: Professional, subtle dot grid background for idle state (4 CSS variants)
+- **Build System Enhancements**: Added .glb file support, automatic asset copying, TypeScript declarations for 3D assets
 
 **v3.19.0 (Oct 2025)**
 - **Circular Countdown Timer**: Large visual countdown timer with real-time ETA prediction

@@ -1,6 +1,6 @@
 {
   "name": "operator",
-  "version": "3.20.0",
+  "version": "3.21.0",
   "description": "Operator - Advanced medical AI assistant Chrome extension with specialized agents and EMR integration",
   "type": "module",
   "scripts": {
@@ -39,6 +39,9 @@
     "optim:quick-letter:with-exemplars": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task quick-letter --iterations 5 --with-exemplars"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/rapier": "^1.5.0",
     "@tanstack/react-query": "^5.85.5",
     "@vitejs/plugin-react-swc": "^4.0.1",
     "@xenova/transformers": "^2.10.0",
@@ -46,10 +49,12 @@
     "html2canvas": "^1.4.1",
     "js-yaml": "^4.1.0",
     "lucide-react": "^0.300.0",
+    "meshline": "^3.3.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^14.3.8",
     "react-loading-indicators": "^1.0.1",
+    "three": "^0.168.0",
     "zod": "^4.1.8"
   },
   "devDependencies": {
@@ -58,6 +63,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "@types/three": "^0.180.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.2.1",

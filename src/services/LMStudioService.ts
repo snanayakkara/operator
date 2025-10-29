@@ -12,6 +12,7 @@ import { ASRCorrectionEngine } from '@/utils/asr/ASRCorrectionEngine';
 import { logger } from '@/utils/Logger';
 import { GemmaPromptFormatter } from '@/utils/GemmaPromptFormatter';
 import { StreamingParser } from '@/utils/StreamingParser';
+import { ModelLoadingError } from '@/types/errors.types';
 
 /**
  * Centralized Model Configuration
@@ -942,7 +943,24 @@ export class LMStudioService {
                 Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')
               )
             });
+
+            // Check if this is a model loading error due to insufficient memory
+            const modelLoadingError = await this.parseModelLoadingError(
+              errorBody,
+              response.status,
+              preparedRequest.model || this.config.processorModel
+            );
+
+            if (modelLoadingError) {
+              console.error('💾 Model loading failed due to insufficient memory');
+              throw modelLoadingError; // Throw specialized error for UI to handle
+            }
+
           } catch (e) {
+            // If parseModelLoadingError threw a ModelLoadingError, re-throw it
+            if (e instanceof ModelLoadingError) {
+              throw e;
+            }
             errorDetails = response.statusText;
           }
           throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorDetails}`);
@@ -1250,6 +1268,48 @@ export class LMStudioService {
   private startHealthCheck(): void {
     // Initial connection check only - React Query handles periodic checks
     this.checkConnection();
+  }
+
+  /**
+   * Check if an error response from LM Studio indicates a model loading failure
+   * due to insufficient system resources
+   */
+  private async parseModelLoadingError(
+    errorBody: string,
+    httpStatus: number,
+    requestedModel: string
+  ): Promise<ModelLoadingError | null> {
+    // Check for memory-related error patterns
+    const isMemoryError =
+      errorBody.includes('insufficient system resources') ||
+      errorBody.includes('model loading was stopped') ||
+      errorBody.includes('overload your system') ||
+      errorBody.includes('freeze');
+
+    if (!isMemoryError) {
+      return null; // Not a memory-related model loading error
+    }
+
+    // Fetch available models for user to choose from
+    let availableModels: string[] = [];
+    try {
+      availableModels = await this.getAvailableModels();
+    } catch (error) {
+      console.warn('Failed to fetch available models for error dialog:', error);
+    }
+
+    // Create detailed error
+    return new ModelLoadingError(
+      `Failed to load model "${requestedModel}" due to insufficient system memory. ` +
+      `LM Studio blocked loading to prevent system freeze.`,
+      {
+        requestedModel,
+        isMemoryIssue: true,
+        availableModels,
+        httpStatus,
+        rawErrorMessage: errorBody
+      }
+    );
   }
 
   private sleep(ms: number): Promise<void> {

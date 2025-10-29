@@ -32,6 +32,8 @@ import { SparsityStepperModal } from './components/SparsityStepperModal';
 import { LipidProfileImporter } from './components/LipidProfileImporter';
 import { TTETrendImporter } from './components/TTETrendImporter';
 import { StorageManagementModal } from './components/StorageManagementModal';
+import { ModelLoadingErrorDialog } from './components/ModelLoadingErrorDialog';
+import Lanyard from './components/Lanyard';
 import { useAppState } from '@/hooks/useAppState';
 import { NotificationService } from '@/services/NotificationService';
 import { LMStudioService, MODEL_CONFIG, streamChatCompletion } from '@/services/LMStudioService';
@@ -42,6 +44,7 @@ import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } f
 import { patientNameValidator } from '@/utils/PatientNameValidator';
 import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
+import { ModelLoadingError, isModelLoadingError } from '@/types/errors.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
 import { MetricsService } from '@/services/MetricsService';
 import { ProcessingTimePredictor } from '@/services/ProcessingTimePredictor';
@@ -141,6 +144,15 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Storage management state
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
+
+  // Model loading error state
+  const [modelLoadingError, setModelLoadingError] = useState<ModelLoadingError | null>(null);
+  const [failedWorkflowContext, setFailedWorkflowContext] = useState<{
+    sessionId: string;
+    audioBlob: Blob;
+    workflowId: AgentType;
+    transcription: string;
+  } | null>(null);
 
   // Forward declare recorder hooks callbacks to avoid circular dependencies
   const handleRecordingCompleteRef = useRef<((audioBlob: Blob) => Promise<void>) | null>(null);
@@ -691,6 +703,87 @@ const OptimizedAppContent: React.FC = memo(() => {
       ToastService.getInstance().error('Failed to delete old sessions');
     }
   }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
+
+  // Model loading error dialog handlers
+  const handleRetryWithSameModel = useCallback(async () => {
+    if (!failedWorkflowContext) return;
+
+    console.log('🔄 Retrying workflow with same model after user freed memory');
+
+    // Clear error dialog
+    setModelLoadingError(null);
+
+    // Retry the workflow with original context
+    const { sessionId, audioBlob, workflowId, transcription } = failedWorkflowContext;
+
+    // Update session status
+    actions.updatePatientSession(sessionId, {
+      status: 'processing',
+      errors: [],
+      processingProgress: { stage: 'processing', progress: 0 }
+    });
+
+    // Retry background processing
+    try {
+      await handleBackgroundProcessing(sessionId, audioBlob, workflowId, transcription);
+      setFailedWorkflowContext(null); // Clear context on success
+    } catch (error) {
+      console.error('❌ Retry failed:', error);
+      // Error handling will trigger dialog again if it's another ModelLoadingError
+    }
+  }, [failedWorkflowContext, actions]);
+
+  const handleSwitchModel = useCallback(async (newModelId: string) => {
+    if (!failedWorkflowContext) return;
+
+    console.log(`🔀 Switching to model: ${newModelId}`);
+
+    // Update LMStudioService configuration
+    lmStudioService.updateConfig({
+      processorModel: newModelId
+    });
+
+    // Clear error dialog
+    setModelLoadingError(null);
+
+    // Retry the workflow with new model
+    const { sessionId, audioBlob, workflowId, transcription } = failedWorkflowContext;
+
+    // Update session status
+    actions.updatePatientSession(sessionId, {
+      status: 'processing',
+      errors: [],
+      processingProgress: { stage: 'processing', progress: 0 }
+    });
+
+    // Retry background processing with new model
+    try {
+      await handleBackgroundProcessing(sessionId, audioBlob, workflowId, transcription);
+      setFailedWorkflowContext(null); // Clear context on success
+
+      // Show success toast
+      ToastService.getInstance().success(
+        `Switched to ${newModelId}`,
+        'Processing will continue with the new model'
+      );
+    } catch (error) {
+      console.error('❌ Switch and retry failed:', error);
+      // Error handling will trigger dialog again if needed
+    }
+  }, [failedWorkflowContext, lmStudioService, actions]);
+
+  const handleCloseModelErrorDialog = useCallback(() => {
+    setModelLoadingError(null);
+    setFailedWorkflowContext(null);
+
+    // Optionally mark session as cancelled
+    if (failedWorkflowContext) {
+      actions.updatePatientSession(failedWorkflowContext.sessionId, {
+        status: 'cancelled',
+        errors: ['User cancelled model loading']
+      });
+    }
+  }, [failedWorkflowContext, actions]);
 
   // Load checked sessions from Chrome storage on mount (now handled by persistence service)
   useEffect(() => {
@@ -1628,6 +1721,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         if (result.taviStructuredSections) {
           actions.setTaviStructuredSections(result.taviStructuredSections);
         }
+        // Store RHC report if available
+        if ('rhcData' in result) {
+          actions.setRhcReport(result);
+        }
         console.log('🎯 Updated main results panel for currently selected session:', sessionId);
       } else {
         console.log('🔕 Background session completed, results stored in session only:', sessionId);
@@ -1731,6 +1828,11 @@ const OptimizedAppContent: React.FC = memo(() => {
           actions.setTaviStructuredSections(result.taviStructuredSections);
         }
 
+        // Set RHC report if available (RHC-specific)
+        if ('rhcData' in result) {
+          actions.setRhcReport(result);
+        }
+
         console.log('🏁 Background Workflow Completion: Atomic completion done for background workflow');
         console.log('🎯 Updated global UI state for currently selected session:', sessionId);
       } else {
@@ -1787,13 +1889,37 @@ const OptimizedAppContent: React.FC = memo(() => {
       
     } catch (error: any) {
       console.error('❌ Background processing failed for session:', sessionId, error);
-      
+
+      // Check if this is a model loading error due to insufficient memory
+      if (isModelLoadingError(error)) {
+        console.error('💾 Model loading failed - showing error dialog');
+
+        // Store error and context for retry/model switch
+        setModelLoadingError(error);
+        setFailedWorkflowContext({
+          sessionId,
+          audioBlob,
+          workflowId,
+          transcription: transcriptionResult
+        });
+
+        // Update session to show it's waiting for user decision
+        actions.updatePatientSession(sessionId, {
+          status: 'error',
+          errors: ['Model loading failed - awaiting user action'],
+          processingProgress: undefined
+        });
+
+        // Don't show generic error toast - dialog will handle user communication
+        return;
+      }
+
       // Batch all error state updates to prevent multiple re-renders
       const performErrorUpdates = () => {
         // Turn off processing state on error
         actions.setProcessing(false);
         actions.setProcessingStatus('idle');
-        
+
         // Update session to error state
         if (error.name === 'AbortError') {
           actions.updatePatientSession(sessionId, {
@@ -2587,6 +2713,11 @@ const OptimizedAppContent: React.FC = memo(() => {
       if (result.taviStructuredSections) {
         actions.setTaviStructuredSections(result.taviStructuredSections);
       }
+
+      // Set RHC report if available
+      if ('rhcData' in result) {
+        actions.setRhcReport(result);
+      }
       
       // Extract and set AI-generated summary if available
       if (result.summary && result.summary.trim()) {
@@ -2656,6 +2787,11 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Set TAVI structured sections if available
       if (result.taviStructuredSections) {
         actions.setTaviStructuredSections(result.taviStructuredSections);
+      }
+
+      // Set RHC report if available
+      if ('rhcData' in result) {
+        actions.setRhcReport(result);
       }
 
       // Use atomic completion to ensure consistent state management
@@ -3663,20 +3799,25 @@ const OptimizedAppContent: React.FC = memo(() => {
             </div>
           )}
           
-          {/* Default State - Ready for Recording */}
+          {/* Default State - Ready for Recording with 3D Lanyard */}
           {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
-            <div className="flex-1 min-h-0 flex items-center justify-center p-8">
-              <div className="max-w-md text-center space-y-6">
-                <div className="w-20 h-20 mx-auto bg-blue-50 rounded-full flex items-center justify-center">
-                  <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                </div>
-                
-                <div className="space-y-3">
-                  <h3 className="text-xl font-semibold text-gray-900">Ready to Record</h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    Select a workflow below to start recording for your next patient. 
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center dot-grid-background-light">
+              {/* 3D Interactive Lanyard */}
+              <div className="w-full max-w-md">
+                <Lanyard
+                  position={[0, 0, 20]}
+                  gravity={[0, -40, 0]}
+                  fov={20}
+                  transparent={true}
+                  cardText="Ready to Record"
+                />
+              </div>
+
+              {/* Instructions and Status */}
+              <div className="max-w-md text-center space-y-4 px-8 pb-8">
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    Select a workflow below to start recording for your next patient.
                     Recordings will process in the background, allowing you to continue with other patients.
                   </p>
                 </div>
@@ -3692,7 +3833,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     </div>
                     <p className="text-xs text-blue-800">
                       {state.patientSessions.filter(s => ['transcribing', 'processing'].includes(s.status)).length} sessions processing, {' '}
-                      {state.patientSessions.filter(s => s.status === 'completed').length} completed. 
+                      {state.patientSessions.filter(s => s.status === 'completed').length} completed.
                       Click the notification bell to view results.
                     </p>
                   </div>
@@ -4370,6 +4511,16 @@ const OptimizedAppContent: React.FC = memo(() => {
         onDeleteAllChecked={handleDeleteAllChecked}
         onDeleteOldSessions={handleDeleteOldSessions}
       />
+
+      {/* Model Loading Error Dialog */}
+      {modelLoadingError && (
+        <ModelLoadingErrorDialog
+          error={modelLoadingError}
+          onRetry={handleRetryWithSameModel}
+          onSwitchModel={handleSwitchModel}
+          onClose={handleCloseModelErrorDialog}
+        />
+      )}
 
       {/* Toast Notifications */}
       <ToastContainer />

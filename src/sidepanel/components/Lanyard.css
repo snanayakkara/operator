@@ -1,0 +1,37 @@
+/* Lanyard Component Styles */
+.lanyard-wrapper {
+  width: 100%;
+  height: 400px;
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+}
+
+.lanyard-wrapper canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+
+/* Fallback for loading state */
+.lanyard-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 400px;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+  .lanyard-wrapper {
+    height: 300px;
+  }
+
+  .lanyard-loading {
+    height: 300px;
+  }
+}

@@ -7,6 +7,103 @@
 
 export const RightHeartCathSystemPrompts = {
   /**
+   * Primary system prompt for SystemPromptLoader
+   * This is the main prompt used by the RightHeartCathAgent
+   */
+  primary: `You are a specialist cardiologist generating right heart catheterisation procedural reports for medical records.
+
+CRITICAL INSTRUCTIONS:
+- Generate a PROCEDURAL REPORT in operation report style, NOT a consultation letter
+- DO NOT include "Dear Doctor", "Thanks for asking me to see", or letter-style formatting
+- DO NOT include patient greeting or letter closings
+- DO NOT use table formatting or numbered sections
+- DO NOT include placeholder fields like "[Insert Date]" or "[Refer to extracted data]"
+- DO NOT include conversational preambles like "Okay, here is a draft..." or "Sure, I can help with that..."
+- DO NOT use markdown syntax (**, ##, ###, -, *, etc.) - output plain text only
+- DO NOT leave template placeholders like "[Insert Patient Name]" or "[Insert clinical details]"
+- START IMMEDIATELY with the first section header without any introduction
+- Use professional, clinical narrative language matching cardiology standards
+- Structure report in exactly THREE sections with specific clinical content
+- Use AUSTRALIAN medical terminology: catheterisation, haemodynamic, colour, recognised, anaesthesia
+
+Required sections (use exactly these headers in PLAIN TEXT):
+
+PREAMBLE:
+- Patient demographics with indication for right heart catheterisation
+- Clinical presentation: heart failure, pulmonary hypertension, transplant evaluation with specific symptoms
+- Recent investigations: echocardiography findings, BNP levels, functional status assessment
+- Pre-procedure assessment: baseline observations, contraindications considered
+- Access planning: vascular assessment and approach selection
+
+FINDINGS:
+- Vascular access approach and catheter positioning with specific details in narrative form
+- Haemodynamic measurements presented in structured list format followed by clinical interpretation:
+
+Structured haemodynamic data format:
+ RA | [a wave]/[v wave] ([mean])
+RV | [systolic]/[diastolic] (RVEDP [value])
+PA | [systolic]/[diastolic] (mean [value])
+PCWP | [a wave]/[v wave] (mean [value])
+CO [value]
+CI [value]
+
+TPG [value] (if calculated)
+PVR [value] (if calculated)
+
+Example presentation:
+ RA | 8/12 (11)
+RV | 74/12 (RVEDP 8)
+PA | 74/40 (mean 55)
+PCWP | 8/12 (mean 11)
+CO 3.4
+CI 1.1
+
+TPG 44
+PVR 13
+
+Followed by clinical narrative: "Mixed venous oxygen saturation was 68% with wedge saturation of 95%. Laboratory assessment showed haemoglobin of 125 g/L and lactate of 1.8 mmol/L."
+
+Exercise testing (if performed):
+"Straight leg raising exercise was performed for 2 minutes with repeat haemodynamic measurements demonstrating [describe pressure changes and exercise response]."
+
+CONCLUSION:
+- Haemodynamic profile interpretation with clinical significance
+- Assessment of pulmonary pressures and cardiac function
+- Management recommendations based on findings
+- Follow-up requirements and monitoring plan
+
+CLINICAL LANGUAGE REQUIREMENTS:
+- Australian spelling: catheterisation, haemodynamic, colour, recognised, anaesthesia
+- Precise measurements: Always include units (mmHg, L/min, L/min/m², %, g/L, mmol/L)
+- Technical terminology: "right atrium", "pulmonary capillary wedge pressure", "thermodilution"
+- Assessment language: "elevated filling pressures", "preserved cardiac output", "pulmonary hypertension"
+- Anatomical accuracy: "right basilic", "internal jugular", "femoral venous access"
+
+HAEMODYNAMIC TERMINOLOGY:
+- Pressure waves: "a wave reflects atrial contraction", "v wave represents ventricular filling"
+- RVEDP: "right ventricular end-diastolic pressure"
+- PCWP: "pulmonary capillary wedge pressure" (never just "wedge")
+- Cardiac output methods: "thermodilution method", "Fick principle"
+- Exercise response: "exercise-induced changes", "haemodynamic reserve"
+
+VASCULAR ACCESS DOCUMENTATION:
+- "Right basilic venous access via antecubital approach"
+- "Right internal jugular venous access under ultrasound guidance"
+- "Right femoral venous access with standard Seldinger technique"
+- Include French size catheters and sheath specifications when mentioned
+
+NORMAL VALUES REFERENCE:
+- RA: 2-8 mmHg mean
+- RV: 15-30/2-8 mmHg, RVEDP <8 mmHg
+- PA: 15-30/4-12 mmHg, mean 9-18 mmHg
+- PCWP: 6-15 mmHg mean
+- CO: 4-8 L/min, CI: 2.5-4.0 L/min/m²
+- Mixed venous O2: 65-75%
+
+Use standard cardiology procedural documentation format.
+Target audience: Medical record documentation for cardiologists, heart failure specialists, and referring physicians.`,
+
+  /**
    * Right Heart Catheterisation Procedure Report Agent System Prompt
    * Enhanced with comprehensive medical knowledge for haemodynamic assessment
    */
@@ -161,38 +258,47 @@ export const RightHeartCathMedicalPatterns = {
   raPressureV: /(?:right\s+)?atrial?\s+pressure[:\s]*\d+\s*(?:(?:\/|slash)\s*|[ ]+)(\d+)/gi,
   raPressureMean: /(?:right\s+)?atrial?\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  rvPressureSystolic: /(?:right\s+)?ventricl?e?\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash)\s*\d+/gi,
-  rvPressureDiastolic: /(?:right\s+)?ventricl?e?\s+(?:pressure\s+)?\d+\s*(?:\/|slash)\s*(\d+)/gi,
+  rvPressureSystolic: /(?:right\s+)?ventricular?\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  rvPressureDiastolic: /(?:right\s+)?ventricular?\s+(?:pressure\s+)?\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
   rvedp: /rvedp[:\s]*(\d+)/gi,
 
-  paPressureSystolic: /pulmonary\s+artery\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash)\s*\d+/gi,
-  paPressureDiastolic: /pulmonary\s+artery\s+(?:pressure\s+)?\d+\s*(?:\/|slash)\s*(\d+)/gi,
+  paPressureSystolic: /pulmonary\s+artery\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  paPressureDiastolic: /pulmonary\s+artery\s+(?:pressure\s+)?\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
   paPressureMean: /pulmonary\s+artery.*?mean\s+(\d+)/gi,
 
-  // PCWP patterns - handle "wedge pressure 10 10 mean of 9" format (a-wave=10, v-wave=10, mean=9)
-  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s]*(\d+)\s*(?:(?:\/|slash)\s*\d+|\s+\d+)/gi,
-  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s]*\d+\s*(?:(?:\/|slash)\s*|[ ]+)(\d+)/gi,
+  // PCWP patterns - handle "wedge pressure 10 10 mean of 9" or "15-21, mean of 15" format
+  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+|[,\s]+\d+)/gi,
+  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*|[,\s]+)(\d+)/gi,
   pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  // Cardiac output patterns - enhanced to handle missing units
-  thermodilutionCO: /cardiac\s+output\s+(?:by\s+)?(?:thermodilution\s+)?(\d+\.?\d*)(?:\s*l\/min)?/gi,
-  thermodilutionCI: /cardiac\s+index\s+(?:by\s+)?(?:thermodilution\s+)?(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
-  fickCO: /fick\s+(?:cardiac\s+output|co)[:\s]*(\d+\.?\d*)(?:\s*l\/min)?/gi,
-  fickCI: /fick\s+(?:cardiac\s+index|ci)[:\s]*(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
+  // Cardiac output patterns - enhanced to handle missing units and comma separators
+  // Specifically match thermodilution (not "thick" or "fick")
+  thermodilutionCO: /(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,
+  thermodilutionCI: /thermodilution\s+cardiac\s+index[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
+  // Fick method - handle common transcription errors: "thick" or "tick" instead of "fick"
+  fickCO: /(?:fick|thick|tick)\s+(?:cardiac\s+output|co)[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,
+  fickCI: /(?:fick|thick|tick)\s+(?:cardiac\s+index|ci)[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
 
   // Oxygen saturation patterns - enhanced to handle missing % sign
-  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)\s*(?:saturation)?[:\s]*(\d+)%?/gi,
-  wedgeSaturation: /wedge\s+saturation[:\s]*(\d+)%?/gi,
+  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)\s*(?:saturation)?[:\s,]*(\d+)%?/gi,
+  wedgeSaturation: /wedge\s+saturation[:\s,]*(\d+)%?/gi,
+  arterialO2Saturation: /(?:aortic|arterial)\s+(?:arterial\s+)?(?:oxygen\s+)?saturation[:\s,]+(\d+)%?/gi,
+  pulmonaryArterySaturation: /pulmonary\s+artery\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)%?/gi,
 
   // Laboratory values - enhanced to handle American spelling and flexible units
   haemoglobin: /(?:h[ae]moglobin|hb)[:\s]*(\d+)(?:\s*g\/l)?/gi,
   lactate: /lactate[:\s]*(\d+\.?\d*)(?:\s*mmol\/l)?/gi,
 
   // Radiation safety and contrast patterns
-  fluoroscopyTime: /(?:fluoro(?:scopy)?\s+time|screening\s+time)[:\s]*(\d+\.?\d*)\s*(?:min(?:ute)?s?)?/gi,
-  fluoroscopyDose: /(?:fluoro(?:scopy)?\s+dose|radiation\s+dose)[:\s]*(\d+\.?\d*)\s*(?:m?gy)?/gi,
-  doseAreaProduct: /(?:dap|dose\s+area\s+product)[:\s]*(\d+\.?\d*)\s*(?:gy[·\s×*]?cm²?)?/gi,
+  fluoroscopyTime: /(?:total\s+)?(?:fluoro(?:scopy)?\s+time|screening\s+time)[:\s,]*(\d+\.?\d*)\s*(?:min(?:ute)?s?)?/gi,
+  fluoroscopyDose: /(?:total\s+)?(?:fluoro(?:scopy)?\s+dose|radiation\s+dose)[:\s]*(\d+\.?\d*)\s*(?:m?gy|milligray)?/gi,
+  doseAreaProduct: /(?:total\s+)?(?:dap|dose\s+area\s+product)[:\s]*(\d+\.?\d*)\s*(?:gy[·\s×*]?cm²?)?/gi,
   contrastVolume: /contrast\s+(?:volume|used|administered)?[:\s]*(\d+\.?\d*)\s*(?:m?l)?/gi,
+
+  // Systemic blood pressure patterns - handle "83 on 55" or "83/55" format
+  systemicBPSystolic: /(?:systemic\s+)?blood\s+pressure[:\s]+(\d+)\s*(?:\/|on|-)\s*\d+/gi,
+  systemicBPDiastolic: /(?:systemic\s+)?blood\s+pressure[:\s]+\d+\s*(?:\/|on|-)\s*(\d+)/gi,
+  meanArterialPressure: /(?:map|mean\s+arterial\s+pressure)[:\s]+(\d+)/gi,
 
   // Vascular access patterns - enhanced to handle "vascular access" phrasing and brachial
   basilicAccess: /(?:right\s+)?(?:basilic|brachial)\s+(?:venous\s+)?(?:vascular\s+)?access/gi,

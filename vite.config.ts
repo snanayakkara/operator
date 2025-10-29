@@ -60,7 +60,7 @@ const copyStaticFiles = () => ({
       if (!existsSync('dist/rules')) {
         mkdirSync('dist/rules', { recursive: true });
       }
-      
+
       // Copy performance_rules.json
       const performanceRules = 'rules/performance_rules.json';
       if (existsSync(performanceRules)) {
@@ -72,7 +72,26 @@ const copyStaticFiles = () => ({
     } else {
       console.warn('⚠️  rules directory not found, skipping...');
     }
-    
+
+    // Copy lanyard assets (3D models and textures)
+    const lanyardDir = 'src/assets/lanyard';
+    if (existsSync(lanyardDir)) {
+      // Create lanyard directory in dist/assets
+      if (!existsSync('dist/assets/lanyard')) {
+        mkdirSync('dist/assets/lanyard', { recursive: true });
+      }
+
+      // Copy .glb and .png files
+      const lanyardFiles = ['card.glb', 'lanyard.png'];
+      lanyardFiles.forEach(file => {
+        const srcFile = `${lanyardDir}/${file}`;
+        if (existsSync(srcFile)) {
+          copyFileSync(srcFile, `dist/assets/lanyard/${file}`);
+          console.log(`✅ Copied ${file} to dist/assets/lanyard/`);
+        }
+      });
+    }
+
     console.log('Static files copied successfully');
   }
 })
@@ -80,6 +99,8 @@ const copyStaticFiles = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), copyStaticFiles()],
+  // Include .glb files as assets for Three.js 3D models
+  assetsInclude: ['**/*.glb'],
   server: {
     // Warm up critical modules for faster startup
     warmup: {
@@ -127,6 +148,7 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom'],
           'vendor-ui': ['framer-motion', 'lucide-react', '@tanstack/react-query'],
+          'vendor-3d': ['three', '@react-three/fiber', '@react-three/drei', '@react-three/rapier', 'meshline'],
           agents: ['@/agents/router/AgentRouter'],
           services: ['@/services/LMStudioService', '@/services/TranscriptionService', '@/services/WhisperServerService'],
           'settings-components': ['@/components/settings/OptimizationPanel', '@/components/settings/LocalCorrectionsViewer']

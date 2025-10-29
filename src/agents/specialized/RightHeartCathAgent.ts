@@ -76,7 +76,10 @@ export class RightHeartCathAgent extends MedicalAgent {
     'pulmonary wedge': 'pulmonary capillary wedge pressure',
     'wedge pressure': 'PCWP',
     'swan ganz': 'Swan-Ganz catheter',
-    'thermodilution': 'thermodilution'
+    'thermodilution': 'thermodilution',
+    // Common transcription errors
+    'thick cardiac': 'Fick cardiac', // "thick" is often mishearing of "Fick"
+    'tick cardiac': 'Fick cardiac'   // "tick" is also common
   };
 
   constructor() {
@@ -348,7 +351,7 @@ export class RightHeartCathAgent extends MedicalAgent {
   }
 
   private extractCardiacOutput(input: string): CardiacOutput {
-    
+
     return {
       thermodilution: {
         co: this.extractMeasurement(input, RightHeartCathMedicalPatterns.thermodilutionCO),
@@ -358,7 +361,8 @@ export class RightHeartCathAgent extends MedicalAgent {
         co: this.extractMeasurement(input, RightHeartCathMedicalPatterns.fickCO),
         ci: this.extractMeasurement(input, RightHeartCathMedicalPatterns.fickCI)
       },
-      mixedVenousO2: this.extractMeasurement(input, RightHeartCathMedicalPatterns.mixedVenousO2),
+      mixedVenousO2: this.extractMeasurement(input, RightHeartCathMedicalPatterns.mixedVenousO2) ||
+                     this.extractMeasurement(input, RightHeartCathMedicalPatterns.pulmonaryArterySaturation), // Fallback to PA saturation
       wedgeSaturation: this.extractMeasurement(input, RightHeartCathMedicalPatterns.wedgeSaturation)
     };
   }
@@ -716,23 +720,38 @@ Note: This report was generated with limited AI processing. Clinical review is r
       patientData.heartRate = parseFloat(hrMatch[1] || hrMatch[2]);
     }
 
-    // Extract blood pressure
-    const bpMatch = input.match(/blood\s+pressure[:\s]+(\d+)\/(\d+)|BP[:\s]+(\d+)\/(\d+)/i);
-    if (bpMatch) {
-      patientData.systolicBP = parseFloat(bpMatch[1] || bpMatch[3]);
-      patientData.diastolicBP = parseFloat(bpMatch[2] || bpMatch[4]);
+    // Extract blood pressure - enhanced to handle "systemic blood pressure" and "on" separator
+    const sysBPMatch = input.match(/(?:systemic\s+)?blood\s+pressure[:\s]+(\d+)\s*(?:\/|on|-)\s*(\d+)/i);
+    if (sysBPMatch) {
+      patientData.systolicBP = parseFloat(sysBPMatch[1]);
+      patientData.diastolicBP = parseFloat(sysBPMatch[2]);
     }
 
-    // Extract arterial oxygen saturation
-    const sao2Match = input.match(/arterial\s+(?:oxygen\s+)?saturation[:\s]+(\d+)|SaO2[:\s]+(\d+)|arterial\s+sat[:\s]+(\d+)/i);
+    // Extract MAP (mean arterial pressure)
+    const mapMatch = input.match(/(?:map|mean\s+arterial\s+pressure)[:\s]+(\d+)/i);
+    if (mapMatch) {
+      patientData.meanArterialPressure = parseFloat(mapMatch[1]);
+    } else if (patientData.systolicBP && patientData.diastolicBP) {
+      // Calculate MAP if not provided: MAP = (SBP + 2*DBP) / 3
+      patientData.meanArterialPressure = RHCCalc.calculateMAP(patientData.systolicBP, patientData.diastolicBP);
+    }
+
+    // Extract arterial oxygen saturation - enhanced to handle "aortic arterial saturation"
+    const sao2Match = input.match(/(?:aortic|arterial)\s+(?:arterial\s+)?(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
     if (sao2Match) {
-      patientData.sao2 = parseFloat(sao2Match[1] || sao2Match[2] || sao2Match[3]);
+      patientData.sao2 = parseFloat(sao2Match[1]);
     }
 
-    // Extract mixed venous oxygen saturation
-    const svo2Match = input.match(/mixed\s+venous\s+(?:oxygen\s+)?saturation[:\s]+(\d+)|SvO2[:\s]+(\d+)|mixed\s+venous\s+sat[:\s]+(\d+)/i);
+    // Extract mixed venous oxygen saturation - enhanced with PA saturation fallback
+    const svo2Match = input.match(/mixed\s+venous\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
     if (svo2Match) {
-      patientData.svo2 = parseFloat(svo2Match[1] || svo2Match[2] || svo2Match[3]);
+      patientData.svo2 = parseFloat(svo2Match[1]);
+    } else {
+      // Fallback to pulmonary artery saturation if mixed venous not available
+      const paSatMatch = input.match(/pulmonary\s+artery\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
+      if (paSatMatch) {
+        patientData.svo2 = parseFloat(paSatMatch[1]);
+      }
     }
 
     // Extract PaO2

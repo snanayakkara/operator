@@ -18,11 +18,12 @@ import {
   ChevronDownIcon as _ChevronDownIcon,
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2, Edit3 } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
 import { MissingInfoPanel } from './MissingInfoPanel';
+import { RHCFieldEditor } from './RHCFieldEditor';
 import { exportRHCCard, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import type {
   RightHeartCathReport,
@@ -109,9 +110,15 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
   );
   const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
+  const [isEditingFields, setIsEditingFields] = useState(false);
+  const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
 
   // Parse RHC report data or fall back to results string
+  // Use edited data if available, otherwise use original rhcReport
   const effectiveRHCData = useMemo(() => {
+    if (editedRHCReport) {
+      return editedRHCReport;
+    }
     if (rhcReport) {
       return rhcReport;
     }
@@ -236,6 +243,17 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       setButtonStates(prev => ({ ...prev, exporting: false }));
     }
   }, [effectiveRHCData]);
+
+  // Handle field editor save
+  const handleFieldEditorSave = useCallback((updatedReport: RightHeartCathReport) => {
+    setEditedRHCReport(updatedReport);
+    setIsEditingFields(false);
+  }, []);
+
+  // Handle field editor cancel
+  const handleFieldEditorCancel = useCallback(() => {
+    setIsEditingFields(false);
+  }, []);
 
   // Helper functions for section rendering
   const _renderPressuresSection = (pressures: HaemodynamicPressures) => (
@@ -383,6 +401,17 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
               <button
                 type="button"
+                onClick={() => setIsEditingFields(true)}
+                disabled={!effectiveRHCData}
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                title="Edit haemodynamic fields before export"
+              >
+                <Edit3 className="w-3 h-3 mr-1" />
+                Edit Fields
+              </button>
+
+              <button
+                type="button"
                 onClick={handleExportCard}
                 disabled={buttonStates.exporting || !effectiveRHCData}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
@@ -462,6 +491,15 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           })}
         </div>
       </motion.div>
+
+      {/* Field Editor Modal */}
+      {isEditingFields && effectiveRHCData && (
+        <RHCFieldEditor
+          rhcReport={rhcReport || effectiveRHCData}
+          onSave={handleFieldEditorSave}
+          onCancel={handleFieldEditorCancel}
+        />
+      )}
     </div>
   );
 };

@@ -185,6 +185,7 @@ type AppAction =
   | { type: 'SET_TAVI_STRUCTURED_SECTIONS'; payload: any }
   | { type: 'SET_EDUCATION_DATA'; payload: any }
   | { type: 'SET_PREOP_PLAN_DATA'; payload: PreOpPlanReport['planData'] | undefined }
+  | { type: 'SET_RHC_REPORT'; payload: any }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
   | { type: 'SET_CANCELLING'; payload: boolean }
   | { type: 'SET_WARNINGS'; payload: string[] }
@@ -464,6 +465,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_PREOP_PLAN_DATA':
       if (state.preOpPlanData === action.payload) return state;
       return { ...state, preOpPlanData: action.payload };
+
+    case 'SET_RHC_REPORT':
+      if (state.rhcReport === action.payload) return state;
+      return { ...state, rhcReport: action.payload };
 
     case 'SET_ACTIVE_WORKFLOW':
       if (state.ui.activeWorkflow === action.payload) return state;
@@ -1129,6 +1134,10 @@ export function useAppState() {
 
     setPreOpPlanData: useCallback((data: PreOpPlanReport['planData'] | undefined) => {
       dispatch({ type: 'SET_PREOP_PLAN_DATA', payload: data });
+    }, []),
+
+    setRhcReport: useCallback((report: any) => {
+      dispatch({ type: 'SET_RHC_REPORT', payload: report });
     }, []),
 
     setActiveWorkflow: useCallback((workflow: AgentType | null) => {
