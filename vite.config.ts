@@ -82,7 +82,7 @@ const copyStaticFiles = () => ({
       }
 
       // Copy .glb and .png files
-      const lanyardFiles = ['card.glb', 'lanyard.png'];
+      const lanyardFiles = ['card.glb', 'lanyard.png', 'microphone-card.png'];
       lanyardFiles.forEach(file => {
         const srcFile = `${lanyardDir}/${file}`;
         if (existsSync(srcFile)) {

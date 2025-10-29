@@ -9,6 +9,33 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.6] - 2025-10-29
+
+### Changed
+
+- **Replaced 3D Microphone with 2D Texture**
+  - Removed 3D geometric microphone meshes (capsule, cylinders, sphere)
+  - Created clean 2D microphone icon (512x768 PNG, 39KB)
+  - Icon features rounded capsule head with grille lines and stand design
+  - Applied microphone texture directly to lanyard card material
+  - Simpler, cleaner approach that integrates better with card design
+  - Light gray background (#f8f9fa) with dark gray microphone (#1f2937)
+
+- **Improved Texture Management**
+  - Separated `lanyardTexture` (band) from `microphoneTexture` (card)
+  - Card texture uses ClampToEdgeWrapping (displays once, no repeat)
+  - Lanyard band texture uses RepeatWrapping (striped pattern)
+  - Added microphone-card.png to preload list for faster initial render
+
+### Technical Details
+
+- Created microphone icon with ImageMagick from SVG design
+- Lanyard.tsx: Load two separate textures, apply microphone to card material
+- vite.config.ts: Added 'microphone-card.png' to asset copy list
+- Card material properties: clearcoat, low roughness, minimal metalness
+- Maintains all physics simulation and interactive dragging
+- Fallback geometry also displays microphone texture when model fails to load
+
 ## [3.21.5] - 2025-10-29
 
 ### Changed
