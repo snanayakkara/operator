@@ -9,6 +9,71 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.22.0] - 2025-11-02
+
+### Added
+
+- **RHC Card Preview Modal**
+  - New preview modal for 13×13cm RHC cards before export
+  - **Copy to Clipboard** button using Clipboard API for images
+  - **Download PNG** button for saving cards
+  - Modal dismissable by clicking outside (overlay click handler)
+  - Shows card preview at full quality (300 DPI)
+
+- **RHC Custom Fields Functionality**
+  - "+ Add Custom Field" button for adding arbitrary key-value pairs
+  - Inline form for quick field entry (field name + value)
+  - Fields displayed in expandable emerald-colored panel
+  - Remove individual custom fields with X button
+  - Press Enter to add field quickly
+  - Perfect for ad-hoc fields like "Fluoroscopy time: 8.2 minutes"
+
+- **Inline Field Editor Components**
+  - Created reusable `InlineFieldEditor` and `ClickableField` components
+  - Support for immediate save on blur/Enter
+  - Warning indicators for out-of-range values
+  - Escape key to cancel edits
+
+### Changed
+
+- **RHC Card Font Update**
+  - Changed card font from system fonts to **Avenir** with fallback stack
+  - Font stack: `'Avenir, "Avenir Next", system-ui, -apple-system, sans-serif'`
+  - More professional, medical-grade typography
+
+- **RHC Card Display Improvements**
+  - Removed "Normal: X-Y mmHg" text from all pressure boxes on cards
+  - Cleaner, more compact card display
+  - Reduced visual clutter while maintaining color-coded severity indicators
+
+- **Patient Name Integration**
+  - Patient name now flows properly: `OptimizedApp` → `OptimizedResultsPanel` → `RightHeartCathDisplay`
+  - Fixed hardcoded `undefined` for patient name display
+  - Cards now show patient name instead of "MRN: rhc-display"
+  - Proper prop passing through component hierarchy
+
+### Fixed
+
+- **Type Errors**
+  - Fixed unused `label` parameter in InlineFieldEditor (prefixed with underscore)
+  - Fixed `title` prop on Lucide AlertTriangle icon (wrapped in div)
+  - Removed unused `ClickableField` import from RightHeartCathDisplay
+  - Removed unused `handleFieldEdit` function (incomplete implementation)
+  - Added missing `X` icon import from lucide-react
+
+- **ESLint Errors**
+  - Fixed unnecessary escape characters in regex patterns (PatientEducationAgent, RightHeartCathAgent, BPDiaryExtractor)
+  - Prefixed all unused variables with underscore across 13 files
+  - Fixed `FocusEvent` undefined errors in content-script with eslint-disable comments
+  - Reduced lint errors from 33 to 3 (non-critical config warnings only)
+
+### Technical Details
+
+- New `generateRHCCardBlob()` function returns both blob and data URL for preview
+- RHCCardPreviewModal component with copy/download functionality
+- Custom fields stored in component state with add/remove handlers
+- Card export workflow: validate → generate → preview → copy/download
+
 ## [3.21.8] - 2025-11-01
 
 ### Changed

@@ -2136,7 +2136,9 @@ class ContentScriptHandler {
       new Event('change', { bubbles: true, cancelable: true }),
       new KeyboardEvent('keydown', { bubbles: true, cancelable: true }),
       new KeyboardEvent('keyup', { bubbles: true, cancelable: true }),
+      // eslint-disable-next-line no-undef
       new FocusEvent('focus', { bubbles: true }),
+      // eslint-disable-next-line no-undef
       new FocusEvent('blur', { bubbles: true })
     ];
 

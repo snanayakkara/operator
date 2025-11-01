@@ -1109,6 +1109,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               collapseTranscriptionWhen={resultsReady}
               approvalState={approvalState}
               onTranscriptionApprove={onTranscriptionApprove}
+              selectedPatientName={selectedPatientName}
               onReprocessWithAnswers={onReprocessWithAnswers}
               onDismissMissingInfo={onDismissMissingInfo}
             />

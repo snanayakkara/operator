@@ -734,12 +734,12 @@ Additional Context: ${input.patientContext || 'Not provided'}`;
         continue;
       }
 
-      if (/^(\*|\-|\u2022)\s+/.test(trimmed)) {
+      if (/^(\*|-|\u2022)\s+/.test(trimmed)) {
         if (!inList) {
           html.push('<ul>');
           inList = true;
         }
-        const item = trimmed.replace(/^(\*|\-|\u2022)\s+/, '');
+        const item = trimmed.replace(/^(\*|-|\u2022)\s+/, '');
         html.push(`<li>${formatInline(item)}</li>`);
         continue;
       }
@@ -788,8 +788,8 @@ Additional Context: ${input.patientContext || 'Not provided'}`;
         continue;
       }
 
-      if (/^(\*|\-|\u2022)\s+/.test(trimmed)) {
-        const item = stripInline(trimmed.replace(/^(\*|\-|\u2022)\s+/, ''));
+      if (/^(\*|-|\u2022)\s+/.test(trimmed)) {
+        const item = stripInline(trimmed.replace(/^(\*|-|\u2022)\s+/, ''));
         out.push(`• ${item}`);
         continue;
       }

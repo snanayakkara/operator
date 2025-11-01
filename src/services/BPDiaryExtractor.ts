@@ -402,10 +402,10 @@ CLINICAL CONTEXT:
 Return ONLY JSON using this schema:
 {
   "controlSummary": "Overall BP control referencing home threshold (135/85)",
-  "diurnalPattern": "Morning vs evening commentary or \"Insufficient data\"",
+  "diurnalPattern": "Morning vs evening commentary or 'Insufficient data'",
   "variabilityConcern": "Variability assessment referencing observed range",
   "keyRecommendations": ["Clinician-facing next steps in plain text"],
-  "medicationRationale": "How current regimen explains control or gaps; say \"No medications supplied\" if none provided",
+  "medicationRationale": "How current regimen explains control or gaps; say 'No medications supplied' if none provided",
   "abpmSuggestion": "Specific statement on ABPM / adherence / follow-up timing",
   "patientParagraph": "Short patient-friendly paragraph (Australian English, plain text)",
   "peakTimes": "Times with highest readings if pattern evident",

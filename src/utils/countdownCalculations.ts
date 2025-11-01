@@ -26,7 +26,7 @@ export function calculateAdaptiveRemainingTime(
   prediction: ProcessingTimeEstimate | null,
   currentProgress: number,
   velocity: number,
-  elapsedTime: number
+  _elapsedTime: number
 ): number | null {
   if (!prediction || currentProgress >= 100) {
     return null;

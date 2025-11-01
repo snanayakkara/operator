@@ -192,6 +192,80 @@ export function validateRHCDataForExport(rhcData: RightHeartCathReport): {
 }
 
 /**
+ * Generates a blob of the card for copy-to-clipboard
+ * Returns both the blob and data URL for preview
+ */
+export async function generateRHCCardBlob(
+  rhcData: RightHeartCathReport,
+  options: ExportOptions = {}
+): Promise<{ blob: Blob; dataUrl: string }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.zIndex = '-1';
+      document.body.appendChild(container);
+
+      const root = createRoot(container);
+      root.render(
+        RHCCardLayout({
+          rhcData,
+          patientInfo: options.patientInfo,
+          operatorInfo: options.operatorInfo
+        })
+      );
+
+      setTimeout(async () => {
+        try {
+          const cardElement = container.querySelector('div') as HTMLElement;
+
+          if (!cardElement) {
+            throw new Error('Card element not found after rendering');
+          }
+
+          const canvas = await html2canvas(cardElement, {
+            scale: 3.125, // 300 DPI for high-quality copy
+            backgroundColor: '#FFFFFF',
+            logging: false,
+            useCORS: true,
+            allowTaint: false,
+            width: 492,
+            height: 492
+          });
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                reject(new Error('Failed to create image blob'));
+                return;
+              }
+
+              const dataUrl = canvas.toDataURL('image/png');
+
+              // Clean up
+              root.unmount();
+              document.body.removeChild(container);
+
+              resolve({ blob, dataUrl });
+            },
+            'image/png',
+            1.0
+          );
+        } catch (error) {
+          root.unmount();
+          document.body.removeChild(container);
+          reject(error);
+        }
+      }, 100);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
  * Generates a preview of the card without downloading
  * Useful for showing users what the card will look like
  */

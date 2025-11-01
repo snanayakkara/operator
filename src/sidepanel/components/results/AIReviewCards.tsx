@@ -63,7 +63,7 @@ const AIReviewCards: React.FC<AIReviewCardsProps> = memo(({
   storageKey = 'ui_preferences_card_theme'
 }) => {
   const [useBrightCardsFromStorage, setUseBrightCardsFromStorage] = useState(false);
-  const [storageLoaded, setStorageLoaded] = useState(false);
+  const [_storageLoaded, setStorageLoaded] = useState(false);
 
   // Load preference from Chrome storage on mount
   useEffect(() => {

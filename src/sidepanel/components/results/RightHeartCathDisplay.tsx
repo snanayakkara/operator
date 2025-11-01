@@ -18,13 +18,14 @@ import {
   ChevronDownIcon as _ChevronDownIcon,
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2, Edit3 } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2, Edit3, X } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { RHCFieldEditor } from './RHCFieldEditor';
-import { exportRHCCard, validateRHCDataForExport } from '@/utils/rhcCardExport';
+import { RHCCardPreviewModal } from './RHCCardPreviewModal';
+import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import type {
   RightHeartCathReport,
   RightHeartCathData as _RightHeartCathData,
@@ -63,6 +64,8 @@ interface RightHeartCathDisplayProps {
   // Missing info handling
   onReprocessWithAnswers?: (answers: Record<string, string>) => void;
   onDismissMissingInfo?: () => void;
+  // Patient info
+  selectedPatientName?: string;
 }
 
 interface SectionConfig {
@@ -104,7 +107,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   approvalState,
   onTranscriptionApprove,
   onReprocessWithAnswers,
-  onDismissMissingInfo
+  onDismissMissingInfo,
+  selectedPatientName
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
@@ -112,6 +116,11 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
+  const [cardPreview, setCardPreview] = useState<{ dataUrl: string; blob: Blob } | null>(null);
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [showAddField, setShowAddField] = useState(false);
+  const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldValue, setNewFieldValue] = useState('');
 
   // Parse RHC report data or fall back to results string
   // Use edited data if available, otherwise use original rhcReport
@@ -217,7 +226,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     try {
       // Extract patient info from context or report metadata
       const patientInfo = {
-        name: effectiveRHCData.rhcData.clinicalPresentation ? undefined : undefined, // TODO: Add patient name to context
+        name: selectedPatientName || undefined,
         mrn: effectiveRHCData.id || undefined,
         dob: undefined
       };
@@ -232,17 +241,20 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
         })
       };
 
-      await exportRHCCard(effectiveRHCData, { patientInfo, operatorInfo });
+      // Generate blob and data URL for preview
+      const { blob, dataUrl } = await generateRHCCardBlob(effectiveRHCData, { patientInfo, operatorInfo });
 
-      // Set success state
-      setButtonStates(prev => ({ ...prev, exporting: false, exported: true }));
-      setTimeout(() => setButtonStates(prev => ({ ...prev, exported: false })), 3000);
+      // Show preview modal
+      setCardPreview({ dataUrl, blob });
+
+      // Reset exporting state
+      setButtonStates(prev => ({ ...prev, exporting: false }));
     } catch (error) {
-      console.error('Failed to export RHC card:', error);
-      alert('Failed to generate card image. Please try again.');
+      console.error('Failed to generate card preview:', error);
+      alert('Failed to generate card preview. Please try again.');
       setButtonStates(prev => ({ ...prev, exporting: false }));
     }
-  }, [effectiveRHCData]);
+  }, [effectiveRHCData, selectedPatientName]);
 
   // Handle field editor save
   const handleFieldEditorSave = useCallback((updatedReport: RightHeartCathReport) => {
@@ -253,6 +265,32 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   // Handle field editor cancel
   const handleFieldEditorCancel = useCallback(() => {
     setIsEditingFields(false);
+  }, []);
+
+  // Handle custom field addition
+  const handleAddCustomField = useCallback(() => {
+    if (!newFieldName.trim() || !newFieldValue.trim()) {
+      alert('Both field name and value are required');
+      return;
+    }
+
+    setCustomFields(prev => ({
+      ...prev,
+      [newFieldName.trim()]: newFieldValue.trim()
+    }));
+
+    // Reset form
+    setNewFieldName('');
+    setNewFieldValue('');
+    setShowAddField(false);
+  }, [newFieldName, newFieldValue]);
+
+  const handleRemoveCustomField = useCallback((fieldName: string) => {
+    setCustomFields(prev => {
+      const updated = { ...prev };
+      delete updated[fieldName];
+      return updated;
+    });
   }, []);
 
   // Helper functions for section rendering
@@ -449,6 +487,95 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           </div>
         </div>
 
+        {/* Custom Fields Section */}
+        {(Object.keys(customFields).length > 0 || showAddField) && (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Custom Fields</h3>
+              <button
+                onClick={() => setShowAddField(!showAddField)}
+                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                {showAddField ? 'Cancel' : '+ Add Field'}
+              </button>
+            </div>
+
+            {/* Add Field Form */}
+            {showAddField && (
+              <div className="bg-white rounded-lg p-3 mb-3 border border-emerald-200">
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                    placeholder="Field name (e.g., 'Fluoroscopy time')"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomField();
+                      }
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={newFieldValue}
+                    onChange={(e) => setNewFieldValue(e.target.value)}
+                    placeholder="Value (e.g., '8.2 minutes')"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomField();
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleAddCustomField}
+                  className="w-full px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                >
+                  Add Field
+                </button>
+              </div>
+            )}
+
+            {/* Display Custom Fields */}
+            {Object.keys(customFields).length > 0 && (
+              <div className="space-y-2">
+                {Object.entries(customFields).map(([name, value]) => (
+                  <div
+                    key={name}
+                    className="bg-white rounded px-3 py-2 flex items-center justify-between border border-emerald-200"
+                  >
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-700">{name}:</span>
+                      <span className="text-sm text-gray-900 ml-2">{value}</span>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveCustomField(name)}
+                      className="text-red-500 hover:text-red-700 ml-2"
+                      title="Remove field"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Add Custom Field Button (when no custom fields) */}
+        {Object.keys(customFields).length === 0 && !showAddField && (
+          <button
+            onClick={() => setShowAddField(true)}
+            className="w-full mb-4 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 rounded-lg transition-colors"
+          >
+            + Add Custom Field
+          </button>
+        )}
+
         {/* Sections */}
         <div className="divide-y divide-gray-200">
           {SECTION_CONFIGS.map(({ key, title, icon: IconComponent, color }) => {
@@ -498,6 +625,16 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           rhcReport={rhcReport || effectiveRHCData}
           onSave={handleFieldEditorSave}
           onCancel={handleFieldEditorCancel}
+        />
+      )}
+
+      {/* Card Preview Modal */}
+      {cardPreview && (
+        <RHCCardPreviewModal
+          imageDataUrl={cardPreview.dataUrl}
+          imageBlob={cardPreview.blob}
+          patientName={selectedPatientName}
+          onClose={() => setCardPreview(null)}
         />
       )}
     </div>

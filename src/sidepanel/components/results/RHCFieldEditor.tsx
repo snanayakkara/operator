@@ -57,14 +57,14 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
 
     // Extract numeric values
     const rapMean = parseValue(pressures.ra.mean);
-    const rvSys = parseValue(pressures.rv.systolic);
-    const rvDia = parseValue(pressures.rv.diastolic);
+    const _rvSys = parseValue(pressures.rv.systolic);
+    const _rvDia = parseValue(pressures.rv.diastolic);
     const paSys = parseValue(pressures.pa.systolic);
     const paDia = parseValue(pressures.pa.diastolic);
     const paMean = parseValue(pressures.pa.mean);
     const pcwpMean = parseValue(pressures.pcwp.mean);
     const thermodilutionCO = parseValue(cardiacOutput.thermodilution.co);
-    const thermodilutionCI = parseValue(cardiacOutput.thermodilution.ci);
+    const _thermodilutionCI = parseValue(cardiacOutput.thermodilution.ci);
 
     const calculations: CalculatedHaemodynamics = {};
 

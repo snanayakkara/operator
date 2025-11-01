@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { AlertTriangle, MemoryStick, X, RefreshCw, CheckCircle2 } from 'lucide-react';
 import type { ModelLoadingError } from '@/types/errors.types';
-import { getModelInfo, formatMemorySize, getModelsForAvailableMemory, getRecommendedFallbackModel } from '@/utils/modelInfo';
+import { getModelInfo, formatMemorySize, getModelsForAvailableMemory as _getModelsForAvailableMemory, getRecommendedFallbackModel } from '@/utils/modelInfo';
 
 interface ModelLoadingErrorDialogProps {
   error: ModelLoadingError;

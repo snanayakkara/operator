@@ -145,7 +145,7 @@ interface BandProps {
 /**
  * Band component - creates the physics-based lanyard with card
  */
-function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: BandProps) {
+function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Record' }: BandProps) {
   // Physics body references
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);

@@ -341,8 +341,13 @@ export class RightHeartCathAgent extends MedicalAgent {
   }
 
   private extractHaemodynamicPressures(input: string): HaemodynamicPressures {
-    
+
     // Use enhanced patterns from RightHeartCathSystemPrompts
+    const pcwpMean = this.extractMeasurement(input, RightHeartCathMedicalPatterns.pcwpPressureMean);
+
+    // If PCWP not available, try LVEDP as fallback (e.g., "unable to obtain PCWP, LVEDP imputed 13")
+    const lvedp = !pcwpMean ? this.extractMeasurement(input, RightHeartCathMedicalPatterns.lvedp) : null;
+
     return {
       ra: {
         aWave: this.extractMeasurement(input, RightHeartCathMedicalPatterns.raPressurea),
@@ -362,7 +367,7 @@ export class RightHeartCathAgent extends MedicalAgent {
       pcwp: {
         aWave: this.extractMeasurement(input, RightHeartCathMedicalPatterns.pcwpPressureA),
         vWave: this.extractMeasurement(input, RightHeartCathMedicalPatterns.pcwpPressureV),
-        mean: this.extractMeasurement(input, RightHeartCathMedicalPatterns.pcwpPressureMean)
+        mean: pcwpMean || lvedp  // Use LVEDP if PCWP unavailable
       }
     };
   }
@@ -588,7 +593,7 @@ Note: This report was generated with limited AI processing. Clinical review is r
     cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
 
     // Remove markdown bullet points (convert to plain text)
-    cleaned = cleaned.replace(/^[\*\-]\s+/gm, '');
+    cleaned = cleaned.replace(/^[*-]\s+/gm, '');
 
     // Remove template placeholders
     cleaned = cleaned.replace(/\[Insert\s+[^\]]+\]/gi, '');
@@ -619,9 +624,10 @@ Note: This report was generated with limited AI processing. Clinical review is r
     pattern.lastIndex = 0;
 
     const match = pattern.exec(text);
-    if (match && match[1]) {
-      // Return the first captured group (the numeric value)
-      return match[1];
+    if (match) {
+      // Return the first non-undefined captured group (the numeric value)
+      // This handles patterns with multiple capture groups where only one matches
+      return match[1] || match[2] || null;
     }
     return null;
   }
@@ -817,8 +823,8 @@ Note: This report was generated with limited AI processing. Clinical review is r
 
     // Extract numeric values from pressure data
     const rapMean = parseValue(pressures.ra.mean);
-    const rvSys = parseValue(pressures.rv.systolic);
-    const rvDia = parseValue(pressures.rv.diastolic);
+    const _rvSys = parseValue(pressures.rv.systolic);
+    const _rvDia = parseValue(pressures.rv.diastolic);
     const paSys = parseValue(pressures.pa.systolic);
     const paDia = parseValue(pressures.pa.diastolic);
     const paMean = parseValue(pressures.pa.mean);
@@ -826,8 +832,8 @@ Note: This report was generated with limited AI processing. Clinical review is r
 
     // Extract cardiac output values
     const thermodilutionCO = parseValue(cardiacOutput.thermodilution.co);
-    const thermodilutionCI = parseValue(cardiacOutput.thermodilution.ci);
-    const mixedVenousO2 = parseValue(cardiacOutput.mixedVenousO2);
+    const _thermodilutionCI = parseValue(cardiacOutput.thermodilution.ci);
+    const _mixedVenousO2 = parseValue(cardiacOutput.mixedVenousO2);
 
     // ========== TIER 1: ESSENTIAL CALCULATIONS ==========
     // Copy calculated patient data

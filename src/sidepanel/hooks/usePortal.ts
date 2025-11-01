@@ -32,7 +32,7 @@ export const usePortal = (id: string = 'portal-root') => {
     };
 
     // Initial setup
-    const portalContainer = ensurePortalExists();
+    const _portalContainer = ensurePortalExists();
 
     // Set up MutationObserver to detect if portal gets removed from DOM
     observerRef.current = new MutationObserver((mutations) => {

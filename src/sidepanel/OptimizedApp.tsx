@@ -42,7 +42,7 @@ import { OptimizationService } from '@/services/OptimizationService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { ModelLoadingError, isModelLoadingError } from '@/types/errors.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';

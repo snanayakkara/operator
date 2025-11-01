@@ -13,7 +13,7 @@ import {
   Play,
   Copy,
   Check,
-  ArrowRight,
+  ArrowRight as _ArrowRight,
   XCircle,
   HardDrive
 } from 'lucide-react';

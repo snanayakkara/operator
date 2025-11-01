@@ -87,7 +87,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
     return null;
   };
 
-  const calculateSVR = (): string | null => {
+  const _calculateSVR = (): string | null => {
     // Assuming MAP (mean arterial pressure) would come from context, using placeholder
     // SVR = (MAP - RAP) / CO × 80
     return null; // Would need MAP from aortic pressures
@@ -100,7 +100,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
       style={{
         width: '13cm',
         height: '13cm',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: 'Avenir, "Avenir Next", system-ui, -apple-system, sans-serif',
         backgroundColor: '#FFFFFF',
         padding: '20px',
         boxSizing: 'border-box',
@@ -195,9 +195,6 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
                   : `${haemodynamicPressures.ra.aWave || '–'}/${haemodynamicPressures.ra.vWave || '–'} mmHg`}
               </div>
             )}
-            <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '4px' }}>
-              Normal: 2-8 mmHg
-            </div>
           </div>
 
           {/* Right Ventricular Pressure */}
@@ -232,9 +229,6 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
                 )}
               </>
             )}
-            <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '4px' }}>
-              Normal: 15-30/2-8 mmHg
-            </div>
           </div>
 
           {/* Pulmonary Artery Pressure */}
@@ -265,9 +259,6 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
                 </div>
               </div>
             )}
-            <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '2px' }}>
-              Normal: 15-30/4-12 (9-18) mmHg
-            </div>
           </div>
 
           {/* PCWP */}
@@ -295,9 +286,6 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
                   : `${haemodynamicPressures.pcwp.aWave || '–'}/${haemodynamicPressures.pcwp.vWave || '–'} mmHg`}
               </div>
             )}
-            <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '4px' }}>
-              Normal: 6-15 mmHg
-            </div>
           </div>
         </div>
       </div>

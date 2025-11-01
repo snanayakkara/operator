@@ -17,7 +17,7 @@ import {
   Calendar,
   Search,
   ArrowLeft,
-  Settings,
+  Settings as _Settings,
   ChevronRight,
   ChevronDown,
   Mic,

@@ -27,14 +27,33 @@ CRITICAL INSTRUCTIONS:
 - Structure report in exactly THREE sections with specific clinical content
 - Use AUSTRALIAN medical terminology: catheterisation, haemodynamic, colour, recognised, anaesthesia
 
+ANTI-HALLUCINATION RULES (CRITICAL - MEDICAL SAFETY):
+- ONLY include information explicitly stated in the dictation
+- NEVER infer symptoms (dyspnoea, fatigue, chest pain, orthopnoea, etc.)
+- NEVER infer test results (echocardiography findings, BNP values, PASP estimates, biomarkers)
+- NEVER infer functional class (NYHA class, WHO functional class)
+- NEVER infer clinical severity descriptors (progressive, worsening, improving, stable, acute, chronic)
+- NEVER infer specific measurements, dates, or numbers not provided
+- NEVER infer physical examination findings (JVP, oedema, murmurs)
+- If clinical context not dictated: state ONLY "The indication for the procedure was haemodynamic assessment"
+- Minimal safe inference allowed: "indication was haemodynamic assessment" when performing RHC on patient with stated diagnosis
+- When in doubt: OMIT rather than INFER
+
 Required sections (use exactly these headers in PLAIN TEXT):
 
-PREAMBLE:
-- Patient demographics with indication for right heart catheterisation
-- Clinical presentation: heart failure, pulmonary hypertension, transplant evaluation with specific symptoms
-- Recent investigations: echocardiography findings, BNP levels, functional status assessment
-- Pre-procedure assessment: baseline observations, contraindications considered
-- Access planning: vascular assessment and approach selection
+PREAMBLE (CONDITIONAL CONTENT - Include ONLY what was dictated):
+- Patient demographics (age, gender, date if provided) and stated diagnosis with indication for right heart catheterisation
+- Indication: State "The indication for the procedure was haemodynamic assessment" (minimal safe inference acceptable)
+- Clinical presentation: ONLY if symptoms/functional status were explicitly dictated, include verbatim. OTHERWISE: completely omit this paragraph
+- Recent investigations: ONLY if specific test results (echo/BNP/imaging) were dictated, include verbatim. OTHERWISE: completely omit this paragraph
+- Pre-procedure assessment: ONLY documented vital signs that were explicitly stated (BP, HR, O2 saturation, haemoglobin, weight, height)
+- Vascular access and equipment: ONLY what was explicitly dictated (access site, catheter type, catheter size, guidance method)
+
+PREAMBLE EXAMPLE (when minimal context dictated - NO symptoms/investigations):
+"[Age] year old [gender] with [stated diagnosis only]. Pre-procedure assessment demonstrated resting blood pressure [X/X] mmHg, heart rate [X] bpm, and haemoglobin [X] g/L. Vascular access was obtained via [stated access site] using a [X] French [catheter type] catheter."
+
+PREAMBLE EXAMPLE (when comprehensive context dictated):
+"[Age] year old [gender] with [stated diagnosis]. The patient presented with [explicitly dictated symptoms]. Recent investigations included [explicitly dictated test results with specific values]. Pre-procedure assessment demonstrated [dictated vital signs]. Vascular access was obtained via [stated access site] using [equipment details]."
 
 FINDINGS:
 - Vascular access approach and catheter positioning with specific details in narrative form
@@ -113,7 +132,9 @@ When describing haemodynamic findings, use these severity grades explicitly in c
 Use standard cardiology procedural documentation format.
 Target audience: Medical record documentation for cardiologists, heart failure specialists, and referring physicians.`,
 
-    userPromptTemplate: `Generate a comprehensive right heart catheterisation procedural report using the THREE-SECTION format based on the following procedural dictation:
+    userPromptTemplate: `CRITICAL ANTI-HALLUCINATION REMINDER: Generate report using ONLY information explicitly stated in the dictation below. DO NOT infer symptoms, test results, functional class, or clinical severity. If minimal context provided, state only demographics, vital signs, and equipment. When in doubt: OMIT rather than INFER.
+
+Generate a comprehensive right heart catheterisation procedural report using the THREE-SECTION format based on the following procedural dictation:
 
 {input}
 
@@ -122,14 +143,18 @@ CRITICAL OUTPUT REQUIREMENTS:
 - START IMMEDIATELY with "PREAMBLE:" - NO conversational introduction
 - NO template placeholders - use actual patient data from dictation
 - Use Australian spelling throughout (catheterisation, haemodynamic)
+- ONLY include information explicitly stated in the dictation above
+- NO verbose phrasing like "This report details..." - start directly with demographics
 
 Structure the report with exactly these three sections using NARRATIVE clinical language:
 
-PREAMBLE:
-- Start with patient demographics and indication for RHC
-- Include clinical presentation and recent investigations in flowing sentences
-- Document pre-procedure assessment and access planning naturally
-- Example: "Ms Smith is a 75-year-old woman referred for right heart catheterisation for assessment of suspected pulmonary hypertension in the setting of progressive exertional dyspnoea."
+PREAMBLE (CONDITIONAL - Adapt to dictation content):
+- Start directly: "[Age] year old [gender] with [stated diagnosis only]"
+- If symptoms/investigations dictated: include verbatim. If NOT: completely omit
+- ALWAYS include: Pre-procedure vitals explicitly stated (BP, HR, Hb, weight, height)
+- ALWAYS include: Vascular access and equipment explicitly stated
+- Example (minimal context): "83 year old male with chronic thromboembolic pulmonary hypertension. Pre-procedure assessment demonstrated resting blood pressure 124/66 mmHg, heart rate 92 bpm, and haemoglobin 150 g/L. Vascular access was obtained via the right antecubital vein using a 7 French Swan-Ganz catheter."
+- Example (comprehensive context): "75 year old female with heart failure presenting with progressive exertional dyspnoea NYHA class III. Recent echocardiography demonstrated [specific findings from dictation]. Pre-procedure assessment demonstrated [vitals]. Vascular access was obtained via [stated access]."
 
 FINDINGS:
 - Document vascular access approach and catheter positioning in narrative form
@@ -164,58 +189,65 @@ CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or num
  * Comprehensive patterns extracted from clinical right heart catheterisation reports
  */
 export const RightHeartCathMedicalPatterns = {
-  // Pressure measurement patterns with a/v waves - enhanced to handle "slash" separator and flexible formatting
-  // Pattern 1: "RA pressure 11 slash 9 mean 7" or "RA pressure 11 9 mean 7"
-  raPressurea: /(?:right\s+)?atrial?\s+pressure[:\s]*(\d+)\s*(?:(?:\/|slash)\s*\d+|\s+\d+)/gi,
-  raPressureV: /(?:right\s+)?atrial?\s+pressure[:\s]*\d+\s*(?:(?:\/|slash)\s*|[ ]+)(\d+)/gi,
-  raPressureMean: /(?:right\s+)?atrial?\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
+  // Pressure measurement patterns with a/v waves - handles all separator variants: "slash", "/", "-"
+  // Handles: "RA 6 slash 6 mean of 8", "RA 8-9 mean of 7", "RA 13-13, mean of 11"
+  raPressurea: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
+  raPressureV: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
+  raPressureMean: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  rvPressureSystolic: /(?:right\s+)?ventricular?\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
-  rvPressureDiastolic: /(?:right\s+)?ventricular?\s+(?:pressure\s+)?\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
-  rvedp: /rvedp[:\s]*(\d+)/gi,
+  // RV patterns - handles "RV 63 slash 5", "RV 50-1", "RV 63-0"
+  rvPressureSystolic: /(?:right\s+)?(?:ventricular?|rv)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  rvPressureDiastolic: /(?:right\s+)?(?:ventricular?|rv)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
+  // RVEDP handles: "RV EDP of 13", "RVEDP of 8", "RVEDP 8"
+  rvedp: /rv\s+edp\s+(?:of\s+)?[:\s,]*(\d+)|rvedp\s+(?:of\s+)?[:\s,]*(\d+)/gi,
 
-  paPressureSystolic: /pulmonary\s+artery\s+(?:pressure\s+)?(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
-  paPressureDiastolic: /pulmonary\s+artery\s+(?:pressure\s+)?\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
-  paPressureMean: /pulmonary\s+artery.*?mean\s+(\d+)/gi,
+  // PA patterns - handles "PA 65 slash 22 mean of 39", "PA 50-22 mean of 36", "PA 59-19, mean of 33"
+  paPressureSystolic: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  paPressureDiastolic: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
+  paPressureMean: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  // PCWP patterns - handle "wedge pressure 10 10 mean of 9" or "15-21, mean of 15" format
-  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+|[,\s]+\d+)/gi,
-  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*|[,\s]+)(\d+)/gi,
-  pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?wedge\s+pressure.*?mean\s+(?:of\s+)?(\d+)/gi,
+  // PCWP patterns - handles "wedge pressure 15 slash 15 mean of 13", "PCWP 15-21, mean of 15"
+  // Also handles "unable to obtain PCWP" by failing gracefully
+  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
+  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
+  pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
+
+  // LVEDP pattern for when PCWP unavailable - handles "LVEDP imputed 13"
+  lvedp: /lvedp\s+(?:imputed\s+)?[:\s,]*(\d+)/gi,
 
   // Cardiac output patterns - enhanced to handle missing units and comma separators
-  // Specifically match thermodilution (not "thick" or "fick")
-  thermodilutionCO: /(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,
+  // Handles "thermodilution cardiac output 5.4" AND "cardiac output 5.4 via thermodilution"
+  thermodilutionCO: /(?:(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)|cardiac\s+output\s+(\d+\.?\d*)\s+(?:via|by)\s+thermodilution)(?:\s*l\/min)?/gi,
   thermodilutionCI: /thermodilution\s+cardiac\s+index[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
   // Fick method - handle common transcription errors: "thick" or "tick" instead of "fick"
   fickCO: /(?:fick|thick|tick)\s+(?:cardiac\s+output|co)[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,
   fickCI: /(?:fick|thick|tick)\s+(?:cardiac\s+index|ci)[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
 
-  // Oxygen saturation patterns - enhanced to handle missing % sign
-  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)\s*(?:saturation)?[:\s,]*(\d+)%?/gi,
+  // Oxygen saturation patterns - handles "mixed venous 68", "mixed venous saturation 57"
+  mixedVenousO2: /mixed\s+venous\s+(?:o2|oxygen)?\s*(?:saturation)?[:\s,]*(\d+)%?/gi,
   wedgeSaturation: /wedge\s+saturation[:\s,]*(\d+)%?/gi,
   arterialO2Saturation: /(?:aortic|arterial)\s+(?:arterial\s+)?(?:oxygen\s+)?saturation[:\s,]+(\d+)%?/gi,
   pulmonaryArterySaturation: /pulmonary\s+artery\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)%?/gi,
 
-  // Laboratory values - enhanced to handle American spelling and flexible units
-  haemoglobin: /(?:h[ae]moglobin|hb)[:\s]*(\d+)(?:\s*g\/l)?/gi,
-  lactate: /lactate[:\s]*(\d+\.?\d*)(?:\s*mmol\/l)?/gi,
+  // Laboratory values - handles both American "hemoglobin 71" and Australian "haemoglobin 150"
+  haemoglobin: /(?:h[ae]moglobin|hb)[:\s,]*(\d+)(?:\s*g\/l)?/gi,
+  lactate: /lactate[:\s,]*(\d+\.?\d*)(?:\s*mmol\/l)?/gi,
 
-  // Radiation safety and contrast patterns
+  // Radiation safety - handles "fluoro time 1.45 minutes"
   fluoroscopyTime: /(?:total\s+)?(?:fluoro(?:scopy)?\s+time|screening\s+time)[:\s,]*(\d+\.?\d*)\s*(?:min(?:ute)?s?)?/gi,
-  fluoroscopyDose: /(?:total\s+)?(?:fluoro(?:scopy)?\s+dose|radiation\s+dose)[:\s]*(\d+\.?\d*)\s*(?:m?gy|milligray)?/gi,
-  doseAreaProduct: /(?:total\s+)?(?:dap|dose\s+area\s+product)[:\s]*(\d+\.?\d*)\s*(?:gy[·\s×*]?cm²?)?/gi,
-  contrastVolume: /contrast\s+(?:volume|used|administered)?[:\s]*(\d+\.?\d*)\s*(?:m?l)?/gi,
+  fluoroscopyDose: /(?:total\s+)?(?:fluoro(?:scopy)?\s+dose|radiation\s+dose)[:\s,]*(\d+\.?\d*)\s*(?:m?gy|milligray)?/gi,
+  doseAreaProduct: /(?:total\s+)?(?:dap|dose\s+area\s+product)[:\s,]*(\d+\.?\d*)\s*(?:gy[·\s×*]?cm²?)?/gi,
+  contrastVolume: /contrast\s+(?:volume|used|administered)?[:\s,]*(\d+\.?\d*)\s*(?:m?l)?/gi,
 
-  // Systemic blood pressure patterns - handle "83 on 55" or "83/55" format
-  systemicBPSystolic: /(?:systemic\s+)?blood\s+pressure[:\s]+(\d+)\s*(?:\/|on|-)\s*\d+/gi,
-  systemicBPDiastolic: /(?:systemic\s+)?blood\s+pressure[:\s]+\d+\s*(?:\/|on|-)\s*(\d+)/gi,
-  meanArterialPressure: /(?:map|mean\s+arterial\s+pressure)[:\s]+(\d+)/gi,
+  // Blood pressure - handles "resting blood pressure 87 on 54" and "124 on 66"
+  systemicBPSystolic: /(?:resting\s+)?(?:systemic\s+)?blood\s+pressure[:\s,]+(\d+)\s*(?:\/|on|-)\s*\d+/gi,
+  systemicBPDiastolic: /(?:resting\s+)?(?:systemic\s+)?blood\s+pressure[:\s,]+\d+\s*(?:\/|on|-)\s*(\d+)/gi,
+  meanArterialPressure: /(?:map|mean\s+arterial\s+pressure)[:\s,]+(\d+)/gi,
 
-  // Vascular access patterns - enhanced to handle "vascular access" phrasing and brachial
-  basilicAccess: /(?:right\s+)?(?:basilic|brachial)\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
-  jugularAccess: /(?:right\s+)?internal\s+jugular\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
-  femoralAccess: /(?:right\s+)?femoral\s+(?:venous\s+)?(?:vascular\s+)?access/gi,
+  // Vascular access - handles "right internal jugular venous access" and "Right median anti-cubital venous axis" (Whisper error)
+  basilicAccess: /(?:right\s+)?(?:median\s+)?(?:anti[-\s]?cubital|basilic|brachial)\s+(?:venous\s+)?(?:vascular\s+)?(?:access|axis)/gi,
+  jugularAccess: /(?:right\s+)?internal\s+jugular\s+(?:venous\s+)?(?:vascular\s+)?(?:access|axis)/gi,
+  femoralAccess: /(?:right\s+)?femoral\s+(?:venous\s+)?(?:vascular\s+)?(?:access|axis)/gi,
   
   // Exercise testing
   exerciseProtocol: /straight\s+leg\s+raising/gi,
@@ -228,9 +260,9 @@ export const RightHeartCathMedicalPatterns = {
   transplantEvaluation: /transplant\s+evaluation/gi,
   haemodynamicAssessment: /haemodynamic\s+assessment/gi,
   
-  // Catheter specifications - enhanced to handle various spellings
+  // Catheter specifications - handles "7 French swan GANS catheter" (Whisper transcription error for Swan-Ganz)
   frenchSize: /(\d+)[-\s]?f(?:rench)?\s+(?:catheter|sheath|swan)/gi,
-  swanGanz: /swan[-\s]?g[ae]n[zs]\s+catheter/gi,
+  swanGanz: /swan[-\s]?(?:g[ae]n[zs]|gans)\s+catheter/gi,
   thermodilutionCatheter: /thermodilution\s+catheter/gi,
   
   // Measurements with units
