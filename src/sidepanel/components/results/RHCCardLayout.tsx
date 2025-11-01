@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import type { RightHeartCathReport } from '@/types/medical.types';
+import type { CalculatedHaemodynamics, RightHeartCathReport } from '@/types/medical.types';
 
 interface RHCCardLayoutProps {
   rhcData: RightHeartCathReport;
@@ -35,6 +35,12 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
   operatorInfo
 }) => {
   const { haemodynamicPressures, cardiacOutput, rhcData: data, calculations } = rhcData;
+  const calculationFields = calculations
+    ? (Object.keys(calculations) as Array<keyof CalculatedHaemodynamics>).filter((key) => {
+        const value = calculations[key];
+        return value !== undefined && value !== null;
+      })
+    : [];
 
   // DEBUG: Log card data for troubleshooting
   console.log('🃏 RHC Card Rendering:', {
@@ -47,7 +53,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
       fick: cardiacOutput.fick
     },
     hasCalculations: !!calculations,
-    calculationFields: calculations ? Object.keys(calculations).filter(k => calculations[k] !== undefined && calculations[k] !== null) : [],
+    calculationFields,
     procedureDetails: {
       fluoroscopyTime: data?.fluoroscopyTime,
       fluoroscopyDose: data?.fluoroscopyDose,

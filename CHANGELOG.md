@@ -9,6 +9,42 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.21.8] - 2025-11-01
+
+### Changed
+
+- **Lanyard Starting Position Raised**
+  - Moved lanyard attachment point from `[0, 4, 0]` to `[0, 10, 0]`
+  - Lanyard now appears to hang from near the top edge (header/content border)
+  - More realistic hanging appearance from the top of the viewport
+
+### Removed
+
+- **Microphone HTML Overlay**
+  - Removed non-functional HTML emoji overlay that wasn't attached to card
+  - Card now shows only the embedded texture from card.glb
+  - Simplified implementation without floating overlays
+
+- **Unused Microphone Texture Files**
+  - Deleted `microphone-card.png` (72KB)
+  - Deleted `microphone-card.svg` (1.2KB)
+  - Removed from vite.config.ts copy list
+  - Removed unused texture loading and preload code
+  - Cleaned up debug logging
+
+### Technical Details
+
+- Card now uses original embedded texture from card.glb file
+- The atom-like logo on the card is baked into the GLB model itself
+- Lanyard.tsx: Removed microphoneTexture loading, debug useEffect
+- OptimizedApp.tsx: Removed microphone emoji HTML overlay
+- Reduced bundle size by removing unused assets
+- Cleaner codebase with no unused texture manipulation code
+
+### Note
+
+The card logo (atom design) is embedded in the card.glb 3D model file downloaded from React Bits. To change it would require editing the GLB file in a 3D editor like Blender.
+
 ## [3.21.7] - 2025-10-29
 
 ### Fixed

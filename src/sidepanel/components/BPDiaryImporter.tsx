@@ -3,7 +3,7 @@
  *
  * Orchestrates the complete BP diary import workflow:
  * 1. Image upload (dropzone)
- * 2. Extraction via Gemma-3n-e4b
+ * 2. Extraction via Qwen3-VL 8B Instruct (vision/OCR)
  * 3. Validation and review (editable grid)
  * 4. Visualization (interactive chart)
  * 5. Export (JSON/CSV) and clipboard copy
@@ -18,8 +18,15 @@ import { BPDiaryExtractor } from '@/services/BPDiaryExtractor';
 import { BPDataValidator } from '@/utils/BPDataValidator';
 import { BPDiaryStorage } from '@/services/BPDiaryStorage';
 import { LMStudioService } from '@/services/LMStudioService';
-import type { BPReading, BPDiarySession, BPDiarySettings } from '@/types/BPTypes';
-import { DEFAULT_BP_SETTINGS } from '@/types/BPTypes';
+import {
+  DEFAULT_BP_SETTINGS,
+  type BPReading,
+  type BPDiarySession,
+  type BPDiarySettings,
+  type BPInsights,
+  type BPClinicalContext,
+  type BPDiaryModelsUsed
+} from '@/types/BPTypes';
 import { ToastService } from '@/services/ToastService';
 
 interface BPDiaryImporterProps {
@@ -39,16 +46,27 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [settings, setSettings] = useState<BPDiarySettings>(DEFAULT_BP_SETTINGS);
   const [showLoadConfirm, setShowLoadConfirm] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string>('medgemma-4b-it-mlx');
+  const [selectedModel, setSelectedModel] = useState<string>(() => BPDiaryExtractor.getInstance().getDefaultOCRModel());
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [insights, setInsights] = useState<import('@/types/BPTypes').BPInsights | undefined>(undefined);
+  const [insights, setInsights] = useState<BPInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
+  const [clinicalContext, setClinicalContext] = useState<BPClinicalContext | null>(null);
+  const [modelsUsed, setModelsUsed] = useState<BPDiaryModelsUsed>(() => {
+    const extractor = BPDiaryExtractor.getInstance();
+    return {
+      extraction: extractor.getDefaultOCRModel(),
+      reasoning: extractor.getDefaultClinicalModel()
+    };
+  });
 
   const chartRef = useRef<BPChartHandle>(null);
   const extractorRef = useRef(BPDiaryExtractor.getInstance());
   const validatorRef = useRef(BPDataValidator.getInstance());
   const storageRef = useRef(BPDiaryStorage.getInstance());
   const lmStudioRef = useRef(LMStudioService.getInstance());
+  const insightsRequestIdRef = useRef(0);
 
   // Load settings and available models on mount
   useEffect(() => {
@@ -62,6 +80,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   };
 
   const loadAvailableModels = async () => {
+    const defaultOCRModel = extractorRef.current.getDefaultOCRModel();
     const allModels = await lmStudioRef.current.getAvailableModels();
 
     // Filter to only vision-capable models
@@ -76,15 +95,19 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
         lowerModel.includes('minicpm') ||
         lowerModel.includes('pixtral') ||
         lowerModel.includes('phi-3-vision') ||
-        lowerModel.includes('molmo')
+        lowerModel.includes('molmo') ||
+        lowerModel.includes('deepseek') ||
+        lowerModel.includes('ocr')
       );
     });
 
-    setAvailableModels(visionModels);
+    const uniqueVisionModels = Array.from(new Set([defaultOCRModel, ...visionModels]));
+    setAvailableModels(uniqueVisionModels);
 
     // Priority order for auto-selection
-    // Qwen3-VL is preferred as it has proven vision support in LM Studio
+    // Qwen3-VL is preferred for diary extraction, then other proven vision models
     const preferredModels = [
+      defaultOCRModel,
       'qwen/qwen3-vl-8b',      // Best vision support, proven compatibility
       'google/gemma-3n-e4b',   // Efficient 4B vision model
       'medgemma-4b-it-mlx',    // Medical-specific vision model
@@ -93,22 +116,179 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     ];
 
     // Try to find preferred model
-    let selectedModel = 'medgemma-4b-it-mlx'; // Default fallback
+    let nextSelectedModel = defaultOCRModel;
     for (const preferred of preferredModels) {
-      const found = visionModels.find(m => m.includes(preferred));
+      const found = uniqueVisionModels.find(m => m.includes(preferred));
       if (found) {
-        selectedModel = found;
+        nextSelectedModel = found;
         break;
       }
     }
 
     // If no preferred model found, use first available vision model
-    if (!visionModels.some(m => m === selectedModel) && visionModels.length > 0) {
-      selectedModel = visionModels[0];
+    if (!uniqueVisionModels.includes(nextSelectedModel) && uniqueVisionModels.length > 0) {
+      nextSelectedModel = uniqueVisionModels[0];
     }
 
-    setSelectedModel(selectedModel);
+    setSelectedModel(nextSelectedModel);
   };
+
+  /**
+   * Fetch medications/background context from the EMR (if available)
+   */
+  const fetchClinicalContext = useCallback(async (): Promise<BPClinicalContext> => {
+    const context: BPClinicalContext = {};
+
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+      return context;
+    }
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'EXECUTE_ACTION',
+        action: 'extract-patient-data',
+        data: {}
+      });
+
+      if (!response?.success || !response?.data) {
+        return context;
+      }
+
+      const data = response.data as Record<string, unknown>;
+      const medicationSources = [
+        data.medications,
+        data.medications_emr,
+        data.currentMedications,
+        data.meds_snapshot
+      ].filter(Boolean);
+
+      const normaliseMedicationEntry = (entry: unknown): string => {
+        if (!entry) return '';
+        if (typeof entry === 'string') {
+          return entry.trim();
+        }
+        if (Array.isArray(entry)) {
+          return entry
+            .map(normaliseMedicationEntry)
+            .filter(Boolean)
+            .join('\n');
+        }
+        if (typeof entry === 'object') {
+          const med = entry as Record<string, unknown>;
+          const parts = ['name', 'dose', 'frequency', 'route', 'indication']
+            .map(key => (typeof med[key] === 'string' ? (med[key] as string).trim() : ''))
+            .filter(Boolean);
+          return parts.join(' ').trim();
+        }
+        return String(entry);
+      };
+
+      for (const source of medicationSources) {
+        const candidate = normaliseMedicationEntry(source);
+        if (candidate.trim().length > 0) {
+          context.medicationsText = candidate.trim();
+          break;
+        }
+      }
+
+      const backgroundCandidates: unknown[] = [
+        data.background,
+        data.problemList,
+        data.problems,
+        data.history,
+        data.medicalHistory
+      ].filter(Boolean);
+
+      const normaliseBackground = (entry: unknown): string => {
+        if (!entry) return '';
+        if (typeof entry === 'string') {
+          return entry.trim();
+        }
+        if (Array.isArray(entry)) {
+          return entry
+            .map(normaliseBackground)
+            .filter(Boolean)
+            .join('\n');
+        }
+        if (typeof entry === 'object') {
+          try {
+            return JSON.stringify(entry);
+          } catch {
+            return '';
+          }
+        }
+        return String(entry);
+      };
+
+      for (const source of backgroundCandidates) {
+        const candidate = normaliseBackground(source);
+        if (candidate.trim().length > 0) {
+          context.backgroundText = candidate.trim();
+          break;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch clinical context for BP diary insights', error);
+    }
+
+    return context;
+  }, []);
+
+  /**
+   * Run stage-two clinical reasoning using MedGemma
+   */
+  const runClinicalInsights = useCallback(async (bpReadings: BPReading[], contextOverride?: BPClinicalContext) => {
+    if (bpReadings.length === 0) {
+      setInsights(null);
+      setInsightsError(null);
+      setInsightsLoading(false);
+      return;
+    }
+
+    const runId = ++insightsRequestIdRef.current;
+    setInsightsLoading(true);
+    setInsightsError(null);
+
+    try {
+      const context = contextOverride ?? await fetchClinicalContext();
+      if (insightsRequestIdRef.current !== runId) {
+        return;
+      }
+
+      setClinicalContext(context);
+
+      const extractor = extractorRef.current;
+      const reasoningModel = extractor.getDefaultClinicalModel();
+
+      const result = await extractor.generateClinicalInsights(bpReadings, {
+        medicationsText: context.medicationsText,
+        backgroundText: context.backgroundText
+      });
+
+      if (insightsRequestIdRef.current !== runId) {
+        return;
+      }
+
+      setInsights(result);
+      setModelsUsed(prev => ({
+        extraction: prev.extraction,
+        reasoning: reasoningModel
+      }));
+    } catch (error) {
+      if (insightsRequestIdRef.current !== runId) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'Unable to generate clinical insights';
+      setInsights(null);
+      setInsightsError(message);
+      ToastService.getInstance().warning('Clinical insights unavailable', message);
+    } finally {
+      if (insightsRequestIdRef.current === runId) {
+        setInsightsLoading(false);
+      }
+    }
+  }, [fetchClinicalContext]);
 
   /**
    * Handle image selection and start extraction
@@ -117,9 +297,16 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     setImageDataUrl(dataUrl);
     setProcessingState('extracting');
     setErrorMessage('');
+    setInsights(null);
+    setInsightsError(null);
+    setClinicalContext(null);
 
     try {
-      const result = await extractorRef.current.extractFromImage(dataUrl, undefined, selectedModel);
+      const extractor = extractorRef.current;
+      const defaultClinicalModel = extractor.getDefaultClinicalModel();
+      const extractionModelUsed = selectedModel || extractor.getDefaultOCRModel();
+
+      const result = await extractor.extractFromImage(dataUrl, undefined, selectedModel);
 
       if (!result.success || result.readings.length === 0) {
         setProcessingState('error');
@@ -136,13 +323,17 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
       const validated = validatorRef.current.validateAndSort(result.readings);
 
       setReadings(validated);
-      setInsights(result.insights);
+      setModelsUsed({
+        extraction: extractionModelUsed,
+        reasoning: defaultClinicalModel
+      });
       setProcessingState('ready');
 
       ToastService.getInstance().success(
         'Extraction complete',
         `Found ${validated.length} BP reading${validated.length !== 1 ? 's' : ''}`
       );
+      void runClinicalInsights(validated);
 
     } catch (error) {
       setProcessingState('error');
@@ -150,7 +341,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
       setErrorMessage(message);
       ToastService.getInstance().error('Processing failed', message);
     }
-  }, [selectedModel]);
+  }, [runClinicalInsights, selectedModel]);
 
   /**
    * Handle readings edit from grid
@@ -162,12 +353,29 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   }, []);
 
   /**
+   * Retry MedGemma insights generation with the current readings
+   */
+  const handleRetryInsights = useCallback(() => {
+    if (readings.length === 0) return;
+    void runClinicalInsights(readings);
+  }, [runClinicalInsights, readings]);
+
+  /**
    * Clear and start over
    */
   const handleClear = useCallback(() => {
+    const extractor = extractorRef.current;
     setImageDataUrl(null);
     setReadings([]);
-    setInsights(undefined);
+    setInsights(null);
+    setInsightsError(null);
+    setInsightsLoading(false);
+    setClinicalContext(null);
+    setModelsUsed({
+      extraction: extractor.getDefaultOCRModel(),
+      reasoning: extractor.getDefaultClinicalModel()
+    });
+    setSelectedModel(extractor.getDefaultOCRModel());
     setProcessingState('idle');
     setErrorMessage('');
   }, []);
@@ -179,13 +387,23 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     if (readings.length === 0) return;
 
     try {
+      const extractor = extractorRef.current;
       const session: BPDiarySession = {
         id: `bp-session-${Date.now()}`,
         timestamp: Date.now(),
         imageDataUrl: imageDataUrl || '',
         readings,
-        settings
+        settings,
+        insights: insights ?? null,
+        modelsUsed: {
+          extraction: modelsUsed.extraction || extractor.getDefaultOCRModel(),
+          reasoning: modelsUsed.reasoning || extractor.getDefaultClinicalModel()
+        }
       };
+
+      if (clinicalContext && (clinicalContext.medicationsText || clinicalContext.backgroundText)) {
+        session.clinicalContext = clinicalContext;
+      }
 
       await storageRef.current.saveSession(session);
       await storageRef.current.saveSettings(settings);
@@ -201,7 +419,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
-  }, [readings, imageDataUrl, settings]);
+  }, [clinicalContext, imageDataUrl, insights, modelsUsed, readings, settings]);
 
   /**
    * Load last session
@@ -217,6 +435,17 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     setImageDataUrl(session.imageDataUrl);
     setReadings(session.readings);
     setSettings(session.settings);
+    setInsights(session.insights ?? null);
+    setClinicalContext(session.clinicalContext ?? null);
+    setInsightsLoading(false);
+    setInsightsError(null);
+    setModelsUsed({
+      extraction: session.modelsUsed?.extraction || extractorRef.current.getDefaultOCRModel(),
+      reasoning: session.modelsUsed?.reasoning || extractorRef.current.getDefaultClinicalModel()
+    });
+    if (session.modelsUsed?.extraction) {
+      setSelectedModel(session.modelsUsed.extraction);
+    }
     setProcessingState('ready');
     setShowLoadConfirm(false);
 
@@ -228,7 +457,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
    */
   const handleExportJSON = useCallback(() => {
     const stats = validatorRef.current.getStatistics(readings, settings.sbpControlTarget);
-    const exportData = {
+    const exportData: Record<string, unknown> = {
       exportDate: new Date().toISOString(),
       readingsCount: readings.length,
       statistics: stats,
@@ -245,8 +474,13 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
         dbp: r.dbp,
         hr: r.hr
       })),
-      insights: insights
+      insights,
+      modelsUsed
     };
+
+    if (clinicalContext && (clinicalContext.medicationsText || clinicalContext.backgroundText)) {
+      exportData.clinicalContext = clinicalContext;
+    }
 
     const json = JSON.stringify(exportData, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -258,7 +492,7 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
     URL.revokeObjectURL(url);
 
     ToastService.getInstance().success('Exported', 'BP diary exported as JSON');
-  }, [readings, settings]);
+  }, [clinicalContext, insights, modelsUsed, readings, settings]);
 
   /**
    * Export as CSV
@@ -306,6 +540,10 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
   }, []);
 
   if (!isOpen) return null;
+
+  const defaultOCRModel = extractorRef.current.getDefaultOCRModel();
+  const defaultClinicalModel = extractorRef.current.getDefaultClinicalModel();
+  const displayedReasoningModel = modelsUsed.reasoning || defaultClinicalModel;
 
   const stats = readings.length > 0 ? validatorRef.current.getStatistics(readings, settings.sbpControlTarget) : null;
 
@@ -476,35 +714,101 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
           {processingState === 'ready' && readings.length > 0 && (
             <div className="space-y-6">
               {/* Clinical Insights */}
-              {insights && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info className="w-5 h-5 text-blue-700" />
-                    <h3 className="text-lg font-semibold text-blue-900">Clinical Insights</h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Info className="w-5 h-5 text-blue-700" />
+                  <h3 className="text-lg font-semibold text-blue-900">Clinical Insights</h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-blue-800">
+                  <span>
+                    Models:&nbsp;
+                    <span className="font-mono">
+                      {modelsUsed.extraction || defaultOCRModel} → {displayedReasoningModel}
+                    </span>
+                  </span>
+                  {insightsLoading && <span className="text-blue-600">MedGemma-27B running…</span>}
+                  {!insightsLoading && insights && (
+                    <span className="text-blue-600">MedGemma insights ready</span>
+                  )}
+                </div>
+
+                {clinicalContext && (clinicalContext.medicationsText || clinicalContext.backgroundText) && (
+                  <div className="bg-white/70 border border-blue-100 rounded-lg p-3 space-y-2">
+                    {clinicalContext.medicationsText && (
+                      <div>
+                        <div className="text-[11px] font-semibold text-blue-900 uppercase tracking-wide">Medications</div>
+                        <div className="text-xs text-gray-700 whitespace-pre-line">
+                          {clinicalContext.medicationsText}
+                        </div>
+                      </div>
+                    )}
+                    {clinicalContext.backgroundText && (
+                      <div>
+                        <div className="text-[11px] font-semibold text-blue-900 uppercase tracking-wide">Background</div>
+                        <div className="text-xs text-gray-700 whitespace-pre-line">
+                          {clinicalContext.backgroundText}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                )}
 
+                {insightsLoading && (
+                  <div className="bg-white rounded-lg p-4 flex items-center gap-3 border border-blue-100">
+                    <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <div className="text-sm text-gray-700">
+                      Generating clinician and patient insights…
+                    </div>
+                  </div>
+                )}
+
+                {!insightsLoading && insightsError && (
+                  <div className="bg-white border border-yellow-200 rounded-lg p-4 space-y-3">
+                    <div className="text-sm text-yellow-800">
+                      {insightsError}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleRetryInsights}
+                        className="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        Retry insights
+                      </button>
+                      <span className="text-xs text-gray-500">
+                        Readings remain available for review.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!insightsLoading && !insightsError && insights && (
                   <div className="space-y-3">
-                    {/* Control Summary */}
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-xs font-semibold text-gray-600 mb-1">Control Summary</div>
-                      <div className="text-sm text-gray-900">{insights.controlSummary}</div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-xs font-semibold text-gray-600 mb-1">Control Summary</div>
+                        <div className="text-sm text-gray-900">{insights.controlSummary}</div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-xs font-semibold text-gray-600 mb-1">Diurnal Pattern</div>
+                        <div className="text-sm text-gray-900">{insights.diurnalPattern}</div>
+                      </div>
                     </div>
 
-                    {/* Diurnal Pattern */}
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-xs font-semibold text-gray-600 mb-1">Diurnal Pattern</div>
-                      <div className="text-sm text-gray-900">{insights.diurnalPattern}</div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-xs font-semibold text-gray-600 mb-1">Variability</div>
+                        <div className="text-sm text-gray-900">{insights.variabilityConcern}</div>
+                      </div>
+                      {insights.medicationRationale && (
+                        <div className="bg-white rounded-lg p-3">
+                          <div className="text-xs font-semibold text-gray-600 mb-1">Medication Rationale</div>
+                          <div className="text-sm text-gray-900">{insights.medicationRationale}</div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Variability */}
-                    <div className="bg-white rounded-lg p-3">
-                      <div className="text-xs font-semibold text-gray-600 mb-1">Variability</div>
-                      <div className="text-sm text-gray-900">{insights.variabilityConcern}</div>
-                    </div>
-
-                    {/* Peak/Lowest Times (if available) */}
-                    {(insights.peakTimes || insights.lowestTimes) && (
-                      <div className="grid grid-cols-2 gap-3">
+                    {(insights.peakTimes || insights.lowestTimes || insights.abpmSuggestion) && (
+                      <div className="grid gap-3 md:grid-cols-3">
                         {insights.peakTimes && (
                           <div className="bg-white rounded-lg p-3">
                             <div className="text-xs font-semibold text-gray-600 mb-1">Peak Times</div>
@@ -517,10 +821,15 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                             <div className="text-sm text-gray-900">{insights.lowestTimes}</div>
                           </div>
                         )}
+                        {insights.abpmSuggestion && (
+                          <div className="bg-white rounded-lg p-3 md:col-span-1">
+                            <div className="text-xs font-semibold text-gray-600 mb-1">Next Clinical Step</div>
+                            <div className="text-sm text-gray-900">{insights.abpmSuggestion}</div>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Recommendations */}
                     <div className="bg-white rounded-lg p-3">
                       <div className="text-xs font-semibold text-gray-600 mb-2">Key Recommendations</div>
                       <ul className="space-y-1.5">
@@ -532,9 +841,24 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                         ))}
                       </ul>
                     </div>
+
+                    {insights.patientParagraph && (
+                      <div className="bg-white border border-blue-100 rounded-lg p-4">
+                        <div className="text-xs font-semibold text-blue-900 mb-1">Patient-Facing Summary</div>
+                        <div className="text-sm text-gray-900 whitespace-pre-line">
+                          {insights.patientParagraph}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+
+                {!insightsLoading && !insightsError && !insights && (
+                  <div className="bg-white rounded-lg p-4 border border-dashed border-blue-200 text-sm text-gray-600">
+                    Clinical insights will appear here once MedGemma finishes processing.
+                  </div>
+                )}
+              </div>
 
               {/* Statistics Summary */}
               {stats && (

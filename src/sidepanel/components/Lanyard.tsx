@@ -75,7 +75,7 @@ export default function Lanyard({
           }}
           onError={(error) => {
             console.error('🎨 Canvas error:', error);
-            setError(error as Error);
+            setError(error instanceof Error ? error : new Error(String(error)));
           }}
         >
           <ambientLight intensity={Math.PI} />
@@ -174,18 +174,13 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
   const nodes = gltf?.nodes || {};
   const materials = gltf?.materials || {};
 
-  // Load textures - React hooks must be called unconditionally
+  // Load lanyard texture - React hooks must be called unconditionally
   const lanyardTexture = useTexture('/assets/lanyard/lanyard.png');
-  const microphoneTexture = useTexture('/assets/lanyard/microphone-card.png');
 
   if (lanyardTexture) {
     lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
   }
 
-  if (microphoneTexture) {
-    // Card texture should not repeat, just display once
-    microphoneTexture.wrapS = microphoneTexture.wrapT = THREE.ClampToEdgeWrapping;
-  }
 
   // Create curve for lanyard band
   const curve = useState(() => {
@@ -276,7 +271,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
 
   return (
     <>
-      <group position={[0, 4, 0]}>
+      <group position={[0, 10, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type={'fixed' as RigidBodyProps['type']} />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps} type={'dynamic' as RigidBodyProps['type']}>
           <BallCollider args={[0.1]} />
@@ -308,23 +303,22 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
               drag(new THREE.Vector3().copy(e.point).sub(vec.copy(card.current.translation())));
             }}
           >
-            {/* Card mesh with microphone texture */}
+            {/* Card mesh - use original texture from model or plain color */}
             {nodes.card && nodes.card.geometry ? (
               <mesh geometry={nodes.card.geometry}>
                 <meshPhysicalMaterial
-                  map={microphoneTexture || materials.base?.map}
+                  map={materials.base?.map}
                   map-anisotropy={16}
                   clearcoat={1}
                   clearcoatRoughness={0.15}
-                  roughness={0.3}
-                  metalness={0.1}
+                  roughness={0.9}
+                  metalness={0.8}
                 />
               </mesh>
             ) : (
               <mesh>
                 <boxGeometry args={[1.6, 2.25, 0.02]} />
                 <meshPhysicalMaterial
-                  map={microphoneTexture}
                   color="#f8f9fa"
                   clearcoat={1}
                   clearcoatRoughness={0.15}
@@ -370,4 +364,3 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText = 'Ready to Record' }: Ban
 // Preload assets for faster initial render
 useGLTF.preload('/assets/lanyard/card.glb');
 useTexture.preload('/assets/lanyard/lanyard.png');
-useTexture.preload('/assets/lanyard/microphone-card.png');

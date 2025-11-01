@@ -1,7 +1,7 @@
 /**
  * BP Diary Extractor Service
  *
- * Extracts blood pressure readings from diary images using Gemma-3n-e4b via LM Studio.
+ * Extracts blood pressure readings from diary images using a vision-capable OCR model via LM Studio.
  * Implements the "bottom-number rule" when cells contain multiple stacked values.
  */
 
@@ -25,6 +25,20 @@ export class BPDiaryExtractor {
   }
 
   /**
+   * Expose default OCR model used for Stage 1 processing.
+   */
+  public getDefaultOCRModel(): string {
+    return this.lmStudioService.getDefaultOCRModel();
+  }
+
+  /**
+   * Expose default clinical reasoning model used for Stage 2 processing.
+   */
+  public getDefaultClinicalModel(): string {
+    return this.lmStudioService.getDefaultClinicalReasoningModel();
+  }
+
+  /**
    * Extract BP readings from an image
    * @param imageDataUrl - Base64 encoded image data URL
    * @param signal - Optional AbortSignal for cancellation
@@ -38,6 +52,9 @@ export class BPDiaryExtractor {
     const startTime = Date.now();
 
     try {
+      const defaultModel = this.getDefaultOCRModel();
+      const ocrModel = modelOverride || defaultModel;
+
       // Validate image format and size
       const validationError = this.validateImage(imageDataUrl);
       if (validationError) {
@@ -53,7 +70,8 @@ export class BPDiaryExtractor {
         component: 'bp-extractor',
         imageSize: imageDataUrl.length,
         imageSizeMB: (imageDataUrl.length / (1024 * 1024)).toFixed(2),
-        model: modelOverride || 'default'
+        model: ocrModel,
+        modelOverrideProvided: !!modelOverride
       });
 
       // Build extraction prompt (text-only, image sent separately)
@@ -66,7 +84,7 @@ export class BPDiaryExtractor {
         imageDataUrl,
         'bp-diary-extraction', // Custom agent type for potential future optimization
         signal,
-        modelOverride // Pass model override to LMStudioService
+        ocrModel // Always specify the OCR model (defaults to Qwen3-VL 8B Instruct when not overridden)
       );
 
       logger.info('Received LM Studio response', {
@@ -81,19 +99,19 @@ export class BPDiaryExtractor {
         logger.warn('Vision model returned empty response', {
           component: 'bp-extractor',
           response: trimmedResponse,
-          modelUsed: modelOverride || 'default'
+          modelUsed: ocrModel
         });
 
         return {
           success: false,
           readings: [],
           error: `Vision model could not extract any readings from the image. This may indicate:\n\n` +
-                 `1. The model (${modelOverride || 'default'}) may not be properly loaded with vision support in LM Studio\n` +
+                 `1. The model (${ocrModel}) may not be properly loaded with vision support in LM Studio\n` +
                  `2. The image quality may be too poor for the model to read\n` +
-                 `3. The model may not support vision tasks (ensure you're using a vision-capable model like Qwen3-VL, LLaVA, or Gemma with vision)\n\n` +
+                 `3. The model may not support vision tasks (ensure you're using a vision-capable model such as Qwen3-VL, DeepSeek-OCR, LLaVA, or Gemma vision variants)\n\n` +
                  `Troubleshooting:\n` +
-                 `- Verify your vision model is loaded in LM Studio with the correct GGUF files (including -mmproj files for vision support)\n` +
-                 `- Try a different vision model from the dropdown\n` +
+                 `- Verify your vision model is loaded in LM Studio with the correct GGUF files (including -mmproj files for vision support where required)\n` +
+                 `- Try a different vision-capable model from the dropdown\n` +
                  `- Use the "Load Sample Data" button to test the chart and editing features`,
           processingTime: Date.now() - startTime
         };
@@ -122,32 +140,18 @@ export class BPDiaryExtractor {
         };
       }
 
-      // Generate clinical insights if we have readings
-      let insights: BPInsights | undefined;
-      if (readings.length > 0) {
-        try {
-          insights = await this.generateClinicalInsights(readings, signal, modelOverride);
-        } catch (error) {
-          logger.warn('Failed to generate insights, continuing without them', {
-            component: 'bp-extractor',
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
-      }
-
       const processingTime = Date.now() - startTime;
 
       logger.info('BP extraction complete', {
         component: 'bp-extractor',
         readingsCount: readings.length,
-        hasInsights: !!insights,
-        processingTime
+        processingTime,
+        modelUsed: ocrModel
       });
 
       return {
         success: true,
         readings,
-        insights,
         rawResponse: response,
         processingTime
       };
@@ -287,31 +291,60 @@ If you cannot see or process the image at all, return an empty array [].`;
   }
 
   /**
-   * Generate clinical insights from BP readings using LLM
+   * Generate clinical insights from BP readings using the clinical reasoning model.
+   *
+   * NOTE: This method is no longer called automatically from extractFromImage.
+   *       Higher-level components (e.g. the importer) should invoke it explicitly
+   *       once vision/OCR extraction has completed.
    */
-  private async generateClinicalInsights(
+  public async generateClinicalInsights(
     readings: BPReading[],
-    signal?: AbortSignal,
-    modelOverride?: string
+    options?: {
+      signal?: AbortSignal;
+      modelOverride?: string;
+      medicationsText?: string;
+      backgroundText?: string;
+    }
   ): Promise<BPInsights> {
-    const systemPrompt = `You are a clinical hypertension specialist analyzing home blood pressure monitoring data.
-Provide concise, evidence-based clinical insights following Australian guidelines.`;
+    if (readings.length === 0) {
+      return {
+        controlSummary: 'No readings supplied for analysis',
+        diurnalPattern: 'Insufficient data for diurnal assessment',
+        variabilityConcern: 'Insufficient data for variability assessment',
+        keyRecommendations: ['Provide home BP readings before attempting analysis']
+      };
+    }
 
-    const userPrompt = this.buildInsightsPrompt(readings);
+    const {
+      signal,
+      modelOverride,
+      medicationsText,
+      backgroundText
+    } = options || {};
+
+    const systemPrompt = `You are a hypertension and cardiovascular risk clinician in Australia. You receive home blood pressure monitoring data and the current medication list. You must: (1) assess overall BP control using home thresholds (135/85), (2) comment on morning vs evening readings, (3) detect high variability, (4) relate control to the medications supplied (e.g. ACEi, ARB, CCB, thiazide, beta-blocker), (5) suggest next clinical steps such as ABPM, adherence check, timing adjustment or intensification, and (6) generate a short paragraph for the patient in Australian English. Use Australian spelling in every response.`;
+
+    const stats = this.calculateBasicStats(readings);
+    const userPrompt = this.buildInsightsPrompt(readings, stats, {
+      medicationsText,
+      backgroundText
+    });
+
+    const defaultClinicalModel = this.getDefaultClinicalModel();
 
     if (modelOverride) {
       try {
         const overrideResponse = await this.lmStudioService.processWithAgent(
           systemPrompt,
           userPrompt,
-          'bp-insights', // Agent type for potential DSPy optimization
+          'bp-diary-insights',
           signal,
           modelOverride
         );
 
         return this.parseInsightsResponse(overrideResponse);
       } catch (error) {
-        logger.warn('Failed to generate BP insights with override model, falling back to default text model', {
+        logger.warn('Failed to generate BP insights with override model, falling back to default clinical reasoning model', {
           component: 'bp-extractor',
           model: modelOverride,
           error: error instanceof Error ? error.message : 'Unknown error'
@@ -322,8 +355,9 @@ Provide concise, evidence-based clinical insights following Australian guideline
     const response = await this.lmStudioService.processWithAgent(
       systemPrompt,
       userPrompt,
-      'bp-insights',
-      signal
+      'bp-diary-insights',
+      signal,
+      defaultClinicalModel
     );
 
     return this.parseInsightsResponse(response);
@@ -332,37 +366,57 @@ Provide concise, evidence-based clinical insights following Australian guideline
   /**
    * Build prompt for clinical insights generation
    */
-  private buildInsightsPrompt(readings: BPReading[]): string {
-    const stats = this.calculateBasicStats(readings);
-
+  private buildInsightsPrompt(
+    readings: BPReading[],
+    stats: ReturnType<typeof this.calculateBasicStats>,
+    context?: { medicationsText?: string; backgroundText?: string }
+  ): string {
     const readingsSummary = readings.map(r =>
       `${r.date} ${r.time}: ${r.sbp}/${r.dbp} mmHg, HR ${r.hr}`
     ).join('\n');
 
-    return `Analyze these home BP readings and provide clinical insights:
+    const medicationsSection = context?.medicationsText?.trim()
+      ? context.medicationsText.trim()
+      : 'No medications supplied.';
 
+    const backgroundSection = context?.backgroundText?.trim()
+      ? context.backgroundText.trim()
+      : 'No additional background supplied.';
+
+    return `You will receive structured home blood pressure readings and limited clinical context. Analyse the data and respond with JSON only.
+
+READINGS:
 ${readingsSummary}
 
-Summary statistics:
-- Average: ${stats.avgSBP}/${stats.avgDBP} mmHg
-- Range: SBP ${stats.minSBP}-${stats.maxSBP}, DBP ${stats.minDBP}-${stats.maxDBP}
-- Readings above target (135/85): ${stats.aboveTarget}/${stats.count} (${stats.percentAboveTarget}%)
+SUMMARY STATISTICS:
+- Count: ${stats.count}
+- Average: ${stats.avgSBP}/${stats.avgDBP} mmHg (HR ${stats.avgHR})
+- SBP Range: ${stats.minSBP}-${stats.maxSBP} mmHg
+- DBP Range: ${stats.minDBP}-${stats.maxDBP} mmHg
+- Readings ≥135/85: ${stats.aboveTarget}/${stats.count} (${stats.percentAboveTarget}%)
 
-Provide insights in this EXACT JSON format (no markdown, no code blocks):
+CLINICAL CONTEXT:
+- Medications: ${medicationsSection}
+- Background: ${backgroundSection}
+
+Return ONLY JSON using this schema:
 {
-  "controlSummary": "Brief assessment of BP control quality",
-  "diurnalPattern": "Observations about time-of-day patterns (if sufficient data)",
-  "variabilityConcern": "Assessment of BP variability and consistency",
-  "keyRecommendations": ["recommendation 1", "recommendation 2", "recommendation 3"],
-  "peakTimes": "Time periods with highest readings (if pattern evident)",
-  "lowestTimes": "Time periods with best control (if pattern evident)"
+  "controlSummary": "Overall BP control referencing home threshold (135/85)",
+  "diurnalPattern": "Morning vs evening commentary or \"Insufficient data\"",
+  "variabilityConcern": "Variability assessment referencing observed range",
+  "keyRecommendations": ["Clinician-facing next steps in plain text"],
+  "medicationRationale": "How current regimen explains control or gaps; say \"No medications supplied\" if none provided",
+  "abpmSuggestion": "Specific statement on ABPM / adherence / follow-up timing",
+  "patientParagraph": "Short patient-friendly paragraph (Australian English, plain text)",
+  "peakTimes": "Times with highest readings if pattern evident",
+  "lowestTimes": "Times with best control if pattern evident"
 }
 
-Guidelines:
-- Home BP target: <135/85 mmHg (Australian guidelines)
-- High variability if SBP range >20-30 mmHg
-- Diurnal pattern: compare morning (<12:00) vs afternoon/evening (≥12:00)
-- Keep recommendations concise and actionable`;
+Constraints:
+- Use Australian spelling.
+- Tie recommendations to supplied medications where possible.
+- Mention explicitly if medications or background were not provided.
+- Do not include markdown, explanations, or additional text outside the JSON object.`;
   }
 
   /**
@@ -377,16 +431,69 @@ Guidelines:
       }
 
       const parsed = JSON.parse(cleaned);
+      const candidate = (parsed && typeof parsed === 'object' && 'insights' in parsed)
+        ? (parsed as { insights?: unknown }).insights
+        : parsed;
+
+      if (!candidate || typeof candidate !== 'object') {
+        throw new Error('Insights payload was not an object');
+      }
+
+      const getString = (value: unknown, fallback: string): string => {
+        if (typeof value === 'string' && value.trim().length > 0) {
+          return value.trim();
+        }
+        return fallback;
+      };
+
+      const toOptionalString = (value: unknown): string | undefined => {
+        if (typeof value === 'string' && value.trim().length > 0) {
+          return value.trim();
+        }
+        return undefined;
+      };
+
+      let recommendations: string[] = [];
+      const rawRecommendations = (candidate as Record<string, unknown>).keyRecommendations;
+      if (Array.isArray(rawRecommendations)) {
+        recommendations = rawRecommendations
+          .map(item => {
+            if (typeof item === 'string') {
+              return item.trim();
+            }
+            if (item && typeof item === 'object') {
+              try {
+                return JSON.stringify(item);
+              } catch {
+                return '';
+              }
+            }
+            return String(item ?? '');
+          })
+          .filter(rec => rec.length > 0);
+      } else if (typeof rawRecommendations === 'string' && rawRecommendations.trim().length > 0) {
+        recommendations = rawRecommendations
+          .split(/\n|;/)
+          .map(part => part.trim())
+          .filter(Boolean);
+      }
+
+      if (recommendations.length === 0) {
+        recommendations = ['Review readings with healthcare provider'];
+      }
+
+      const data = candidate as Record<string, unknown>;
 
       return {
-        controlSummary: String(parsed.controlSummary || 'Unable to assess'),
-        diurnalPattern: String(parsed.diurnalPattern || 'Insufficient data for pattern analysis'),
-        variabilityConcern: String(parsed.variabilityConcern || 'Unable to assess'),
-        keyRecommendations: Array.isArray(parsed.keyRecommendations)
-          ? parsed.keyRecommendations.map(String)
-          : ['Review with healthcare provider'],
-        peakTimes: parsed.peakTimes ? String(parsed.peakTimes) : undefined,
-        lowestTimes: parsed.lowestTimes ? String(parsed.lowestTimes) : undefined
+        controlSummary: getString(data.controlSummary, 'Unable to assess'),
+        diurnalPattern: getString(data.diurnalPattern, 'Insufficient data for pattern analysis'),
+        variabilityConcern: getString(data.variabilityConcern, 'Unable to assess'),
+        keyRecommendations: recommendations,
+        peakTimes: toOptionalString(data.peakTimes),
+        lowestTimes: toOptionalString(data.lowestTimes),
+        patientParagraph: toOptionalString(data.patientParagraph),
+        medicationRationale: toOptionalString(data.medicationRationale),
+        abpmSuggestion: toOptionalString(data.abpmSuggestion)
       };
     } catch (error) {
       logger.error('Failed to parse insights response', {
@@ -411,9 +518,11 @@ Guidelines:
   private calculateBasicStats(readings: BPReading[]) {
     const sbps = readings.map(r => r.sbp);
     const dbps = readings.map(r => r.dbp);
+    const hrs = readings.map(r => r.hr);
 
     const avgSBP = Math.round(sbps.reduce((sum, n) => sum + n, 0) / sbps.length);
     const avgDBP = Math.round(dbps.reduce((sum, n) => sum + n, 0) / dbps.length);
+    const avgHR = hrs.length > 0 ? Math.round(hrs.reduce((sum, n) => sum + n, 0) / hrs.length) : 0;
     const minSBP = Math.min(...sbps);
     const maxSBP = Math.max(...sbps);
     const minDBP = Math.min(...dbps);
@@ -426,6 +535,7 @@ Guidelines:
       count: readings.length,
       avgSBP,
       avgDBP,
+      avgHR,
       minSBP,
       maxSBP,
       minDBP,

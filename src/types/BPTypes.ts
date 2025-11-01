@@ -25,7 +25,6 @@ export interface BPWarning {
 export interface BPExtractionResult {
   success: boolean;
   readings: BPReading[];
-  insights?: BPInsights;
   rawResponse?: string;
   error?: string;
   processingTime: number;
@@ -38,6 +37,9 @@ export interface BPInsights {
   keyRecommendations: string[]; // e.g., ["Consider uptitrating antihypertensive", "Assess medication timing"]
   peakTimes?: string; // e.g., "Highest readings typically 06:00-08:00"
   lowestTimes?: string; // e.g., "Best control 18:00-20:00"
+  patientParagraph?: string; // Patient-friendly paragraph in Australian English
+  medicationRationale?: string; // Links BP control to medication regimen
+  abpmSuggestion?: string; // Explicit recommendation regarding ABPM/adherence checks/next steps
 }
 
 export interface BPValidationResult {
@@ -53,6 +55,19 @@ export interface BPDiarySession {
   imageDataUrl: string;
   readings: BPReading[];
   settings: BPDiarySettings;
+  insights?: BPInsights | null;
+  clinicalContext?: BPClinicalContext;
+  modelsUsed?: BPDiaryModelsUsed;
+}
+
+export interface BPClinicalContext {
+  medicationsText?: string;
+  backgroundText?: string;
+}
+
+export interface BPDiaryModelsUsed {
+  extraction: string;
+  reasoning?: string;
 }
 
 export interface BPDiarySettings {

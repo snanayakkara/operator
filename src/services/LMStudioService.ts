@@ -20,10 +20,12 @@ import { ModelLoadingError } from '@/types/errors.types';
  * Change these model names to easily switch between different models in LMStudio:
  * - REASONING_MODEL: Used for complex medical analysis (TAVI, PCI, AI Review, etc.)
  * - QUICK_MODEL: Used for simple formatting tasks (investigation-summary, quick-letter, etc.)
+ * - OCR_MODEL: Vision/OCR defaults (Qwen3-VL 8B Instruct for BP diary extraction)
  */
 export const MODEL_CONFIG = {
   REASONING_MODEL: 'medgemma-27b-text-it-mlx',
-  QUICK_MODEL: 'qwen/qwen3-4b-2507'
+  QUICK_MODEL: 'qwen/qwen3-4b-2507',
+  OCR_MODEL: 'qwen3-vl-8b-instruct-mlx'
 } as const;
 
 export interface LMStudioConfig {
@@ -100,8 +102,9 @@ export class LMStudioService {
         'bloods': MODEL_CONFIG.QUICK_MODEL, // Simple pathology/blood test ordering formatting
         'pre-op-plan': MODEL_CONFIG.REASONING_MODEL, // Structured pre-operative planning card generation
 
-        // Vision tasks - Use vision-capable model (gemma-3n-e4b supports vision)
-        'bp-diary-extraction': 'google/gemma-3n-e4b', // BP diary image OCR/extraction - requires vision support
+        // Vision tasks - Use dedicated OCR/vision-capable model
+        'bp-diary-extraction': MODEL_CONFIG.OCR_MODEL, // BP diary image OCR/extraction via Qwen3-VL
+        'bp-diary-insights': MODEL_CONFIG.REASONING_MODEL, // Stage 2 clinical reasoning for BP diary
 
         // All workflow buttons use default REASONING_MODEL for comprehensive medical analysis:
         // - 'quick-letter': Uses REASONING_MODEL for proper medical dictation processing
@@ -136,6 +139,7 @@ export class LMStudioService {
 
         // Vision tasks
         'bp-diary-extraction': 4000, // Increased to 4k tokens to handle large BP diaries (30+ readings)
+        'bp-diary-insights': 5000, // MedGemma 27B reasoning output with clinician + patient paragraphs
 
         // Default for unlisted agents
         'default': 4000
@@ -164,6 +168,7 @@ export class LMStudioService {
 
         // Vision tasks - may take longer due to image processing
         'bp-diary-extraction': 120000, // 2 minutes for vision processing
+        'bp-diary-insights': 180000, // 3 minutes for reasoning stage
 
         // Default for unlisted agents
         'default': 300000           // 5 minutes (existing default)
@@ -207,6 +212,20 @@ export class LMStudioService {
       LMStudioService.instance = new LMStudioService(config);
     }
     return LMStudioService.instance;
+  }
+
+  /**
+   * Default OCR/vision model for handwriting/table extraction tasks.
+   */
+  public getDefaultOCRModel(): string {
+    return MODEL_CONFIG.OCR_MODEL;
+  }
+
+  /**
+   * Default clinical reasoning model for text-only analysis tasks.
+   */
+  public getDefaultClinicalReasoningModel(): string {
+    return this.config.processorModel || MODEL_CONFIG.REASONING_MODEL;
   }
 
 
@@ -481,7 +500,8 @@ export class LMStudioService {
 
   /**
    * Process with vision-enabled agent that can accept both text and images
-   * Uses OpenAI-compatible vision API format
+   * Uses OpenAI-compatible vision API format (system + user text + inline image block).
+   * Pass an explicit model name to override agent-specific or global defaults.
    */
   public async processWithVisionAgent(
     systemPrompt: string,
@@ -579,6 +599,10 @@ export class LMStudioService {
     return result;
   }
 
+  /**
+   * Process a text-only agent (system + user messages) with optional model override.
+   * Defaults to the configured clinical reasoning model when no override is supplied.
+   */
   public async processWithAgent(
     agentPrompt: string,
     userInput: string,

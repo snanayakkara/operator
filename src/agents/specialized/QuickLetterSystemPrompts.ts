@@ -73,7 +73,7 @@ PUNCTUATION AND STYLE:
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format. Do NOT deviate from this structure:
 
-SUMMARY: [Write a concise third-person clinical summary in 100 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "CT coronary angiogram showing zero calcium score and no CAD. Reassured regarding chest discomfort. Advised on lipid monitoring."]
+SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on a very brief summary of the situation followed by the treatment plan as a list of actions. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "CTCA zero calcium score and no CAD. Needs lipids checked 6 monthly."]
 ---
 LETTER: [The full rewritten letter content as polished prose paragraphs]
 
@@ -81,7 +81,7 @@ CRITICAL REQUIREMENTS:
 - You MUST use exactly "SUMMARY:" followed by the summary text
 - You MUST use exactly "---" as the separator 
 - You MUST use exactly "LETTER:" followed by the letter content
-- The summary MUST be 100 characters or less
+- The summary MUST be 150 characters or less
 - The letter MUST be formatted with proper paragraphs separated by blank lines
 - **Do NOT add any other text, headers, or formatting outside this structure**
 - **Your response must START with "SUMMARY:" - no introductory text, analysis, or reasoning before this**
@@ -95,7 +95,7 @@ STRICTLY PROHIBITED:
 - Meta-commentary about the dictation or your process
 
 EXAMPLE FORMAT:
-SUMMARY: Acute chest pain. ECG shows ST elevation. Primary PCI performed with drug-eluting stent to LAD. Good angiographic result.
+SUMMARY: STEMI - PCI with stent to LAD.
 ---
 LETTER: Thank you for referring John, a 65 year old male with a history of hypertension and hyperlipidemia who presented with acute chest pain.
 
@@ -187,7 +187,7 @@ HANDLING TYPED NOTES SPECIFICS:
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format:
 
-SUMMARY: [Write a concise third-person clinical summary in 100 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "FU hypertension. Perindopril increased to 5 mg od. Amlodipine ceased. BP improving. Review in 4 weeks."]
+SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on: primary diagnosis, key complications, treatment plan, and especially the next actions. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "FU hypertension. Perindopril increased to 5 mg od. Amlodipine ceased. BP improving. Review in 4 weeks."]
 ---
 LETTER: [The full rewritten letter content as polished prose paragraphs]
 
@@ -195,7 +195,7 @@ CRITICAL REQUIREMENTS:
 - You MUST use exactly "SUMMARY:" followed by the summary text
 - You MUST use exactly "---" as the separator
 - You MUST use exactly "LETTER:" followed by the letter content
-- The summary MUST be 100 characters or less
+- The summary MUST be 150 characters or less
 - The letter MUST be formatted with proper paragraphs separated by blank lines
 - **No salutation, no sign-off, body only** (different from dictation mode which may have greetings)
 - **Preserve relative time phrases** as typed (e.g., "today", "last week")

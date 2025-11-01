@@ -720,7 +720,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.updatePatientSession(sessionId, {
       status: 'processing',
       errors: [],
-      processingProgress: { stage: 'processing', progress: 0 }
+      processingProgress: { phase: 'Processing', progress: 0 }
     });
 
     // Retry background processing
@@ -753,7 +753,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.updatePatientSession(sessionId, {
       status: 'processing',
       errors: [],
-      processingProgress: { stage: 'processing', progress: 0 }
+      processingProgress: { phase: 'Processing', progress: 0 }
     });
 
     // Retry background processing with new model
@@ -816,6 +816,14 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [checkedSessions]);
 
   const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
+    // Agents that MUST use agent-based processing (not streaming)
+    // These agents require structured data extraction, calculations, or specialized processing
+    const agentBasedOnly: AgentType[] = ['right-heart-cath', 'tavi-workup'];
+    if (agentBasedOnly.includes(agent)) {
+      console.log(`🔄 Agent '${agent}' requires agent-based processing, skipping streaming`);
+      return null;
+    }
+
     try {
       // Use the centralized SystemPromptLoader for all agents
       const { systemPromptLoader } = await import('@/services/SystemPromptLoader');
@@ -1213,6 +1221,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const processSessionInBackground = useCallback(async (sessionId: string, audioBlob: Blob, workflowId: AgentType) => {
     console.log('🔄 Starting background processing for session:', sessionId);
     console.log('🎯 Current selectedSessionId at start:', state.selectedSessionId);
+    let transcriptionResult = '';
 
     // Create dedicated AbortControllers for this session
     const sessionProcessingAbort = new AbortController();
@@ -1252,7 +1261,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       const audioQueue = AudioProcessingQueueService.getInstance();
       
       // Queue the transcription job with callbacks
-      const transcriptionResult = await new Promise<string>((resolve, reject) => {
+      transcriptionResult = await new Promise<string>((resolve, reject) => {
         audioQueue.addJob(sessionId, audioBlob, workflowId, {
           onProgress: (status, error) => {
             console.log(`📊 Session ${sessionId} transcription status:`, status, error || '');
@@ -1638,7 +1647,17 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       // Add RHC structured report if available (for Right Heart Cath agent)
+      console.log('🚨 STATE: Checking for rhcData in result...');
+      console.log('🚨 STATE: Result keys:', Object.keys(result));
+      console.log('🚨 STATE: Has rhcData?', 'rhcData' in result);
+
       if ('rhcData' in result) {
+        console.log('🚨 STATE: Storing RHC report to session');
+        console.log('🚨 STATE: RHC report structure:', {
+          hasRhcData: !!(result as any).rhcData,
+          hasHaemodynamics: !!(result as any).haemodynamicPressures,
+          hasCalculations: !!(result as any).calculations
+        });
         sessionUpdate.rhcReport = result as any; // Store full RHC report with structured data
       }
 
@@ -1955,6 +1974,14 @@ const OptimizedAppContent: React.FC = memo(() => {
       setTimeout(performErrorUpdates, 0);
     }
   }, [actions, lmStudioService, storeFailedAudioRecording, state.patientSessions]);
+
+  const handleBackgroundProcessing = useCallback(
+    async (sessionId: string, audioBlob: Blob, workflowId: AgentType, _transcription?: string) => {
+      console.log('♻️ Retrying background processing for session:', sessionId);
+      await processSessionInBackground(sessionId, audioBlob, workflowId);
+    },
+    [processSessionInBackground]
+  );
 
   const handleRecordingComplete = useCallback(async (audioBlob: Blob) => {
     // Store current audio blob for potential failed transcription storage

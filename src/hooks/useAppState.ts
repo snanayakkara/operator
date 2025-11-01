@@ -1137,6 +1137,11 @@ export function useAppState() {
     }, []),
 
     setRhcReport: useCallback((report: any) => {
+      console.log('🚨 ACTION: setRhcReport called with:', {
+        hasRhcData: !!report?.rhcData,
+        hasCalculations: !!report?.calculations,
+        reportKeys: report ? Object.keys(report) : []
+      });
       dispatch({ type: 'SET_RHC_REPORT', payload: report });
     }, []),
 

@@ -108,6 +108,11 @@ export class RightHeartCathAgent extends MedicalAgent {
   async process(input: string, context?: MedicalContext): Promise<RightHeartCathReport> {
     await this.initializeSystemPrompt();
 
+    // DIAGNOSTIC: Confirm process() method is being called
+    console.log('🚨 RHC AGENT: process() method STARTED');
+    console.log('🚨 RHC AGENT: Input length:', input.length, 'chars');
+    console.log('🚨 RHC AGENT: Input preview:', input.substring(0, 200));
+
     const startTime = Date.now();
     
     try {
@@ -119,17 +124,22 @@ export class RightHeartCathAgent extends MedicalAgent {
       const correctedInput = this.correctRHCTerminology(input);
 
       // Extract RHC data from input
+      console.log('🚨 RHC AGENT: Calling extractRHCData()...');
       const rhcData = this.extractRHCData(correctedInput);
+      console.log('🚨 RHC AGENT: extractRHCData() completed');
 
       // Analyze haemodynamic pressures
+      console.log('🚨 RHC AGENT: Calling extractHaemodynamicPressures()...');
       const haemodynamicPressures = this.extractHaemodynamicPressures(correctedInput);
       console.log('📊 Extracted haemodynamic pressures:', JSON.stringify(haemodynamicPressures, null, 2));
 
       // Assess cardiac output
+      console.log('🚨 RHC AGENT: Calling extractCardiacOutput()...');
       const cardiacOutput = this.extractCardiacOutput(correctedInput);
       console.log('💓 Extracted cardiac output:', JSON.stringify(cardiacOutput, null, 2));
 
       // Extract patient anthropometric data and vitals
+      console.log('🚨 RHC AGENT: Calling extractPatientData()...');
       const patientData = this.extractPatientData(correctedInput);
       console.log('👤 Extracted patient data:', JSON.stringify(patientData, null, 2));
 
@@ -140,6 +150,7 @@ export class RightHeartCathAgent extends MedicalAgent {
       const complications = this.identifyComplications(correctedInput);
 
       // Calculate all derived haemodynamic values
+      console.log('🚨 RHC AGENT: Calling calculateDerivedHaemodynamics()...');
       const calculations = this.calculateDerivedHaemodynamics(
         haemodynamicPressures,
         cardiacOutput,
@@ -197,6 +208,12 @@ export class RightHeartCathAgent extends MedicalAgent {
         patientData,
         missingCalculationFields
       };
+
+      // DIAGNOSTIC: Verify report structure before return
+      console.log('🚨 RHC AGENT: Final report has rhcData?', 'rhcData' in report);
+      console.log('🚨 RHC AGENT: Report keys:', Object.keys(report));
+      console.log('🚨 RHC AGENT: calculations present?', !!report.calculations);
+      console.log('🚨 RHC AGENT: calculations:', JSON.stringify(calculations, null, 2));
 
       // Store procedure in memory
       this.addProcedureMemory('RHC', {
