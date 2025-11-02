@@ -23,6 +23,9 @@ import {
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
 
+import cardModelUrl from '@/assets/lanyard/card.glb?url';
+import lanyardTextureUrl from '@/assets/lanyard/lanyard.png?url';
+
 import './Lanyard.css';
 
 // Extend Three.js with MeshLine for the lanyard band
@@ -170,12 +173,13 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
   };
 
   // Load 3D model - React hooks must be called unconditionally
-  const gltf = useGLTF('/assets/lanyard/card.glb', true) as any;
+  // Load 3D model via Vite URL to ensure the asset resolves in dev and build outputs
+  const gltf = useGLTF(cardModelUrl, true) as any;
   const nodes = gltf?.nodes || {};
   const materials = gltf?.materials || {};
 
   // Load lanyard texture - React hooks must be called unconditionally
-  const lanyardTexture = useTexture('/assets/lanyard/lanyard.png');
+  const lanyardTexture = useTexture(lanyardTextureUrl);
 
   if (lanyardTexture) {
     lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
@@ -362,5 +366,5 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
 }
 
 // Preload assets for faster initial render
-useGLTF.preload('/assets/lanyard/card.glb');
-useTexture.preload('/assets/lanyard/lanyard.png');
+useGLTF.preload(cardModelUrl);
+useTexture.preload(lanyardTextureUrl);

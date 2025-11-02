@@ -364,6 +364,123 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
               </div>
             </section>
 
+            {/* Clinical & Procedure Information */}
+            <section>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
+                Clinical & Procedure Information
+              </h3>
+              <div className="grid grid-cols-1 gap-4">
+                {/* Indication */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Indication
+                  </label>
+                  <select
+                    value={rhcData.indication}
+                    onChange={(e) => handleRhcDataChange('indication', e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="heart_failure">Heart Failure</option>
+                    <option value="pulmonary_hypertension">Pulmonary Hypertension</option>
+                    <option value="transplant_evaluation">Transplant Evaluation</option>
+                    <option value="cardiogenic_shock">Cardiogenic Shock</option>
+                    <option value="valvular_disease">Valvular Disease</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Clinical Presentation */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Clinical Presentation
+                  </label>
+                  <textarea
+                    value={rhcData.clinicalPresentation || ''}
+                    onChange={(e) => handleRhcDataChange('clinicalPresentation', e.target.value)}
+                    placeholder="e.g., Progressive dyspnoea NYHA class III..."
+                    rows={2}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Recent Investigations */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recent Investigations
+                  </label>
+                  <textarea
+                    value={rhcData.recentInvestigations || ''}
+                    onChange={(e) => handleRhcDataChange('recentInvestigations', e.target.value)}
+                    placeholder="e.g., Echocardiography demonstrated..."
+                    rows={2}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Vascular Access */}
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Vascular Access
+                    </label>
+                    <select
+                      value={rhcData.vascularAccess}
+                      onChange={(e) => handleRhcDataChange('vascularAccess', e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="right_antecubital">Right Antecubital</option>
+                      <option value="left_antecubital">Left Antecubital</option>
+                      <option value="right_internal_jugular">Right Internal Jugular</option>
+                      <option value="right_femoral">Right Femoral</option>
+                    </select>
+                  </div>
+
+                  {/* Catheter Details */}
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Catheter Details
+                    </label>
+                    <input
+                      type="text"
+                      value={rhcData.catheterDetails || ''}
+                      onChange={(e) => handleRhcDataChange('catheterDetails', e.target.value)}
+                      placeholder="e.g., 7 French Swan-Ganz catheter"
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Recommendations */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recommendations
+                  </label>
+                  <textarea
+                    value={rhcData.recommendations || ''}
+                    onChange={(e) => handleRhcDataChange('recommendations', e.target.value)}
+                    placeholder="e.g., Management recommendations..."
+                    rows={2}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Follow-up */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Follow-up Plan
+                  </label>
+                  <textarea
+                    value={rhcData.followUp || ''}
+                    onChange={(e) => handleRhcDataChange('followUp', e.target.value)}
+                    placeholder="e.g., Repeat RHC in 3 months..."
+                    rows={2}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </section>
+
             {/* Haemodynamic Pressures */}
             <section>
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
