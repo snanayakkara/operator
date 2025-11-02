@@ -43,10 +43,12 @@ Required sections (use exactly these headers in PLAIN TEXT):
 
 PREAMBLE (CONDITIONAL CONTENT - Include ONLY what was dictated):
 - Patient demographics (age, gender, date if provided) and stated diagnosis with indication for right heart catheterisation
+  CRITICAL: Always extract age (in years) and gender (male/female) if mentioned in dictation
 - Indication: State "The indication for the procedure was haemodynamic assessment" (minimal safe inference acceptable)
 - Clinical presentation: ONLY if symptoms/functional status were explicitly dictated, include verbatim. OTHERWISE: completely omit this paragraph
 - Recent investigations: ONLY if specific test results (echo/BNP/imaging) were dictated, include verbatim. OTHERWISE: completely omit this paragraph
 - Pre-procedure assessment: ONLY documented vital signs that were explicitly stated (BP, HR, O2 saturation, haemoglobin, weight, height)
+  CRITICAL: Always extract height (cm), weight (kg), haemoglobin (g/L), lactate (mmol/L) if mentioned - needed for Fick CO calculations
 - Vascular access and equipment: ONLY what was explicitly dictated (access site, catheter type, catheter size, guidance method)
 
 PREAMBLE EXAMPLE (when minimal context dictated - NO symptoms/investigations):

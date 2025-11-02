@@ -113,6 +113,24 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
       calculations.strokeVolumeIndex = RHCCalc.calculateSVI(calculations.cardiacIndex, patientData.heartRate);
     }
 
+    // Estimate VO2 with gender-specific formula
+    if (patientData.bsa) {
+      calculations.estimatedVO2 = RHCCalc.estimateVO2(patientData.bsa, patientData.gender);
+    }
+
+    // Fick cardiac output
+    if (calculations.estimatedVO2 && patientData.haemoglobin && patientData.sao2 && patientData.svo2) {
+      calculations.fickCO = RHCCalc.calculateFickCO(
+        calculations.estimatedVO2,
+        patientData.haemoglobin,
+        patientData.sao2,
+        patientData.svo2
+      );
+      if (calculations.fickCO && patientData.bsa) {
+        calculations.fickCI = RHCCalc.calculateCardiacIndex(calculations.fickCO, patientData.bsa);
+      }
+    }
+
     // RVSWI (Right Ventricular Stroke Work Index)
     if (paMean && calculations.strokeVolumeIndex) {
       calculations.rvswi = RHCCalc.calculateRVSWI(paMean, rapMean || 0, calculations.strokeVolumeIndex);
@@ -187,6 +205,16 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     }));
   };
 
+  const handlePatientDataChange = (
+    field: keyof RHCPatientData,
+    value: string
+  ) => {
+    setPatientData(prev => ({
+      ...prev,
+      [field]: value || undefined
+    }));
+  };
+
   const handleSave = () => {
     const updatedReport: RightHeartCathReport = {
       ...rhcReport,
@@ -233,6 +261,109 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
 
           {/* Content */}
           <div className="px-6 py-6 space-y-6">
+            {/* Patient Data */}
+            <section>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <span className="w-2 h-2 bg-cyan-500 rounded-full mr-2"></span>
+                Patient Data
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Height */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Height (cm)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={patientData.height || ''}
+                    onChange={(e) => handlePatientDataChange('height', e.target.value)}
+                    placeholder="cm"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Weight */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Weight (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={patientData.weight || ''}
+                    onChange={(e) => handlePatientDataChange('weight', e.target.value)}
+                    placeholder="kg"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Age */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Age (years)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={patientData.age || ''}
+                    onChange={(e) => handlePatientDataChange('age', e.target.value)}
+                    placeholder="years"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Gender */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Gender
+                  </label>
+                  <select
+                    value={patientData.gender || ''}
+                    onChange={(e) => handlePatientDataChange('gender', e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Haemoglobin */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Haemoglobin (g/L)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={patientData.haemoglobin || ''}
+                    onChange={(e) => handlePatientDataChange('haemoglobin', e.target.value)}
+                    placeholder="g/L"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <div className="mt-1 text-xs text-gray-500">Normal: 130-180 (M), 120-160 (F)</div>
+                </div>
+
+                {/* Lactate */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Lactate (mmol/L)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={patientData.lactate || ''}
+                    onChange={(e) => handlePatientDataChange('lactate', e.target.value)}
+                    placeholder="mmol/L"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <div className="mt-1 text-xs text-gray-500">Normal: 0.5-2.0 mmol/L</div>
+                </div>
+              </div>
+            </section>
+
             {/* Haemodynamic Pressures */}
             <section>
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -611,6 +742,35 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                 Auto-calculated from your inputs. Updates in real-time as you edit fields.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {calculatedHaemodynamics.estimatedVO2 && (
+                  <div className="bg-emerald-50 rounded-md p-3 shadow-sm border border-emerald-200">
+                    <div className="text-xs font-medium text-emerald-800">VO₂ (estimated)</div>
+                    <div className="text-lg font-bold text-emerald-900">
+                      {calculatedHaemodynamics.estimatedVO2.toFixed(0)}
+                    </div>
+                    <div className="text-xs text-emerald-700">
+                      mL/min {patientData.gender ? `(${patientData.gender})` : ''}
+                    </div>
+                  </div>
+                )}
+                {calculatedHaemodynamics.fickCO && (
+                  <div className="bg-emerald-50 rounded-md p-3 shadow-sm border border-emerald-200">
+                    <div className="text-xs font-medium text-emerald-800">Fick CO</div>
+                    <div className="text-lg font-bold text-emerald-900">
+                      {calculatedHaemodynamics.fickCO.toFixed(1)}
+                    </div>
+                    <div className="text-xs text-emerald-700">L/min (4-8)</div>
+                  </div>
+                )}
+                {calculatedHaemodynamics.fickCI && (
+                  <div className="bg-emerald-50 rounded-md p-3 shadow-sm border border-emerald-200">
+                    <div className="text-xs font-medium text-emerald-800">Fick CI</div>
+                    <div className="text-lg font-bold text-emerald-900">
+                      {calculatedHaemodynamics.fickCI.toFixed(1)}
+                    </div>
+                    <div className="text-xs text-emerald-700">L/min/m² (2.5-4.0)</div>
+                  </div>
+                )}
                 {calculatedHaemodynamics.pulmonaryVascularResistance && (
                   <div className="bg-white rounded-md p-3 shadow-sm">
                     <div className="text-xs font-medium text-gray-600">PVR</div>

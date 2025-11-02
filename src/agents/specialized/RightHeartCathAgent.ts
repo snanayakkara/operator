@@ -737,6 +737,25 @@ Note: This report was generated with limited AI processing. Clinical review is r
       patientData.weight = parseFloat(weightMatch[1]);
     }
 
+    // Extract age (years)
+    const ageMatch = input.match(/(?:age|aged)[:\s]+(\d+)\s*(?:years?|yo|y\/o)?/i);
+    if (ageMatch) {
+      patientData.age = parseFloat(ageMatch[1]);
+    }
+
+    // Extract gender
+    const genderMatch = input.match(/(?:gender|sex)[:\s]+(male|female|m|f)\b/i);
+    if (genderMatch) {
+      const genderRaw = genderMatch[1].toLowerCase();
+      if (genderRaw === 'male' || genderRaw === 'm') {
+        patientData.gender = 'male';
+      } else if (genderRaw === 'female' || genderRaw === 'f') {
+        patientData.gender = 'female';
+      } else {
+        patientData.gender = 'other';
+      }
+    }
+
     // Extract heart rate (bpm)
     const hrMatch = input.match(/heart\s+rate[:\s]+(\d+)|HR[:\s]+(\d+)/i);
     if (hrMatch) {
@@ -787,6 +806,12 @@ Note: This report was generated with limited AI processing. Clinical review is r
     const hbMatch = input.match(/h(?:ae|e)moglobin[:\s]+(\d+)|Hb[:\s]+(\d+)/i);
     if (hbMatch) {
       patientData.haemoglobin = parseFloat(hbMatch[1] || hbMatch[2]);
+    }
+
+    // Extract lactate (mmol/L)
+    const lactateMatch = input.match(/lactate[:\s]+(\d+(?:\.\d+)?)/i);
+    if (lactateMatch) {
+      patientData.lactate = parseFloat(lactateMatch[1]);
     }
 
     // Calculate BSA if height and weight available
@@ -851,9 +876,9 @@ Note: This report was generated with limited AI processing. Clinical review is r
       calculations.cardiacIndex = RHCCalc.calculateCardiacIndex(thermodilutionCO, patientData.bsa);
     }
 
-    // Estimate VO2
+    // Estimate VO2 with gender-specific formula
     if (patientData.bsa) {
-      calculations.estimatedVO2 = RHCCalc.estimateVO2(patientData.bsa);
+      calculations.estimatedVO2 = RHCCalc.estimateVO2(patientData.bsa, patientData.gender);
     }
 
     // Transpulmonary gradient

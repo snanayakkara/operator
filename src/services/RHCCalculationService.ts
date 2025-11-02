@@ -97,21 +97,41 @@ export function calculateCardiacIndex(cardiacOutput?: number, bsa?: number): num
 }
 
 /**
- * Estimate VO₂ (Oxygen Consumption) using simplified formula
- * VO₂ (mL/min) = 125 × BSA (m²)
+ * Estimate VO₂ (Oxygen Consumption) using gender-specific formula
+ *
+ * Gender-specific formulas (mL/min/m² × BSA):
+ * - Males: 150 mL/min/m² × BSA (higher metabolic rate)
+ * - Females: 130 mL/min/m² × BSA (lower metabolic rate)
+ * - Unknown/Other: 125 mL/min/m² × BSA (average)
  *
  * More accurate: VO₂ = 3 × BSA (mL O₂/min/m²) × BSA = 3 × BSA² for resting state
- * Clinical practice: 125 mL/min/m² is commonly used
+ * Clinical practice: Gender-specific multipliers account for sex-based metabolic differences
  *
  * @param bsa - Body surface area in m²
+ * @param gender - Patient gender for gender-specific estimation
  * @returns Estimated VO₂ in mL/min or undefined if BSA invalid
  */
-export function estimateVO2(bsa?: number): number | undefined {
+export function estimateVO2(bsa?: number, gender?: 'male' | 'female' | 'other'): number | undefined {
   if (!bsa || bsa <= 0) {
     return undefined;
   }
 
-  return 125 * bsa;
+  // Gender-specific VO2 estimation
+  let vo2PerBSA: number;
+
+  switch (gender) {
+    case 'male':
+      vo2PerBSA = 150; // mL/min/m² for males
+      break;
+    case 'female':
+      vo2PerBSA = 130; // mL/min/m² for females
+      break;
+    default:
+      vo2PerBSA = 125; // mL/min/m² for unknown/other (average)
+      break;
+  }
+
+  return vo2PerBSA * bsa;
 }
 
 /**

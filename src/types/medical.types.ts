@@ -988,6 +988,8 @@ export interface RightHeartCathReport extends MedicalReport {
 export interface RHCPatientData {
   height?: number; // cm
   weight?: number; // kg
+  age?: number; // years
+  gender?: 'male' | 'female' | 'other'; // for gender-specific VO2 estimation
   bsa?: number; // m² (calculated)
   bmi?: number; // kg/m² (calculated)
   heartRate?: number; // bpm
@@ -999,6 +1001,7 @@ export interface RHCPatientData {
   svo2?: number; // Mixed venous O₂ saturation (%)
   pao2?: number; // Arterial PO₂ (mmHg)
   haemoglobin?: number; // g/L
+  lactate?: number; // mmol/L
   // Volume data (for elastance calculations)
   lvesv?: number; // LV end-systolic volume (mL)
   lvesp?: number; // LV end-systolic pressure (mmHg)
