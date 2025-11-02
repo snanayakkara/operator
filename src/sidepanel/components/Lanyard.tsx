@@ -24,12 +24,14 @@ import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
 
 import cardModelUrl from '@/assets/lanyard/card.glb?url';
-import lanyardTextureUrl from '@/assets/lanyard/lanyard_blue.png?url';
+import lanyardTextureUrl from '@/assets/lanyard/lanyard.png?url';
 
 import './Lanyard.css';
 
 // Extend Three.js with MeshLine for the lanyard band
 extend({ MeshLineGeometry, MeshLineMaterial });
+
+const STRAP_TEXTURE_TILES = 32;
 
 interface LanyardProps {
   /** Camera position [x, y, z] */
@@ -188,9 +190,15 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
   // Load lanyard texture - React hooks must be called unconditionally
   const lanyardTexture = useTexture(lanyardTextureUrl);
 
-  if (lanyardTexture) {
-    lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
-  }
+  useEffect(() => {
+    if (!lanyardTexture) {
+      return;
+    }
+    lanyardTexture.wrapS = THREE.RepeatWrapping;
+    lanyardTexture.wrapT = THREE.RepeatWrapping;
+    lanyardTexture.repeat.set(STRAP_TEXTURE_TILES, 1);
+    lanyardTexture.needsUpdate = true;
+  }, [lanyardTexture]);
 
   useEffect(() => {
     if (!cardTextureUrl) {
@@ -249,6 +257,8 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
   }, [cardTextureUrl]);
 
   const cardMaterialMap = cardTexture ?? materials.base?.map;
+
+  const strapRepeat: [number, number] = lanyardTexture ? [-STRAP_TEXTURE_TILES, 1] : [-3, 1];
 
 
   // Create curve for lanyard band
@@ -422,7 +432,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
           resolution={isSmall ? [1000, 2000] : [1000, 1000]}
           useMap={lanyardTexture ? 1 : 0}
           map={lanyardTexture}
-          repeat={[-3, 1]}
+          repeat={strapRepeat}
           lineWidth={1}
         />
       </mesh>

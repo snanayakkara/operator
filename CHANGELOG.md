@@ -9,6 +9,46 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.27.0] - 2025-11-03
+
+### Fixed
+
+- **RHC Thermodilution CO Extraction**
+  - Fixed regex pattern to match `"cardiac output by thermodilution 5.4"` format
+  - Added alternative pattern: `cardiac\s+output\s+(?:via|by)\s+thermodilution[:\s,]+(\d+\.?\d*)`
+  - Now correctly extracts CO value regardless of word order
+
+- **RHC Catheter Extraction**
+  - Made French size pattern more flexible: `(\d+)[-\s]?f(?:rench)?`
+  - Made Swan-Ganz pattern more flexible: `swan[-\s]?(?:g[ae]n[zs]|gans)`
+  - Now correctly handles `"7 French SWAN GANS"` with space between words
+  - Added debug logging to catheter extraction for troubleshooting
+
+- **RHC LLM Hallucination Prevention**
+  - Added explicit anti-hallucination instructions for vascular access
+  - System prompt now requires: "If vascular access site is NOT explicitly dictated, write: 'Vascular access was obtained [site not specified]'"
+  - Prevents LLM from inferring common access sites (e.g., "right femoral") when not dictated
+
+- **RHC Card Export Dimensions**
+  - Fixed card dimensions from CSS units (`18cm`) to exact pixels (`680px × 378px`)
+  - Added `overflow: 'hidden'` to prevent content bleeding outside canvas
+  - Card preview now matches downloaded PNG exactly
+  - Resolves cut-off content in exported cards
+
+### Added
+
+- **RHC Arterial Saturation Display**
+  - Added SaO2 display in "Other Measurements" section of cardiac output
+  - Shows `"Arterial O₂ Saturation: X%"` when available from patientData
+  - Updated `renderCardiacOutputSection()` to accept optional `patientData` parameter
+  - Also shows SvO2 from patientData as fallback for mixed venous O2
+
+- **RHC Field Editor Debug Logging**
+  - Added comprehensive debug logs for CI auto-calculation
+  - Added debug logs for field editor save operations
+  - Added debug logs for display component receiving updated data
+  - Logs show calculation triggers, values, and data flow for troubleshooting
+
 ## [3.26.0] - 2025-11-03
 
 ### Fixed

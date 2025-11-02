@@ -50,6 +50,8 @@ PREAMBLE (CONDITIONAL CONTENT - Include ONLY what was dictated):
 - Pre-procedure assessment: ONLY documented vital signs that were explicitly stated (BP, HR, O2 saturation, haemoglobin, weight, height)
   CRITICAL: Always extract height (cm), weight (kg), haemoglobin (g/L), lactate (mmol/L) if mentioned - needed for Fick CO calculations
 - Vascular access and equipment: ONLY what was explicitly dictated (access site, catheter type, catheter size, guidance method)
+  CRITICAL: If vascular access site is NOT explicitly dictated, write: "Vascular access was obtained [site not specified]"
+  DO NOT infer or assume common access sites (right femoral, right internal jugular, etc.) - only state what was dictated
 
 PREAMBLE EXAMPLE (when minimal context dictated - NO symptoms/investigations):
 "[Age] year old [gender] with [stated diagnosis only]. Pre-procedure assessment demonstrated resting blood pressure [X/X] mmHg, heart rate [X] bpm, and haemoglobin [X] g/L. Vascular access was obtained via [stated access site] using a [X] French [catheter type] catheter."
@@ -218,8 +220,8 @@ export const RightHeartCathMedicalPatterns = {
   lvedp: /lvedp\s+(?:imputed\s+)?[:\s,]*(\d+)/gi,
 
   // Cardiac output patterns - enhanced to handle missing units and comma separators
-  // Handles "thermodilution cardiac output 5.4", "cardiac output 5.4 via thermodilution", "cardiac output, thermodilution, 5.4"
-  thermodilutionCO: /(?:(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)|cardiac\s+output\s+(\d+\.?\d*)\s+(?:via|by)\s+thermodilution|cardiac\s+output,\s*thermodilution,\s*(\d+\.?\d*))(?:\s*l\/min)?/gi,
+  // Handles "thermodilution cardiac output 5.4", "cardiac output 5.4 via thermodilution", "cardiac output by thermodilution 5.4", "cardiac output, thermodilution, 5.4"
+  thermodilutionCO: /(?:(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)|cardiac\s+output\s+(\d+\.?\d*)\s+(?:via|by)\s+thermodilution|cardiac\s+output\s+(?:via|by)\s+thermodilution[:\s,]+(\d+\.?\d*)|cardiac\s+output,\s*thermodilution,\s*(\d+\.?\d*))(?:\s*l\/min)?/gi,
   thermodilutionCI: /thermodilution\s+cardiac\s+index[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
   // Fick method - handle common transcription errors: "thick" or "tick" instead of "fick"
   fickCO: /(?:fick|thick|tick)\s+(?:cardiac\s+output|co)[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,
@@ -263,8 +265,9 @@ export const RightHeartCathMedicalPatterns = {
   haemodynamicAssessment: /haemodynamic\s+assessment/gi,
   
   // Catheter specifications - handles "7 French swan GANS catheter" (Whisper transcription error for Swan-Ganz)
-  frenchSize: /(\d+)[-\s]?f(?:rench)?\s+(?:catheter|sheath|swan)/gi,
-  swanGanz: /swan[-\s]?(?:g[ae]n[zs]|gans)\s+catheter/gi,
+  // Made frenchSize more flexible to match "7 French SWAN GANS" (space between French and SWAN)
+  frenchSize: /(\d+)[-\s]?f(?:rench)?/gi,
+  swanGanz: /swan[-\s]?(?:g[ae]n[zs]|gans)/gi,
   thermodilutionCatheter: /thermodilution\s+catheter/gi,
   
   // Measurements with units

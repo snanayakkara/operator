@@ -90,7 +90,7 @@ Edit `OptimizedApp.tsx` line ~3812:
 **Option A – Use the built-in settings pane (recommended):**
 1. Click the gear icon in the side panel to open Operator Settings.
 2. In the Dashboard tab, scroll to **Lanyard Branding**.
-3. Upload a PNG/JPEG (≤2MB). Changes sync instantly to the side panel.
+3. Upload a square PNG/JPEG (≤2MB). The 3D card uses the same artwork on both sides and reveals roughly the top 75% of the image to preserve the badge’s aspect ratio. Changes sync instantly to the side panel.
 4. Use *Restore Default* to fall back to the texture packaged in `card.glb`.
 
 **Option B – Hardcode the asset in code:**

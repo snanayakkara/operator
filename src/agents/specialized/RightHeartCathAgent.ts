@@ -720,6 +720,14 @@ Note: This report was generated with limited AI processing. Clinical review is r
     const size = frenchMatch ? frenchMatch[1] : null;
     const isSwanGanz = !!swanGanzMatch;
 
+    console.log('🔍 Catheter extraction:', {
+      input: input.substring(input.length - 50),
+      frenchMatch: frenchMatch?.[0],
+      size,
+      swanGanzMatch: swanGanzMatch?.[0],
+      isSwanGanz
+    });
+
     // Combine size and type when both are present
     if (size && isSwanGanz) {
       return `${size}F Swan-Ganz catheter`;

@@ -10,6 +10,7 @@ import {
 } from '@/config/lanyardPreferences';
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+const CARD_VISIBLE_VERTICAL_RATIO = 0.755; // Approximate UV coverage used by the 3D model
 
 export const LanyardPreferencesSection: React.FC = () => {
   const [preference, setPreference] = useState<LanyardTexturePreference | null>(null);
@@ -17,6 +18,7 @@ export const LanyardPreferencesSection: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [textureDimensions, setTextureDimensions] = useState<{ width: number; height: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -63,6 +65,19 @@ export const LanyardPreferencesSection: React.FC = () => {
     const id = window.setTimeout(() => setStatusMessage(null), 4000);
     return () => window.clearTimeout(id);
   }, [statusMessage]);
+
+  useEffect(() => {
+    if (!preference?.dataUrl) {
+      setTextureDimensions(null);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      setTextureDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.src = preference.dataUrl;
+  }, [preference?.dataUrl]);
 
   const handleSelectClick = () => {
     fileInputRef.current?.click();
@@ -185,13 +200,14 @@ export const LanyardPreferencesSection: React.FC = () => {
       {isLoading ? (
         <div className="text-sm text-ink-tertiary">Loading current artwork…</div>
       ) : (
+        <>
         <div className="grid gap-4 md:grid-cols-[220px,1fr]">
           <div className="rounded-lg border border-dashed border-line-primary bg-surface-primary aspect-[3/4] flex items-center justify-center overflow-hidden">
             {preference?.dataUrl ? (
               <img
                 src={preference.dataUrl}
                 alt="Custom lanyard artwork preview"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             ) : (
               <div className="flex flex-col items-center text-ink-tertiary text-xs space-y-2">
@@ -243,6 +259,12 @@ export const LanyardPreferencesSection: React.FC = () => {
               MB.
             </p>
 
+            {textureDimensions && (
+              <p className="text-xs text-ink-secondary">
+                Uploaded texture: {textureDimensions.width}×{textureDimensions.height} px. The 3D card shows roughly the top {Math.round(CARD_VISIBLE_VERTICAL_RATIO * 100)}% of the square image to preserve aspect ratio.
+              </p>
+            )}
+
             {preference?.fileName && (
               <div className="text-xs text-ink-secondary">
                 Current file: <span className="font-medium text-ink-primary">{preference.fileName}</span>{' '}
@@ -251,6 +273,42 @@ export const LanyardPreferencesSection: React.FC = () => {
             )}
           </div>
         </div>
+
+        {preference?.dataUrl && (
+          <div className="mt-4 space-y-2">
+            <div className="text-xs font-medium text-ink-secondary uppercase tracking-wide">Lanyard Preview</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="aspect-[5/7] rounded-lg border border-line-primary bg-surface-primary overflow-hidden flex flex-col">
+                <div
+                  className="flex-1 w-full"
+                  style={{
+                    backgroundImage: `url(${preference.dataUrl})`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'left top',
+                    backgroundSize: `200% ${Math.round((1 / CARD_VISIBLE_VERTICAL_RATIO) * 100)}%`
+                  }}
+                />
+                <div className="px-2 py-1 text-[10px] text-ink-tertiary text-center">Front</div>
+              </div>
+              <div className="aspect-[5/7] rounded-lg border border-line-primary bg-surface-primary overflow-hidden flex flex-col">
+                <div
+                  className="flex-1 w-full"
+                  style={{
+                    backgroundImage: `url(${preference.dataUrl})`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right top',
+                    backgroundSize: `200% ${Math.round((1 / CARD_VISIBLE_VERTICAL_RATIO) * 100)}%`
+                  }}
+                />
+                <div className="px-2 py-1 text-[10px] text-ink-tertiary text-center">Back</div>
+              </div>
+            </div>
+            <p className="text-[10px] text-ink-tertiary">
+              Tip: Keep important artwork near the upper half of each side; the front uses the left portion of the image, the back uses the right portion, and the bottom ~{Math.round((1 - CARD_VISIBLE_VERTICAL_RATIO) * 100)}% remains hidden behind the card edge.
+            </p>
+          </div>
+        )}
+        </>
       )}
 
       <input

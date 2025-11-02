@@ -9,51 +9,34 @@
 import type { ProcessingTimeEstimate } from '@/services/ProcessingTimePredictor';
 
 /**
- * Calculate adaptive remaining time with velocity-based ETA
+ * Calculate remaining time with pure time-based countdown
  *
- * Blends initial prediction with actual velocity as processing progresses:
- * - 0-5% progress: 100% prediction-based
- * - 5-70% progress: Gradual blend from prediction to velocity
- * - 70%+ progress: 70% velocity-based, 30% prediction
+ * Simple linear countdown from initial prediction:
+ * - Makes prediction once at start based on audio duration and agent type
+ * - Counts down linearly: prediction - elapsed time
+ * - Can go negative if prediction was too optimistic (shows "+X.Xs" overtime)
+ * - ProcessingTimePredictor learns from actual times to improve future predictions
  *
  * @param prediction - Initial time prediction from ProcessingTimePredictor
  * @param currentProgress - Current progress percentage (0-100)
- * @param velocity - Progress per millisecond (progress / elapsedTime)
+ * @param _velocity - Unused (marked with underscore)
  * @param elapsedTime - Time elapsed since start in milliseconds
- * @returns Remaining time in milliseconds
+ * @returns Remaining time in milliseconds (can be negative for overtime)
  */
 export function calculateAdaptiveRemainingTime(
   prediction: ProcessingTimeEstimate | null,
   currentProgress: number,
-  velocity: number,
-  _elapsedTime: number
+  _velocity: number,
+  elapsedTime: number
 ): number | null {
+  // Hide countdown when complete
   if (!prediction || currentProgress >= 100) {
     return null;
   }
 
-  const remainingProgress = 100 - currentProgress;
-
-  // If we haven't made much progress yet, trust the prediction
-  if (currentProgress < 5 || velocity === 0) {
-    const remainingProgressRatio = remainingProgress / 100;
-    return prediction.estimatedDurationMs * remainingProgressRatio;
-  }
-
-  // Calculate velocity-based projection
-  const projectedTimeRemaining = remainingProgress / velocity;
-
-  // Calculate prediction-based estimate
-  const remainingProgressRatio = remainingProgress / 100;
-  const predictionBasedRemaining = prediction.estimatedDurationMs * remainingProgressRatio;
-
-  // Blend prediction with velocity (trust velocity more as we progress)
-  // At 0% progress: 100% prediction, 0% velocity
-  // At 70%+ progress: 30% prediction, 70% velocity
-  const progressWeight = Math.min(currentProgress / 100, 0.7);
-  const adaptiveETA = predictionBasedRemaining * (1 - progressWeight) + projectedTimeRemaining * progressWeight;
-
-  return Math.max(0, adaptiveETA);
+  // Pure time-based countdown: prediction - elapsed time
+  // Can go negative if prediction was too optimistic (learning feedback)
+  return prediction.estimatedDurationMs - elapsedTime;
 }
 
 /**

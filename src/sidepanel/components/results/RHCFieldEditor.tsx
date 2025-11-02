@@ -165,15 +165,19 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     const coValue = cardiacOutput.thermodilution.co;
     const bsaValue = patientData.bsa; // Already a number from useMemo calculation
 
+    console.log('🔢 Field Editor: Auto-calc CI triggered', { coValue, bsaValue });
+
     if (coValue && bsaValue) {
       const co = parseFloat(coValue);
 
       if (!isNaN(co) && bsaValue > 0) {
         const calculatedCI = RHCCalc.calculateCardiacIndex(co, bsaValue);
+        console.log('🔢 Field Editor: Calculated CI:', calculatedCI, 'from CO:', co, 'BSA:', bsaValue);
         if (calculatedCI !== undefined) {
           const ciString = calculatedCI.toFixed(2);
           // Only update if different to avoid infinite loops
           if (cardiacOutput.thermodilution.ci !== ciString) {
+            console.log('🔢 Field Editor: Updating CI from', cardiacOutput.thermodilution.ci, 'to', ciString);
             setCardiacOutput(prev => ({
               ...prev,
               thermodilution: {
@@ -181,9 +185,13 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                 ci: ciString
               }
             }));
+          } else {
+            console.log('🔢 Field Editor: CI already correct:', ciString);
           }
         }
       }
+    } else {
+      console.log('🔢 Field Editor: Missing CO or BSA for CI calculation');
     }
   }, [cardiacOutput.thermodilution.co, patientData.bsa]);
 
@@ -284,6 +292,12 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
       patientData,
       calculations: calculatedHaemodynamics // Include recalculated values
     };
+
+    console.log('💾 Field Editor: Saving report with cardiacOutput:', {
+      thermodilution: cardiacOutput.thermodilution,
+      fick: cardiacOutput.fick,
+      calculations: calculatedHaemodynamics
+    });
 
     onSave(updatedReport);
   };

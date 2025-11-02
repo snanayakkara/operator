@@ -42,15 +42,16 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
   return (
     <div
       style={{
-        width: '18cm',
-        height: '10cm',
+        width: '680px', // 18cm at 96 DPI (exact pixel dimensions)
+        height: '378px', // 10cm at 96 DPI
         fontFamily: 'Avenir, "Avenir Next", system-ui, -apple-system, sans-serif',
         backgroundColor: '#FFFFFF',
         padding: '16px',
         boxSizing: 'border-box',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr 1fr',
-        gap: '0'
+        gap: '0',
+        overflow: 'hidden' // Prevent content from bleeding outside
       }}
     >
       {/* Column 1: Haemodynamic Pressures */}

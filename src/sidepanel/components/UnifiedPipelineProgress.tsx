@@ -166,7 +166,9 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       aria-label="Processing pipeline progress"
     >
       {/* Circular Timer (Large, Prominent) - Responsive sizing */}
-      {showCircularTimer && remainingTime !== null && remainingTime > 500 && (
+      {showCircularTimer &&
+       remainingTime !== null &&
+       progress.progress < 100 && (
         <div className="flex justify-center py-6 border-b border-gray-100">
           {/* Desktop: 240px, Tablet: 200px, Mobile: 160px */}
           <div className="w-40 h-40 sm:w-52 sm:h-52 md:w-60 md:h-60">

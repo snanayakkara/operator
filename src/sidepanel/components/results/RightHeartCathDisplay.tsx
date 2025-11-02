@@ -174,7 +174,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     }
 
     return null;
-  }, [rhcReport, results]);
+  }, [rhcReport, results, editedRHCReport]);
 
   const toggleSection = useCallback((sectionKey: string) => {
     setExpandedSections(prev => {
@@ -273,6 +273,12 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
   // Handle field editor save
   const handleFieldEditorSave = useCallback((updatedReport: RightHeartCathReport) => {
+    console.log('📥 Display: Received updated report from field editor:', {
+      thermodilution: updatedReport.cardiacOutput.thermodilution,
+      fick: updatedReport.cardiacOutput.fick,
+      calculations: updatedReport.calculations
+    });
+
     setEditedRHCReport(updatedReport);
     setIsEditingFields(false);
 
@@ -706,7 +712,7 @@ const renderPressuresSection = (pressures: HaemodynamicPressures) => (
   </div>
 );
 
-const renderCardiacOutputSection = (cardiacOutput: CardiacOutput) => (
+const renderCardiacOutputSection = (cardiacOutput: CardiacOutput, patientData?: { sao2?: number; svo2?: number }) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div className="bg-gray-50 p-4 rounded-lg">
       <h4 className="font-medium text-gray-900 mb-2">Thermodilution</h4>
@@ -733,11 +739,14 @@ const renderCardiacOutputSection = (cardiacOutput: CardiacOutput) => (
     <div className="bg-gray-50 p-4 rounded-lg">
       <h4 className="font-medium text-gray-900 mb-2">Other Measurements</h4>
       <div className="space-y-1 text-sm">
-        {cardiacOutput.mixedVenousO2 && (
-          <div>Mixed Venous O₂: <span className="font-mono">{cardiacOutput.mixedVenousO2}</span></div>
+        {patientData?.sao2 && (
+          <div>Arterial O₂ Saturation: <span className="font-mono">{patientData.sao2}%</span></div>
+        )}
+        {(cardiacOutput.mixedVenousO2 || patientData?.svo2) && (
+          <div>Mixed Venous O₂: <span className="font-mono">{cardiacOutput.mixedVenousO2 || patientData?.svo2}%</span></div>
         )}
         {cardiacOutput.wedgeSaturation && (
-          <div>Wedge Saturation: <span className="font-mono">{cardiacOutput.wedgeSaturation}</span></div>
+          <div>Wedge Saturation: <span className="font-mono">{cardiacOutput.wedgeSaturation}%</span></div>
         )}
       </div>
     </div>
@@ -800,7 +809,7 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
       return renderPressuresSection(haemodynamicPressures);
 
     case 'cardiac_output':
-      return renderCardiacOutputSection(cardiacOutput);
+      return renderCardiacOutputSection(cardiacOutput, rhcData.patientData);
 
     case 'calculations':
       if (!rhcData.calculations || Object.keys(rhcData.calculations).length === 0) {
