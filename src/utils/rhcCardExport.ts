@@ -1,14 +1,15 @@
 /**
  * RHC Card Export Utility
  *
- * Generates high-resolution 13×13cm PNG cards from Right Heart Catheterisation data.
+ * Generates high-resolution 18×10cm PNG cards from Right Heart Catheterisation data.
  * Uses html2canvas to render React components to canvas, then exports as PNG.
  *
  * Technical Specifications:
- * - Card Size: 13cm × 13cm (492px × 492px at 96 DPI)
- * - Export Resolution: 300 DPI (1535px × 1535px)
+ * - Card Size: 18cm × 10cm (680px × 378px at 96 DPI)
+ * - Export Resolution: 300 DPI (2126px × 1181px)
  * - Scale Factor: 3.125 (300 DPI / 96 DPI)
  * - File Format: PNG with optimal compression
+ * - Designed for embedding in Xestro EMR "Findings" section
  *
  * Workflow:
  * 1. Create temporary DOM container
@@ -76,8 +77,10 @@ export async function exportRHCCard(
           }
 
           // Capture at 300 DPI (scale factor: 3.125)
-          // 13cm at 96 DPI = 492px
-          // 13cm at 300 DPI = 1535px
+          // 18cm at 96 DPI = 680px
+          // 18cm at 300 DPI = 2126px
+          // 10cm at 96 DPI = 378px
+          // 10cm at 300 DPI = 1181px
           // Scale factor = 300 / 96 = 3.125
           const canvas = await html2canvas(cardElement, {
             scale: 3.125, // 300 DPI resolution
@@ -85,8 +88,8 @@ export async function exportRHCCard(
             logging: false, // Disable console logs
             useCORS: true, // Handle cross-origin images if any
             allowTaint: false,
-            width: 492, // 13cm at 96 DPI
-            height: 492
+            width: 680, // 18cm at 96 DPI
+            height: 378 // 10cm at 96 DPI
           });
 
           // 4. Convert canvas to blob
@@ -231,8 +234,8 @@ export async function generateRHCCardBlob(
             logging: false,
             useCORS: true,
             allowTaint: false,
-            width: 492,
-            height: 492
+            width: 680, // 18cm at 96 DPI
+            height: 378 // 10cm at 96 DPI
           });
 
           canvas.toBlob(
@@ -308,8 +311,8 @@ export async function previewRHCCard(
             logging: false,
             useCORS: true,
             allowTaint: false,
-            width: 492,
-            height: 492
+            width: 680, // 18cm at 96 DPI
+            height: 378 // 10cm at 96 DPI
           });
 
           // Convert to data URL for preview
