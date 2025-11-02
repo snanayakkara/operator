@@ -212,6 +212,19 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       return;
     }
 
+    // DEBUG: Verify we're using edited data if available
+    console.log('📤 Export Card - Data Source:', {
+      hasEditedReport: !!editedRHCReport,
+      usingEditedData: effectiveRHCData === editedRHCReport,
+      pressures: {
+        ra: effectiveRHCData.haemodynamicPressures.ra,
+        rv: effectiveRHCData.haemodynamicPressures.rv,
+        pa: effectiveRHCData.haemodynamicPressures.pa,
+        pcwp: effectiveRHCData.haemodynamicPressures.pcwp
+      },
+      cardiacOutput: effectiveRHCData.cardiacOutput
+    });
+
     // Validate data completeness
     const validation = validateRHCDataForExport(effectiveRHCData);
     if (!validation.valid) {
@@ -254,7 +267,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       alert('Failed to generate card preview. Please try again.');
       setButtonStates(prev => ({ ...prev, exporting: false }));
     }
-  }, [effectiveRHCData, selectedPatientName]);
+  }, [effectiveRHCData, selectedPatientName, editedRHCReport]);
 
   // Handle field editor save
   const handleFieldEditorSave = useCallback((updatedReport: RightHeartCathReport) => {

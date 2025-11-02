@@ -66,7 +66,7 @@ export async function exportRHCCard(
       );
 
       // 3. Wait for rendering to complete, then capture with html2canvas
-      // Use setTimeout to ensure React has finished rendering
+      // Use setTimeout to ensure React has finished rendering (300ms for reliable state propagation)
       setTimeout(async () => {
         try {
           const cardElement = container.querySelector('div') as HTMLElement;
@@ -130,7 +130,7 @@ export async function exportRHCCard(
           document.body.removeChild(container);
           reject(error);
         }
-      }, 100); // 100ms delay for React rendering
+      }, 300); // 300ms delay for React rendering and state propagation
     } catch (error) {
       reject(error);
     }
@@ -258,7 +258,7 @@ export async function generateRHCCardBlob(
           document.body.removeChild(container);
           reject(error);
         }
-      }, 100);
+      }, 300); // 300ms delay for React rendering and state propagation
     } catch (error) {
       reject(error);
     }
@@ -325,7 +325,7 @@ export async function previewRHCCard(
           document.body.removeChild(container);
           reject(error);
         }
-      }, 100);
+      }, 300); // 300ms delay for React rendering and state propagation
     } catch (error) {
       reject(error);
     }
