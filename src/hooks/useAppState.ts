@@ -1237,7 +1237,12 @@ export function useAppState() {
     updatePatientSession: useCallback((id: string, updates: Partial<PatientSession>) => {
       dispatch({ type: 'UPDATE_PATIENT_SESSION', payload: { id, updates } });
     }, []),
-    
+
+    // Convenience method for updating RHC report in a session
+    updateSessionRhcReport: useCallback((sessionId: string, rhcReport: any) => {
+      dispatch({ type: 'UPDATE_PATIENT_SESSION', payload: { id: sessionId, updates: { rhcReport } } });
+    }, []),
+
     removePatientSession: useCallback((id: string) => {
       dispatch({ type: 'REMOVE_PATIENT_SESSION', payload: id });
     }, []),

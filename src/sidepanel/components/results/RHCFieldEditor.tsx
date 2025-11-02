@@ -160,6 +160,66 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     return calculations;
   }, [pressures, cardiacOutput, patientData]);
 
+  // Auto-calculate thermodilution CI from CO + BSA
+  useEffect(() => {
+    const coValue = cardiacOutput.thermodilution.co;
+    const bsaValue = patientData.bsa; // Already a number from useMemo calculation
+
+    if (coValue && bsaValue) {
+      const co = parseFloat(coValue);
+
+      if (!isNaN(co) && bsaValue > 0) {
+        const calculatedCI = RHCCalc.calculateCardiacIndex(co, bsaValue);
+        if (calculatedCI !== undefined) {
+          const ciString = calculatedCI.toFixed(2);
+          // Only update if different to avoid infinite loops
+          if (cardiacOutput.thermodilution.ci !== ciString) {
+            setCardiacOutput(prev => ({
+              ...prev,
+              thermodilution: {
+                ...prev.thermodilution,
+                ci: ciString
+              }
+            }));
+          }
+        }
+      }
+    }
+  }, [cardiacOutput.thermodilution.co, patientData.bsa]);
+
+  // Auto-calculate Fick CO/CI from saturations + haemoglobin + BSA
+  useEffect(() => {
+    const fickCO = calculatedHaemodynamics.fickCO;
+    const fickCI = calculatedHaemodynamics.fickCI;
+
+    // Sync calculated Fick values to input fields
+    if (fickCO !== undefined) {
+      const coString = fickCO.toFixed(2);
+      if (cardiacOutput.fick.co !== coString) {
+        setCardiacOutput(prev => ({
+          ...prev,
+          fick: {
+            ...prev.fick,
+            co: coString
+          }
+        }));
+      }
+    }
+
+    if (fickCI !== undefined) {
+      const ciString = fickCI.toFixed(2);
+      if (cardiacOutput.fick.ci !== ciString) {
+        setCardiacOutput(prev => ({
+          ...prev,
+          fick: {
+            ...prev.fick,
+            ci: ciString
+          }
+        }));
+      }
+    }
+  }, [calculatedHaemodynamics.fickCO, calculatedHaemodynamics.fickCI]);
+
   const handlePressureChange = (
     chamber: keyof HaemodynamicPressures,
     field: string,
@@ -360,6 +420,24 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <div className="mt-1 text-xs text-gray-500">Normal: 0.5-2.0 mmol/L</div>
+                </div>
+
+                {/* Arterial O2 Saturation (SaO2) */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Arterial O₂ Saturation (SaO₂) %
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    value={patientData.sao2 || ''}
+                    onChange={(e) => handlePatientDataChange('sao2', e.target.value)}
+                    placeholder="%"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <div className="mt-1 text-xs text-gray-500">Normal: 95-100%</div>
                 </div>
               </div>
             </section>

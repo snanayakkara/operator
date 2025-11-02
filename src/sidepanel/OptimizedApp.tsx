@@ -3809,6 +3809,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
                 rhcReport={displayData.isDisplayingSession ? displayData.rhcReport : state.rhcReport}
+                onUpdateRhcReport={displayData.isDisplayingSession && stableSelectedSessionId
+                  ? (rhcReport: any) => actions.updateSessionRhcReport(stableSelectedSessionId, rhcReport)
+                  : undefined}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                 revisionPanel={revisionPanelData}

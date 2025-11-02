@@ -106,6 +106,7 @@ interface OptimizedResultsPanelProps {
   preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan card and JSON metadata
   // Right Heart Cath structured data
   rhcReport?: any; // RightHeartCathReport with haemodynamic calculations
+  onUpdateRhcReport?: (rhcReport: any) => void; // Callback to persist edited RHC report to session
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
@@ -193,6 +194,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   preOpPlanData,
   // Right Heart Cath structured data
   rhcReport,
+  onUpdateRhcReport,
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
@@ -1096,6 +1098,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               results={results}
               onCopy={onCopy}
               onInsertToEMR={onInsertToEMR}
+              onUpdateRhcReport={onUpdateRhcReport}
               originalTranscription={originalTranscription}
               onTranscriptionCopy={onTranscriptionCopy}
               onTranscriptionInsert={onTranscriptionInsert}

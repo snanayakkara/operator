@@ -42,6 +42,7 @@ interface RightHeartCathDisplayProps {
   results?: string; // Raw fallback for existing sessions
   onCopy?: (text: string) => void;
   onInsertToEMR?: (text: string) => void;
+  onUpdateRhcReport?: (rhcReport: RightHeartCathReport) => void; // Callback to persist edited data
   className?: string;
   // Transcription section props
   originalTranscription?: string;
@@ -92,6 +93,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   results,
   onCopy,
   onInsertToEMR,
+  onUpdateRhcReport,
   className = '',
   originalTranscription,
   onTranscriptionCopy,
@@ -273,7 +275,12 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const handleFieldEditorSave = useCallback((updatedReport: RightHeartCathReport) => {
     setEditedRHCReport(updatedReport);
     setIsEditingFields(false);
-  }, []);
+
+    // Persist edited data to session storage
+    if (onUpdateRhcReport) {
+      onUpdateRhcReport(updatedReport);
+    }
+  }, [onUpdateRhcReport]);
 
   // Handle field editor cancel
   const handleFieldEditorCancel = useCallback(() => {
