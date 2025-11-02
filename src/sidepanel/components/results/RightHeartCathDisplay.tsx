@@ -803,7 +803,7 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
       return renderCardiacOutputSection(cardiacOutput);
 
     case 'calculations':
-      if (!rhcData.calculations) {
+      if (!rhcData.calculations || Object.keys(rhcData.calculations).length === 0) {
         return <div className="text-gray-500 italic">No calculated haemodynamics available</div>;
       }
       return <CalculatedHaemodynamicsDisplay calculations={rhcData.calculations} />;

@@ -89,10 +89,9 @@ Exercise testing (if performed):
 "Straight leg raising exercise was performed for 2 minutes with repeat haemodynamic measurements demonstrating [describe pressure changes and exercise response]."
 
 CONCLUSION:
-- Haemodynamic profile interpretation with clinical significance
-- Assessment of pulmonary pressures and cardiac function
-- Management recommendations based on findings
-- Follow-up requirements and monitoring plan
+- Extremely concise 1-2 sentence summary only
+- Primary haemodynamic finding + cardiac output status + notable abnormalities
+- Example: "Moderate pulmonary hypertension, with preserved cardiac output and normal left sided pressures. Significant anaemia noted."
 
 CLINICAL LANGUAGE REQUIREMENTS:
 - Australian spelling: catheterisation, haemodynamic, colour, recognised, anaesthesia
@@ -178,9 +177,10 @@ RVSWI [value] (calculated from above)
 - Use flowing clinical language for non-haemodynamic elements: "Vascular access was obtained via...", "Laboratory assessment demonstrated..."
 
 CONCLUSION:
-- should be kept concise and focused, aiming for 2-3 sentences
-- Interpret haemodynamic profile in clinical narrative
-- Provide assessment and recommendations in professional language
+- MUST be extremely concise: 1-2 sentences maximum (not paragraphs)
+- State primary finding, cardiac output status, and notable abnormalities only
+- NO management recommendations, NO follow-up plans, NO detailed interpretations
+- Example format: "Moderate pulmonary hypertension, with preserved cardiac output and normal left sided pressures. Significant anaemia noted."
 
 CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or numbered sections. Preserve all medical facts accurately with Australian spelling (catheterisation, haemodynamic) and embed measurements naturally in sentences with proper units (mmHg, L/min, L/min/m², %, g/L, mmol/L).`
   }

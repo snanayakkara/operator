@@ -466,6 +466,22 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                     <option value="valvular_disease">Valvular Disease</option>
                     <option value="other">Other</option>
                   </select>
+
+                  {/* Custom indication text input (shown when "Other" is selected) */}
+                  {rhcData.indication === 'other' && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Specify Other Indication
+                      </label>
+                      <input
+                        type="text"
+                        value={rhcData.indicationOther || ''}
+                        onChange={(e) => handleRhcDataChange('indicationOther', e.target.value)}
+                        placeholder="e.g., Chronic thromboembolic disease"
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Clinical Presentation */}

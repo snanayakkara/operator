@@ -1076,6 +1076,7 @@ export interface CalculatedHaemodynamics {
 export interface RightHeartCathData {
   procedureType: 'Right Heart Catheterisation';
   indication: RHCIndication;
+  indicationOther?: string; // Custom indication text when indication is "other"
   clinicalPresentation: string;
   recentInvestigations: string;
   vascularAccess: VenousAccess;
@@ -1153,12 +1154,15 @@ export type VenousAccess =
   | 'right_internal_jugular'
   | 'right_femoral';
 
-export type RHCIndication = 
+export type RHCIndication =
   | 'heart_failure'
   | 'pulmonary_hypertension'
   | 'transplant_evaluation'
   | 'haemodynamic_assessment'
-  | 'cardiomyopathy_evaluation';
+  | 'cardiomyopathy_evaluation'
+  | 'cardiogenic_shock'
+  | 'valvular_disease'
+  | 'other';
 
 // Batch AI Review specific types
 export interface PatientAppointment {

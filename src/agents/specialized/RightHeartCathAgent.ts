@@ -158,15 +158,29 @@ export class RightHeartCathAgent extends MedicalAgent {
       );
       console.log('🧮 Calculated haemodynamics:', JSON.stringify(calculations, null, 2));
 
+      // Auto-populate calculated CI and Fick CO/CI back into cardiacOutput for display/export
+      if (calculations.cardiacIndex !== undefined && !cardiacOutput.thermodilution.ci) {
+        cardiacOutput.thermodilution.ci = calculations.cardiacIndex.toFixed(2);
+      }
+      if (calculations.fickCO !== undefined && !cardiacOutput.fick.co) {
+        cardiacOutput.fick.co = calculations.fickCO.toFixed(2);
+      }
+      if (calculations.fickCI !== undefined && !cardiacOutput.fick.ci) {
+        cardiacOutput.fick.ci = calculations.fickCI.toFixed(2);
+      }
+
       // Generate structured report content
-      const reportContent = await this.generateStructuredReport(
-        rhcData, 
-        haemodynamicPressures, 
-        cardiacOutput, 
+      let reportContent = await this.generateStructuredReport(
+        rhcData,
+        haemodynamicPressures,
+        cardiacOutput,
         exerciseHaemodynamics,
         complications,
         correctedInput
       );
+
+      // Apply post-processing formatting to report output
+      reportContent = this.formatReportOutput(reportContent);
 
       // Parse response into sections
       const sections = this.parseResponse(reportContent, context);
@@ -318,6 +332,41 @@ export class RightHeartCathAgent extends MedicalAgent {
     }
 
     return correctedText;
+  }
+
+  /**
+   * Format the generated report output for consistent styling
+   * Applied AFTER LLM generation to fix spacing, capitalization, and phrasing
+   */
+  private formatReportOutput(reportContent: string): string {
+    let formatted = reportContent;
+
+    // Fix unit spacing: "168 cm" → "168cm", "72 kg" → "72kg"
+    // Only applies to height/weight/vital signs, NOT to pressure measurements
+    formatted = formatted.replace(/(\d+)\s+(cm|kg)\b/g, '$1$2');
+
+    // Fix conjunction: "mmHg, heart rate" → "mmHg with a heart rate"
+    formatted = formatted.replace(/mmHg,\s+heart\s+rate/gi, 'mmHg with a heart rate');
+
+    // Fix Swan-Ganz capitalization variants
+    formatted = formatted.replace(/swan\s+gans/gi, 'Swan-Ganz');
+    formatted = formatted.replace(/swan\s+ganz/gi, 'Swan-Ganz');
+    formatted = formatted.replace(/SWAN\s+GANS/g, 'Swan-Ganz');
+    formatted = formatted.replace(/SWAN\s+GANZ/g, 'Swan-Ganz');
+
+    // Add "right heart catheterisation was performed" before catheter description
+    formatted = formatted.replace(
+      /(vascular\s+access\s+was\s+obtained[^.]+\.)\s+(using\s+a\s+)/gi,
+      '$1 Right heart catheterisation was performed $2'
+    );
+
+    // Fix "under ultrasound guidance using" → "under ultrasound guidance, and right heart catheterisation was performed using"
+    formatted = formatted.replace(
+      /under\s+ultrasound\s+guidance\s+using\s+a\s+/gi,
+      'under ultrasound guidance, and right heart catheterisation was performed using a '
+    );
+
+    return formatted;
   }
 
   private extractRHCData(input: string): RightHeartCathData {
@@ -667,9 +716,18 @@ Note: This report was generated with limited AI processing. Clinical review is r
   private extractCatheterDetails(input: string): string {
     const frenchMatch = input.match(RightHeartCathMedicalPatterns.frenchSize);
     const swanGanzMatch = input.match(RightHeartCathMedicalPatterns.swanGanz);
-    
-    if (frenchMatch) return `${frenchMatch[1]}F catheter`;
-    if (swanGanzMatch) return 'Swan-Ganz catheter';
+
+    const size = frenchMatch ? frenchMatch[1] : null;
+    const isSwanGanz = !!swanGanzMatch;
+
+    // Combine size and type when both are present
+    if (size && isSwanGanz) {
+      return `${size}F Swan-Ganz catheter`;
+    } else if (size) {
+      return `${size}F catheter`;
+    } else if (isSwanGanz) {
+      return 'Swan-Ganz catheter';
+    }
     return 'Thermodilution catheter';
   }
 
@@ -725,16 +783,24 @@ Note: This report was generated with limited AI processing. Clinical review is r
   private extractPatientData(input: string): RHCPatientData {
     const patientData: RHCPatientData = {};
 
+    console.log('🔍 RHC: Extracting patient data from input:', input.substring(0, 300));
+
     // Extract height (cm)
     const heightMatch = input.match(/height[:\s]+(\d+)\s*(?:cm|centimeters?)?/i);
     if (heightMatch) {
       patientData.height = parseFloat(heightMatch[1]);
+      console.log('✅ RHC: Extracted height:', patientData.height, 'cm from match:', heightMatch[0]);
+    } else {
+      console.log('❌ RHC: No height match found');
     }
 
     // Extract weight (kg)
     const weightMatch = input.match(/weight[:\s]+(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)?/i);
     if (weightMatch) {
       patientData.weight = parseFloat(weightMatch[1]);
+      console.log('✅ RHC: Extracted weight:', patientData.weight, 'kg from match:', weightMatch[0]);
+    } else {
+      console.log('❌ RHC: No weight match found');
     }
 
     // Extract age (years)
@@ -782,6 +848,9 @@ Note: This report was generated with limited AI processing. Clinical review is r
     const sao2Match = input.match(/(?:aortic|arterial)\s+(?:arterial\s+)?(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
     if (sao2Match) {
       patientData.sao2 = parseFloat(sao2Match[1]);
+      console.log('✅ RHC: Extracted SaO2:', patientData.sao2, '% from match:', sao2Match[0]);
+    } else {
+      console.log('❌ RHC: No SaO2 match found');
     }
 
     // Extract mixed venous oxygen saturation - enhanced with PA saturation fallback
@@ -824,6 +893,15 @@ Note: This report was generated with limited AI processing. Clinical review is r
     if (patientData.systolicBP && patientData.diastolicBP) {
       patientData.meanArterialPressure = RHCCalc.calculateMAP(patientData.systolicBP, patientData.diastolicBP);
     }
+
+    console.log('📊 RHC: Final extracted patient data:', {
+      height: patientData.height,
+      weight: patientData.weight,
+      bsa: patientData.bsa,
+      sao2: patientData.sao2,
+      svo2: patientData.svo2,
+      haemoglobin: patientData.haemoglobin
+    });
 
     return patientData;
   }

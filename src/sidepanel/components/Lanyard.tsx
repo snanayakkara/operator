@@ -24,7 +24,7 @@ import { MeshLineGeometry, MeshLineMaterial } from 'meshline';
 import * as THREE from 'three';
 
 import cardModelUrl from '@/assets/lanyard/card.glb?url';
-import lanyardTextureUrl from '@/assets/lanyard/lanyard.png?url';
+import lanyardTextureUrl from '@/assets/lanyard/lanyard_blue.png?url';
 
 import './Lanyard.css';
 
@@ -42,17 +42,20 @@ interface LanyardProps {
   transparent?: boolean;
   /** Optional text to display on card */
   cardText?: string;
+  /** Optional custom texture for the ID card face */
+  cardTextureUrl?: string;
 }
 
 /**
  * Main Lanyard component - sets up the Three.js canvas and physics environment
  */
 export default function Lanyard({
-  position = [0, 0, 20],
+  position = [0, 13, 20],
   gravity = [0, -40, 0],
   fov = 20,
   transparent = true,
-  cardText = 'Ready to Record'
+  cardText = 'Ready to Record',
+  cardTextureUrl
 }: LanyardProps) {
   const [error, setError] = useState<Error | null>(null);
 
@@ -72,9 +75,10 @@ export default function Lanyard({
         <Canvas
           camera={{ position, fov }}
           gl={{ alpha: transparent }}
-          onCreated={({ gl }) => {
+          onCreated={({ gl, camera }) => {
             console.log('🎨 Canvas created successfully');
             gl.setClearColor(new THREE.Color(0x000000), transparent ? 0 : 1);
+            camera.lookAt(0, 15, 0);
           }}
           onError={(error) => {
             console.error('🎨 Canvas error:', error);
@@ -83,7 +87,7 @@ export default function Lanyard({
         >
           <ambientLight intensity={Math.PI} />
           <Physics gravity={gravity} timeStep={1 / 60}>
-            <Band cardText={cardText} />
+            <Band cardText={cardText} cardTextureUrl={cardTextureUrl} />
           </Physics>
           <Environment blur={0.75}>
             <Lightformer
@@ -143,12 +147,13 @@ interface BandProps {
   maxSpeed?: number;
   minSpeed?: number;
   cardText?: string;
+  cardTextureUrl?: string;
 }
 
 /**
  * Band component - creates the physics-based lanyard with card
  */
-function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Record' }: BandProps) {
+function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Record', cardTextureUrl }: BandProps) {
   // Physics body references
   const band = useRef<any>(null);
   const fixed = useRef<any>(null);
@@ -172,6 +177,8 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
     linearDamping: 4
   };
 
+  const [cardTexture, setCardTexture] = useState<THREE.Texture | null>(null);
+
   // Load 3D model - React hooks must be called unconditionally
   // Load 3D model via Vite URL to ensure the asset resolves in dev and build outputs
   const gltf = useGLTF(cardModelUrl, true) as any;
@@ -184,6 +191,64 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
   if (lanyardTexture) {
     lanyardTexture.wrapS = lanyardTexture.wrapT = THREE.RepeatWrapping;
   }
+
+  useEffect(() => {
+    if (!cardTextureUrl) {
+      setCardTexture(prev => {
+        if (prev) {
+          prev.dispose();
+        }
+        return null;
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+
+    loader.load(
+      cardTextureUrl,
+      texture => {
+        if (cancelled) {
+          texture.dispose();
+          return;
+        }
+
+        texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.anisotropy = 16;
+        // three@0.168 uses colorSpace; retain compatibility with older encoding API when available
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const srgbEncoding = (THREE as unknown as { sRGBEncoding?: unknown }).sRGBEncoding;
+        if (srgbEncoding && 'encoding' in texture) {
+          (texture as unknown as { encoding: unknown }).encoding = srgbEncoding;
+        }
+        texture.flipY = false;
+
+        setCardTexture(prev => {
+          if (prev && prev !== texture) {
+            prev.dispose();
+          }
+          return texture;
+        });
+      },
+      undefined,
+      error => {
+        console.error('🎨 Failed to load card texture:', error);
+        setCardTexture(prev => {
+          if (prev) {
+            prev.dispose();
+          }
+          return null;
+        });
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cardTextureUrl]);
+
+  const cardMaterialMap = cardTexture ?? materials.base?.map;
 
 
   // Create curve for lanyard band
@@ -275,7 +340,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
 
   return (
     <>
-      <group position={[0, 10, 0]}>
+      <group position={[0, 18, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type={'fixed' as RigidBodyProps['type']} />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps} type={'dynamic' as RigidBodyProps['type']}>
           <BallCollider args={[0.1]} />
@@ -311,8 +376,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
             {nodes.card && nodes.card.geometry ? (
               <mesh geometry={nodes.card.geometry}>
                 <meshPhysicalMaterial
-                  map={materials.base?.map}
-                  map-anisotropy={16}
+                  map={cardMaterialMap ?? undefined}
                   clearcoat={1}
                   clearcoatRoughness={0.15}
                   roughness={0.9}
@@ -323,6 +387,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
               <mesh>
                 <boxGeometry args={[1.6, 2.25, 0.02]} />
                 <meshPhysicalMaterial
+                  map={cardTexture ?? undefined}
                   color="#f8f9fa"
                   clearcoat={1}
                   clearcoatRoughness={0.15}

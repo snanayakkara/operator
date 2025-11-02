@@ -85,6 +85,30 @@ Edit `OptimizedApp.tsx` line ~3812:
 />
 ```
 
+### Swap Card Artwork
+
+**Option A – Use the built-in settings pane (recommended):**
+1. Click the gear icon in the side panel to open Operator Settings.
+2. In the Dashboard tab, scroll to **Lanyard Branding**.
+3. Upload a PNG/JPEG (≤2MB). Changes sync instantly to the side panel.
+4. Use *Restore Default* to fall back to the texture packaged in `card.glb`.
+
+**Option B – Hardcode the asset in code:**
+1. Add your PNG front design to `src/assets/lanyard/` (e.g. `operator-card-face.png`).
+2. Import it in `OptimizedApp.tsx`:
+   ```tsx
+   import operatorCardFace from '@/assets/lanyard/operator-card-face.png?url';
+   ```
+3. Pass it to the component:
+   ```tsx
+   <Lanyard
+     cardTextureUrl={operatorCardFace}
+     cardText=""
+     /* other props */
+   />
+   ```
+If no custom texture is supplied the embedded material from `card.glb` continues to render.
+
 ### Adjust Physics
 ```tsx
 <Lanyard

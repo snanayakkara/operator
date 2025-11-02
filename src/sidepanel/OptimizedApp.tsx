@@ -41,6 +41,7 @@ import { WhisperServerService } from '@/services/WhisperServerService';
 import { OptimizationService } from '@/services/OptimizationService';
 import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestrator';
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
+import { LANYARD_CARD_TEXTURE_KEY, parseLanyardTexturePreference } from '@/config/lanyardPreferences';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
 import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
@@ -144,6 +145,8 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Storage management state
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
+
+  const [lanyardTextureUrl, setLanyardTextureUrl] = useState<string | null>(null);
 
   // Model loading error state
   const [modelLoadingError, setModelLoadingError] = useState<ModelLoadingError | null>(null);
@@ -814,6 +817,46 @@ const OptimizedAppContent: React.FC = memo(() => {
     };
     saveCheckedSessions();
   }, [checkedSessions]);
+
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadPreference = async () => {
+      try {
+        const result = await chrome.storage.local.get(LANYARD_CARD_TEXTURE_KEY);
+        if (!isMounted) {
+          return;
+        }
+        const preference = parseLanyardTexturePreference(result[LANYARD_CARD_TEXTURE_KEY]);
+        setLanyardTextureUrl(preference?.dataUrl ?? null);
+      } catch (error) {
+        console.warn('Failed to load lanyard artwork preference:', error);
+      }
+    };
+
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName !== 'local' || !(LANYARD_CARD_TEXTURE_KEY in changes)) {
+        return;
+      }
+      const preference = parseLanyardTexturePreference(changes[LANYARD_CARD_TEXTURE_KEY].newValue);
+      setLanyardTextureUrl(preference?.dataUrl ?? null);
+    };
+
+    loadPreference();
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      isMounted = false;
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
 
   const getSystemPromptForAgent = useCallback(async (agent: AgentType): Promise<string | null> => {
     // Agents that MUST use agent-based processing (not streaming)
@@ -3117,7 +3160,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       // Auto-check the session in the dropdown after successful EMR insertion
-      const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId;
+      // Try multiple sources to find the session ID: currentSessionId (active work), displaySessionId (viewing), or selectedSessionId (fallback)
+      const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId || state.selectedSessionId;
       if (insertedSessionId) {
         setAutoCheckedSessions(prev => {
           const next = new Set(prev);
@@ -3125,6 +3169,12 @@ const OptimizedAppContent: React.FC = memo(() => {
           return next;
         });
         console.log('✅ Auto-checked session in dropdown after EMR insertion:', insertedSessionId);
+      } else {
+        console.warn('⚠️ Could not auto-check session - no session ID found', {
+          currentSessionId: state.currentSessionId,
+          displaySessionId: state.displaySession.displaySessionId,
+          selectedSessionId: state.selectedSessionId
+        });
       }
     } catch (error) {
       console.error('Failed to insert text to EMR:', error);
@@ -3833,13 +3883,14 @@ const OptimizedAppContent: React.FC = memo(() => {
           {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-between dot-grid-background-light">
               {/* 3D Interactive Lanyard - takes up most of the screen */}
-              <div className="w-full flex-1 flex items-start justify-center pt-4">
+              <div className="w-full flex-1 flex items-start justify-center">
                 <Lanyard
-                  position={[0, 0, 20]}
+                  position={[0, 13, 20]}
                   gravity={[0, -40, 0]}
                   fov={20}
                   transparent={true}
                   cardText=""
+                  cardTextureUrl={lanyardTextureUrl || undefined}
                 />
               </div>
 

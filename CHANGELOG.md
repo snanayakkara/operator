@@ -9,6 +9,56 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.26.0] - 2025-11-03
+
+### Fixed
+
+- **RHC Catheter Display**
+  - Fixed catheter extraction showing "undefinedF catheter" instead of "7F Swan-Ganz catheter"
+  - Rewrote `extractCatheterDetails()` to combine French size and Swan-Ganz type intelligently
+  - Now correctly displays combined catheter descriptions when both attributes present
+
+- **RHC Preamble Formatting**
+  - Added `formatReportOutput()` post-processor to ensure consistent formatting
+  - Fixed unit spacing: "168 cm" → "168cm", "72 kg" → "72kg"
+  - Fixed conjunction: "mmHg, heart rate" → "mmHg with a heart rate"
+  - Fixed capitalization: "SWAN GANS" → "Swan-Ganz"
+  - Added "right heart catheterisation was performed" phrasing
+
+- **RHC Auto-Calculations**
+  - Fixed Cardiac Index not auto-calculating from thermodilution CO + BSA
+  - Fixed Fick CO/CI not auto-calculating from saturations + haemoglobin + BSA
+  - Added auto-population logic to copy calculated values back to `cardiacOutput` fields
+  - Values now appear in initial extraction (not just after field editor edits)
+
+- **RHC Calculated Haemodynamics Display**
+  - Fixed "No calculated haemodynamics available" appearing when calculations existed
+  - Enhanced check to handle empty calculation objects `{}`
+  - Calculated haemodynamics section now appears correctly when data present
+
+- **RHC Conclusion Format**
+  - Changed from verbose paragraphs to extremely concise 1-2 sentence summaries
+  - Removed management recommendations and follow-up plans from conclusions
+  - Added explicit example: "Moderate pulmonary hypertension, with preserved cardiac output and normal left sided pressures. Significant anaemia noted."
+  - Updated system prompts to enforce concise clinical format
+
+### Added
+
+- **RHC Extraction Debug Logging**
+  - Added comprehensive console logging for height, weight, and SaO2 extraction
+  - Logs show input text preview, match confirmations, and final extracted data
+  - Improves debugging of data flow issues from transcription to display
+
+- **RHC Free-Text Indication Input**
+  - Added `indicationOther?: string` field to `RightHeartCathData` interface
+  - Added `'other'`, `'cardiogenic_shock'`, `'valvular_disease'` to `RHCIndication` type
+  - Added conditional text input in field editor when "Other" indication selected
+  - Users can now specify custom indication text (e.g., "Chronic thromboembolic disease")
+
+- **Lanyard Asset Fix**
+  - Fixed missing lanyard texture file causing build failures
+  - Updated import path from `lanyard.png` to `lanyard_blue.png`
+
 ## [3.22.0] - 2025-11-02
 
 ### Added

@@ -6,6 +6,7 @@ import { AgentFactory } from '@/services/AgentFactory';
 import { logger } from '@/utils/Logger';
 import { PerformanceMetricsSection } from './PerformanceMetricsSection';
 import { UIPreferencesSection } from './UIPreferencesSection';
+import { LanyardPreferencesSection } from './LanyardPreferencesSection';
 
 export const DashboardSettings: React.FC = () => {
   const lmStudioService = useMemo(() => LMStudioService.getInstance(), []);
@@ -210,6 +211,8 @@ export const DashboardSettings: React.FC = () => {
 
       {/* UI Preferences Section */}
       <UIPreferencesSection />
+
+      <LanyardPreferencesSection />
 
       <PerformanceMetricsSection />
     </div>

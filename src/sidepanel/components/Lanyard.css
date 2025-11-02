@@ -6,9 +6,10 @@
   height: 75vh; /* 75% of viewport height - lanyard hangs down 3/4 of window */
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   transform: scale(1);
-  transform-origin: center;
+  transform-origin: top center;
+  margin-top: -20px;
   overflow: visible;
   background: transparent;
 }
