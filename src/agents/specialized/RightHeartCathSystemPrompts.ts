@@ -192,34 +192,34 @@ CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or num
  */
 export const RightHeartCathMedicalPatterns = {
   // Pressure measurement patterns with a/v waves - handles all separator variants: "slash", "/", "-"
-  // Handles: "RA 6 slash 6 mean of 8", "RA 8-9 mean of 7", "RA 13-13, mean of 11"
-  raPressurea: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
-  raPressureV: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
-  raPressureMean: /(?:right\s+)?(?:atrial?|ra)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
+  // Handles: "RA 6 slash 6 mean of 8", "RA 8-9 mean of 7", "RA 13-13, mean of 11", "RA8-8, mean of 6"
+  raPressurea: /(?:right\s+)?(?:atrial?|ra)\s*(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
+  raPressureV: /(?:right\s+)?(?:atrial?|ra)\s*(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
+  raPressureMean: /(?:right\s+)?(?:atrial?|ra)\s*(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  // RV patterns - handles "RV 63 slash 5", "RV 50-1", "RV 63-0"
-  rvPressureSystolic: /(?:right\s+)?(?:ventricular?|rv)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
-  rvPressureDiastolic: /(?:right\s+)?(?:ventricular?|rv)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
-  // RVEDP handles: "RV EDP of 13", "RVEDP of 8", "RVEDP 8"
-  rvedp: /rv\s+edp\s+(?:of\s+)?[:\s,]*(\d+)|rvedp\s+(?:of\s+)?[:\s,]*(\d+)/gi,
+  // RV patterns - handles "RV 63 slash 5", "RV 50-1", "RV 63-0", "RV78-4"
+  rvPressureSystolic: /(?:right\s+)?(?:ventricular?|rv)\s*(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  rvPressureDiastolic: /(?:right\s+)?(?:ventricular?|rv)\s*(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
+  // RVEDP handles: "RV EDP of 13", "RVEDP of 8", "RVEDP 8", "RVEDP11"
+  rvedp: /rv\s*edp\s*(?:of\s+)?[:\s,]*(\d+)|rvedp\s*(?:of\s+)?[:\s,]*(\d+)/gi,
 
-  // PA patterns - handles "PA 65 slash 22 mean of 39", "PA 50-22 mean of 36", "PA 59-19, mean of 33"
-  paPressureSystolic: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
-  paPressureDiastolic: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
-  paPressureMean: /(?:pulmonary\s+artery|pa)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
+  // PA patterns - handles "PA 65 slash 22 mean of 39", "PA 50-22 mean of 36", "PA 59-19, mean of 33", "PA75-35, mean 45"
+  paPressureSystolic: /(?:pulmonary\s+artery|pa)\s*(?:pressure\s+)?[:\s,]*(\d+)\s*(?:\/|slash|-)\s*\d+/gi,
+  paPressureDiastolic: /(?:pulmonary\s+artery|pa)\s*(?:pressure\s+)?[:\s,]*\d+\s*(?:\/|slash|-)\s*(\d+)/gi,
+  paPressureMean: /(?:pulmonary\s+artery|pa)\s*(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
 
-  // PCWP patterns - handles "wedge pressure 15 slash 15 mean of 13", "PCWP 15-21, mean of 15"
+  // PCWP patterns - handles "wedge pressure 15 slash 15 mean of 13", "PCWP 15-21, mean of 15", "PCWP12-12, mean of 11"
   // Also handles "unable to obtain PCWP" by failing gracefully
-  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
-  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
-  pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s+(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
+  pcwpPressureA: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s*(?:pressure\s+)?[:\s,]*(\d+)\s*(?:(?:\/|slash|-)\s*\d+)/gi,
+  pcwpPressureV: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s*(?:pressure\s+)?[:\s,]*\d+\s*(?:(?:\/|slash|-)\s*)(\d+)/gi,
+  pcwpPressureMean: /(?:pulmonary\s+capillary\s+)?(?:wedge|pcwp)\s*(?:pressure\s+)?.*?mean\s+(?:of\s+)?(\d+)/gi,
 
   // LVEDP pattern for when PCWP unavailable - handles "LVEDP imputed 13"
   lvedp: /lvedp\s+(?:imputed\s+)?[:\s,]*(\d+)/gi,
 
   // Cardiac output patterns - enhanced to handle missing units and comma separators
-  // Handles "thermodilution cardiac output 5.4" AND "cardiac output 5.4 via thermodilution"
-  thermodilutionCO: /(?:(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)|cardiac\s+output\s+(\d+\.?\d*)\s+(?:via|by)\s+thermodilution)(?:\s*l\/min)?/gi,
+  // Handles "thermodilution cardiac output 5.4", "cardiac output 5.4 via thermodilution", "cardiac output, thermodilution, 5.4"
+  thermodilutionCO: /(?:(?:three\s+)?thermodilution\s+cardiac\s+output[:\s,]+(\d+\.?\d*)|cardiac\s+output\s+(\d+\.?\d*)\s+(?:via|by)\s+thermodilution|cardiac\s+output,\s*thermodilution,\s*(\d+\.?\d*))(?:\s*l\/min)?/gi,
   thermodilutionCI: /thermodilution\s+cardiac\s+index[:\s,]+(\d+\.?\d*)(?:\s*l\/min\/m²?)?/gi,
   // Fick method - handle common transcription errors: "thick" or "tick" instead of "fick"
   fickCO: /(?:fick|thick|tick)\s+(?:cardiac\s+output|co)[:\s,]+(\d+\.?\d*)(?:\s*l\/min)?/gi,

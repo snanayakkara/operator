@@ -627,7 +627,7 @@ Note: This report was generated with limited AI processing. Clinical review is r
     if (match) {
       // Return the first non-undefined captured group (the numeric value)
       // This handles patterns with multiple capture groups where only one matches
-      return match[1] || match[2] || null;
+      return match[1] || match[2] || match[3] || null;
     }
     return null;
   }
