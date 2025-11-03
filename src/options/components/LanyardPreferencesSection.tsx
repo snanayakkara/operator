@@ -11,6 +11,59 @@ import {
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 const CARD_VISIBLE_VERTICAL_RATIO = 0.755; // Approximate UV coverage used by the 3D model
+const CARD_ASPECT = 2.25 / 1.6; // Matches blender dimensions used in card.glb
+
+interface LanyardPreviewCanvasProps {
+  src: string;
+  crop: { x: number; width: number };
+  dimensions: { width: number; height: number } | null;
+}
+
+const LanyardPreviewCanvas: React.FC<LanyardPreviewCanvasProps> = ({ src, crop, dimensions }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!dimensions) {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => {
+      const destWidth = 400;
+      const destHeight = Math.round(destWidth * CARD_ASPECT);
+      canvas.width = destWidth;
+      canvas.height = destHeight;
+
+      const sx = crop.x * image.width;
+      const sy = 0;
+      const sw = crop.width * image.width;
+      const sh = CARD_VISIBLE_VERTICAL_RATIO * image.height;
+
+      ctx.clearRect(0, 0, destWidth, destHeight);
+      ctx.drawImage(image, sx, sy, sw, sh, 0, 0, destWidth, destHeight);
+    };
+    image.src = src;
+  }, [src, crop.x, crop.width, dimensions]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-auto rounded-md border border-line-primary"
+      style={{ aspectRatio: '160 / 225' }}
+    />
+  );
+};
 
 export const LanyardPreferencesSection: React.FC = () => {
   const [preference, setPreference] = useState<LanyardTexturePreference | null>(null);
@@ -278,27 +331,19 @@ export const LanyardPreferencesSection: React.FC = () => {
           <div className="mt-4 space-y-2">
             <div className="text-xs font-medium text-ink-secondary uppercase tracking-wide">Lanyard Preview</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="aspect-[5/7] rounded-lg border border-line-primary bg-surface-primary overflow-hidden flex flex-col">
-                <div
-                  className="flex-1 w-full"
-                  style={{
-                    backgroundImage: `url(${preference.dataUrl})`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'left top',
-                    backgroundSize: `200% ${Math.round((1 / CARD_VISIBLE_VERTICAL_RATIO) * 100)}%`
-                  }}
+              <div className="flex flex-col space-y-2">
+                <LanyardPreviewCanvas
+                  src={preference.dataUrl}
+                  crop={{ x: 0, width: 0.5 }}
+                  dimensions={textureDimensions}
                 />
                 <div className="px-2 py-1 text-[10px] text-ink-tertiary text-center">Front</div>
               </div>
-              <div className="aspect-[5/7] rounded-lg border border-line-primary bg-surface-primary overflow-hidden flex flex-col">
-                <div
-                  className="flex-1 w-full"
-                  style={{
-                    backgroundImage: `url(${preference.dataUrl})`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right top',
-                    backgroundSize: `200% ${Math.round((1 / CARD_VISIBLE_VERTICAL_RATIO) * 100)}%`
-                  }}
+              <div className="flex flex-col space-y-2">
+                <LanyardPreviewCanvas
+                  src={preference.dataUrl}
+                  crop={{ x: 0.5, width: 0.5 }}
+                  dimensions={textureDimensions}
                 />
                 <div className="px-2 py-1 text-[10px] text-ink-tertiary text-center">Back</div>
               </div>
