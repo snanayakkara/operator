@@ -118,7 +118,7 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 **Benefits:**
 - **Saves time**: No wasted 3-15min reasoning model runs with incomplete data; validation takes only 10-30s
 - **Improves accuracy**: User sees missing fields immediately; model corrections reduce transcription errors
-- **Efficient resource usage**: Lightweight quick model (Gemma-3n-e4b) validates before running resource-intensive reasoning model (MedGemma-27B)
+- **Efficient resource usage**: Lightweight quick model (qwen/qwen3-4b-2507) validates before running resource-intensive reasoning model (MedGemma-27B)
 
 **Critical Fields for Fick Calculations:**
 - Height (cm), Weight (kg), Hemoglobin (g/L), SaO2 (%), SvO2 (%)
