@@ -1,19 +1,21 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
-import type { 
-  MedicalContext, 
-  ChatMessage, 
-  ReportSection, 
+import type {
+  MedicalContext,
+  ChatMessage,
+  ReportSection,
   MTEERReport,
   MTEERData,
   MitralRegurgitationData,
   ClipAssessment,
   MTEERComplication,
   ClipType,
-  MRSeverityGrade
+  MRSeverityGrade,
+  ValidationResult,
+  MTEERExtractedData
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
-import { MTEERMedicalPatterns, MTEERValidationRules } from './MTEERSystemPrompts';
+import { MTEERMedicalPatterns, MTEERValidationRules, MTEERSystemPrompts } from './MTEERSystemPrompts';
 
 /**
  * Specialized agent for processing Mitral Transcatheter Edge-to-Edge Repair (mTEER) procedures.
@@ -99,7 +101,43 @@ export class MTEERAgent extends MedicalAgent {
 
       // Correct mTEER-specific terminology with Australian spelling
       const correctedInput = this.correctMTEERTerminology(input);
-      
+
+      // Phase 1.5: Regex extraction + quick-model validation
+      console.log('🚨 MTEER AGENT: Starting validation workflow...');
+      const regexExtracted = this.extractMTEERValidationData(correctedInput);
+      console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
+
+      const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
+      const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
+
+      // Interactive checkpoint - require user input if critical gaps remain
+      if (validation.missingCritical.length > 0 ||
+          validation.corrections.some(correction => correction.confidence < 0.8)) {
+
+        console.log(`⚠️ MTEER AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+
+        const baseReport = this.createReport('', [], context, 0, 0);
+        return {
+          ...baseReport,
+          mteerData: this.getEmptyMTEERData(),
+          mitralRegurgitation: this.getEmptyMitralRegurgitationData(),
+          clipAssessment: this.getEmptyClipAssessment(),
+          complications: [],
+          status: 'awaiting_validation',
+          validationResult: validation,
+          extractedData: correctedData
+        };
+      }
+
+      // Merge user-provided fields from validation modal
+      let finalData = correctedData;
+      if (context?.userProvidedFields) {
+        console.log('🚨 MTEER AGENT: Merging user-provided fields...');
+        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
+      }
+
+      console.log('✅ MTEER AGENT: Validation complete, proceeding to reasoning model');
+
       // Extract mTEER data from input
       const mteerData = this.extractMTEERData(correctedInput);
       
@@ -426,6 +464,166 @@ Generate a comprehensive mTEER procedural report using the following dictation. 
 
 Note: This report was generated with limited AI processing due to technical issues. Please review and complete manually.`;
     }
+  }
+
+  // Helper methods for data extraction
+  // ============================================================
+  // Validation workflow methods (regex extraction + quick model)
+  // ============================================================
+
+  private extractMTEERValidationData(input: string): MTEERExtractedData {
+    const extracted: MTEERExtractedData = {};
+
+    // Mitral regurgitation pre/post grading
+    const preGradeMatch = input.match(/(?:pre(?:-|\s)?(?:procedure|deployment)|baseline)[^.\n]{0,120}?(?:mr|mitral regurgitation)\s*(?:grade\s*)?(?:was\s*)?((?:[1-4]\+)|(?:moderate-severe|moderately\s+severe|severe|moderate|mild))/i);
+    const postGradeMatch = input.match(/(?:post(?:-|\s)?(?:procedure|deployment)|after\s+(?:clip|deployment)|final)[^.\n]{0,120}?(?:mr|mitral regurgitation)\s*(?:grade\s*)?(?:is\s*)?((?:[1-4]\+)|(?:moderate-severe|moderately\s+severe|severe|moderate|mild))/i);
+
+    if (preGradeMatch || postGradeMatch) {
+      extracted.mitralRegurgitation = {
+        preGrade: preGradeMatch ? preGradeMatch[1] : undefined,
+        postGrade: postGradeMatch ? postGradeMatch[1] : undefined,
+        preMRGrade: preGradeMatch ? preGradeMatch[1] : undefined,
+        postMRGrade: postGradeMatch ? postGradeMatch[1] : undefined
+      };
+    }
+
+    // Clip details
+    const clipTypeMatch = input.match(/(mitraclip\s+(?:ntw|nt|xtw)|pascal\s+(?:p10|ace))/i);
+    const clipSizeMatch = input.match(/(?:clip\s+size|size|clip)\s*(\d+(?:\.\d+)?)\s*mm/i);
+    const clipNumberMatch = input.match(/(\d+)\s+(?:clip|clips|devices)\s+(?:were\s+)?(?:deployed|implanted|placed|used)/i);
+
+    if (clipTypeMatch || clipSizeMatch || clipNumberMatch) {
+      const clipTypeKey = clipTypeMatch ? (clipTypeMatch[1] || clipTypeMatch[0]).toLowerCase() : undefined;
+      extracted.clipDetails = {
+        type: clipTypeKey ? (this.clipTypes[clipTypeKey] || clipTypeMatch?.[0]) : undefined,
+        size: clipSizeMatch ? `${clipSizeMatch[1]} mm` : undefined,
+        number: clipNumberMatch ? parseInt(clipNumberMatch[1], 10) : undefined
+      };
+    }
+
+    // Anatomical location (A2-P2 etc.)
+    const locationMatch = input.match(/(a[1-3]\s*[-]\s*p[1-3]|a[1-3]p[1-3]|commissural)/i);
+    if (locationMatch) {
+      const locationRaw = (locationMatch[1] || '').toUpperCase().replace(/\s+/g, '');
+      const formattedLocation = locationRaw.includes('-') ? locationRaw.replace(/\s+/g, '') : locationRaw.replace(/([AP][1-3])([AP][1-3])/, '$1-$2');
+      extracted.anatomicalLocation = formattedLocation;
+    }
+
+    // EROA measurements (pre/post)
+    const preEroaMatch = input.match(/(?:pre(?:-|\s)?(?:procedure|deployment)|baseline)[^.\n]{0,120}?eroa\s+(?:of\s+)?(\d+\.?\d*)\s*cm²?/i);
+    const postEroaMatch = input.match(/(?:post(?:-|\s)?(?:procedure|deployment)|after\s+(?:clip|deployment)|final)[^.\n]{0,120}?eroa\s+(?:of\s+)?(\d+\.?\d*)\s*cm²?/i);
+    if (preEroaMatch || postEroaMatch) {
+      extracted.eroa = {
+        pre: preEroaMatch ? parseFloat(preEroaMatch[1]) : undefined,
+        post: postEroaMatch ? parseFloat(postEroaMatch[1]) : undefined
+      };
+    }
+
+    // Transmitral gradient (pre/post)
+    const preGradientMatch = input.match(/(?:pre(?:-|\s)?(?:procedure|deployment)|baseline)[^.\n]{0,120}?transmitral\s+gradient\s+(?:of\s+)?(\d+\.?\d*)\s*(?:mm\s*hg|mmhg)/i);
+    const postGradientMatch = input.match(/(?:post(?:-|\s)?(?:procedure|deployment)|after\s+(?:clip|deployment)|final)[^.\n]{0,120}?transmitral\s+gradient\s+(?:of\s+)?(\d+\.?\d*)\s*(?:mm\s*hg|mmhg)/i);
+    if (preGradientMatch || postGradientMatch) {
+      extracted.transmitralGradient = {
+        pre: preGradientMatch ? parseFloat(preGradientMatch[1]) : undefined,
+        post: postGradientMatch ? parseFloat(postGradientMatch[1]) : undefined
+      };
+    }
+
+    return extracted;
+  }
+
+  private async validateAndDetectGaps(
+    extracted: MTEERExtractedData,
+    transcription: string
+  ): Promise<ValidationResult> {
+    console.log('🔍 MTEER AGENT: Starting quick model validation...');
+
+    try {
+      const userMessage = `REGEX EXTRACTED:\n${JSON.stringify(extracted, null, 2)}\n\nTRANSCRIPTION:\n${transcription}\n\nValidate the extraction and output JSON only.`;
+
+      const response = await this.lmStudioService.processWithAgent(
+        MTEERSystemPrompts.dataValidationPrompt,
+        userMessage,
+        'mteer-validation',
+        undefined,
+        MODEL_CONFIG.QUICK_MODEL
+      );
+
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonString = jsonMatch ? jsonMatch[1] : response;
+
+      try {
+        const validationResult = JSON.parse(jsonString);
+        console.log('✅ MTEER AGENT: Validation complete');
+        console.log(`   - Corrections: ${validationResult.corrections.length}`);
+        console.log(`   - Missing critical: ${validationResult.missingCritical.length}`);
+        console.log(`   - Missing optional: ${validationResult.missingOptional.length}`);
+        console.log(`   - Confidence: ${typeof validationResult.confidence === 'number' ? validationResult.confidence.toFixed(2) : 'n/a'}`);
+        return validationResult;
+      } catch (parseError) {
+        console.error('❌ Failed to parse mTEER validation JSON:', parseError);
+        return {
+          corrections: [],
+          missingCritical: [],
+          missingOptional: [],
+          confidence: 0.5
+        };
+      }
+    } catch (error) {
+      console.error('❌ MTEER AGENT: Validation request failed:', error);
+      return {
+        corrections: [],
+        missingCritical: [],
+        missingOptional: [],
+        confidence: 0.5
+      };
+    }
+  }
+
+  private applyCorrections(
+    extracted: MTEERExtractedData,
+    corrections: ValidationResult['corrections'],
+    confidenceThreshold: number = 0.8
+  ): MTEERExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as MTEERExtractedData;
+
+    for (const correction of corrections) {
+      if (correction.confidence >= confidenceThreshold) {
+        this.setNestedField(result, correction.field, correction.correctValue);
+        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue}`);
+      }
+    }
+
+    return result;
+  }
+
+  private mergeUserInput(
+    extracted: MTEERExtractedData,
+    userFields: Record<string, unknown>
+  ): MTEERExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as MTEERExtractedData;
+
+    for (const [fieldPath, value] of Object.entries(userFields)) {
+      if (value !== null && value !== undefined && value !== '') {
+        this.setNestedField(result, fieldPath, value);
+        console.log(`✅ User-provided ${fieldPath}: ${value as string}`);
+      }
+    }
+
+    return result;
+  }
+
+  private setNestedField(obj: any, path: string, value: unknown): void {
+    const keys = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key]) current[key] = {};
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
   }
 
   // Helper methods for data extraction
