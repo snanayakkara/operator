@@ -185,7 +185,73 @@ CONCLUSION:
 - Example format: "Moderate pulmonary hypertension, with preserved cardiac output and normal left sided pressures. Significant anaemia noted."
 
 CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or numbered sections. Preserve all medical facts accurately with Australian spelling (catheterisation, haemodynamic) and embed measurements naturally in sentences with proper units (mmHg, L/min, L/min/m², %, g/L, mmol/L).`
-  }
+  },
+
+  /**
+   * RHC Data Validation Prompt - Quick model validates regex extraction and detects gaps
+   * This runs BEFORE report generation to ensure data completeness
+   */
+  dataValidationPrompt: `You are validating RHC (Right Heart Catheterization) data extraction. Your job is to:
+
+1. VERIFY regex-extracted values against the transcription
+2. DETECT values the regex MISSED that are present in transcription
+3. IDENTIFY critical missing fields needed for Fick calculations
+
+CRITICAL FIELDS FOR FICK CALCULATIONS:
+- Height (cm) → required for BSA calculation
+- Weight (kg) → required for BSA calculation
+- Hemoglobin (g/L) → required for Fick CO calculation
+- SaO2 (%) → arterial oxygen saturation, required for Fick CO
+- SvO2 (%) → mixed venous oxygen saturation, required for Fick CO
+- RA, RV, PA, PCWP pressures → required for haemodynamic assessment
+- Thermodilution CO (L/min) → primary cardiac output measurement
+
+VALIDATION RULES:
+1. Compare each regex-extracted value to the transcription
+2. If regex value is CORRECT, no correction needed
+3. If regex value is WRONG or MISSING but present in transcription, add to "corrections"
+4. If value NOT in transcription at all, add to "missingCritical" or "missingOptional"
+5. Assign confidence scores (0-1) based on transcription clarity
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Unambiguous ("mixed venous oxygen saturation 58" → SvO2 = 58)
+- 0.80-0.94: Clear with minor ASR issues ("mixed mean is oxygen saturation 58" → SvO2 = 58)
+- 0.60-0.79: Implicit/contextual ("PA sat 65" → SvO2 = 65)
+- 0.00-0.59: Uncertain/ambiguous (low confidence, require user review)
+
+OUTPUT FORMAT (strict JSON only, no markdown):
+{
+  "corrections": [
+    {
+      "field": "patientData.svo2",
+      "regexValue": null,
+      "correctValue": 58,
+      "reason": "Found 'mixed mean is oxygen saturation 58' in transcription (ASR error for 'mixed venous')",
+      "confidence": 0.92
+    }
+  ],
+  "missingCritical": [
+    {
+      "field": "patientData.height",
+      "reason": "Required for BSA calculation but not mentioned in dictation",
+      "critical": true
+    }
+  ],
+  "missingOptional": [
+    {
+      "field": "patientData.heartRate",
+      "reason": "Not dictated - would improve stroke volume calculation accuracy",
+      "critical": false
+    }
+  ],
+  "confidence": 0.92
+}
+
+IMPORTANT:
+- Output ONLY valid JSON, no explanations or markdown
+- If all values are correct and complete, return empty arrays for corrections/missing
+- Confidence is overall validation confidence (average of individual confidences)
+- Use dot-notation for field paths (e.g., "patientData.svo2", "haemodynamicPressures.pa.mean")`
 };
 
 /**

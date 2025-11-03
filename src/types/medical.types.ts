@@ -980,6 +980,11 @@ export interface RightHeartCathReport extends MedicalReport {
   calculations?: CalculatedHaemodynamics; // Auto-calculated derived values
   patientData?: RHCPatientData; // Patient anthropometrics and vitals
   missingCalculationFields?: string[]; // Fields needed for complete calculations
+
+  // Validation state (when interactive validation required)
+  status?: 'complete' | 'awaiting_validation'; // Report generation status
+  validationResult?: RHCValidationResult; // Validation output from quick model
+  extractedData?: RHCExtractedData; // Raw regex-extracted data before corrections
 }
 
 /**
@@ -1008,6 +1013,46 @@ export interface RHCPatientData {
   raesv?: number; // RA end-systolic volume (mL)
   rapSystolic?: number; // RA systolic pressure (mmHg)
   rapZero?: number; // RA pressure at zero volume (mmHg)
+}
+
+/**
+ * RHC Field Correction - represents a correction suggested by quick model validation
+ */
+export interface RHCFieldCorrection {
+  field: string; // Dot-notation path (e.g., "patientData.svo2")
+  regexValue: any; // Value extracted by regex (null if not found)
+  correctValue: any; // Corrected value from quick model
+  reason: string; // Explanation for correction
+  confidence: number; // Confidence score 0-1
+}
+
+/**
+ * RHC Missing Field - represents a field that's missing and needs user input
+ */
+export interface RHCMissingField {
+  field: string; // Dot-notation path
+  reason: string; // Why this field is needed
+  critical: boolean; // True if required for Fick calculations
+}
+
+/**
+ * RHC Validation Result - output from quick model validation phase
+ */
+export interface RHCValidationResult {
+  corrections: RHCFieldCorrection[]; // Suggested corrections to regex-extracted values
+  missingCritical: RHCMissingField[]; // Missing fields required for calculations
+  missingOptional: RHCMissingField[]; // Missing fields that would improve accuracy
+  confidence: number; // Overall validation confidence 0-1
+}
+
+/**
+ * RHC Extracted Data - structured output from regex extraction phase
+ */
+export interface RHCExtractedData {
+  rhcData: RightHeartCathData;
+  haemodynamicPressures: HaemodynamicPressures;
+  cardiacOutput: CardiacOutput;
+  patientData: RHCPatientData;
 }
 
 /**
