@@ -4,10 +4,13 @@ import type {
   ReportSection,
   TAVIWorkupReport,
   TAVIWorkupStructuredSections,
-  ChatMessage
+  ChatMessage,
+  ValidationResult,
+  TAVIExtractedData
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
+import { TAVI_WORKUP_SYSTEM_PROMPTS } from './TAVIWorkupSystemPrompts';
 
 /**
  * Streamlined TAVI Workup Agent following standard MedicalAgent pattern.
@@ -76,6 +79,69 @@ export class TAVIWorkupAgent extends MedicalAgent {
       const emrData = await this.extractEMRData();
       reportProgress('Extracting EMR data', 100, 'EMR extraction complete');
       console.log(`✅ EMR data extracted:`, Object.keys(emrData));
+
+      // Phase 1.5: Regex Extraction + Quick Model Validation
+      console.log('🚨 TAVI AGENT: Starting validation workflow...');
+      const regexExtracted = this.extractTAVIData(input);
+      console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
+
+      const validation = await this.validateAndDetectGaps(regexExtracted, input);
+      const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
+
+      // INTERACTIVE CHECKPOINT: Check for critical gaps
+      if (validation.missingCritical.length > 0 ||
+          validation.corrections.some(c => c.confidence < 0.8)) {
+
+        console.log(`⚠️ TAVI AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+
+        // Return incomplete report with validation state
+        const baseReport = this.createReport('', [], context, 0, 0);
+        return {
+          ...baseReport,
+          workupData: {
+            patient: {},
+            clinical: {},
+            laboratory: {},
+            ecg: {},
+            echocardiography: {},
+            ctMeasurements: {
+              coronaryHeights: {},
+              sinusOfValsalva: {},
+              coplanarAngles: [],
+              accessVessels: {}
+            },
+            procedurePlan: {
+              valveSelection: {},
+              access: {},
+              strategy: {}
+            }
+          },
+          alerts: {
+            alertMessages: [],
+            triggers: {
+              lowLeftMainHeight: false,
+              lowSinusDiameters: [],
+              lowCoronaryHeights: [],
+              calciumBurden: 'unknown',
+              accessConcerns: [],
+              contraindicationFlags: []
+            }
+          },
+          missingFields: [],
+          status: 'awaiting_validation',
+          validationResult: validation,
+          extractedData: correctedData
+        } as TAVIWorkupReport;
+      }
+
+      // Merge user input if provided
+      let finalData = correctedData;
+      if (context?.userProvidedFields) {
+        console.log('🚨 TAVI AGENT: Merging user-provided fields...');
+        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
+      }
+
+      console.log('✅ TAVI AGENT: Validation complete, proceeding to reasoning model');
 
       // Phase 2: LLM Processing
       reportProgress('Processing dictation with AI', 0, 'Preparing comprehensive TAVI analysis');
@@ -655,5 +721,202 @@ Please process this comprehensive TAVI workup dictation and format according to 
     };
 
     return errorReport;
+  }
+
+  // ============================================================
+  // Validation Workflow Methods (following RHC pattern)
+  // ============================================================
+
+  /**
+   * Extract TAVI data using regex patterns from transcription
+   */
+  private extractTAVIData(input: string): TAVIExtractedData {
+    const text = input.toLowerCase();
+
+    const extracted: TAVIExtractedData = {};
+
+    // Valve Sizing from CT
+    const annulusDiamMatch = text.match(/annulus\s+diameter\s+(\d+(?:\.\d+)?)\s*mm/i);
+    const annulusPerimMatch = text.match(/annulus\s+perimeter\s+(\d+(?:\.\d+)?)\s*mm/i);
+    const annulusAreaMatch = text.match(/(?:annulus|ct)\s+area\s+(\d+(?:\.\d+)?)\s*(?:mm²|mm2|sq\s*mm)/i);
+
+    if (annulusDiamMatch || annulusPerimMatch || annulusAreaMatch) {
+      extracted.valveSizing = {
+        annulusDiameter: annulusDiamMatch ? parseFloat(annulusDiamMatch[1]) : undefined,
+        annulusPerimeter: annulusPerimMatch ? parseFloat(annulusPerimMatch[1]) : undefined,
+        annulusArea: annulusAreaMatch ? parseFloat(annulusAreaMatch[1]) : undefined
+      };
+    }
+
+    // Access Assessment
+    const accessSiteMatch = text.match(/(?:access|approach)\s+(?:via|through)\s+(femoral|radial|subclavian|transapical|transaortic)/i);
+    const iliofemoralMatch = text.match(/(?:iliac|femoral)\s+(?:arteries|vessels)\s+(\d+(?:-\d+)?)\s*mm/i);
+
+    if (accessSiteMatch || iliofemoralMatch) {
+      extracted.accessAssessment = {
+        site: accessSiteMatch ? accessSiteMatch[1] : undefined,
+        iliofemoralDimensions: iliofemoralMatch ? iliofemoralMatch[0] : undefined
+      };
+    }
+
+    // Coronary Heights
+    const leftCoronaryMatch = text.match(/left\s+coronary\s+height\s+(\d+(?:\.\d+)?)\s*mm/i);
+    const rightCoronaryMatch = text.match(/right\s+coronary\s+height\s+(\d+(?:\.\d+)?)\s*mm/i);
+
+    if (leftCoronaryMatch || rightCoronaryMatch) {
+      extracted.coronaryHeights = {
+        leftCoronary: leftCoronaryMatch ? parseFloat(leftCoronaryMatch[1]) : undefined,
+        rightCoronary: rightCoronaryMatch ? parseFloat(rightCoronaryMatch[1]) : undefined
+      };
+    }
+
+    // Aortic Valve Assessment from Echo
+    const peakGradMatch = text.match(/(?:peak|max)\s+gradient\s+(\d+(?:\.\d+)?)\s*mmhg/i);
+    const meanGradMatch = text.match(/mean\s+gradient\s+(\d+(?:\.\d+)?)\s*mmhg/i);
+    const avAreaMatch = text.match(/(?:aortic\s+valve\s+area|ava)\s+(\d+(?:\.\d+)?)\s*cm²/i);
+
+    if (peakGradMatch || meanGradMatch || avAreaMatch) {
+      extracted.aorticValve = {
+        peakGradient: peakGradMatch ? parseFloat(peakGradMatch[1]) : undefined,
+        meanGradient: meanGradMatch ? parseFloat(meanGradMatch[1]) : undefined,
+        avArea: avAreaMatch ? parseFloat(avAreaMatch[1]) : undefined
+      };
+    }
+
+    // LV Assessment
+    const efMatch = text.match(/(?:lvef|ejection\s+fraction|ef)\s+(\d+)\s*%/i);
+    const lviddMatch = text.match(/lvidd\s+(\d+(?:\.\d+)?)\s*mm/i);
+    const lvidsMatch = text.match(/lvids\s+(\d+(?:\.\d+)?)\s*mm/i);
+
+    if (efMatch || lviddMatch || lvidsMatch) {
+      extracted.lvAssessment = {
+        ef: efMatch ? parseFloat(efMatch[1]) : undefined,
+        lvidd: lviddMatch ? parseFloat(lviddMatch[1]) : undefined,
+        lvids: lvidsMatch ? parseFloat(lvidsMatch[1]) : undefined
+      };
+    }
+
+    // Procedure Details - Valve selection
+    const valveTypeMatch = text.match(/(sapien\s+(?:3|ultra)|evolut\s+(?:r|pro|fx)|acurate\s+(?:neo|neo2))/i);
+    const valveSizeMatch = text.match(/(\d+)\s*mm\s+valve/i);
+    const deploymentDepthMatch = text.match(/deployment\s+depth\s+(\d+(?:\.\d+)?)\s*mm/i);
+
+    if (valveTypeMatch || valveSizeMatch || deploymentDepthMatch) {
+      extracted.procedureDetails = {
+        valveType: valveTypeMatch ? valveTypeMatch[1] : undefined,
+        valveSize: valveSizeMatch ? parseFloat(valveSizeMatch[1]) : undefined,
+        deploymentDepth: deploymentDepthMatch ? parseFloat(deploymentDepthMatch[1]) : undefined
+      };
+    }
+
+    return extracted;
+  }
+
+  /**
+   * Validate extracted data using quick model
+   */
+  private async validateAndDetectGaps(
+    extracted: TAVIExtractedData,
+    transcription: string
+  ): Promise<ValidationResult> {
+    console.log('🔍 TAVI AGENT: Starting quick model validation...');
+
+    try {
+      const userMessage = `REGEX EXTRACTED:\n${JSON.stringify(extracted, null, 2)}\n\nTRANSCRIPTION:\n${transcription}\n\nValidate the extraction and output JSON only.`;
+
+      const response = await this.lmStudioService.processWithAgent(
+        TAVI_WORKUP_SYSTEM_PROMPTS.dataValidationPrompt,
+        userMessage,
+        'tavi-validation',
+        undefined,
+        MODEL_CONFIG.QUICK_MODEL
+      );
+
+      // Parse validation result - handle potential markdown code fences
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonString = jsonMatch ? jsonMatch[1] : response;
+
+      try {
+        const validationResult = JSON.parse(jsonString);
+        console.log('✅ TAVI AGENT: Validation complete');
+        console.log(`   - Corrections: ${validationResult.corrections.length}`);
+        console.log(`   - Missing critical: ${validationResult.missingCritical.length}`);
+        console.log(`   - Missing optional: ${validationResult.missingOptional.length}`);
+        console.log(`   - Confidence: ${validationResult.confidence.toFixed(2)}`);
+
+        return validationResult;
+      } catch (parseError) {
+        console.error('❌ Failed to parse validation JSON:', parseError);
+        return {
+          corrections: [],
+          missingCritical: [],
+          missingOptional: [],
+          confidence: 0.5
+        };
+      }
+    } catch (error) {
+      console.error('❌ TAVI AGENT: Validation failed:', error);
+      return {
+        corrections: [],
+        missingCritical: [],
+        missingOptional: [],
+        confidence: 0.5
+      };
+    }
+  }
+
+  /**
+   * Apply high-confidence corrections automatically
+   */
+  private applyCorrections(
+    extracted: TAVIExtractedData,
+    corrections: ValidationResult['corrections'],
+    confidenceThreshold: number = 0.8
+  ): TAVIExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as TAVIExtractedData;
+
+    for (const correction of corrections) {
+      if (correction.confidence >= confidenceThreshold) {
+        this.setNestedField(result, correction.field, correction.correctValue);
+        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Merge user-provided fields from validation modal
+   */
+  private mergeUserInput(
+    extracted: TAVIExtractedData,
+    userFields: Record<string, any>
+  ): TAVIExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as TAVIExtractedData;
+
+    for (const [fieldPath, value] of Object.entries(userFields)) {
+      if (value !== null && value !== undefined && value !== '') {
+        this.setNestedField(result, fieldPath, value);
+        console.log(`✅ User-provided ${fieldPath}: ${value}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Helper to set nested field via dot notation
+   */
+  private setNestedField(obj: any, path: string, value: any): void {
+    const keys = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key]) current[key] = {};
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
   }
 }
