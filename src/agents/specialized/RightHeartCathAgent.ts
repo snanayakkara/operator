@@ -12,7 +12,10 @@ import type {
   VenousAccess,
   RHCIndication,
   RHCPatientData,
-  CalculatedHaemodynamics
+  CalculatedHaemodynamics,
+  RHCExtractedData,
+  RHCValidationResult,
+  RHCFieldCorrection
 } from '@/types/medical.types';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
@@ -129,57 +132,100 @@ export class RightHeartCathAgent extends MedicalAgent {
       // Correct RHC-specific terminology with Australian spelling
       const correctedInput = this.correctRHCTerminology(asrCorrectedInput);
 
-      // Extract RHC data from input
+      // STEP 1: Regex extraction
       console.log('🚨 RHC AGENT: Calling extractRHCData()...');
       const rhcData = this.extractRHCData(correctedInput);
       console.log('🚨 RHC AGENT: extractRHCData() completed');
 
-      // Analyze haemodynamic pressures
       console.log('🚨 RHC AGENT: Calling extractHaemodynamicPressures()...');
       const haemodynamicPressures = this.extractHaemodynamicPressures(correctedInput);
       console.log('📊 Extracted haemodynamic pressures:', JSON.stringify(haemodynamicPressures, null, 2));
 
-      // Assess cardiac output
       console.log('🚨 RHC AGENT: Calling extractCardiacOutput()...');
       const cardiacOutput = this.extractCardiacOutput(correctedInput);
       console.log('💓 Extracted cardiac output:', JSON.stringify(cardiacOutput, null, 2));
 
-      // Extract patient anthropometric data and vitals
       console.log('🚨 RHC AGENT: Calling extractPatientData()...');
       const patientData = this.extractPatientData(correctedInput);
       console.log('👤 Extracted patient data:', JSON.stringify(patientData, null, 2));
 
-      // Extract exercise data if present
-      const exerciseHaemodynamics = this.extractExerciseHaemodynamics(correctedInput);
-
-      // Identify complications
-      const complications = this.identifyComplications(correctedInput);
-
-      // Calculate all derived haemodynamic values
-      console.log('🚨 RHC AGENT: Calling calculateDerivedHaemodynamics()...');
-      const calculations = this.calculateDerivedHaemodynamics(
+      const regexExtracted: RHCExtractedData = {
+        rhcData,
         haemodynamicPressures,
         cardiacOutput,
         patientData
+      };
+
+      // STEP 2: Quick model validation
+      console.log('🚨 RHC AGENT: Starting validation phase...');
+      const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
+
+      // STEP 3: Apply high-confidence corrections automatically
+      console.log('🚨 RHC AGENT: Applying corrections...');
+      const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
+
+      // STEP 4: Check for critical gaps - INTERACTIVE CHECKPOINT
+      if (validation.missingCritical.length > 0 ||
+          validation.corrections.some(c => c.confidence < 0.8)) {
+
+        console.log(`⚠️ RHC AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+
+        // Return incomplete report with validation state
+        // UI will show validation modal and re-run process() with user input
+        const baseReport = this.createReport('', [], context, 0, 0);
+        return {
+          ...baseReport,
+          title: 'Right Heart Catheterisation - Validation Required',
+          content: '',
+          sections: [],
+          status: 'awaiting_validation',
+          validationResult: validation,
+          extractedData: correctedData,
+          rhcData: correctedData.rhcData,
+          haemodynamicPressures: correctedData.haemodynamicPressures,
+          cardiacOutput: correctedData.cardiacOutput,
+          exerciseHaemodynamics: null,
+          complications: [],
+          patientData: correctedData.patientData
+        } as RightHeartCathReport;
+      }
+
+      // STEP 5: Merge user input if provided
+      let finalData = correctedData;
+      if (context?.userProvidedFields) {
+        console.log('🚨 RHC AGENT: Merging user-provided fields...');
+        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
+      }
+
+      // STEP 6: Extract exercise/complications
+      const exerciseHaemodynamics = this.extractExerciseHaemodynamics(correctedInput);
+      const complications = this.identifyComplications(correctedInput);
+
+      // STEP 7: Calculate all derived haemodynamic values - now guaranteed to have all inputs
+      console.log('🚨 RHC AGENT: Calling calculateDerivedHaemodynamics()...');
+      const calculations = this.calculateDerivedHaemodynamics(
+        finalData.haemodynamicPressures,
+        finalData.cardiacOutput,
+        finalData.patientData
       );
       console.log('🧮 Calculated haemodynamics:', JSON.stringify(calculations, null, 2));
 
       // Auto-populate calculated CI and Fick CO/CI back into cardiacOutput for display/export
-      if (calculations.cardiacIndex !== undefined && !cardiacOutput.thermodilution.ci) {
-        cardiacOutput.thermodilution.ci = calculations.cardiacIndex.toFixed(2);
+      if (calculations.cardiacIndex !== undefined && !finalData.cardiacOutput.thermodilution.ci) {
+        finalData.cardiacOutput.thermodilution.ci = calculations.cardiacIndex.toFixed(2);
       }
-      if (calculations.fickCO !== undefined && !cardiacOutput.fick.co) {
-        cardiacOutput.fick.co = calculations.fickCO.toFixed(2);
+      if (calculations.fickCO !== undefined && !finalData.cardiacOutput.fick.co) {
+        finalData.cardiacOutput.fick.co = calculations.fickCO.toFixed(2);
       }
-      if (calculations.fickCI !== undefined && !cardiacOutput.fick.ci) {
-        cardiacOutput.fick.ci = calculations.fickCI.toFixed(2);
+      if (calculations.fickCI !== undefined && !finalData.cardiacOutput.fick.ci) {
+        finalData.cardiacOutput.fick.ci = calculations.fickCI.toFixed(2);
       }
 
-      // Generate structured report content
+      // STEP 8: Generate structured report content
       let reportContent = await this.generateStructuredReport(
-        rhcData,
-        haemodynamicPressures,
-        cardiacOutput,
+        finalData.rhcData,
+        finalData.haemodynamicPressures,
+        finalData.cardiacOutput,
         exerciseHaemodynamics,
         complications,
         correctedInput
@@ -196,13 +242,13 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // Serialize structured data for display layer parsing
       const structuredDataJson = JSON.stringify({
-        rhcData,
-        haemodynamicPressures,
-        cardiacOutput,
+        rhcData: finalData.rhcData,
+        haemodynamicPressures: finalData.haemodynamicPressures,
+        cardiacOutput: finalData.cardiacOutput,
         exerciseHaemodynamics,
         complications,
         calculations,
-        patientData
+        patientData: finalData.patientData
       }, null, 2);
 
       // Combine report content with JSON data for backward compatibility
@@ -212,20 +258,21 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // Identify missing fields required for calculations
       const missingCalculationFields = this.identifyMissingCalculationFields(
-        haemodynamicPressures,
-        cardiacOutput,
-        patientData
+        finalData.haemodynamicPressures,
+        finalData.cardiacOutput,
+        finalData.patientData
       );
 
       const report: RightHeartCathReport = {
         ...baseReport,
-        rhcData,
-        haemodynamicPressures,
-        cardiacOutput,
+        status: 'complete',
+        rhcData: finalData.rhcData,
+        haemodynamicPressures: finalData.haemodynamicPressures,
+        cardiacOutput: finalData.cardiacOutput,
         exerciseHaemodynamics,
         complications,
         calculations,
-        patientData,
+        patientData: finalData.patientData,
         missingCalculationFields
       };
 
@@ -1200,11 +1247,159 @@ Note: This report was generated with limited AI processing. Clinical review is r
   private getSectionPriority(line: string): 'high' | 'medium' | 'low' {
     const highPriority = ['findings', 'procedure', 'indication', 'complications', 'assessment'];
     const title = line.toLowerCase();
-    
+
     for (const keyword of highPriority) {
       if (title.includes(keyword)) return 'high';
     }
-    
+
     return 'medium';
+  }
+
+  // ========== VALIDATION HELPERS ==========
+
+  /**
+   * Set a nested field value using dot notation (e.g., "patientData.svo2")
+   */
+  private setNestedField(obj: any, path: string, value: any): void {
+    const keys = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key]) {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
+  }
+
+  /**
+   * Get a nested field value using dot notation
+   */
+  private getNestedField(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  /**
+   * Validate regex-extracted data using quick model and detect missing fields
+   *
+   * @param extracted - Regex-extracted RHC data
+   * @param transcription - Original corrected transcription
+   * @returns Validation result with corrections and missing fields
+   */
+  private async validateAndDetectGaps(
+    extracted: RHCExtractedData,
+    transcription: string
+  ): Promise<RHCValidationResult> {
+    console.log('🔍 RHC AGENT: Starting quick model validation...');
+
+    try {
+      // Call quick model for validation
+      const userMessage = `REGEX EXTRACTED:\n${JSON.stringify(extracted, null, 2)}\n\nTRANSCRIPTION:\n${transcription}\n\nValidate the extraction and output JSON only.`;
+
+      const response = await this.lmStudioService.processWithAgent(
+        RightHeartCathSystemPrompts.dataValidationPrompt,
+        userMessage,
+        'rhc-validation', // agentType
+        undefined, // signal
+        MODEL_CONFIG.QUICK_MODEL // modelOverride
+      );
+
+      // Parse validation result - handle potential markdown code fences
+      let validationResult: RHCValidationResult;
+
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonString = jsonMatch ? jsonMatch[1] : response;
+
+      try {
+        validationResult = JSON.parse(jsonString);
+      } catch (parseError) {
+        console.error('❌ Failed to parse validation JSON:', parseError);
+        console.log('Raw response:', response);
+
+        // Fallback: return empty validation (proceed with regex data as-is)
+        return {
+          corrections: [],
+          missingCritical: [],
+          missingOptional: [],
+          confidence: 0.5
+        };
+      }
+
+      console.log('✅ RHC AGENT: Validation complete');
+      console.log(`   - Corrections: ${validationResult.corrections.length}`);
+      console.log(`   - Missing critical: ${validationResult.missingCritical.length}`);
+      console.log(`   - Missing optional: ${validationResult.missingOptional.length}`);
+      console.log(`   - Confidence: ${validationResult.confidence.toFixed(2)}`);
+
+      return validationResult;
+
+    } catch (error) {
+      console.error('❌ RHC AGENT: Validation failed:', error);
+
+      // Fallback: proceed with regex extraction as-is
+      return {
+        corrections: [],
+        missingCritical: [],
+        missingOptional: [],
+        confidence: 0.5
+      };
+    }
+  }
+
+  /**
+   * Apply high-confidence corrections automatically
+   * Low-confidence corrections are added to user validation list
+   *
+   * @param extracted - Original regex-extracted data
+   * @param corrections - Corrections suggested by quick model
+   * @param confidenceThreshold - Minimum confidence for auto-apply (default 0.8)
+   * @returns Corrected data with metadata tracking
+   */
+  private applyCorrections(
+    extracted: RHCExtractedData,
+    corrections: RHCFieldCorrection[],
+    confidenceThreshold: number = 0.8
+  ): RHCExtractedData {
+    // Deep clone to avoid mutations
+    const result = JSON.parse(JSON.stringify(extracted)) as RHCExtractedData;
+
+    for (const correction of corrections) {
+      if (correction.confidence >= confidenceThreshold) {
+        // Auto-apply high-confidence corrections
+        this.setNestedField(result, correction.field, correction.correctValue);
+        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue} (confidence: ${correction.confidence.toFixed(2)})`);
+      } else {
+        // Low confidence - will be shown to user for review
+        console.log(`⚠️ Low-confidence correction for ${correction.field} (${correction.confidence.toFixed(2)}), requiring user review`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Merge user-provided field values with extracted data
+   *
+   * @param extracted - Auto-corrected extracted data
+   * @param userFields - User-provided field values from validation modal
+   * @returns Merged data with user inputs
+   */
+  private mergeUserInput(
+    extracted: RHCExtractedData,
+    userFields: Record<string, any>
+  ): RHCExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as RHCExtractedData;
+
+    for (const [fieldPath, value] of Object.entries(userFields)) {
+      if (value !== null && value !== undefined && value !== '') {
+        this.setNestedField(result, fieldPath, value);
+        console.log(`👤 User provided ${fieldPath}: ${value}`);
+      }
+    }
+
+    return result;
   }
 }

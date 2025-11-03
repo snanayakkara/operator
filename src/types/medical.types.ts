@@ -28,6 +28,8 @@ export interface MedicalContext {
   clinicalCorrelations?: any[];
   terminologyPreferences?: string;
   recommendations?: string[];
+  // RHC validation: User-provided fields after validation modal
+  userProvidedFields?: Record<string, any>; // e.g., { "patientData.height": 172 }
   // Patient demographics for enhanced correspondence
   demographics?: {
     name?: string;
