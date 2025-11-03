@@ -99,31 +99,57 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 • HbA1c: <7%
 ```
 
-### 2.2 Right Heart Catheterisation (RHC) Interactive Validation
+### 2.2 Interactive Validation Workflow (RHC, TAVI, AngioPCI, mTEER)
 
-**Intelligent validation workflow** prevents wasted reasoning model runs by validating extracted data before expensive report generation:
+**Intelligent validation workflow** prevents wasted reasoning model runs by validating extracted data before expensive report generation. **Now deployed across 4 procedural agents.**
 
-**Workflow:**
-1. **Whisper Transcription** → ASR corrections for common errors (e.g., "mixed mean is" → "mixed venous")
-2. **Regex Extraction** → Extract haemodynamic pressures, cardiac output, patient data (height, weight, Hb, SaO2, SvO2)
-3. **Quick Model Validation** (qwen/qwen3-4b-2507, ~10-30s) → Validate extraction, detect gaps, suggest corrections
-4. **Auto-Apply High-Confidence** → Corrections ≥0.8 confidence applied automatically
-5. **Interactive Checkpoint** → If critical fields missing or low-confidence corrections:
+**Universal Workflow Pattern:**
+1. **Whisper Transcription** → ASR corrections for common errors (agent-specific patterns)
+2. **Regex Extraction** → Extract procedure-specific critical fields (valve sizing, stent details, clip deployment, haemodynamics)
+3. **Quick Model Validation** (qwen/qwen3-4b-2507, ~10-30s) → Validate extraction, detect gaps, suggest corrections with confidence scores
+4. **Auto-Apply High-Confidence** → Corrections ≥0.8 confidence applied automatically without user intervention
+5. **Interactive Checkpoint** → If critical fields missing or low-confidence corrections (<0.8):
    - Pause workflow with `status: 'awaiting_validation'`
-   - Show modal with missing fields (red), low-confidence suggestions (yellow), optional fields (blue)
+   - Show validation modal with agent-specific field configurations:
+     - **Critical missing fields** (red) - REQUIRED for complete report/calculations
+     - **Low-confidence suggestions** (yellow) - User accepts/rejects proposed corrections
+     - **Optional fields** (blue) - Improves documentation quality but not essential
    - User fills/approves fields → reprocess with `context.userProvidedFields`
-6. **Calculations** → Fick CO/CI with guaranteed complete inputs
-7. **Reasoning Model** → Generate report (medgemma-27b, ~3-15min) ONLY after validation passes
+6. **Reasoning Model** → Generate report (MedGemma-27B, ~3-15min) ONLY after validation passes
+
+**Agent-Specific Critical Fields:**
+
+**RHC (Right Heart Cath):**
+- **For Fick Calculations**: Height, Weight, Hemoglobin, SaO2, SvO2 (ensures accurate CO/CI/PVR/SVR)
+- **Pressures**: RA, RV systolic/diastolic, PA systolic/diastolic/mean, PCWP
+- **Resources**: Fluoroscopy time, contrast volume (safety documentation)
+
+**TAVI (Valve Sizing & Safety):**
+- **Valve Sizing**: Annulus diameter/perimeter/area from CT (CRITICAL for prosthesis selection)
+- **Coronary Heights**: Left/right coronary ostium heights (CRITICAL for coronary occlusion risk)
+- **Access Assessment**: Site, iliofemoral dimensions
+- **Aortic Valve**: Peak/mean gradient, AV area
+- **LV Assessment**: EF, LVIDD, LVIDS
+
+**Angiogram/PCI (Registry Reporting):**
+- **Intervention Details**: Stent type/diameter/length (REQUIRED for device tracking & registry)
+- **Lesion Characteristics**: Target vessel, location, stenosis %
+- **TIMI Flow**: Pre/post-intervention grades (REQUIRED for success assessment)
+- **Resources**: Contrast volume, fluoroscopy time (safety documentation)
+
+**mTEER (Procedural Success):**
+- **MR Grading**: Pre/post-procedure MR grade (KEY measure of procedural success)
+- **Clip Details**: Type (MitraClip/PASCAL), size, number deployed (REQUIRED for device tracking)
+- **Anatomical Location**: A2-P2, A1-P1, etc. (precise documentation)
+- **Transmitral Gradient**: Post-procedure gradient (CRITICAL for assessing mitral stenosis risk)
 
 **Benefits:**
-- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data; validation takes only 10-30s
-- **Improves accuracy**: User sees missing fields immediately; model corrections reduce transcription errors
-- **Efficient resource usage**: Lightweight quick model (qwen/qwen3-4b-2507) validates before running resource-intensive reasoning model (MedGemma-27B)
+- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data; quick model validation takes only 10-30s
+- **Improves accuracy**: User sees missing fields immediately before generation; model corrections reduce transcription errors (e.g., "three point five" → 3.5)
+- **Efficient resource usage**: Lightweight quick model validates before resource-intensive reasoning model runs
+- **Consistent UX**: All 4 agents use same generic `FieldValidationPrompt` component with agent-specific field configurations in `validationFieldConfig.ts`
 
-**Critical Fields for Fick Calculations:**
-- Height (cm), Weight (kg), Hemoglobin (g/L), SaO2 (%), SvO2 (%)
-
-Each agent has dedicated SystemPrompts, validation patterns, template structure, QA rules; Australian terminology.
+Each agent has dedicated SystemPrompts with `dataValidationPrompt`, validation patterns, critical field lists, confidence thresholds; Australian terminology.
 
 ---
 
@@ -305,12 +331,27 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.28.0**
+**Current Version**: **3.29.0**
 **Last Updated**: November 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.29.0 (Nov 2025)**
+- **Universal Validation Workflow Extension**: Interactive validation now deployed across 4 procedural agents (RHC → TAVI, AngioPCI, mTEER)
+  - All agents follow identical pattern: Whisper → Regex → Quick Model → Auto-Correct → Checkpoint → Reasoning Model
+  - Agent-specific critical fields:
+    - **TAVI**: Valve sizing (annulus diameter/perimeter/area), coronary heights (safety), access assessment
+    - **AngioPCI**: Stent details (type/diameter/length for registry), TIMI flow (success assessment), lesion characteristics
+    - **mTEER**: Pre/post MR grades (procedural success), clip details (device tracking), transmitral gradient (stenosis risk)
+  - **Centralized validation configuration** (`validationFieldConfig.ts`): Single source of truth for field labels, placeholders, helper text across all agents
+  - **Generic FieldValidationPrompt component**: Reusable validation modal with agent-specific configs; eliminates code duplication
+  - **Type-safe validation system**: `ValidationResult`, `FieldCorrection`, `MissingField` types with agent-specific extracted data interfaces (`TAVIExtractedData`, `AngioPCIExtractedData`, `MTEERExtractedData`)
+  - **Auto-apply high-confidence corrections** (≥0.8 threshold) across all agents; consistent UX for low-confidence suggestions
+  - **Saves time & improves accuracy**: Prevents wasted 3-15min reasoning model runs; quick model validation (~10-30s) catches missing fields before generation
+- **Comprehensive SystemPrompts updates**: Added `dataValidationPrompt` for TAVI, AngioPCI, mTEER with agent-specific critical field lists and confidence scoring guidance
+- **Phase-based implementation**: Type definitions (Phase 1) → Agent methods (Phase 2) → Centralized config (Phase 3) → Integration (Phase 4)
 
 **v3.28.0 (Nov 2025)**
 - **RHC Interactive Validation Workflow**: Intelligent validation checkpoint prevents wasted reasoning model runs
