@@ -107,6 +107,7 @@ interface OptimizedResultsPanelProps {
   // Right Heart Cath structured data
   rhcReport?: any; // RightHeartCathReport with haemodynamic calculations
   onUpdateRhcReport?: (rhcReport: any) => void; // Callback to persist edited RHC report to session
+  onRHCReprocessWithValidation?: (userFields: Record<string, any>) => void; // Callback for RHC validation reprocessing
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
@@ -195,6 +196,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Right Heart Cath structured data
   rhcReport,
   onUpdateRhcReport,
+  onRHCReprocessWithValidation,
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
@@ -1099,6 +1101,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onCopy={onCopy}
               onInsertToEMR={onInsertToEMR}
               onUpdateRhcReport={onUpdateRhcReport}
+              onReprocessWithValidation={onRHCReprocessWithValidation}
               originalTranscription={originalTranscription}
               onTranscriptionCopy={onTranscriptionCopy}
               onTranscriptionInsert={onTranscriptionInsert}

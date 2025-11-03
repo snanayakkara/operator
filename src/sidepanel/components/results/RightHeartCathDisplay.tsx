@@ -25,7 +25,9 @@ import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { RHCFieldEditor } from './RHCFieldEditor';
 import { RHCCardPreviewModal } from './RHCCardPreviewModal';
+import { RHCFieldValidationPrompt } from './RHCFieldValidationPrompt';
 import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
+import { useRHCValidation } from '@/hooks/useRHCValidation';
 import type {
   RightHeartCathReport,
   RightHeartCathData as _RightHeartCathData,
@@ -67,6 +69,8 @@ interface RightHeartCathDisplayProps {
   onDismissMissingInfo?: () => void;
   // Patient info
   selectedPatientName?: string;
+  // Validation handling
+  onReprocessWithValidation?: (userFields: Record<string, any>) => void;
 }
 
 interface SectionConfig {
@@ -110,7 +114,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   onTranscriptionApprove,
   onReprocessWithAnswers,
   onDismissMissingInfo,
-  selectedPatientName
+  selectedPatientName,
+  onReprocessWithValidation
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
@@ -118,6 +123,9 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
+
+  // Validation hook
+  const rhcValidation = useRHCValidation();
   const [cardPreview, setCardPreview] = useState<{ dataUrl: string; blob: Blob } | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [showAddField, setShowAddField] = useState(false);
@@ -175,6 +183,14 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
     return null;
   }, [rhcReport, results, editedRHCReport]);
+
+  // Detect validation state and show modal
+  React.useEffect(() => {
+    if (rhcReport?.status === 'awaiting_validation' && rhcReport.validationResult) {
+      console.log('🔍 RHC Display: Validation required, showing modal');
+      rhcValidation.handleValidationRequired(rhcReport.validationResult);
+    }
+  }, [rhcReport?.status, rhcReport?.validationResult]);
 
   const toggleSection = useCallback((sectionKey: string) => {
     setExpandedSections(prev => {
@@ -661,6 +677,30 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           imageBlob={cardPreview.blob}
           patientName={selectedPatientName}
           onClose={() => setCardPreview(null)}
+        />
+      )}
+
+      {/* Validation Modal */}
+      {rhcValidation.showValidationModal && rhcValidation.validationResult && (
+        <RHCFieldValidationPrompt
+          validation={rhcValidation.validationResult}
+          onCancel={() => {
+            console.log('🚫 RHC Display: Validation cancelled');
+            rhcValidation.handleValidationCancel();
+          }}
+          onSkip={() => {
+            console.log('⏭️ RHC Display: Validation skipped');
+            rhcValidation.handleValidationSkip();
+            // TODO: Force generation with incomplete data
+          }}
+          onContinue={(userFields) => {
+            console.log('✅ RHC Display: Validation complete, user fields:', userFields);
+            rhcValidation.handleValidationContinue(userFields);
+            // Re-process with user-provided fields
+            if (onReprocessWithValidation) {
+              onReprocessWithValidation(userFields);
+            }
+          }}
         />
       )}
     </div>

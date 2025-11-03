@@ -758,7 +758,9 @@ export type SessionStatus =
   | 'processing'
   | 'completed'
   | 'error'
-  | 'cancelled';
+  | 'cancelled'
+  | 'awaiting_validation'
+  | 'failed';
 
 export interface PatientSession {
   id: string;

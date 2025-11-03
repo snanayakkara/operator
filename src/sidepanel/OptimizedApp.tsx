@@ -1639,13 +1639,35 @@ const OptimizedAppContent: React.FC = memo(() => {
         sessionProcessingAbort.signal,
         processOptions
       );
-      
+
       const processingDuration = Date.now() - processingStartTime;
       performanceMonitor.recordMetrics('agent-processing', processingDuration, {
         agentType: workflowId
       });
-      
+
       console.log('✅ Agent processing complete for session:', sessionId);
+
+      // Check if RHC validation is required
+      if (workflowId === 'right-heart-cath' && (result as any).status === 'awaiting_validation') {
+        console.log('⚠️ RHC validation required - pausing workflow');
+
+        // Store partial result with validation data
+        const rhcResult = result as any;
+        actions.updatePatientSession(sessionId, {
+          results: rhcResult.content,
+          rhcReport: rhcResult, // Store full report with validation data
+          status: 'awaiting_validation',
+          processingProgress: undefined,
+          pipelineProgress: undefined
+        });
+
+        // Clear progress indicators
+        actions.setProcessingProgress(0);
+        actions.clearPipelineProgress();
+
+        // Return early - user will fill in fields via modal
+        return;
+      }
 
       // Update pipeline progress - Generation/completion phase
       actions.setPipelineProgress({
@@ -2873,6 +2895,98 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [state.transcription, state.currentAgent, actions]);
 
+  // Reprocess RHC with user-provided validation fields
+  const handleRHCReprocessWithValidation = useCallback(async (userFields: Record<string, any>) => {
+    try {
+      if (!state.transcription || !state.currentAgent || state.currentAgent !== 'right-heart-cath') {
+        console.error('❌ Cannot reprocess: missing transcription or not RHC agent');
+        return;
+      }
+
+      const sessionId = state.currentSessionId;
+      if (!sessionId) {
+        console.error('❌ Cannot reprocess: no session ID');
+        return;
+      }
+
+      console.log('🔄 Reprocessing RHC with user-provided fields:', userFields);
+
+      actions.setProcessing(true);
+      actions.setProcessingStatus('processing');
+
+      // Update session status
+      actions.updatePatientSession(sessionId, {
+        status: 'processing'
+      });
+
+      // Build context with user-provided fields
+      const context = {
+        sessionId,
+        timestamp: Date.now(),
+        userProvidedFields: userFields
+      };
+
+      // Dynamic import for bundle optimization
+      const { AgentFactory } = await import('@/services/AgentFactory');
+      const result = await AgentFactory.processWithAgent(
+        'right-heart-cath',
+        state.transcription,
+        context,
+        processingAbortRef.current?.signal
+      );
+
+      console.log('✅ RHC reprocessing complete');
+
+      // Check if validation is still required (shouldn't be, but handle gracefully)
+      if ((result as any).status === 'awaiting_validation') {
+        console.warn('⚠️ RHC still requires validation after user input - this should not happen');
+        actions.updatePatientSession(sessionId, {
+          rhcReport: result as any,
+          status: 'awaiting_validation'
+        });
+        return;
+      }
+
+      // Update session with completed results
+      const sessionUpdate: any = {
+        results: result.content,
+        rhcReport: result,
+        status: 'completed',
+        completed: true,
+        completedTime: Date.now(),
+        processingTime: result.processingTime,
+        warnings: result.warnings,
+        errors: result.errors
+      };
+
+      actions.updatePatientSession(sessionId, sessionUpdate);
+
+      // Save to persistence
+      const completedSession = state.patientSessions.find(s => s.id === sessionId);
+      if (completedSession) {
+        await saveSessionToPersistence({
+          ...completedSession,
+          ...sessionUpdate
+        });
+      }
+
+      // Use atomic completion to ensure consistent state management
+      actions.completeProcessingAtomic(sessionId, result.content);
+
+      console.log('✅ RHC session completed and saved');
+    } catch (error) {
+      console.error('❌ RHC reprocess with validation failed:', error);
+      actions.setProcessing(false);
+      actions.setProcessingStatus('idle');
+      if (state.currentSessionId) {
+        actions.updatePatientSession(state.currentSessionId, {
+          status: 'failed',
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        });
+      }
+    }
+  }, [state.transcription, state.currentAgent, state.currentSessionId, state.patientSessions, actions]);
+
   // Patient version generation handler
   const handleGeneratePatientVersion = useCallback(async () => {
     if (!state.results || state.isGeneratingPatientVersion) {
@@ -3862,6 +3976,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 onUpdateRhcReport={displayData.isDisplayingSession && stableSelectedSessionId
                   ? (rhcReport: any) => actions.updateSessionRhcReport(stableSelectedSessionId, rhcReport)
                   : undefined}
+                onRHCReprocessWithValidation={!displayData.isDisplayingSession ? handleRHCReprocessWithValidation : undefined}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                 revisionPanel={revisionPanelData}

@@ -164,6 +164,31 @@ export function useAIProcessing() {
         setStreaming(false);
         abortRef.current = null;
       }
+    },
+
+    // RHC validation reprocessing
+    async reprocessWithUserInput(
+      agentType: AgentType,
+      transcription: string,
+      userFields: Record<string, any>,
+      context?: any,
+      signal?: AbortSignal
+    ) {
+      // Merge user-provided fields into context
+      const updatedContext = {
+        ...context,
+        userProvidedFields: userFields
+      };
+
+      console.log('🔄 Reprocessing with user-provided fields:', userFields);
+
+      // Process again with updated context
+      return await processingMutation.mutateAsync({
+        agentType,
+        transcription,
+        context: updatedContext,
+        signal
+      });
     }
   };
 }
