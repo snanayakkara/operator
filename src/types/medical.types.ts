@@ -57,6 +57,10 @@ export interface MedicalReport {
   timestamp: number;
   warnings?: string[];
   errors?: string[];
+  // Validation workflow support (for agents that use validation)
+  status?: 'complete' | 'awaiting_validation';
+  validationResult?: ValidationResult;
+  extractedData?: any; // Agent-specific extracted data (TAVIExtractedData | AngioPCIExtractedData | MTEERExtractedData)
 }
 
 export interface ReportSection {
@@ -481,6 +485,10 @@ export interface TAVIWorkupReport extends MedicalReport {
   missingFields: string[];
   // New JSON structure for narrative-based PDF export
   structuredSections?: TAVIWorkupStructuredSections;
+  // Validation workflow support
+  status?: 'complete' | 'awaiting_validation';
+  validationResult?: ValidationResult;
+  extractedData?: TAVIExtractedData;
 }
 
 // New interface for JSON narrative structure matching system prompt output
@@ -829,6 +837,10 @@ export interface MTEERReport extends MedicalReport {
   mitralRegurgitation: MitralRegurgitationData;
   clipAssessment: ClipAssessment;
   complications: MTEERComplication[];
+  // Validation workflow support
+  status?: 'complete' | 'awaiting_validation';
+  validationResult?: ValidationResult;
+  extractedData?: MTEERExtractedData;
 }
 
 export interface MTEERData {
@@ -1057,6 +1069,127 @@ export interface RHCExtractedData {
   haemodynamicPressures: HaemodynamicPressures;
   cardiacOutput: CardiacOutput;
   patientData: RHCPatientData;
+}
+
+// ============================================================
+// Generic Validation Types (used across agents)
+// ============================================================
+
+/**
+ * Generic field correction - works for any agent
+ */
+export interface FieldCorrection {
+  field: string; // Dot-notation path (e.g., "procedureData.accessSite")
+  regexValue: any; // Value extracted by regex (null if not found)
+  correctValue: any; // Corrected value from quick model
+  reason: string; // Explanation for correction
+  confidence: number; // Confidence score 0-1
+}
+
+/**
+ * Generic missing field - works for any agent
+ */
+export interface MissingField {
+  field: string; // Dot-notation path
+  reason: string; // Why this field is needed
+  critical: boolean; // True if required for complete report
+}
+
+/**
+ * Generic validation result - works for any agent
+ */
+export interface ValidationResult {
+  corrections: FieldCorrection[]; // Suggested corrections to regex-extracted values
+  missingCritical: MissingField[]; // Missing fields required for complete report
+  missingOptional: MissingField[]; // Missing fields that would improve accuracy
+  confidence: number; // Overall validation confidence 0-1
+}
+
+// ============================================================
+// TAVI Validation Types
+// ============================================================
+
+export interface TAVIExtractedData {
+  valveSizing?: {
+    annulusDiameter?: number;
+    annulusPerimeter?: number;
+    annulusArea?: number;
+  };
+  accessAssessment?: {
+    site?: string;
+    iliofemoralDimensions?: string;
+  };
+  coronaryHeights?: {
+    leftCoronary?: number;
+    rightCoronary?: number;
+  };
+  aorticValve?: {
+    peakGradient?: number;
+    meanGradient?: number;
+    avArea?: number;
+  };
+  lvAssessment?: {
+    ef?: number;
+    lvidd?: number;
+    lvids?: number;
+  };
+  procedureDetails?: {
+    valveType?: string;
+    valveSize?: number;
+    deploymentDepth?: number;
+  };
+}
+
+// ============================================================
+// Angiogram/PCI Validation Types
+// ============================================================
+
+export interface AngioPCIExtractedData {
+  accessSite?: string;
+  targetVessel?: string;
+  lesionLocation?: string;
+  stenosisPercent?: number;
+  intervention?: {
+    stentType?: string;
+    stentSize?: number;
+    stentLength?: number;
+    balloonSize?: number;
+  };
+  timiFlow?: {
+    pre?: number;
+    post?: number;
+  };
+  resources?: {
+    contrastVolume?: number;
+    fluoroscopyTime?: number;
+  };
+}
+
+// ============================================================
+// mTEER Validation Types
+// ============================================================
+
+export interface MTEERExtractedData {
+  mitralRegurgitation?: {
+    preGrade?: string;
+    postGrade?: string;
+    preMRGrade?: string; // Legacy alias
+    postMRGrade?: string; // Legacy alias
+  };
+  clipDetails?: {
+    type?: string;
+    size?: string;
+    number?: number;
+  };
+  anatomicalLocation?: string;
+  eroa?: {
+    pre?: number;
+    post?: number;
+  };
+  transmitralGradient?: {
+    pre?: number;
+    post?: number;
+  };
 }
 
 /**

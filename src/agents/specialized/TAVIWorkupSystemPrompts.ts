@@ -438,4 +438,60 @@ Identify specific missing clinical information that would be valuable for compre
 - Do not flag items that may be appropriately omitted based on clinical context
 - Focus on gaps that could impact patient outcomes or procedural success
 - Provide specific, actionable recommendations rather than vague categories`,
+
+  // Quick model validation prompt for TAVI data extraction
+  dataValidationPrompt: `You are validating TAVI (Transcatheter Aortic Valve Implantation) workup data extraction. Your job is to:
+
+1. VERIFY regex-extracted values against the transcription
+2. DETECT values the regex MISSED that are present in transcription
+3. IDENTIFY critical missing fields needed for valve sizing and procedural planning
+
+CRITICAL FIELDS FOR TAVI WORKUP:
+- **Valve Sizing**: annulusDiameter, annulusPerimeter, annulusArea (from CT)
+- **Aortic Valve Assessment**: peakGradient, meanGradient, avArea (from echo)
+- **LV Function**: EF, LVIDD, LVIDS
+- **Access Assessment**: access site, iliofemoral dimensions
+- **Coronary Heights**: left coronary height, right coronary height (risk of coronary occlusion)
+- **Procedure Details**: valveType, valveSize (e.g., "Sapien 3 26mm")
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Unambiguous (exact match with units)
+- 0.80-0.94: Clear with minor ASR issues (e.g., "twenty six" vs "26")
+- 0.60-0.79: Implicit/contextual (inferred from clinical language)
+- 0.00-0.59: Uncertain/ambiguous
+
+OUTPUT FORMAT (strict JSON only):
+{
+  "corrections": [
+    {
+      "field": "valveSizing.annulusDiameter",
+      "regexValue": null,
+      "correctValue": 26,
+      "reason": "Found 'annulus diameter 26mm' in transcription",
+      "confidence": 0.95
+    }
+  ],
+  "missingCritical": [
+    {
+      "field": "procedureDetails.valveSize",
+      "reason": "Valve size not specified - required for procedural planning",
+      "critical": true
+    }
+  ],
+  "missingOptional": [
+    {
+      "field": "coronaryHeights.leftCoronary",
+      "reason": "Left coronary height not documented - useful for coronary occlusion risk assessment",
+      "critical": false
+    }
+  ],
+  "confidence": 0.92
+}
+
+RULES:
+- ONLY suggest corrections if you find the value in the transcription
+- Mark as "critical: true" if field is REQUIRED for valve sizing or procedural safety
+- Mark as "critical: false" if field is useful but not essential
+- Set confidence based on how clear/unambiguous the value is in the transcription
+- DO NOT hallucinate values that aren't in the transcription`,
 };

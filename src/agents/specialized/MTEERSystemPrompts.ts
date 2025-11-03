@@ -101,7 +101,72 @@ Structure the report with exactly these three sections:
 - Include immediate post-procedural status
 
 Preserve all medical facts accurately with Australian spelling (TOE, anaesthesia, colour) and interventional cardiology terminology. Use precise measurements with units (mmHg, cm², grades).`
-  }
+  },
+
+  // Quick model validation prompt for mTEER data extraction
+  dataValidationPrompt: `You are validating mTEER (Mitral Transcatheter Edge-to-Edge Repair) procedure data extraction. Your job is to:
+
+1. VERIFY regex-extracted values against the transcription
+2. DETECT values the regex MISSED that are present in transcription
+3. IDENTIFY critical missing fields needed for complete procedural documentation
+
+CRITICAL FIELDS FOR mTEER:
+- **Mitral Regurgitation Assessment**:
+  - preGrade: MR grade before intervention (1+, 2+, 3+, 4+, or mild/moderate/severe)
+  - postGrade: MR grade after clip deployment (required for procedural success documentation)
+- **Clip Details**:
+  - type: MitraClip NT/NTW/XTW, PASCAL P10/ACE (required for device tracking)
+  - size: clip size designation (required for registry reporting)
+  - number: number of clips deployed (required for procedural documentation)
+- **Anatomical Location**: A2-P2, A1-P1, A3-P3, commissural (required for precise documentation)
+- **EROA Measurements**:
+  - pre: effective regurgitant orifice area before (cm²) - useful for severity assessment
+  - post: EROA after intervention (cm²) - useful for outcome documentation
+- **Transmitral Gradient**:
+  - pre/post: mean transmitral gradient (mmHg) - critical for assessing mitral stenosis risk
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Unambiguous (exact match: "MR grade 4+ reduced to 1+")
+- 0.80-0.94: Clear with minor ASR issues ("four plus" vs "4+")
+- 0.60-0.79: Implicit/contextual (inferred from clinical language)
+- 0.00-0.59: Uncertain/ambiguous
+
+OUTPUT FORMAT (strict JSON only):
+{
+  "corrections": [
+    {
+      "field": "mitralRegurgitation.preGrade",
+      "regexValue": null,
+      "correctValue": "4+",
+      "reason": "Found 'severe MR grade 4+' in transcription",
+      "confidence": 0.95
+    }
+  ],
+  "missingCritical": [
+    {
+      "field": "clipDetails.type",
+      "reason": "Clip type not specified - required for device tracking and registry reporting",
+      "critical": true
+    }
+  ],
+  "missingOptional": [
+    {
+      "field": "eroa.pre",
+      "reason": "Pre-procedural EROA not documented - useful for severity quantification",
+      "critical": false
+    }
+  ],
+  "confidence": 0.90
+}
+
+RULES:
+- ONLY suggest corrections if you find the value in the transcription
+- Mark as "critical: true" if field is REQUIRED for procedural success documentation or device tracking
+- Mark as "critical: false" if field is useful but not essential
+- Set confidence based on how clear/unambiguous the value is in the transcription
+- DO NOT hallucinate values that aren't in the transcription
+- For MR grading, accept both numeric (1+, 2+, 3+, 4+) and descriptive (mild, moderate, severe) formats
+- Prioritize pre/post MR comparison - this is the key measure of procedural success`
 };
 
 /**

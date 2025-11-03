@@ -216,6 +216,69 @@ OUTPUT FORMAT:
 - "TIMI III flow" → "Blood flow was normal after the procedure"
 - "TR-Band closure" → "We sealed the small puncture in your wrist with a special band"
 - "Dual antiplatelet therapy" → "Two blood-thinning medications to keep the stent working properly"`,
+
+  // Quick model validation prompt for Angiogram/PCI data extraction
+  dataValidationPrompt: `You are validating Angiogram/PCI (Percutaneous Coronary Intervention) procedure data extraction. Your job is to:
+
+1. VERIFY regex-extracted values against the transcription
+2. DETECT values the regex MISSED that are present in transcription
+3. IDENTIFY critical missing fields needed for complete procedural documentation
+
+CRITICAL FIELDS FOR ANGIOGRAM/PCI:
+- **Access Site**: femoral, radial, brachial (required for closure technique)
+- **Target Vessel**: LAD, LCx, RCA, OM, diag, etc. (required for intervention documentation)
+- **Lesion Location**: proximal, mid, distal + specific segment (required for precise documentation)
+- **Stenosis %**: degree of narrowing (required for intervention indication)
+- **For PCI Interventions**:
+  - stentType: Xience, Resolute, Promus, etc. (required for device tracking)
+  - stentSize: diameter in mm (required for registry reporting)
+  - stentLength: length in mm (required for registry reporting)
+  - balloonSize: diameter for pre/post-dilation (useful for technique documentation)
+- **TIMI Flow**: pre/post-intervention flow grade 0-3 (required for success assessment)
+- **Resources**: contrastVolume (ml), fluoroscopyTime (min) (required for safety documentation)
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Unambiguous (exact match: "3.5mm × 18mm Xience stent")
+- 0.80-0.94: Clear with minor ASR issues ("three point five" vs "3.5")
+- 0.60-0.79: Implicit/contextual (inferred from clinical language)
+- 0.00-0.59: Uncertain/ambiguous
+
+OUTPUT FORMAT (strict JSON only):
+{
+  "corrections": [
+    {
+      "field": "intervention.stentSize",
+      "regexValue": null,
+      "correctValue": 3.5,
+      "reason": "Found '3.5mm Xience stent' in transcription",
+      "confidence": 0.95
+    }
+  ],
+  "missingCritical": [
+    {
+      "field": "intervention.stentLength",
+      "reason": "Stent length not specified - required for PCI registry reporting",
+      "critical": true
+    }
+  ],
+  "missingOptional": [
+    {
+      "field": "resources.fluoroscopyTime",
+      "reason": "Fluoroscopy time not documented - useful for radiation dose tracking",
+      "critical": false
+    }
+  ],
+  "confidence": 0.88
+}
+
+RULES:
+- ONLY suggest corrections if you find the value in the transcription
+- Mark as "critical: true" if field is REQUIRED for registry reporting or intervention documentation
+- Mark as "critical: false" if field is useful but not essential
+- Set confidence based on how clear/unambiguous the value is in the transcription
+- DO NOT hallucinate values that aren't in the transcription
+- For diagnostic angiograms (no intervention), focus on vessel findings and access site
+- For PCI, prioritize stent details, TIMI flow, and lesion characteristics`,
 };
 
 export const ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE = {
