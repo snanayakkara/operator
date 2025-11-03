@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import type { CalculatedHaemodynamics, RightHeartCathReport } from '@/types/medical.types';
+import type { RightHeartCathReport } from '@/types/medical.types';
 
 interface RHCCardLayoutProps {
   rhcData: RightHeartCathReport;

@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unknown-property */
 /**
  * Lanyard.tsx - 3D Interactive Lanyard Component
  *

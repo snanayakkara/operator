@@ -99,6 +99,30 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 • HbA1c: <7%
 ```
 
+### 2.2 Right Heart Catheterisation (RHC) Interactive Validation
+
+**Intelligent validation workflow** prevents wasted reasoning model runs by validating extracted data before expensive report generation:
+
+**Workflow:**
+1. **Whisper Transcription** → ASR corrections for common errors (e.g., "mixed mean is" → "mixed venous")
+2. **Regex Extraction** → Extract haemodynamic pressures, cardiac output, patient data (height, weight, Hb, SaO2, SvO2)
+3. **Quick Model Validation** (qwen/qwen3-4b-2507, ~10-30s) → Validate extraction, detect gaps, suggest corrections
+4. **Auto-Apply High-Confidence** → Corrections ≥0.8 confidence applied automatically
+5. **Interactive Checkpoint** → If critical fields missing or low-confidence corrections:
+   - Pause workflow with `status: 'awaiting_validation'`
+   - Show modal with missing fields (red), low-confidence suggestions (yellow), optional fields (blue)
+   - User fills/approves fields → reprocess with `context.userProvidedFields`
+6. **Calculations** → Fick CO/CI with guaranteed complete inputs
+7. **Reasoning Model** → Generate report (medgemma-27b, ~3-15min) ONLY after validation passes
+
+**Benefits:**
+- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data
+- **Improves accuracy**: User sees missing fields immediately; model corrections reduce transcription errors
+- **Cost-effective**: Quick model ($0.001) validates before expensive reasoning model ($0.05+)
+
+**Critical Fields for Fick Calculations:**
+- Height (cm), Weight (kg), Hemoglobin (g/L), SaO2 (%), SvO2 (%)
+
 Each agent has dedicated SystemPrompts, validation patterns, template structure, QA rules; Australian terminology.
 
 ---
@@ -281,12 +305,22 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.21.0**
-**Last Updated**: October 2025
+**Current Version**: **3.28.0**
+**Last Updated**: November 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.28.0 (Nov 2025)**
+- **RHC Interactive Validation Workflow**: Intelligent validation checkpoint prevents wasted reasoning model runs
+  - Quick model (qwen/qwen3-4b-2507, ~10-30s) validates extracted data before expensive report generation
+  - Auto-applies high-confidence corrections (≥0.8); shows modal for missing critical fields or low-confidence suggestions
+  - User fills missing fields (height, weight, Hb, SaO2, SvO2) → reprocesses with validated data
+  - Saves 3-15min wasted runs; cost-effective ($0.001 validation vs $0.05+ generation)
+  - Three-section modal: Critical Missing (red), Low-Confidence Corrections (yellow), Optional Fields (blue)
+- **Session Status Enhancements**: Added `'awaiting_validation'` and `'failed'` status types for better workflow state management
+- **Lint Fixes**: Cleaned up unused imports and invalid ESLint disable comments
 
 **v3.21.0 (Oct 2025)**
 - **3D Interactive Lanyard Component**: Physics-based 3D lanyard replaces static "Ready to Record" screen

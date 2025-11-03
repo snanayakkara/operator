@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { RHCValidationResult, RHCFieldCorrection, RHCMissingField } from '@/types/medical.types';
+import type { RHCValidationResult, RHCFieldCorrection } from '@/types/medical.types';
 
 interface RHCFieldValidationPromptProps {
   validation: RHCValidationResult;

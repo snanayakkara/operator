@@ -197,4 +197,5 @@ export const UIPreferencesSection: React.FC = () => {
 };
 
 // Export storage key for use in AIReviewCards
+// eslint-disable-next-line react-refresh/only-export-components
 export { STORAGE_KEY_CARD_THEME };

@@ -9,6 +9,54 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.28.0] - 2025-11-04
+
+### Added
+
+- **RHC Interactive Validation Workflow**
+  - Intelligent validation checkpoint between regex extraction and report generation
+  - Quick model (qwen/qwen3-4b-2507) validates extracted data before expensive reasoning model run
+  - Auto-applies high-confidence corrections (≥0.8) automatically
+  - Shows modal for missing critical fields (height, weight, Hb, SaO2, SvO2 for Fick calculations)
+  - User fills missing fields → reprocesses with `context.userProvidedFields`
+  - Prevents wasted 3-15min reasoning model runs with incomplete data
+  - Saves time: ~10-30s validation vs full regeneration
+  - Cost-effective: Quick model ($0.001) validates before reasoning model ($0.05+)
+
+- **RHC Validation Modal Component**
+  - Three sections: Critical Missing Fields (red), Low-Confidence Corrections (yellow), Optional Fields (blue)
+  - Field-specific labels (e.g., "Mixed Venous O₂ Saturation (%)")
+  - Accept/Reject buttons for low-confidence suggestions
+  - Input fields with validation for missing critical data
+  - Cancel/Skip/Continue workflow options
+
+- **Session Status Types**
+  - Added `'awaiting_validation'` status for interactive checkpoints
+  - Added `'failed'` status for error handling
+  - Enhanced SessionStatus type for better workflow state management
+
+### Changed
+
+- **RHC Agent Processing Flow**
+  - Updated process() to pause at validation checkpoint if critical fields missing
+  - Agent returns `status: 'awaiting_validation'` with `validationResult` and `extractedData`
+  - Merges user-provided fields via `mergeUserInput()` method
+  - Only runs expensive reasoning model after validation passes
+
+- **State Management**
+  - OptimizedApp detects `awaiting_validation` status and pauses workflow
+  - Added `handleRHCReprocessWithValidation()` callback for user input flow
+  - Wired validation detection through component hierarchy
+  - Added `reprocessWithUserInput()` to useAIProcessing hook
+
+### Fixed
+
+- **Lint Errors**
+  - Removed unused `CalculatedHaemodynamics` import from RHCCardLayout
+  - Removed unused `RHCMissingField` import from RHCFieldValidationPrompt
+  - Removed invalid `react/no-unknown-property` ESLint disable comment from Lanyard
+  - Added ESLint disable comment for `STORAGE_KEY_CARD_THEME` export in UIPreferencesSection
+
 ## [3.27.0] - 2025-11-03
 
 ### Fixed
