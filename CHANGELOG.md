@@ -21,7 +21,7 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
   - User fills missing fields → reprocesses with `context.userProvidedFields`
   - Prevents wasted 3-15min reasoning model runs with incomplete data
   - Saves time: ~10-30s validation vs full regeneration
-  - Cost-effective: Quick model ($0.001) validates before reasoning model ($0.05+)
+  - Efficient: Lightweight quick model validates before running resource-intensive reasoning model
 
 - **RHC Validation Modal Component**
   - Three sections: Critical Missing Fields (red), Low-Confidence Corrections (yellow), Optional Fields (blue)

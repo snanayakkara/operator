@@ -116,9 +116,9 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 7. **Reasoning Model** → Generate report (medgemma-27b, ~3-15min) ONLY after validation passes
 
 **Benefits:**
-- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data
+- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data; validation takes only 10-30s
 - **Improves accuracy**: User sees missing fields immediately; model corrections reduce transcription errors
-- **Cost-effective**: Quick model ($0.001) validates before expensive reasoning model ($0.05+)
+- **Efficient resource usage**: Lightweight quick model (Gemma-3n-e4b) validates before running resource-intensive reasoning model (MedGemma-27B)
 
 **Critical Fields for Fick Calculations:**
 - Height (cm), Weight (kg), Hemoglobin (g/L), SaO2 (%), SvO2 (%)
@@ -317,7 +317,7 @@ npm run optim:quick-letter
   - Quick model (qwen/qwen3-4b-2507, ~10-30s) validates extracted data before expensive report generation
   - Auto-applies high-confidence corrections (≥0.8); shows modal for missing critical fields or low-confidence suggestions
   - User fills missing fields (height, weight, Hb, SaO2, SvO2) → reprocesses with validated data
-  - Saves 3-15min wasted runs; cost-effective ($0.001 validation vs $0.05+ generation)
+  - Saves 3-15min wasted runs; efficient resource usage with lightweight validation before intensive generation
   - Three-section modal: Critical Missing (red), Low-Confidence Corrections (yellow), Optional Fields (blue)
 - **Session Status Enhancements**: Added `'awaiting_validation'` and `'failed'` status types for better workflow state management
 - **Lint Fixes**: Cleaned up unused imports and invalid ESLint disable comments
