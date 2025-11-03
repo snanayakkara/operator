@@ -1,10 +1,12 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
-import type { 
-  MedicalContext, 
-  ChatMessage, 
-  ReportSection, 
+import type {
+  MedicalContext,
+  ChatMessage,
+  ReportSection,
   MedicalReport,
-  MedicalCode
+  MedicalCode,
+  ValidationResult,
+  AngioPCIExtractedData
 } from '@/types/medical.types';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { ANGIOGRAM_PCI_SYSTEM_PROMPTS, ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE } from './AngiogramPCISystemPrompts';
@@ -83,6 +85,38 @@ export class AngiogramPCIAgent extends MedicalAgent {
         console.log(`🔴 Critical findings detected: ${criticalFindingsDetected.join(', ')}`);
         this.updateMemory('criticalFindings', criticalFindingsDetected);
       }
+
+      // Validation Workflow: Regex Extraction + Quick Model Validation
+      console.log('🚨 ANGIO/PCI AGENT: Starting validation workflow...');
+      const regexExtracted = this.extractAngioPCIData(correctedInput, procedureType);
+      console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
+
+      const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
+      const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
+
+      // INTERACTIVE CHECKPOINT: Check for critical gaps
+      if (validation.missingCritical.length > 0 ||
+          validation.corrections.some(c => c.confidence < 0.8)) {
+
+        console.log(`⚠️ ANGIO/PCI AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+
+        const baseReport = this.createReport('', [], context, 0, 0);
+        return {
+          ...baseReport,
+          status: 'awaiting_validation',
+          validationResult: validation,
+          extractedData: correctedData
+        };
+      }
+
+      // Merge user input if provided
+      let finalData = correctedData;
+      if (context?.userProvidedFields) {
+        console.log('🚨 ANGIO/PCI AGENT: Merging user-provided fields...');
+        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
+      }
+
+      console.log('✅ ANGIO/PCI AGENT: Validation complete, proceeding to reasoning model');
 
       // Extract relevant data based on procedure type
       const procedureData = this.extractProcedureData(correctedInput, procedureType);
@@ -1164,5 +1198,171 @@ If you have any questions about these results, please don't hesitate to contact 
     }
 
     return `We completed the catheterisation procedure to examine your heart arteries. Your cardiologist will discuss the detailed findings and recommendations with you at your follow-up appointment.`;
+  }
+
+  // ============================================================
+  // Validation Workflow Methods (following RHC/TAVI pattern)
+  // ============================================================
+
+  /**
+   * Extract structured data for validation (simplified wrapper around existing extraction)
+   */
+  private extractAngioPCIData(input: string, procedureType: ProcedureType): AngioPCIExtractedData {
+    const text = input.toLowerCase();
+    const extracted: AngioPCIExtractedData = {};
+
+    // Access site
+    const accessSite = this.extractAccessSite(input);
+    if (accessSite) extracted.accessSite = accessSite;
+
+    // Target vessel and lesion for PCI
+    if (procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED') {
+      const targetVessel = this.extractTargetVessel(input);
+      const lesionMatch = text.match(/(\d+)%\s+stenosis/i);
+      const stentDetails = this.extractStentDetails(input);
+
+      if (targetVessel) extracted.targetVessel = targetVessel;
+      if (lesionMatch) extracted.stenosisPercent = parseInt(lesionMatch[1]);
+
+      // Stent details (parsed from existing extraction)
+      if (stentDetails && typeof stentDetails === 'string') {
+        const sizeMatch = stentDetails.match(/(\d+(?:\.\d+)?)\s*(?:x|×)\s*(\d+)/i);
+        const typeMatch = stentDetails.match(/(xience|resolute|promus|synergy|orsiro)/i);
+
+        extracted.intervention = {
+          stentType: typeMatch ? typeMatch[1] : undefined,
+          stentSize: sizeMatch ? parseFloat(sizeMatch[1]) : undefined,
+          stentLength: sizeMatch ? parseFloat(sizeMatch[2]) : undefined
+        };
+      }
+    }
+
+    // TIMI flow
+    const preTimiMatch = text.match(/pre\s*(?:timi|flow)\s*(?:grade\s*)?([0-3])/i);
+    const postTimiMatch = text.match(/post\s*(?:timi|flow)\s*(?:grade\s*)?([0-3])/i);
+    if (preTimiMatch || postTimiMatch) {
+      extracted.timiFlow = {
+        pre: preTimiMatch ? parseInt(preTimiMatch[1]) : undefined,
+        post: postTimiMatch ? parseInt(postTimiMatch[1]) : undefined
+      };
+    }
+
+    // Resources
+    const contrastVol = this.extractContrastVolume(input);
+    const fluoroTime = this.extractFluoroscopyTime(input);
+    if (contrastVol || fluoroTime) {
+      extracted.resources = {
+        contrastVolume: contrastVol,
+        fluoroscopyTime: fluoroTime
+      };
+    }
+
+    return extracted;
+  }
+
+  /**
+   * Validate extracted data using quick model
+   */
+  private async validateAndDetectGaps(
+    extracted: AngioPCIExtractedData,
+    transcription: string
+  ): Promise<ValidationResult> {
+    console.log('🔍 ANGIO/PCI AGENT: Starting quick model validation...');
+
+    try {
+      const userMessage = `REGEX EXTRACTED:\n${JSON.stringify(extracted, null, 2)}\n\nTRANSCRIPTION:\n${transcription}\n\nValidate the extraction and output JSON only.`;
+
+      const response = await this.lmStudioService.processWithAgent(
+        ANGIOGRAM_PCI_SYSTEM_PROMPTS.dataValidationPrompt,
+        userMessage,
+        'angio-pci-validation',
+        undefined,
+        MODEL_CONFIG.QUICK_MODEL
+      );
+
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonString = jsonMatch ? jsonMatch[1] : response;
+
+      try {
+        const validationResult = JSON.parse(jsonString);
+        console.log('✅ ANGIO/PCI AGENT: Validation complete');
+        console.log(`   - Corrections: ${validationResult.corrections.length}`);
+        console.log(`   - Missing critical: ${validationResult.missingCritical.length}`);
+        console.log(`   - Confidence: ${validationResult.confidence.toFixed(2)}`);
+
+        return validationResult;
+      } catch (parseError) {
+        console.error('❌ Failed to parse validation JSON:', parseError);
+        return {
+          corrections: [],
+          missingCritical: [],
+          missingOptional: [],
+          confidence: 0.5
+        };
+      }
+    } catch (error) {
+      console.error('❌ ANGIO/PCI AGENT: Validation failed:', error);
+      return {
+        corrections: [],
+        missingCritical: [],
+        missingOptional: [],
+        confidence: 0.5
+      };
+    }
+  }
+
+  /**
+   * Apply high-confidence corrections automatically
+   */
+  private applyCorrections(
+    extracted: AngioPCIExtractedData,
+    corrections: ValidationResult['corrections'],
+    confidenceThreshold: number = 0.8
+  ): AngioPCIExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as AngioPCIExtractedData;
+
+    for (const correction of corrections) {
+      if (correction.confidence >= confidenceThreshold) {
+        this.setNestedField(result, correction.field, correction.correctValue);
+        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Merge user-provided fields from validation modal
+   */
+  private mergeUserInput(
+    extracted: AngioPCIExtractedData,
+    userFields: Record<string, any>
+  ): AngioPCIExtractedData {
+    const result = JSON.parse(JSON.stringify(extracted)) as AngioPCIExtractedData;
+
+    for (const [fieldPath, value] of Object.entries(userFields)) {
+      if (value !== null && value !== undefined && value !== '') {
+        this.setNestedField(result, fieldPath, value);
+        console.log(`✅ User-provided ${fieldPath}: ${value}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Helper to set nested field via dot notation
+   */
+  private setNestedField(obj: any, path: string, value: any): void {
+    const keys = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!current[key]) current[key] = {};
+      current = current[key];
+    }
+
+    current[keys[keys.length - 1]] = value;
   }
 }
