@@ -209,6 +209,19 @@ export const ASRCorrections: ASRCorrectionCategories = {
   cardiology: [
     // Date format: remove leading zeros from day numbers in medical reports
     [/\b0(\d)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/gi, '$1 $2'],
+
+    // Right Heart Catheterization (RHC) specific corrections
+    // Common ASR errors in haemodynamic measurements
+    [/\bmixed\s+mean\s+is\s+oxygen\s+saturation\b/gi, 'mixed venous oxygen saturation'],
+    [/\bmixed\s+mean\s+is\s+saturation\b/gi, 'mixed venous saturation'],
+    [/\bmixed\s+means\s+oxygen\s+saturation\b/gi, 'mixed venous oxygen saturation'],
+    [/\bswan\s+GANS\b/g, 'Swan-Ganz'], // Preserve case - "swan GANS" -> "Swan-Ganz"
+    [/\bswan\s+gans\b/gi, 'Swan-Ganz'],
+    [/\bswan\s+ganz\b/gi, 'Swan-Ganz'],
+    [/\bthermal\s+dilution\b/gi, 'thermodilution'],
+    [/\bpulmonary\s+capillary\s+wedge\b/gi, 'pulmonary capillary wedge pressure'],
+    [/\bPCW\b/g, 'PCWP'], // Ensure "PCW" becomes "PCWP"
+
     // Medical terminology: cardiac wall regions
     [/\banteo[-\s]?receptal\b/gi, 'anteroseptal'],
     // Capitalization: medical descriptors should be lowercase

@@ -18,6 +18,7 @@ import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { RightHeartCathSystemPrompts, RightHeartCathMedicalPatterns, RightHeartCathValidationRules } from './RightHeartCathSystemPrompts';
 import * as RHCCalc from '@/services/RHCCalculationService';
+import { applyASRCorrections } from '@/utils/ASRCorrections';
 
 /**
  * Specialized agent for processing Right Heart Catheterisation (RHC) procedures.
@@ -120,8 +121,13 @@ export class RightHeartCathAgent extends MedicalAgent {
       this.updateMemory('currentInput', input);
       this.updateMemory('processingContext', context);
 
+      // Apply ASR corrections for common transcription errors (BEFORE RHC terminology corrections)
+      console.log('🚨 RHC AGENT: Applying ASR corrections...');
+      const asrCorrectedInput = applyASRCorrections(input, ['cardiology']);
+      console.log('✅ RHC AGENT: ASR corrections applied');
+
       // Correct RHC-specific terminology with Australian spelling
-      const correctedInput = this.correctRHCTerminology(input);
+      const correctedInput = this.correctRHCTerminology(asrCorrectedInput);
 
       // Extract RHC data from input
       console.log('🚨 RHC AGENT: Calling extractRHCData()...');
@@ -862,14 +868,20 @@ Note: This report was generated with limited AI processing. Clinical review is r
     }
 
     // Extract mixed venous oxygen saturation - enhanced with PA saturation fallback
-    const svo2Match = input.match(/mixed\s+venous\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
+    // Pattern handles: "mixed venous", "mixed mean is" (ASR error), "mixed means" (ASR error)
+    // Note: ASR corrections should convert these to "mixed venous", but defensive pattern kept for robustness
+    const svo2Match = input.match(/mixed\s+(?:venous|mean\s+(?:is|venous)|means)\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
     if (svo2Match) {
       patientData.svo2 = parseFloat(svo2Match[1]);
+      console.log('✅ RHC: Extracted SvO2:', patientData.svo2, '% from match:', svo2Match[0]);
     } else {
       // Fallback to pulmonary artery saturation if mixed venous not available
       const paSatMatch = input.match(/pulmonary\s+artery\s+(?:oxygen\s+)?saturation[:\s,]+(\d+)/i);
       if (paSatMatch) {
         patientData.svo2 = parseFloat(paSatMatch[1]);
+        console.log('✅ RHC: Extracted SvO2 from PA saturation:', patientData.svo2, '% from match:', paSatMatch[0]);
+      } else {
+        console.log('❌ RHC: No SvO2 match found');
       }
     }
 
