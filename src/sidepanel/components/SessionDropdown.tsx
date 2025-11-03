@@ -15,6 +15,7 @@ import {
   Check,
   ArrowRight as _ArrowRight,
   XCircle,
+  Search,
   HardDrive
 } from 'lucide-react';
 import { SessionProgressIndicator } from './SessionProgressIndicator';
@@ -512,6 +513,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   const [showAllCompleted, setShowAllCompleted] = useState(false);
   const [showAllInProgress, setShowAllInProgress] = useState(false);
   const [showAllErrored, setShowAllErrored] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (!copiedSessionId) return;
@@ -550,14 +552,44 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     }
   }, []);
 
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+  const filteredSessions = useMemo(() => {
+    if (!normalizedSearchTerm) {
+      return sessions;
+    }
+    return sessions.filter((session) => {
+      const patientName = session.patient?.name?.toLowerCase() ?? '';
+      const agentName = session.agentName?.toLowerCase() ?? '';
+      const agentType = session.agentType?.toLowerCase() ?? '';
+      const quickField = session.quickActionField?.toLowerCase() ?? '';
+      const transcript = session.transcription?.toLowerCase() ?? '';
+      return (
+        patientName.includes(normalizedSearchTerm) ||
+        agentName.includes(normalizedSearchTerm) ||
+        agentType.includes(normalizedSearchTerm) ||
+        quickField.includes(normalizedSearchTerm) ||
+        transcript.includes(normalizedSearchTerm)
+      );
+    });
+  }, [sessions, normalizedSearchTerm]);
+
+  useEffect(() => {
+    setShowAllCompleted(false);
+    setShowAllInProgress(false);
+    setShowAllErrored(false);
+  }, [normalizedSearchTerm]);
+
+  const isSearchActive = normalizedSearchTerm.length > 0;
+
   // Timeline sessions with derived states
   const timelineStates = useMemo(() => {
-    return sessions.map((session) => ({
+    return filteredSessions.map((session) => ({
       session,
       state: deriveTimelineState(session),
       isChecked: checkedSessionIds.has(session.id)
     }));
-  }, [sessions, checkedSessionIds]);
+  }, [filteredSessions, checkedSessionIds]);
 
   // Next review session
   const nextReviewSession = useMemo(() => {
@@ -600,21 +632,21 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
 
   // Apply lazy loading limits
   const visibleSessions = useMemo(() => {
-    const completedLimit = showAllCompleted ? sessionCategories.completed.length : INITIAL_VISIBLE_SESSIONS;
-    const inProgressLimit = showAllInProgress ? sessionCategories.inProgress.length : INITIAL_VISIBLE_SESSIONS;
-    const erroredLimit = showAllErrored ? sessionCategories.errored.length : INITIAL_VISIBLE_SESSIONS;
+    const completedLimit = isSearchActive || showAllCompleted ? sessionCategories.completed.length : INITIAL_VISIBLE_SESSIONS;
+    const inProgressLimit = isSearchActive || showAllInProgress ? sessionCategories.inProgress.length : INITIAL_VISIBLE_SESSIONS;
+    const erroredLimit = isSearchActive || showAllErrored ? sessionCategories.errored.length : INITIAL_VISIBLE_SESSIONS;
 
     const result = {
       completed: sessionCategories.completed.slice(0, completedLimit),
       inProgress: sessionCategories.inProgress.slice(0, inProgressLimit),
       errored: sessionCategories.errored.slice(0, erroredLimit),
-      hasMoreCompleted: sessionCategories.completed.length > completedLimit,
-      hasMoreInProgress: sessionCategories.inProgress.length > inProgressLimit,
-      hasMoreErrored: sessionCategories.errored.length > erroredLimit
+      hasMoreCompleted: !isSearchActive && sessionCategories.completed.length > completedLimit,
+      hasMoreInProgress: !isSearchActive && sessionCategories.inProgress.length > inProgressLimit,
+      hasMoreErrored: !isSearchActive && sessionCategories.errored.length > erroredLimit
     };
 
     return result;
-  }, [sessionCategories, showAllCompleted, showAllInProgress, showAllErrored]);
+  }, [sessionCategories, showAllCompleted, showAllInProgress, showAllErrored, isSearchActive]);
 
   const handleClearAll = () => {
     onClearAllSessions();
@@ -716,9 +748,12 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   }, [computedPos]);
 
   // Early return AFTER all hooks to avoid React hook rule violations
-  if (!isOpen || sessions.length === 0) {
+  if (!isOpen) {
     return null;
   }
+
+  const totalSessionsCount = sessions.length;
+  const matchingSessionsCount = filteredSessions.length;
 
 
   const dropdownContent = (
@@ -735,8 +770,20 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
             <div>
               <h3 className="text-gray-900 font-medium text-sm">Recent Sessions</h3>
               <p className="text-gray-600 text-xs">
-                {sessions.length} total • {sessionCategories.inProgress.length} processing • {sessionCategories.completed.length} completed
-                {sessionCategories.errored.length > 0 && ` • ${sessionCategories.errored.length} error${sessionCategories.errored.length !== 1 ? 's' : ''}`}
+                {isSearchActive ? (
+                  <>
+                    {matchingSessionsCount} match{matchingSessionsCount === 1 ? '' : 'es'}
+                    {searchTerm && <> for “{searchTerm}”</>}
+                    {matchingSessionsCount !== totalSessionsCount && (
+                      <> • {totalSessionsCount} total</>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {totalSessionsCount} total • {sessionCategories.inProgress.length} processing • {sessionCategories.completed.length} completed
+                    {sessionCategories.errored.length > 0 && ` • ${sessionCategories.errored.length} error${sessionCategories.errored.length !== 1 ? 's' : ''}`}
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -753,149 +800,178 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
         </div>
       </div>
 
-      {/* Sessions List */}
-      <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
-        {/* In Progress Sessions */}
-        {sessionCategories.inProgress.length > 0 && (
-          <div className="p-2">
-            <div className="flex items-center space-x-1 mb-2 px-2">
-              <Clock className="w-3 h-3 text-amber-600" />
-              <span className="text-xs font-medium text-amber-700">In Progress</span>
-            </div>
-            <div className="space-y-2">
-              {visibleSessions.inProgress.map(({ session, isChecked }) => {
-                const sessionState = timelineStates.find(ts => ts.session.id === session.id);
-                return (
-                  <EnhancedSessionItem
-                    key={session.id}
-                    session={session}
-                    state={sessionState?.state || 'processing'}
-                    isSelected={selectedSessionId === session.id}
-                    isNextReview={nextReviewSession?.session.id === session.id}
-                    isActiveRecording={session.id === activeRecordingSessionId}
-                    copiedSessionId={copiedSessionId}
-                    isChecked={isChecked}
-                    isCompact={isChecked}
-                    isPersisted={persistedSessionIds.has(session.id)}
-                    onToggleCheck={handleToggleCheck}
-                    onSessionSelect={onSessionSelect}
-                    onResumeRecording={onResumeRecording}
-                    onStopRecording={onStopRecording}
-                    onRemoveSession={onRemoveSession}
-                    onCopyResults={handleCopyResults}
-                    onClose={onClose}
-                  />
-                );
-              })}
-              {/* Show More Button for In Progress */}
-              {visibleSessions.hasMoreInProgress && (
-                <ShowMoreButton
-                  onClick={() => setShowAllInProgress(true)}
-                  hiddenCount={sessionCategories.inProgress.length - visibleSessions.inProgress.length}
-                  category="in progress"
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Error/Cancelled Sessions */}
-        {sessionCategories.errored.length > 0 && (
-          <div className={`p-2 ${sessionCategories.inProgress.length > 0 ? 'border-t border-gray-100' : ''}`}>
-            <div className="flex items-center space-x-1 mb-2 px-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full flex-shrink-0" />
-              <span className="text-xs font-medium text-red-700">Issues</span>
-            </div>
-            <div className="space-y-2">
-              {visibleSessions.errored.map(({ session, isChecked }) => {
-                const sessionState = timelineStates.find(ts => ts.session.id === session.id);
-                return (
-                  <EnhancedSessionItem
-                    key={session.id}
-                    session={session}
-                    state={sessionState?.state || 'error'}
-                    isSelected={selectedSessionId === session.id}
-                    isNextReview={nextReviewSession?.session.id === session.id}
-                    isActiveRecording={session.id === activeRecordingSessionId}
-                    copiedSessionId={copiedSessionId}
-                    isChecked={isChecked}
-                    isCompact={isChecked}
-                    isPersisted={persistedSessionIds.has(session.id)}
-                    onToggleCheck={handleToggleCheck}
-                    onSessionSelect={onSessionSelect}
-                    onResumeRecording={onResumeRecording}
-                    onStopRecording={onStopRecording}
-                    onRemoveSession={onRemoveSession}
-                    onCopyResults={handleCopyResults}
-                    onClose={onClose}
-                  />
-                );
-              })}
-              {/* Show More Button for Errored */}
-              {visibleSessions.hasMoreErrored && (
-                <ShowMoreButton
-                  onClick={() => setShowAllErrored(true)}
-                  hiddenCount={sessionCategories.errored.length - visibleSessions.errored.length}
-                  category="issues"
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Completed Sessions */}
-        {sessionCategories.completed.length > 0 && (
-          <div className={`p-2 ${(sessionCategories.inProgress.length > 0 || sessionCategories.errored.length > 0) ? 'border-t border-gray-100' : ''}`}>
-            {(sessionCategories.inProgress.length > 0 || sessionCategories.errored.length > 0) && (
-              <div className="flex items-center space-x-1 mb-2 px-2">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full flex-shrink-0" />
-                <span className="text-xs font-medium text-emerald-700">Completed</span>
-              </div>
-            )}
-            <div className="space-y-2">
-              {visibleSessions.completed.map(({ session, isChecked }) => {
-                const sessionState = timelineStates.find(ts => ts.session.id === session.id);
-                return (
-                  <EnhancedSessionItem
-                    key={session.id}
-                    session={session}
-                    state={sessionState?.state || 'needs_review'}
-                    isSelected={selectedSessionId === session.id}
-                    isNextReview={nextReviewSession?.session.id === session.id}
-                    isActiveRecording={session.id === activeRecordingSessionId}
-                    copiedSessionId={copiedSessionId}
-                    isChecked={isChecked}
-                    isCompact={isChecked}
-                    isPersisted={persistedSessionIds.has(session.id)}
-                    onToggleCheck={handleToggleCheck}
-                    onSessionSelect={onSessionSelect}
-                    onResumeRecording={onResumeRecording}
-                    onStopRecording={onStopRecording}
-                    onRemoveSession={onRemoveSession}
-                    onCopyResults={handleCopyResults}
-                    onClose={onClose}
-                  />
-                );
-              })}
-              {/* Show More Button for Completed */}
-              {visibleSessions.hasMoreCompleted && (
-                <ShowMoreButton
-                  onClick={() => setShowAllCompleted(true)}
-                  hiddenCount={sessionCategories.completed.length - visibleSessions.completed.length}
-                  category="completed"
-                />
-              )}
-            </div>
-          </div>
-        )}
+      {/* Search */}
+      <div className="px-3 py-2 border-b border-gray-100 bg-white">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search patients, agents, or transcripts"
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-8 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+            autoFocus={sessions.length > 10}
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:text-gray-600"
+              aria-label="Clear session search"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Empty State (shouldn't show due to early return, but for safety) */}
-      {sessions.length === 0 && (
-        <div className="p-4 text-center text-gray-500 text-sm">
-          No recent sessions
-        </div>
-      )}
+      {/* Sessions List */}
+      <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
+        {matchingSessionsCount === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-gray-500">
+            {isSearchActive ? (
+              <>
+                No sessions found for “{searchTerm}”.
+                <br />
+                Try a different patient name or agent.
+              </>
+            ) : (
+              'No recent sessions'
+            )}
+          </div>
+        ) : (
+          <>
+            {/* In Progress Sessions */}
+            {sessionCategories.inProgress.length > 0 && (
+              <div className="p-2">
+                <div className="flex items-center space-x-1 mb-2 px-2">
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  <span className="text-xs font-medium text-amber-700">In Progress</span>
+                </div>
+                <div className="space-y-2">
+                  {visibleSessions.inProgress.map(({ session, isChecked }) => {
+                    const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                    return (
+                      <EnhancedSessionItem
+                        key={session.id}
+                        session={session}
+                        state={sessionState?.state || 'processing'}
+                        isSelected={selectedSessionId === session.id}
+                        isNextReview={nextReviewSession?.session.id === session.id}
+                        isActiveRecording={session.id === activeRecordingSessionId}
+                        copiedSessionId={copiedSessionId}
+                        isChecked={isChecked}
+                        isCompact={isChecked}
+                        isPersisted={persistedSessionIds.has(session.id)}
+                        onToggleCheck={handleToggleCheck}
+                        onSessionSelect={onSessionSelect}
+                        onResumeRecording={onResumeRecording}
+                        onStopRecording={onStopRecording}
+                        onRemoveSession={onRemoveSession}
+                        onCopyResults={handleCopyResults}
+                        onClose={onClose}
+                      />
+                    );
+                  })}
+                  {visibleSessions.hasMoreInProgress && (
+                    <ShowMoreButton
+                      onClick={() => setShowAllInProgress(true)}
+                      hiddenCount={sessionCategories.inProgress.length - visibleSessions.inProgress.length}
+                      category="in-progress sessions"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error/Cancelled Sessions */}
+            {sessionCategories.errored.length > 0 && (
+              <div className={`p-2 ${sessionCategories.inProgress.length > 0 ? 'border-t border-gray-100' : ''}`}>
+                <div className="flex items-center space-x-1 mb-2 px-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full flex-shrink-0" />
+                  <span className="text-xs font-medium text-red-700">Needs Attention</span>
+                </div>
+                <div className="space-y-2">
+                  {visibleSessions.errored.map(({ session, isChecked }) => {
+                    const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                    return (
+                      <EnhancedSessionItem
+                        key={session.id}
+                        session={session}
+                        state={sessionState?.state || 'error'}
+                        isSelected={selectedSessionId === session.id}
+                        isNextReview={nextReviewSession?.session.id === session.id}
+                        isActiveRecording={session.id === activeRecordingSessionId}
+                        copiedSessionId={copiedSessionId}
+                        isChecked={isChecked}
+                        isCompact={isChecked}
+                        isPersisted={persistedSessionIds.has(session.id)}
+                        onToggleCheck={handleToggleCheck}
+                        onSessionSelect={onSessionSelect}
+                        onResumeRecording={onResumeRecording}
+                        onStopRecording={onStopRecording}
+                        onRemoveSession={onRemoveSession}
+                        onCopyResults={handleCopyResults}
+                        onClose={onClose}
+                      />
+                    );
+                  })}
+                  {visibleSessions.hasMoreErrored && (
+                    <ShowMoreButton
+                      onClick={() => setShowAllErrored(true)}
+                      hiddenCount={sessionCategories.errored.length - visibleSessions.errored.length}
+                      category="sessions needing attention"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Completed Sessions */}
+            {sessionCategories.completed.length > 0 && (
+              <div className={`p-2 ${(sessionCategories.inProgress.length > 0 || sessionCategories.errored.length > 0) ? 'border-t border-gray-100' : ''}`}>
+                {(sessionCategories.inProgress.length > 0 || sessionCategories.errored.length > 0) && (
+                  <div className="flex items-center space-x-1 mb-2 px-2">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full flex-shrink-0" />
+                    <span className="text-xs font-medium text-emerald-700">Completed</span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {visibleSessions.completed.map(({ session, isChecked }) => {
+                    const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                    return (
+                      <EnhancedSessionItem
+                        key={session.id}
+                        session={session}
+                        state={sessionState?.state || 'needs_review'}
+                        isSelected={selectedSessionId === session.id}
+                        isNextReview={nextReviewSession?.session.id === session.id}
+                        isActiveRecording={session.id === activeRecordingSessionId}
+                        copiedSessionId={copiedSessionId}
+                        isChecked={isChecked}
+                        isCompact={isChecked}
+                        isPersisted={persistedSessionIds.has(session.id)}
+                        onToggleCheck={handleToggleCheck}
+                        onSessionSelect={onSessionSelect}
+                        onResumeRecording={onResumeRecording}
+                        onStopRecording={onStopRecording}
+                        onRemoveSession={onRemoveSession}
+                        onCopyResults={handleCopyResults}
+                        onClose={onClose}
+                      />
+                    );
+                  })}
+                  {visibleSessions.hasMoreCompleted && (
+                    <ShowMoreButton
+                      onClick={() => setShowAllCompleted(true)}
+                      hiddenCount={sessionCategories.completed.length - visibleSessions.completed.length}
+                      category="completed sessions"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 

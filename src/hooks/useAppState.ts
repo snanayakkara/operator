@@ -15,7 +15,11 @@ import type {
   PatientSession,
   PatientInfo,
   PipelineProgress,
-  PreOpPlanReport
+  PreOpPlanReport,
+  ValidationResult,
+  TAVIExtractedData,
+  AngioPCIExtractedData,
+  MTEERExtractedData
 } from '@/types/medical.types';
 import type { TranscriptionApprovalState } from '@/types/optimization';
 import type { PatientNameComparison } from '@/utils/PatientNameValidator';
@@ -92,6 +96,12 @@ interface DisplaySessionState {
   displayPreOpPlanData?: PreOpPlanReport['planData']; // Pre-Op Plan structured data
   displayReviewData?: any; // AI Medical Review structured data
   displayRhcReport?: any; // Right Heart Cath structured data
+  displayTaviValidationResult?: ValidationResult | null;
+  displayTaviValidationStatus?: 'complete' | 'awaiting_validation';
+  displayAngioValidationResult?: ValidationResult | null;
+  displayAngioValidationStatus?: 'complete' | 'awaiting_validation';
+  displayMteerValidationResult?: ValidationResult | null;
+  displayMteerValidationStatus?: 'complete' | 'awaiting_validation';
   displayAgent?: AgentType | null;
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
@@ -186,6 +196,9 @@ type AppAction =
   | { type: 'SET_EDUCATION_DATA'; payload: any }
   | { type: 'SET_PREOP_PLAN_DATA'; payload: PreOpPlanReport['planData'] | undefined }
   | { type: 'SET_RHC_REPORT'; payload: any }
+  | { type: 'SET_TAVI_VALIDATION'; payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: TAVIExtractedData | null } }
+  | { type: 'SET_ANGIO_VALIDATION'; payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: AngioPCIExtractedData | null } }
+  | { type: 'SET_MTEER_VALIDATION'; payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: MTEERExtractedData | null } }
   | { type: 'SET_ACTIVE_WORKFLOW'; payload: AgentType | null }
   | { type: 'SET_CANCELLING'; payload: boolean }
   | { type: 'SET_WARNINGS'; payload: string[] }
@@ -284,6 +297,15 @@ const initialState: CombinedAppState = {
   educationData: undefined,
   preOpPlanData: undefined,
   rhcReport: undefined,
+  taviValidationResult: null,
+  taviValidationStatus: undefined,
+  taviExtractedData: undefined,
+  angiogramValidationResult: null,
+  angiogramValidationStatus: undefined,
+  angiogramExtractedData: undefined,
+  mteerValidationResult: null,
+  mteerValidationStatus: undefined,
+  mteerExtractedData: undefined,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -333,6 +355,12 @@ const initialState: CombinedAppState = {
     displayPreOpPlanData: undefined,
     displayReviewData: undefined,
     displayRhcReport: undefined,
+    displayTaviValidationResult: undefined,
+    displayTaviValidationStatus: undefined,
+    displayAngioValidationResult: undefined,
+    displayAngioValidationStatus: undefined,
+    displayMteerValidationResult: undefined,
+    displayMteerValidationStatus: undefined,
     displayAgent: null,
     displayAgentName: null,
     displayPatientInfo: null,
@@ -469,6 +497,30 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_RHC_REPORT':
       if (state.rhcReport === action.payload) return state;
       return { ...state, rhcReport: action.payload };
+
+    case 'SET_TAVI_VALIDATION':
+      return {
+        ...state,
+        taviValidationResult: action.payload.result ?? null,
+        taviValidationStatus: action.payload.status,
+        taviExtractedData: action.payload.extractedData ?? undefined
+      };
+
+    case 'SET_ANGIO_VALIDATION':
+      return {
+        ...state,
+        angiogramValidationResult: action.payload.result ?? null,
+        angiogramValidationStatus: action.payload.status,
+        angiogramExtractedData: action.payload.extractedData ?? undefined
+      };
+
+    case 'SET_MTEER_VALIDATION':
+      return {
+        ...state,
+        mteerValidationResult: action.payload.result ?? null,
+        mteerValidationStatus: action.payload.status,
+        mteerExtractedData: action.payload.extractedData ?? undefined
+      };
 
     case 'SET_ACTIVE_WORKFLOW':
       if (state.ui.activeWorkflow === action.payload) return state;
@@ -613,6 +665,15 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
         educationData: undefined,
         preOpPlanData: undefined,
         rhcReport: undefined,
+        taviValidationResult: null,
+        taviValidationStatus: undefined,
+        taviExtractedData: undefined,
+        angiogramValidationResult: null,
+        angiogramValidationStatus: undefined,
+        angiogramExtractedData: undefined,
+        mteerValidationResult: null,
+        mteerValidationStatus: undefined,
+        mteerExtractedData: undefined,
         // Clear streaming state to allow record button access
         streaming: false,
         streamBuffer: '',
@@ -637,6 +698,12 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayPreOpPlanData: undefined,
           displayReviewData: undefined,
           displayRhcReport: undefined,
+          displayTaviValidationResult: undefined,
+          displayTaviValidationStatus: undefined,
+          displayAngioValidationResult: undefined,
+          displayAngioValidationStatus: undefined,
+          displayMteerValidationResult: undefined,
+          displayMteerValidationStatus: undefined,
           displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null,
@@ -952,6 +1019,12 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayPreOpPlanData: session.preOpPlanData,
           displayReviewData: session.reviewData,
           displayRhcReport: session.rhcReport,
+          displayTaviValidationResult: session.taviValidationResult ?? null,
+          displayTaviValidationStatus: session.taviValidationStatus,
+          displayAngioValidationResult: session.angiogramValidationResult ?? null,
+          displayAngioValidationStatus: session.angiogramValidationStatus,
+          displayMteerValidationResult: session.mteerValidationResult ?? null,
+          displayMteerValidationStatus: session.mteerValidationStatus,
           displayAgent: session.agentType || null,
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null,
@@ -973,12 +1046,18 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayTranscription: '',
           displayResults: '',
           displaySummary: undefined,
-          displayTaviStructuredSections: undefined,
-          displayEducationData: undefined,
-          displayPreOpPlanData: undefined,
-          displayReviewData: undefined,
-          displayRhcReport: undefined,
-          displayAgent: null,
+        displayTaviStructuredSections: undefined,
+        displayEducationData: undefined,
+        displayPreOpPlanData: undefined,
+        displayReviewData: undefined,
+        displayRhcReport: undefined,
+        displayTaviValidationResult: undefined,
+        displayTaviValidationStatus: undefined,
+        displayAngioValidationResult: undefined,
+        displayAngioValidationStatus: undefined,
+        displayMteerValidationResult: undefined,
+        displayMteerValidationStatus: undefined,
+        displayAgent: null,
           displayAgentName: null,
           displayPatientInfo: null,
           displayProcessingTime: undefined,
@@ -1143,6 +1222,18 @@ export function useAppState() {
         reportKeys: report ? Object.keys(report) : []
       });
       dispatch({ type: 'SET_RHC_REPORT', payload: report });
+    }, []),
+
+    setTaviValidationState: useCallback((payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: TAVIExtractedData | null }) => {
+      dispatch({ type: 'SET_TAVI_VALIDATION', payload });
+    }, []),
+
+    setAngioValidationState: useCallback((payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: AngioPCIExtractedData | null }) => {
+      dispatch({ type: 'SET_ANGIO_VALIDATION', payload });
+    }, []),
+
+    setMteerValidationState: useCallback((payload: { result?: ValidationResult | null; status?: 'complete' | 'awaiting_validation'; extractedData?: MTEERExtractedData | null }) => {
+      dispatch({ type: 'SET_MTEER_VALIDATION', payload });
     }, []),
 
     setActiveWorkflow: useCallback((workflow: AgentType | null) => {

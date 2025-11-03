@@ -8,7 +8,7 @@
  * - Provides formatted output for clinical documentation
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckIcon,
@@ -20,7 +20,11 @@ import {
 } from '../icons/OptimizedIcons';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
+import { FieldValidationPrompt } from './FieldValidationPrompt';
+import { useValidationCheckpoint } from '@/hooks/useValidationCheckpoint';
+import type { ValidationResult } from '@/types/medical.types';
 import type { TAVIWorkupStructuredSections } from '@/types/medical.types';
+import { getValidationConfig } from '@/config/validationFieldConfig';
 
 interface TAVIWorkupDisplayProps {
   structuredSections?: TAVIWorkupStructuredSections; // Made optional for backward compatibility
@@ -29,6 +33,9 @@ interface TAVIWorkupDisplayProps {
   onCopy?: (text: string) => void;
   onInsertToEMR?: (text: string) => void;
   onReprocessWithAnswers?: (answers: Record<string, string>) => void;
+  validationResult?: ValidationResult | null;
+  validationStatus?: 'complete' | 'awaiting_validation';
+  onReprocessWithValidation?: (fields: Record<string, unknown>) => void;
   className?: string;
 }
 
@@ -102,6 +109,9 @@ const GROUP_CONFIGS: GroupConfig[] = [
   }
 ];
 
+// Use centralized validation configuration
+const { fieldConfig: TAVI_VALIDATION_FIELD_CONFIG, copy: TAVI_VALIDATION_COPY } = getValidationConfig('tavi');
+
 export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
   structuredSections,
   results,
@@ -109,6 +119,9 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
   onCopy,
   onInsertToEMR,
   onReprocessWithAnswers,
+  validationResult,
+  validationStatus,
+  onReprocessWithValidation,
   className = ''
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['patient', 'clinical', 'alerts']));
@@ -116,6 +129,23 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
   const [showMissingInfoForm, setShowMissingInfoForm] = useState(false);
   const [missingInfoAnswers, setMissingInfoAnswers] = useState<Record<string, string>>({});
   const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false });
+  const {
+    showValidationModal,
+    validationResult: activeValidationResult,
+    handleValidationRequired,
+    handleValidationContinue,
+    handleValidationCancel,
+    handleValidationSkip,
+    clearValidationState
+  } = useValidationCheckpoint<ValidationResult>({ agentType: 'tavi-workup' });
+
+  useEffect(() => {
+    if (validationStatus === 'awaiting_validation' && validationResult) {
+      handleValidationRequired(validationResult);
+    } else if (validationStatus && validationStatus !== 'awaiting_validation') {
+      clearValidationState();
+    }
+  }, [validationStatus, validationResult, handleValidationRequired, clearValidationState]);
 
   // Backward compatibility: Parse JSON from results if structured sections not available
   const effectiveStructuredSections = useMemo(() => {
@@ -734,6 +764,32 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
             <strong>Completeness Score:</strong> {effectiveStructuredSections.missing_summary.completeness_score}
           </p>
         </div>
+      )}
+
+      {/* Validation Modal */}
+      {showValidationModal && activeValidationResult && (
+        <FieldValidationPrompt
+          agentLabel="TAVI Workup"
+          validation={activeValidationResult}
+          fieldConfig={TAVI_VALIDATION_FIELD_CONFIG}
+          copy={TAVI_VALIDATION_COPY}
+          onCancel={() => {
+            console.log('🚫 TAVI Display: Validation cancelled');
+            handleValidationCancel();
+          }}
+          onSkip={() => {
+            console.log('⏭️ TAVI Display: Validation skipped');
+            handleValidationSkip();
+            // TODO: Force generation with incomplete data
+          }}
+          onContinue={(userFields) => {
+            console.log('✅ TAVI Display: Validation complete, user fields:', userFields);
+            handleValidationContinue(userFields);
+            if (onReprocessWithValidation) {
+              onReprocessWithValidation(userFields);
+            }
+          }}
+        />
       )}
     </div>
   );

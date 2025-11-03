@@ -253,14 +253,18 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
         <div className="p-4">
           <AppointmentMatrixBuilder
             onGenerate={async (preset) => {
-              await handleAction('appointment-wrap-up', {
-                preset: {
-                  id: 'matrix-generated',
-                  displayName: preset.displayName,
-                  itemCode: preset.itemCode,
-                  notes: preset.notes
-                }
-              });
+              try {
+                await handleAction('appointment-wrap-up', {
+                  preset: {
+                    id: 'matrix-generated',
+                    displayName: preset.displayName,
+                    itemCode: preset.itemCode,
+                    notes: preset.notes
+                  }
+                });
+              } finally {
+                handleBackToActions();
+              }
             }}
           />
         </div>

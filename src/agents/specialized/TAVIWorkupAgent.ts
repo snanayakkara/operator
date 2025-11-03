@@ -122,6 +122,7 @@ export class TAVIWorkupAgent extends MedicalAgent {
               lowLeftMainHeight: false,
               lowSinusDiameters: [],
               lowCoronaryHeights: [],
+              smallAccessVessels: [],
               calciumBurden: 'unknown',
               accessConcerns: [],
               contraindicationFlags: []

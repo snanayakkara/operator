@@ -43,7 +43,7 @@ import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestr
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { LANYARD_CARD_TEXTURE_KEY, parseLanyardTexturePreference } from '@/config/lanyardPreferences';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport, ValidationResult } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { ModelLoadingError, isModelLoadingError } from '@/types/errors.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
@@ -69,6 +69,12 @@ interface CurrentDisplayData {
   preOpPlanData?: PreOpPlanReport['planData'];
   reviewData?: any;
   rhcReport?: any;
+  taviValidationResult?: ValidationResult | null;
+  taviValidationStatus?: 'complete' | 'awaiting_validation';
+  angiogramValidationResult?: ValidationResult | null;
+  angiogramValidationStatus?: 'complete' | 'awaiting_validation';
+  mteerValidationResult?: ValidationResult | null;
+  mteerValidationStatus?: 'complete' | 'awaiting_validation';
   agent: AgentType | null;
   agentName: string | null;
   patientInfo: PatientInfo | null;
@@ -595,50 +601,78 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [persistenceService, actions, updateStorageStats]);
 
-  // Handle checkbox toggle with persistence
-  const handleToggleSessionCheck = useCallback(async (sessionId: string) => {
-    const isCurrentlyChecked = checkedSessions.has(sessionId);
+  const markSessionChecked = useCallback(async (sessionId: string) => {
+    if (checkedSessions.has(sessionId)) {
+      return;
+    }
 
-    if (isCurrentlyChecked) {
-      // Unchecking - remove from checked set and reset expiry timer
+    setCheckedSessions(prev => {
+      if (prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+
+    try {
+      await persistenceService.markSessionComplete(sessionId);
+      await updateStorageStats();
+      console.log('✅ Session marked complete (persistent):', sessionId);
+    } catch (error) {
+      console.error('❌ Failed to mark session as complete:', error);
+      ToastService.getInstance().error('Failed to mark session as complete');
       setCheckedSessions(prev => {
+        if (!prev.has(sessionId)) {
+          return prev;
+        }
         const next = new Set(prev);
         next.delete(sessionId);
         return next;
       });
+    }
+  }, [checkedSessions, persistenceService, updateStorageStats]);
 
-      try {
-        await persistenceService.unmarkSessionComplete(sessionId);
-        console.log('↩️ Session unchecked, expiry reset to 7 days:', sessionId);
-      } catch (error) {
-        console.error('❌ Failed to unmark session as complete:', error);
+  const unmarkSessionChecked = useCallback(async (sessionId: string) => {
+    if (!checkedSessions.has(sessionId)) {
+      return;
+    }
+
+    setCheckedSessions(prev => {
+      if (!prev.has(sessionId)) {
+        return prev;
       }
-    } else {
-      // Checking - add to checked set and start 24h deletion timer
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+
+    try {
+      await persistenceService.unmarkSessionComplete(sessionId);
+      await updateStorageStats();
+      console.log('↩️ Session unchecked (persistent):', sessionId);
+    } catch (error) {
+      console.error('❌ Failed to unmark session as complete:', error);
+      ToastService.getInstance().error('Failed to unmark session');
       setCheckedSessions(prev => {
+        if (prev.has(sessionId)) {
+          return prev;
+        }
         const next = new Set(prev);
         next.add(sessionId);
         return next;
       });
-
-      try {
-        await persistenceService.markSessionComplete(sessionId);
-        console.log('✅ Session checked, will delete in 24 hours:', sessionId);
-      } catch (error) {
-        console.error('❌ Failed to mark session as complete:', error);
-        ToastService.getInstance().error('Failed to mark session as complete');
-
-        // Revert checkbox state on error
-        setCheckedSessions(prev => {
-          const next = new Set(prev);
-          next.delete(sessionId);
-          return next;
-        });
-      }
     }
-
-    await updateStorageStats();
   }, [checkedSessions, persistenceService, updateStorageStats]);
+
+  // Handle checkbox toggle with persistence
+  const handleToggleSessionCheck = useCallback(async (sessionId: string) => {
+    if (checkedSessions.has(sessionId)) {
+      await unmarkSessionChecked(sessionId);
+    } else {
+      await markSessionChecked(sessionId);
+    }
+  }, [checkedSessions, markSessionChecked, unmarkSessionChecked]);
 
   // Delete session from persistence
   const handleDeleteSession = useCallback(async (sessionId: string) => {
@@ -1647,26 +1681,101 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       console.log('✅ Agent processing complete for session:', sessionId);
 
-      // Check if RHC validation is required
-      if (workflowId === 'right-heart-cath' && (result as any).status === 'awaiting_validation') {
-        console.log('⚠️ RHC validation required - pausing workflow');
+      const resultStatus = (result as any).status;
 
-        // Store partial result with validation data
-        const rhcResult = result as any;
-        actions.updatePatientSession(sessionId, {
-          results: rhcResult.content,
-          rhcReport: rhcResult, // Store full report with validation data
-          status: 'awaiting_validation',
-          processingProgress: undefined,
-          pipelineProgress: undefined
-        });
+      if (resultStatus === 'awaiting_validation') {
+        switch (workflowId) {
+          case 'right-heart-cath': {
+            console.log('⚠️ RHC validation required - pausing workflow');
 
-        // Clear progress indicators
-        actions.setProcessingProgress(0);
-        actions.clearPipelineProgress();
+            const rhcResult = result as any;
+            actions.updatePatientSession(sessionId, {
+              results: rhcResult.content,
+              rhcReport: rhcResult,
+              status: 'awaiting_validation',
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
 
-        // Return early - user will fill in fields via modal
-        return;
+            actions.setProcessingProgress(0);
+            actions.clearPipelineProgress();
+            return;
+          }
+
+          case 'tavi-workup': {
+            console.log('⚠️ TAVI validation required - pausing workflow');
+
+            const taviResult = result as any;
+            actions.updatePatientSession(sessionId, {
+              results: taviResult.content,
+              taviStructuredSections: taviResult.structuredSections,
+              taviValidationResult: taviResult.validationResult ?? null,
+              taviValidationStatus: 'awaiting_validation',
+              taviExtractedData: taviResult.extractedData,
+              status: 'awaiting_validation',
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+
+            actions.setTaviStructuredSections(taviResult.structuredSections ?? undefined);
+            actions.setTaviValidationState({
+              result: taviResult.validationResult ?? null,
+              status: 'awaiting_validation',
+              extractedData: taviResult.extractedData ?? null
+            });
+            actions.setProcessingProgress(0);
+            actions.clearPipelineProgress();
+            return;
+          }
+
+          case 'angiogram-pci': {
+            console.log('⚠️ Angiogram/PCI validation required - pausing workflow');
+
+            const angioResult = result as any;
+            actions.updatePatientSession(sessionId, {
+              results: angioResult.content,
+              angiogramValidationResult: angioResult.validationResult ?? null,
+              angiogramValidationStatus: 'awaiting_validation',
+              angiogramExtractedData: angioResult.extractedData,
+              status: 'awaiting_validation',
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+
+            actions.setAngioValidationState({
+              result: angioResult.validationResult ?? null,
+              status: 'awaiting_validation',
+              extractedData: angioResult.extractedData ?? null
+            });
+            actions.setProcessingProgress(0);
+            actions.clearPipelineProgress();
+            return;
+          }
+
+          case 'mteer': {
+            console.log('⚠️ mTEER validation required - pausing workflow');
+
+            const mteerResult = result as any;
+            actions.updatePatientSession(sessionId, {
+              results: mteerResult.content,
+              mteerValidationResult: mteerResult.validationResult ?? null,
+              mteerValidationStatus: 'awaiting_validation',
+              mteerExtractedData: mteerResult.extractedData,
+              status: 'awaiting_validation',
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+
+            actions.setMteerValidationState({
+              result: mteerResult.validationResult ?? null,
+              status: 'awaiting_validation',
+              extractedData: mteerResult.extractedData ?? null
+            });
+            actions.setProcessingProgress(0);
+            actions.clearPipelineProgress();
+            return;
+          }
+        }
       }
 
       // Update pipeline progress - Generation/completion phase
@@ -1709,6 +1818,27 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Add TAVI structured sections if available
       if (result.taviStructuredSections) {
         sessionUpdate.taviStructuredSections = result.taviStructuredSections;
+      }
+
+      if (workflowId === 'tavi-workup') {
+        sessionUpdate.taviValidationResult = result.validationResult ?? null;
+        sessionUpdate.taviValidationStatus = 'complete';
+        sessionUpdate.taviExtractedData = result.extractedData ?? undefined;
+        actions.setTaviValidationState({ result: null, status: undefined, extractedData: undefined });
+      }
+
+      if (workflowId === 'angiogram-pci') {
+        sessionUpdate.angiogramValidationResult = result.validationResult ?? null;
+        sessionUpdate.angiogramValidationStatus = 'complete';
+        sessionUpdate.angiogramExtractedData = result.extractedData ?? undefined;
+        actions.setAngioValidationState({ result: null, status: undefined, extractedData: undefined });
+      }
+
+      if (workflowId === 'mteer') {
+        sessionUpdate.mteerValidationResult = result.validationResult ?? null;
+        sessionUpdate.mteerValidationStatus = 'complete';
+        sessionUpdate.mteerExtractedData = result.extractedData ?? undefined;
+        actions.setMteerValidationState({ result: null, status: undefined, extractedData: undefined });
       }
 
       // Add RHC structured report if available (for Right Heart Cath agent)
@@ -2171,6 +2301,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       // Use new isolated session display action
       actions.setDisplaySession(session);
+      actions.setTranscription(session.transcription || '');
       actions.setUIMode('reviewing', { sessionId: session.id, origin: 'user' });
 
       // Show progress overlay if session is currently processing
@@ -2263,6 +2394,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         preOpPlanData: state.displaySession.displayPreOpPlanData,
         reviewData: state.displaySession.displayReviewData,
         rhcReport: state.displaySession.displayRhcReport,
+        taviValidationResult: state.displaySession.displayTaviValidationResult ?? null,
+        taviValidationStatus: state.displaySession.displayTaviValidationStatus,
+        angiogramValidationResult: state.displaySession.displayAngioValidationResult ?? null,
+        angiogramValidationStatus: state.displaySession.displayAngioValidationStatus,
+        mteerValidationResult: state.displaySession.displayMteerValidationResult ?? null,
+        mteerValidationStatus: state.displaySession.displayMteerValidationStatus,
         agent: state.displaySession.displayAgent ?? null,
         agentName: state.displaySession.displayAgentName ?? null,
         patientInfo: state.displaySession.displayPatientInfo ?? null,
@@ -2320,6 +2457,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         preOpPlanData: state.preOpPlanData,
         reviewData: state.reviewData,
         rhcReport: state.rhcReport,
+        taviValidationResult: state.taviValidationResult ?? null,
+        taviValidationStatus: state.taviValidationStatus,
+        angiogramValidationResult: state.angiogramValidationResult ?? null,
+        angiogramValidationStatus: state.angiogramValidationStatus,
+        mteerValidationResult: state.mteerValidationResult ?? null,
+        mteerValidationStatus: state.mteerValidationStatus,
         agent: state.currentAgent,
         agentName: state.currentAgentName,
         patientInfo: state.currentPatientInfo,
@@ -2895,7 +3038,298 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [state.transcription, state.currentAgent, actions]);
 
-  // Reprocess RHC with user-provided validation fields
+  // Reprocess TAVI Workup with user-provided validation fields
+  const handleTAVIReprocessWithValidation = useCallback(async (userFields: Record<string, any>) => {
+    try {
+      if (!state.transcription || state.currentAgent !== 'tavi-workup') {
+        console.error('❌ Cannot reprocess TAVI: missing transcription or incorrect agent');
+        return;
+      }
+
+      const sessionId = state.currentSessionId;
+      if (!sessionId) {
+        console.error('❌ Cannot reprocess TAVI: no session ID');
+        return;
+      }
+
+      console.log('🔄 Reprocessing TAVI with user-provided fields:', userFields);
+
+      actions.setProcessing(true);
+      actions.setProcessingStatus('processing');
+
+      actions.updatePatientSession(sessionId, {
+        status: 'processing'
+      });
+
+      const context = {
+        sessionId,
+        timestamp: Date.now(),
+        userProvidedFields: userFields
+      };
+
+      const { AgentFactory } = await import('@/services/AgentFactory');
+      const result = await AgentFactory.processWithAgent(
+        'tavi-workup',
+        state.transcription,
+        context,
+        processingAbortRef.current?.signal
+      );
+
+      if ((result as any).status === 'awaiting_validation') {
+        console.warn('⚠️ TAVI still requires validation after user input');
+        const pendingResult = result as any;
+        actions.updatePatientSession(sessionId, {
+          results: pendingResult.content,
+          taviStructuredSections: pendingResult.structuredSections,
+          taviValidationResult: pendingResult.validationResult ?? null,
+          taviValidationStatus: 'awaiting_validation',
+          taviExtractedData: pendingResult.extractedData,
+          status: 'awaiting_validation'
+        });
+        actions.setTaviStructuredSections(pendingResult.structuredSections ?? undefined);
+        actions.setTaviValidationState({
+          result: pendingResult.validationResult ?? null,
+          status: 'awaiting_validation',
+          extractedData: pendingResult.extractedData ?? null
+        });
+        actions.setProcessingProgress(0);
+        actions.clearPipelineProgress();
+        return;
+      }
+
+      const sessionUpdate: any = {
+        results: result.content,
+        summary: result.summary || '',
+        taviStructuredSections: (result as any).structuredSections,
+        taviValidationResult: result.validationResult ?? null,
+        taviValidationStatus: 'complete',
+        taviExtractedData: result.extractedData ?? undefined,
+        status: 'completed',
+        completed: true,
+        completedTime: Date.now(),
+        processingTime: result.processingTime,
+        warnings: result.warnings,
+        errors: result.errors
+      };
+
+      actions.updatePatientSession(sessionId, sessionUpdate);
+
+      if ((result as any).structuredSections) {
+        actions.setTaviStructuredSections((result as any).structuredSections);
+      }
+      actions.setTaviValidationState({ result: null, status: undefined, extractedData: undefined });
+
+      const completedSession = state.patientSessions.find(s => s.id === sessionId);
+      if (completedSession) {
+        await saveSessionToPersistence({
+          ...completedSession,
+          ...sessionUpdate
+        });
+      }
+
+      actions.completeProcessingAtomic(sessionId, result.content, result.summary);
+      console.log('✅ TAVI session completed after validation');
+    } catch (error) {
+      console.error('❌ TAVI reprocess with validation failed:', error);
+      actions.setProcessing(false);
+      actions.setProcessingStatus('idle');
+      if (state.currentSessionId) {
+        actions.updatePatientSession(state.currentSessionId, {
+          status: 'failed',
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        });
+      }
+    }
+  }, [state.transcription, state.currentAgent, state.currentSessionId, state.patientSessions, actions]);
+
+  // Reprocess Angiogram/PCI with user-provided validation fields
+  const handleAngioReprocessWithValidation = useCallback(async (userFields: Record<string, any>) => {
+    try {
+      if (!state.transcription || state.currentAgent !== 'angiogram-pci') {
+        console.error('❌ Cannot reprocess Angio/PCI: missing transcription or incorrect agent');
+        return;
+      }
+
+      const sessionId = state.currentSessionId;
+      if (!sessionId) {
+        console.error('❌ Cannot reprocess Angio/PCI: no session ID');
+        return;
+      }
+
+      console.log('🔄 Reprocessing Angio/PCI with user-provided fields:', userFields);
+
+      actions.setProcessing(true);
+      actions.setProcessingStatus('processing');
+      actions.updatePatientSession(sessionId, { status: 'processing' });
+
+      const context = {
+        sessionId,
+        timestamp: Date.now(),
+        userProvidedFields: userFields
+      };
+
+      const { AgentFactory } = await import('@/services/AgentFactory');
+      const result = await AgentFactory.processWithAgent(
+        'angiogram-pci',
+        state.transcription,
+        context,
+        processingAbortRef.current?.signal
+      );
+
+      if ((result as any).status === 'awaiting_validation') {
+        console.warn('⚠️ Angio/PCI still requires validation after user input');
+        const pendingResult = result as any;
+        actions.updatePatientSession(sessionId, {
+          results: pendingResult.content,
+          angiogramValidationResult: pendingResult.validationResult ?? null,
+          angiogramValidationStatus: 'awaiting_validation',
+          angiogramExtractedData: pendingResult.extractedData,
+          status: 'awaiting_validation'
+        });
+        actions.setAngioValidationState({
+          result: pendingResult.validationResult ?? null,
+          status: 'awaiting_validation',
+          extractedData: pendingResult.extractedData ?? null
+        });
+        actions.setProcessingProgress(0);
+        actions.clearPipelineProgress();
+        return;
+      }
+
+      const sessionUpdate: any = {
+        results: result.content,
+        summary: result.summary || '',
+        angiogramValidationResult: result.validationResult ?? null,
+        angiogramValidationStatus: 'complete',
+        angiogramExtractedData: result.extractedData ?? undefined,
+        status: 'completed',
+        completed: true,
+        completedTime: Date.now(),
+        processingTime: result.processingTime,
+        warnings: result.warnings,
+        errors: result.errors
+      };
+
+      actions.updatePatientSession(sessionId, sessionUpdate);
+      actions.setAngioValidationState({ result: null, status: undefined, extractedData: undefined });
+
+      const completedSession = state.patientSessions.find(s => s.id === sessionId);
+      if (completedSession) {
+        await saveSessionToPersistence({
+          ...completedSession,
+          ...sessionUpdate
+        });
+      }
+
+      actions.completeProcessingAtomic(sessionId, result.content, result.summary);
+      console.log('✅ Angio/PCI session completed after validation');
+    } catch (error) {
+      console.error('❌ Angio/PCI reprocess with validation failed:', error);
+      actions.setProcessing(false);
+      actions.setProcessingStatus('idle');
+      if (state.currentSessionId) {
+        actions.updatePatientSession(state.currentSessionId, {
+          status: 'failed',
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        });
+      }
+    }
+  }, [state.transcription, state.currentAgent, state.currentSessionId, state.patientSessions, actions]);
+
+  // Reprocess mTEER with user-provided validation fields
+  const handleMTEERReprocessWithValidation = useCallback(async (userFields: Record<string, any>) => {
+    try {
+      if (!state.transcription || state.currentAgent !== 'mteer') {
+        console.error('❌ Cannot reprocess mTEER: missing transcription or incorrect agent');
+        return;
+      }
+
+      const sessionId = state.currentSessionId;
+      if (!sessionId) {
+        console.error('❌ Cannot reprocess mTEER: no session ID');
+        return;
+      }
+
+      console.log('🔄 Reprocessing mTEER with user-provided fields:', userFields);
+
+      actions.setProcessing(true);
+      actions.setProcessingStatus('processing');
+      actions.updatePatientSession(sessionId, { status: 'processing' });
+
+      const context = {
+        sessionId,
+        timestamp: Date.now(),
+        userProvidedFields: userFields
+      };
+
+      const { AgentFactory } = await import('@/services/AgentFactory');
+      const result = await AgentFactory.processWithAgent(
+        'mteer',
+        state.transcription,
+        context,
+        processingAbortRef.current?.signal
+      );
+
+      if ((result as any).status === 'awaiting_validation') {
+        console.warn('⚠️ mTEER still requires validation after user input');
+        const pendingResult = result as any;
+        actions.updatePatientSession(sessionId, {
+          results: pendingResult.content,
+          mteerValidationResult: pendingResult.validationResult ?? null,
+          mteerValidationStatus: 'awaiting_validation',
+          mteerExtractedData: pendingResult.extractedData,
+          status: 'awaiting_validation'
+        });
+        actions.setMteerValidationState({
+          result: pendingResult.validationResult ?? null,
+          status: 'awaiting_validation',
+          extractedData: pendingResult.extractedData ?? null
+        });
+        actions.setProcessingProgress(0);
+        actions.clearPipelineProgress();
+        return;
+      }
+
+      const sessionUpdate: any = {
+        results: result.content,
+        summary: result.summary || '',
+        mteerValidationResult: result.validationResult ?? null,
+        mteerValidationStatus: 'complete',
+        mteerExtractedData: result.extractedData ?? undefined,
+        status: 'completed',
+        completed: true,
+        completedTime: Date.now(),
+        processingTime: result.processingTime,
+        warnings: result.warnings,
+        errors: result.errors
+      };
+
+      actions.updatePatientSession(sessionId, sessionUpdate);
+      actions.setMteerValidationState({ result: null, status: undefined, extractedData: undefined });
+
+      const completedSession = state.patientSessions.find(s => s.id === sessionId);
+      if (completedSession) {
+        await saveSessionToPersistence({
+          ...completedSession,
+          ...sessionUpdate
+        });
+      }
+
+      actions.completeProcessingAtomic(sessionId, result.content, result.summary);
+      console.log('✅ mTEER session completed after validation');
+    } catch (error) {
+      console.error('❌ mTEER reprocess with validation failed:', error);
+      actions.setProcessing(false);
+      actions.setProcessingStatus('idle');
+      if (state.currentSessionId) {
+        actions.updatePatientSession(state.currentSessionId, {
+          status: 'failed',
+          errors: [error instanceof Error ? error.message : 'Unknown error']
+        });
+      }
+    }
+  }, [state.transcription, state.currentAgent, state.currentSessionId, state.patientSessions, actions]);
+
   const handleRHCReprocessWithValidation = useCallback(async (userFields: Record<string, any>) => {
     try {
       if (!state.transcription || !state.currentAgent || state.currentAgent !== 'right-heart-cath') {
@@ -3277,6 +3711,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Try multiple sources to find the session ID: currentSessionId (active work), displaySessionId (viewing), or selectedSessionId (fallback)
       const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId || state.selectedSessionId;
       if (insertedSessionId) {
+        await markSessionChecked(insertedSessionId);
         setAutoCheckedSessions(prev => {
           const next = new Set(prev);
           next.add(insertedSessionId);
@@ -3294,7 +3729,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.error('Failed to insert text to EMR:', error);
       throw error;
     }
-  }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete]);
+  }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete, markSessionChecked]);
 
   // Memoized status checking for better performance
   // Use a stable reference to avoid recreating the callback every render
@@ -3928,7 +4363,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                     onTranscriptionInsert={(text: string) => { handleInsertToEMR(text, undefined, displayData.agent || null); }}
                     onTranscriptionEdit={handleTranscriptionEdit}
                     transcriptionSaveStatus={transcriptionSaveStatus}
-                    onAgentReprocess={displayData.isDisplayingSession ? undefined : handleAgentReprocess}
+                    onAgentReprocess={handleAgentReprocess}
                     approvalState={displayData.isDisplayingSession
                       ? {
                           status: 'pending' as const,
@@ -3959,6 +4394,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 totalProcessingTime={displayData.isDisplayingSession ? (displayData.processingTime || null) : state.totalProcessingTime}
                 processingStatus={displayData.processingStatus}
                 currentAgentName={displayData.agentName}
+                isViewingSession={displayData.isDisplayingSession}
                 modelUsed={displayData.modelUsed || null}
                 selectedSessionId={displayData.isDisplayingSession ? displayData.patientInfo?.name || 'Unknown' : stableSelectedSessionId}
                 selectedPatientName={displayData.patientInfo?.name || stableSelectedPatientName}
@@ -3970,6 +4406,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
                 onStopStreaming={displayData.isDisplayingSession ? undefined : stopStreaming}
                 taviStructuredSections={displayData.isDisplayingSession ? displayData.taviStructuredSections : state.taviStructuredSections}
+                taviValidationResult={displayData.isDisplayingSession ? displayData.taviValidationResult : state.taviValidationResult}
+                taviValidationStatus={displayData.isDisplayingSession ? displayData.taviValidationStatus : state.taviValidationStatus}
+                onTAVIReprocessWithValidation={!displayData.isDisplayingSession ? handleTAVIReprocessWithValidation : undefined}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
                 rhcReport={displayData.isDisplayingSession ? displayData.rhcReport : state.rhcReport}
@@ -3977,6 +4416,12 @@ const OptimizedAppContent: React.FC = memo(() => {
                   ? (rhcReport: any) => actions.updateSessionRhcReport(stableSelectedSessionId, rhcReport)
                   : undefined}
                 onRHCReprocessWithValidation={!displayData.isDisplayingSession ? handleRHCReprocessWithValidation : undefined}
+                angiogramValidationResult={displayData.isDisplayingSession ? displayData.angiogramValidationResult : state.angiogramValidationResult}
+                angiogramValidationStatus={displayData.isDisplayingSession ? displayData.angiogramValidationStatus : state.angiogramValidationStatus}
+                onAngioReprocessWithValidation={!displayData.isDisplayingSession ? handleAngioReprocessWithValidation : undefined}
+                mteerValidationResult={displayData.isDisplayingSession ? displayData.mteerValidationResult : state.mteerValidationResult}
+                mteerValidationStatus={displayData.isDisplayingSession ? displayData.mteerValidationStatus : state.mteerValidationStatus}
+                onMTEERReprocessWithValidation={!displayData.isDisplayingSession ? handleMTEERReprocessWithValidation : undefined}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
                 revisionPanel={revisionPanelData}

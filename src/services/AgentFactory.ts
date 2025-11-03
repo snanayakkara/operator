@@ -7,7 +7,7 @@
  * - Smart recommendations and context enhancement
  */
 
-import type { AgentType, MedicalCode, MedicalContext, MedicalReport, PreOpPlanReport } from '@/types/medical.types';
+import type { AgentType, MedicalCode, MedicalContext, MedicalReport, PreOpPlanReport, ValidationResult } from '@/types/medical.types';
 import { LazyAgentFactory } from './LazyAgentFactory';
 import { LazyAgentLoader } from './LazyAgentLoader';
 import { CrossAgentIntelligence } from './CrossAgentIntelligence';
@@ -114,7 +114,7 @@ export class AgentFactory {
       usePhase4Enhancement?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any; preOpPlanData?: PreOpPlanReport['planData'] }> {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any; preOpPlanData?: PreOpPlanReport['planData']; status?: string; validationResult?: ValidationResult; extractedData?: any; structuredSections?: any }> {
     const startTime = Date.now();
     
     try {
@@ -218,6 +218,7 @@ export class AgentFactory {
       
       // Return structured response with separate warnings/errors, timing data, and optional summary
       return {
+        ...report,
         content: report.content,
         summary: report.summary,
         warnings: report.warnings,
@@ -274,7 +275,7 @@ export class AgentFactory {
       skipNotification?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ) {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; phase4Metadata?: Record<string, unknown>; status?: string; validationResult?: ValidationResult; extractedData?: any; structuredSections?: any }> {
     const startTime = Date.now();
     logger.info('Phase 4 Enhanced processing initiated', {
       component: 'agent-factory',
@@ -377,6 +378,7 @@ export class AgentFactory {
       }
 
       return {
+        ...report,
         content: report.content,
         summary: report.summary,
         warnings: report.warnings,

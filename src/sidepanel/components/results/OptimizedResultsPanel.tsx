@@ -8,10 +8,10 @@
  * - Better performance through focused updates
  */
 
-import React, { memo, useState, useMemo, useCallback } from 'react';
+import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
-import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag } from 'lucide-react';
+import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag, RefreshCw } from 'lucide-react';
 import { calculateWordCount, calculateReadTime, formatReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
   staggerContainer, 
@@ -24,6 +24,7 @@ import {
   ANIMATION_DURATIONS
 } from '@/utils/animations';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
+import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { ProcessingTimeDisplay } from '../ProcessingTimeDisplay';
 import {
   ReportDisplay,
@@ -37,10 +38,16 @@ import {
 } from './index';
 import { PatientEducationOutputCard } from '../PatientEducationOutputCard';
 import { PreOpPlanDisplay } from './PreOpPlanDisplay';
-import type { AgentType, FailedAudioRecording, PipelineProgress, PreOpPlanReport } from '@/types/medical.types';
+import type { AgentType, FailedAudioRecording, PipelineProgress, PreOpPlanReport, ValidationResult } from '@/types/medical.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { UnifiedPipelineProgress } from '../UnifiedPipelineProgress';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
+import { useValidationCheckpoint } from '@/hooks/useValidationCheckpoint';
+import { getValidationConfig } from '@/config/validationFieldConfig';
+
+// Use centralized validation configurations
+const { fieldConfig: ANGIO_VALIDATION_FIELD_CONFIG, copy: ANGIO_VALIDATION_COPY } = getValidationConfig('angio-pci');
+const { fieldConfig: MTEER_VALIDATION_FIELD_CONFIG, copy: MTEER_VALIDATION_COPY } = getValidationConfig('mteer');
 
 interface OptimizedResultsPanelProps {
   results: string;
@@ -100,6 +107,15 @@ interface OptimizedResultsPanelProps {
   onCancelStreaming?: () => void;
   // TAVI Workup structured data
   taviStructuredSections?: any; // TAVIWorkupStructuredSections but avoiding import issues
+  taviValidationResult?: ValidationResult | null;
+  taviValidationStatus?: 'complete' | 'awaiting_validation';
+  onTAVIReprocessWithValidation?: (fields: Record<string, any>) => void;
+  angiogramValidationResult?: ValidationResult | null;
+  angiogramValidationStatus?: 'complete' | 'awaiting_validation';
+  onAngioReprocessWithValidation?: (fields: Record<string, any>) => void;
+  mteerValidationResult?: ValidationResult | null;
+  mteerValidationStatus?: 'complete' | 'awaiting_validation';
+  onMTEERReprocessWithValidation?: (fields: Record<string, any>) => void;
   // Patient Education structured data
   educationData?: any; // Patient Education JSON metadata and letter content
   // Pre-Op Plan structured data
@@ -134,6 +150,7 @@ interface OptimizedResultsPanelProps {
   onRevisionMarkGoldenPair?: () => void | Promise<void>;
   isSavingRevision?: boolean;
   isSavingGoldenPair?: boolean;
+  isViewingSession?: boolean;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -189,6 +206,15 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   onCancelStreaming,
   // TAVI structured data
   taviStructuredSections,
+  taviValidationResult = null,
+  taviValidationStatus,
+  onTAVIReprocessWithValidation,
+  angiogramValidationResult = null,
+  angiogramValidationStatus,
+  onAngioReprocessWithValidation,
+  mteerValidationResult = null,
+  mteerValidationStatus,
+  onMTEERReprocessWithValidation,
   // Patient Education structured data
   educationData,
   // Pre-Op Plan structured data
@@ -208,9 +234,68 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   onRevisionDiscard,
   onRevisionMarkGoldenPair,
   isSavingRevision = false,
-  isSavingGoldenPair = false
+  isSavingGoldenPair = false,
+  isViewingSession = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const angioValidation = useValidationCheckpoint<ValidationResult>({ agentType: 'angiogram-pci' });
+  const mteerValidation = useValidationCheckpoint<ValidationResult>({ agentType: 'mteer' });
+
+  const {
+    showValidationModal: showAngioValidation,
+    validationResult: activeAngioValidation,
+    handleValidationRequired: handleAngioValidationRequired,
+    handleValidationContinue: handleAngioValidationContinue,
+    handleValidationCancel: handleAngioValidationCancel,
+    handleValidationSkip: handleAngioValidationSkip,
+    clearValidationState: clearAngioValidationState
+  } = angioValidation;
+
+  const {
+    showValidationModal: showMTEERValidation,
+    validationResult: activeMTEERValidation,
+    handleValidationRequired: handleMTEERValidationRequired,
+    handleValidationContinue: handleMTEERValidationContinue,
+    handleValidationCancel: handleMTEERValidationCancel,
+    handleValidationSkip: handleMTEERValidationSkip,
+    clearValidationState: clearMTEERValidationState
+  } = mteerValidation;
+
+  useEffect(() => {
+    if (agentType === 'angiogram-pci') {
+      if (angiogramValidationStatus === 'awaiting_validation' && angiogramValidationResult) {
+        handleAngioValidationRequired(angiogramValidationResult);
+      } else if (angiogramValidationStatus && angiogramValidationStatus !== 'awaiting_validation') {
+        clearAngioValidationState();
+      }
+    } else {
+      clearAngioValidationState();
+    }
+  }, [
+    agentType,
+    angiogramValidationStatus,
+    angiogramValidationResult,
+    handleAngioValidationRequired,
+    clearAngioValidationState
+  ]);
+
+  useEffect(() => {
+    if (agentType === 'mteer') {
+      if (mteerValidationStatus === 'awaiting_validation' && mteerValidationResult) {
+        handleMTEERValidationRequired(mteerValidationResult);
+      } else if (mteerValidationStatus && mteerValidationStatus !== 'awaiting_validation') {
+        clearMTEERValidationState();
+      }
+    } else {
+      clearMTEERValidationState();
+    }
+  }, [
+    agentType,
+    mteerValidationStatus,
+    mteerValidationResult,
+    handleMTEERValidationRequired,
+    clearMTEERValidationState
+  ]);
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
@@ -232,6 +317,28 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     copied: false,
     inserted: false
   });
+  const letterContentForActions = revisionPanel?.isEditing ? revisionPanel.edited : results;
+  const hasTranscription = Boolean(originalTranscription && originalTranscription.trim().length > 0);
+  const isRevisionOpen = !!(revisionPanel?.isEditing);
+  const canEditAndTrain = Boolean(onRevisionToggle);
+  const canReprocessQuickLetter = agentType === 'quick-letter' && !!onAgentReprocess && !!originalTranscription?.trim();
+  const letterActionCount = 3 + (canEditAndTrain ? 1 : 0) + (canReprocessQuickLetter ? 1 : 0);
+  const letterActionGridClass = useMemo(() => {
+    switch (letterActionCount) {
+      case 0:
+      case 1:
+      case 2:
+        return 'grid-cols-2';
+      case 3:
+        return 'grid-cols-3';
+      case 4:
+        return 'grid-cols-4';
+      case 5:
+        return 'grid-cols-5';
+      default:
+        return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5';
+    }
+  }, [letterActionCount]);
 
   // Button action handlers with feedback
   const handleSummaryCopy = useCallback(async () => {
@@ -249,16 +356,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   }, [onInsertToEMR, resultsSummary]);
 
   const handleLetterCopy = useCallback(async () => {
-    await onCopy(results);
+    await onCopy(letterContentForActions);
     setLetterButtonStates(prev => ({ ...prev, copied: true }));
     setTimeout(() => setLetterButtonStates(prev => ({ ...prev, copied: false })), 2000);
-  }, [onCopy, results]);
+  }, [letterContentForActions, onCopy]);
 
   const handleLetterInsert = useCallback(async () => {
-    await onInsertToEMR(results);
+    await onInsertToEMR(letterContentForActions);
     setLetterButtonStates(prev => ({ ...prev, inserted: true }));
     setTimeout(() => setLetterButtonStates(prev => ({ ...prev, inserted: false })), 2000);
-  }, [onInsertToEMR, results]);
+  }, [letterContentForActions, onInsertToEMR]);
 
   const handleSummaryDownload = useCallback(() => {
     const blob = new Blob([resultsSummary], { type: 'text/plain' });
@@ -273,7 +380,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   }, [resultsSummary]);
 
   const _handleLetterDownload = useCallback(() => {
-    const blob = new Blob([results], { type: 'text/plain' });
+    const blob = new Blob([letterContentForActions], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -282,7 +389,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [results, agentType]);
+  }, [agentType, letterContentForActions]);
 
   // Patient version handlers
   const handlePatientVersionCopy = useCallback(async () => {
@@ -315,8 +422,12 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     }
   }, [patientVersion]);
 
-  const isRevisionOpen = !!(revisionPanel?.isEditing);
-  const canEditAndTrain = Boolean(onRevisionToggle);
+  const handleQuickLetterReprocess = useCallback(() => {
+    if (!onAgentReprocess || isProcessing || !canReprocessQuickLetter) {
+      return;
+    }
+    onAgentReprocess('quick-letter');
+  }, [canReprocessQuickLetter, isProcessing, onAgentReprocess]);
 
   const revisionTags = useMemo(() => {
     if (!revisionPanel) {
@@ -416,6 +527,14 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
   // Check if this is a Pre-Op Plan with structured display
   const isPreOpPlan = agentType === 'pre-op-plan' && results;
+
+  const showPrimaryTranscriptionSection =
+    !streaming &&
+    !isTAVIWorkup &&
+    !isRightHeartCath &&
+    agentType !== 'investigation-summary' &&
+    !isQuickLetterDualCards &&
+    (hasTranscription || isViewingSession);
 
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
@@ -632,28 +751,34 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       {/* Original Transcription Section - Hide during streaming, show when complete */}
       {/* For investigation-summary, show transcription AFTER results (handled in content section) */}
       <AnimatePresence>
-        {originalTranscription && !streaming && !isTAVIWorkup && !isRightHeartCath && agentType !== 'investigation-summary' && (
+        {showPrimaryTranscriptionSection && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: ANIMATION_DURATIONS.normal }}
           >
-            <TranscriptionSection
-          originalTranscription={originalTranscription}
-          onTranscriptionCopy={onTranscriptionCopy}
-          onTranscriptionInsert={onTranscriptionInsert}
-          onTranscriptionEdit={onTranscriptionEdit}
-          transcriptionSaveStatus={transcriptionSaveStatus}
-          onAgentReprocess={onAgentReprocess}
-          currentAgent={currentAgent}
-          isProcessing={isProcessing}
-          audioBlob={audioBlob}
-          defaultExpanded={!resultsReady}
-              collapseWhen={resultsReady}
-              approvalState={approvalState}
-              onTranscriptionApprove={onTranscriptionApprove}
-            />
+            {hasTranscription ? (
+              <TranscriptionSection
+                originalTranscription={originalTranscription ?? ''}
+                onTranscriptionCopy={onTranscriptionCopy}
+                onTranscriptionInsert={onTranscriptionInsert}
+                onTranscriptionEdit={onTranscriptionEdit}
+                transcriptionSaveStatus={transcriptionSaveStatus}
+                onAgentReprocess={onAgentReprocess}
+                currentAgent={currentAgent}
+                isProcessing={isProcessing}
+                audioBlob={audioBlob}
+                defaultExpanded={!resultsReady}
+                collapseWhen={resultsReady}
+                approvalState={approvalState}
+                onTranscriptionApprove={onTranscriptionApprove}
+              />
+            ) : (
+              <div className="px-4 py-3 border-b border-gray-200 text-xs text-gray-600 bg-gray-50">
+                No transcription was saved with this session.
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -681,7 +806,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               {/* Consistent transcription UI during streaming */}
               {originalTranscription && (
                 <TranscriptionSection
-                  originalTranscription={originalTranscription}
+                  originalTranscription={originalTranscription ?? ''}
                   onTranscriptionCopy={onTranscriptionCopy}
                   onTranscriptionInsert={onTranscriptionInsert}
                   onTranscriptionEdit={onTranscriptionEdit}
@@ -890,12 +1015,22 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   <h4 className="text-blue-800 font-semibold text-sm">Letter</h4>
                 </div>
                 <div className="p-3 max-h-96 overflow-y-auto">
-                  <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
-                    {results}
-                  </div>
+                  {isRevisionOpen && revisionPanel ? (
+                    <textarea
+                      value={revisionPanel.edited}
+                      onChange={handleRevisionTextChange}
+                      className="w-full min-h-[220px] max-h-[360px] resize-y border border-blue-200 rounded-lg px-3 py-2 text-sm leading-relaxed bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      placeholder="Update the letter content before saving a golden example..."
+                      aria-label="Quick letter editable content"
+                    />
+                  ) : (
+                    <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
+                      {letterContentForActions}
+                    </div>
+                  )}
                 </div>
                 <div className="p-3 border-t border-blue-200 bg-blue-50">
-                  <div className={`grid gap-2 ${canEditAndTrain ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  <div className={`grid gap-2 ${letterActionGridClass}`}>
                     {/* Copy Letter Button */}
                     <button
                       onClick={handleLetterCopy}
@@ -954,6 +1089,31 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                         <Sparkles className={`w-4 h-4 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />
                         <span className={`text-xs ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
                           {isRevisionOpen ? 'Editing…' : 'Edit & Train'}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Reprocess Quick Letter */}
+                    {canReprocessQuickLetter && (
+                      <button
+                        onClick={handleQuickLetterReprocess}
+                        disabled={isProcessing}
+                        className={`
+                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
+                          ${isProcessing
+                            ? 'bg-blue-100/60 border-blue-200 text-blue-400 cursor-not-allowed'
+                            : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-blue-700'
+                          }
+                        `}
+                        title="Reprocess this transcription with the Quick Letter agent"
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 text-blue-700" />
+                        )}
+                        <span className={`text-xs ${isProcessing ? 'text-blue-400' : 'text-blue-700'}`}>
+                          Reprocess
                         </span>
                       </button>
                     )}
@@ -1062,6 +1222,31 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Raw Transcription */}
+              {(hasTranscription || isViewingSession) && (
+                hasTranscription ? (
+                  <TranscriptionSection
+                    originalTranscription={originalTranscription ?? ''}
+                    onTranscriptionCopy={onTranscriptionCopy}
+                    onTranscriptionInsert={onTranscriptionInsert}
+                    onTranscriptionEdit={onTranscriptionEdit}
+                    transcriptionSaveStatus={transcriptionSaveStatus}
+                    onAgentReprocess={onAgentReprocess}
+                    currentAgent={currentAgent}
+                    isProcessing={isProcessing}
+                    audioBlob={audioBlob}
+                    defaultExpanded={false}
+                    collapseWhen={false}
+                    approvalState={approvalState}
+                    onTranscriptionApprove={onTranscriptionApprove}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    This historical session does not include an audio transcription.
+                  </div>
+                )
+              )}
             </motion.div>
           ) : isTAVIWorkup ? (
             // TAVI Workup with transcription section + structured display
@@ -1091,6 +1276,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 onCopy={onCopy}
                 onInsertToEMR={onInsertToEMR}
                 onReprocessWithAnswers={onReprocessWithAnswers}
+                validationResult={taviValidationResult}
+                validationStatus={taviValidationStatus}
+                onReprocessWithValidation={onTAVIReprocessWithValidation}
               />
             </div>
           ) : isRightHeartCath ? (
@@ -1208,7 +1396,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               {/* Show transcription AFTER results for investigation-summary */}
               {agentType === 'investigation-summary' && originalTranscription && !streaming && (
                 <TranscriptionSection
-                  originalTranscription={originalTranscription}
+                  originalTranscription={originalTranscription ?? ''}
                   onTranscriptionCopy={onTranscriptionCopy}
                   onTranscriptionInsert={onTranscriptionInsert}
                   onTranscriptionEdit={onTranscriptionEdit}
@@ -1554,6 +1742,56 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
         errors={errors}
         onClearFailedRecordings={onClearFailedRecordings}
       />
+
+      {agentType === 'angiogram-pci' && showAngioValidation && activeAngioValidation && (
+        <FieldValidationPrompt
+          agentLabel="Angiogram/PCI"
+          validation={activeAngioValidation}
+          fieldConfig={ANGIO_VALIDATION_FIELD_CONFIG}
+          copy={ANGIO_VALIDATION_COPY}
+          onCancel={() => {
+            console.log('🚫 Angio Display: Validation cancelled');
+            handleAngioValidationCancel();
+          }}
+          onSkip={() => {
+            console.log('⏭️ Angio Display: Validation skipped');
+            handleAngioValidationSkip();
+            // TODO: Force generation with incomplete data
+          }}
+          onContinue={(userFields) => {
+            console.log('✅ Angio Display: Validation complete, user fields:', userFields);
+            handleAngioValidationContinue(userFields);
+            if (onAngioReprocessWithValidation) {
+              onAngioReprocessWithValidation(userFields);
+            }
+          }}
+        />
+      )}
+
+      {agentType === 'mteer' && showMTEERValidation && activeMTEERValidation && (
+        <FieldValidationPrompt
+          agentLabel="mTEER Procedure"
+          validation={activeMTEERValidation}
+          fieldConfig={MTEER_VALIDATION_FIELD_CONFIG}
+          copy={MTEER_VALIDATION_COPY}
+          onCancel={() => {
+            console.log('🚫 mTEER Display: Validation cancelled');
+            handleMTEERValidationCancel();
+          }}
+          onSkip={() => {
+            console.log('⏭️ mTEER Display: Validation skipped');
+            handleMTEERValidationSkip();
+            // TODO: Force generation with incomplete data
+          }}
+          onContinue={(userFields) => {
+            console.log('✅ mTEER Display: Validation complete, user fields:', userFields);
+            handleMTEERValidationContinue(userFields);
+            if (onMTEERReprocessWithValidation) {
+              onMTEERReprocessWithValidation(userFields);
+            }
+          }}
+        />
+      )}
 
     </motion.div>
   );

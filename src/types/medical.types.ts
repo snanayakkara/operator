@@ -270,6 +270,16 @@ export interface AppState {
   preOpPlanData?: PreOpPlanReport['planData'];
   // Right Heart Cath structured data
   rhcReport?: RightHeartCathReport;
+  // Validation workflow states
+  taviValidationResult?: ValidationResult | null;
+  taviValidationStatus?: 'complete' | 'awaiting_validation';
+  taviExtractedData?: TAVIExtractedData;
+  angiogramValidationResult?: ValidationResult | null;
+  angiogramValidationStatus?: 'complete' | 'awaiting_validation';
+  angiogramExtractedData?: AngioPCIExtractedData;
+  mteerValidationResult?: ValidationResult | null;
+  mteerValidationStatus?: 'complete' | 'awaiting_validation';
+  mteerExtractedData?: MTEERExtractedData;
   // Patient version generation
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
@@ -781,6 +791,15 @@ export interface PatientSession {
   preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op plan card + structured JSON
   reviewData?: any; // AI Medical Review structured data (findings array with urgency levels)
   rhcReport?: RightHeartCathReport; // Right Heart Cath structured data with haemodynamic calculations
+  taviValidationResult?: ValidationResult | null;
+  taviValidationStatus?: 'complete' | 'awaiting_validation';
+  taviExtractedData?: TAVIExtractedData;
+  angiogramValidationResult?: ValidationResult | null;
+  angiogramValidationStatus?: 'complete' | 'awaiting_validation';
+  angiogramExtractedData?: AngioPCIExtractedData;
+  mteerValidationResult?: ValidationResult | null;
+  mteerValidationStatus?: 'complete' | 'awaiting_validation';
+  mteerExtractedData?: MTEERExtractedData;
   agentType: AgentType;
   agentName: string;
   timestamp: number;

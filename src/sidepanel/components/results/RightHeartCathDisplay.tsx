@@ -25,7 +25,7 @@ import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { RHCFieldEditor } from './RHCFieldEditor';
 import { RHCCardPreviewModal } from './RHCCardPreviewModal';
-import { RHCFieldValidationPrompt } from './RHCFieldValidationPrompt';
+import { FieldValidationPrompt, type FieldDisplayConfig, type ValidationPromptCopy } from './FieldValidationPrompt';
 import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import { useRHCValidation } from '@/hooks/useRHCValidation';
 import type {
@@ -80,6 +80,27 @@ interface SectionConfig {
   color: string;
   priority: 'high' | 'medium' | 'low';
 }
+
+const RHC_VALIDATION_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
+  'patientData.height': { label: 'Height (cm)', inputType: 'number' },
+  'patientData.weight': { label: 'Weight (kg)', inputType: 'number' },
+  'patientData.haemoglobin': { label: 'Haemoglobin (g/L)', inputType: 'number' },
+  'patientData.sao2': { label: 'Arterial O₂ Saturation (%)', inputType: 'number' },
+  'patientData.svo2': { label: 'Mixed Venous O₂ Saturation (%)', inputType: 'number' },
+  'patientData.heartRate': { label: 'Heart Rate (bpm)', inputType: 'number' },
+  'cardiacOutput.thermodilution.co': { label: 'Thermodilution CO (L/min)', inputType: 'number' },
+  'haemodynamicPressures.ra.mean': { label: 'RA Mean Pressure (mmHg)', inputType: 'number' },
+  'haemodynamicPressures.rv.systolic': { label: 'RV Systolic Pressure (mmHg)', inputType: 'number' },
+  'haemodynamicPressures.pa.mean': { label: 'PA Mean Pressure (mmHg)', inputType: 'number' },
+  'haemodynamicPressures.pcwp.mean': { label: 'PCWP Mean Pressure (mmHg)', inputType: 'number' }
+};
+
+const RHC_VALIDATION_COPY: ValidationPromptCopy = {
+  heading: 'RHC Data Validation Required',
+  criticalHelper: '(required for Fick calculations)',
+  optionalHelper: '(improves accuracy)',
+  suggestionsHelper: '(please review)'
+};
 
 const SECTION_CONFIGS: SectionConfig[] = [
   { key: 'indication', title: 'Indication & Presentation', icon: FileTextIcon, color: 'blue', priority: 'high' },
@@ -682,8 +703,11 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
       {/* Validation Modal */}
       {rhcValidation.showValidationModal && rhcValidation.validationResult && (
-        <RHCFieldValidationPrompt
+        <FieldValidationPrompt
+          agentLabel="RHC Data"
           validation={rhcValidation.validationResult}
+          fieldConfig={RHC_VALIDATION_FIELD_CONFIG}
+          copy={RHC_VALIDATION_COPY}
           onCancel={() => {
             console.log('🚫 RHC Display: Validation cancelled');
             rhcValidation.handleValidationCancel();
@@ -698,7 +722,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
             rhcValidation.handleValidationContinue(userFields);
             // Re-process with user-provided fields
             if (onReprocessWithValidation) {
-              onReprocessWithValidation(userFields);
+              onReprocessWithValidation(userFields as Record<string, any>);
             }
           }}
         />

@@ -1251,9 +1251,18 @@ If you have any questions about these results, please don't hesitate to contact 
     const contrastVol = this.extractContrastVolume(input);
     const fluoroTime = this.extractFluoroscopyTime(input);
     if (contrastVol || fluoroTime) {
+      const parseNumeric = (value: string | undefined): number | undefined => {
+        if (!value) return undefined;
+        const match = value.match(/(\d+(?:\.\d+)?)/);
+        return match ? parseFloat(match[1]) : undefined;
+      };
+
+      const contrastVolumeValue = parseNumeric(contrastVol);
+      const fluoroscopyTimeValue = parseNumeric(fluoroTime);
+
       extracted.resources = {
-        contrastVolume: contrastVol,
-        fluoroscopyTime: fluoroTime
+        contrastVolume: contrastVolumeValue,
+        fluoroscopyTime: fluoroscopyTimeValue
       };
     }
 
