@@ -800,6 +800,9 @@ export interface PatientSession {
   mteerValidationResult?: ValidationResult | null;
   mteerValidationStatus?: 'complete' | 'awaiting_validation';
   mteerExtractedData?: MTEERExtractedData;
+  preOpValidationResult?: ValidationResult | null;
+  preOpValidationStatus?: 'complete' | 'awaiting_validation';
+  preOpExtractedData?: PreOpExtractedData;
   agentType: AgentType;
   agentName: string;
   timestamp: number; // Session creation time (milliseconds since epoch)

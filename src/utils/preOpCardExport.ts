@@ -26,6 +26,13 @@ import { PreOpCardLayout } from '@/sidepanel/components/results/PreOpCardLayout'
 import type { PreOpProcedureType } from '@/types/medical.types';
 import { logger } from '@/utils/Logger';
 
+const PROCEDURE_TYPE_LABELS: Record<PreOpProcedureType, { label: string; color: string; emoji: string }> = {
+  'ANGIOGRAM_OR_PCI': { label: 'Angiogram/PCI', color: 'blue', emoji: '🩺' },
+  'RIGHT_HEART_CATH': { label: 'Right Heart Cath', color: 'purple', emoji: '🩺' },
+  'TAVI': { label: 'TAVI', color: 'emerald', emoji: '🫀' },
+  'MITRAL_TEER': { label: 'Mitral TEER', color: 'teal', emoji: '🫀' }
+};
+
 interface PreOpCardData {
   procedureType: PreOpProcedureType;
   cardMarkdown: string;
@@ -70,15 +77,12 @@ export async function copyPreOpCardToClipboard(
       document.body.appendChild(container);
 
       // 2. Render PreOpCardLayout component
+      const procedureInfo = PROCEDURE_TYPE_LABELS[cardData.procedureType] || PROCEDURE_TYPE_LABELS['ANGIOGRAM_OR_PCI'];
       const root = createRoot(container);
       root.render(
         PreOpCardLayout({
-          procedureType: cardData.procedureType,
-          cardMarkdown: cardData.cardMarkdown,
           jsonData: cardData.jsonData,
-          completenessScore: cardData.completenessScore,
-          patientInfo: options.patientInfo,
-          operatorInfo: options.operatorInfo
+          procedureInfo: procedureInfo
         })
       );
 
@@ -197,15 +201,12 @@ export async function downloadPreOpCard(
       document.body.appendChild(container);
 
       // 2. Render PreOpCardLayout component
+      const procedureInfo = PROCEDURE_TYPE_LABELS[cardData.procedureType] || PROCEDURE_TYPE_LABELS['ANGIOGRAM_OR_PCI'];
       const root = createRoot(container);
       root.render(
         PreOpCardLayout({
-          procedureType: cardData.procedureType,
-          cardMarkdown: cardData.cardMarkdown,
           jsonData: cardData.jsonData,
-          completenessScore: cardData.completenessScore,
-          patientInfo: options.patientInfo,
-          operatorInfo: options.operatorInfo
+          procedureInfo: procedureInfo
         })
       );
 
@@ -379,15 +380,12 @@ export async function previewPreOpCard(
       document.body.appendChild(container);
 
       // Render PreOpCardLayout component
+      const procedureInfo = PROCEDURE_TYPE_LABELS[cardData.procedureType] || PROCEDURE_TYPE_LABELS['ANGIOGRAM_OR_PCI'];
       const root = createRoot(container);
       root.render(
         PreOpCardLayout({
-          procedureType: cardData.procedureType,
-          cardMarkdown: cardData.cardMarkdown,
           jsonData: cardData.jsonData,
-          completenessScore: cardData.completenessScore,
-          patientInfo: options.patientInfo,
-          operatorInfo: options.operatorInfo
+          procedureInfo: procedureInfo
         })
       );
 

@@ -520,7 +520,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   const isTAVIWorkup = agentType === 'tavi-workup' && results;
 
   // Check if this is a Right Heart Cath with structured display
-  const isRightHeartCath = agentType === 'right-heart-cath' && results;
+  // Include sessions awaiting validation (no results yet, but need to show modal)
+  const isRightHeartCath = agentType === 'right-heart-cath' && (results || rhcReport);
 
   // Check if this is a Patient Education with structured display
   const isPatientEducation = agentType === 'patient-education' && results;

@@ -160,17 +160,24 @@ B. JSON
 - Use "Not specified" for REQUIRED fields that are missing from dictation.
 
 ## OUTPUT INSTRUCTIONS
+
+**IMPORTANT**: If you receive VALIDATED DATA in JSON format at the start of the user message, you MUST use that exact data for card generation. The validated data has been verified and corrected by the user - do not modify or regenerate it.
+
 You must output your response in the following format:
 
 CARD:
-[markdown card content here]
+[markdown card content here - use data from VALIDATED DATA JSON if provided]
+
+**Do NOT output a JSON section if VALIDATED DATA was provided** - it will be used automatically.
+
+If no VALIDATED DATA was provided (legacy mode), output:
 
 JSON:
 \`\`\`json
 [json content here]
 \`\`\`
 
-Do NOT include any explanatory text before or after the card and JSON. Only output the card and JSON sections as specified above.`;
+Do NOT include any explanatory text before or after the card. Only output the card markdown section as specified above. Use Australian English spelling throughout (catheterisation, haemodynamic, etc.).`;
 
 /**
  * Pre-Op Plan Data Validation Prompt - Quick model validates regex extraction and detects gaps

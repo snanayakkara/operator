@@ -1,276 +1,261 @@
 /**
- * PreOpCardLayout Component
+ * Pre-Op Card Layout Component
  *
- * A presentation-ready A5 card layout (14.8cm × 21cm) for pre-op procedure plans.
- * Designed to be rendered at 300 DPI (1748×2480px) for high-quality PNG export.
- *
- * Layout Structure:
- * - Header: Procedure type with emoji, indication
- * - Core Details: Access, equipment, medications
- * - Clinical Info: Allergies, labs, site prep
- * - Next-of-Kin: Emergency contact details
- * - Footer: Completeness score, generation timestamp
- *
- * Supports all procedure types: ANGIOGRAM_OR_PCI, RIGHT_HEART_CATH, TAVI, MITRAL_TEER
+ * Visual card component for displaying pre-procedure summary cards
+ * Matches A5 card design with clean sections and proper formatting
  */
 
 import React from 'react';
-import type { PreOpProcedureType } from '@/types/medical.types';
+import type { PreOpPlanJSON } from '@/types/medical.types';
 
 interface PreOpCardLayoutProps {
-  procedureType: PreOpProcedureType;
-  cardMarkdown: string;
-  jsonData: any;
-  completenessScore?: string;
-  patientInfo?: {
-    name?: string;
-    mrn?: string;
-    dob?: string;
-  };
-  operatorInfo?: {
-    operator?: string;
-    institution?: string;
-    date?: string;
+  jsonData: PreOpPlanJSON;
+  procedureInfo: {
+    label: string;
+    emoji: string;
+    color: string;
   };
 }
 
-// Procedure type configuration
-const PROCEDURE_CONFIG: Record<PreOpProcedureType, { emoji: string; color: string; label: string }> = {
-  'ANGIOGRAM_OR_PCI': { emoji: '🩺', color: '#3B82F6', label: 'Angiogram/PCI' },
-  'RIGHT_HEART_CATH': { emoji: '🩺', color: '#8B5CF6', label: 'Right Heart Catheterisation' },
-  'TAVI': { emoji: '🫀', color: '#10B981', label: 'TAVI' },
-  'MITRAL_TEER': { emoji: '🫀', color: '#14B8A6', label: 'Mitral TEER' }
-};
-
 export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
-  procedureType,
-  cardMarkdown,
   jsonData,
-  completenessScore,
-  patientInfo,
-  operatorInfo
+  procedureInfo
 }) => {
-  const config = PROCEDURE_CONFIG[procedureType] || PROCEDURE_CONFIG['ANGIOGRAM_OR_PCI'];
-  const fields = jsonData?.fields || {};
+  const fields = jsonData.fields || {};
+  const procedureType = jsonData.procedure_type;
 
-  // Parse markdown into structured fields for clean display
-  const parseMarkdownFields = (markdown: string): Array<{ label: string; value: string }> => {
-    const lines = markdown.split('\n');
-    const parsedFields: Array<{ label: string; value: string }> = [];
-
-    for (const line of lines) {
-      // Skip title lines and empty lines
-      if (!line.trim() || line.includes(config.emoji) || line.startsWith('#')) {
-        continue;
-      }
-
-      // Parse field lines: **Label** — Value
-      const match = line.match(/^\*\*(.+?)\*\*\s*[—–-]\s*(.+)$/);
-      if (match) {
-        parsedFields.push({
-          label: match[1].trim(),
-          value: match[2].trim()
-        });
-      }
-    }
-
-    return parsedFields;
+  // Helper to check if field has value
+  const hasValue = (value: any): boolean => {
+    return value && value !== 'Not specified' && value !== '';
   };
 
-  const displayFields = parseMarkdownFields(cardMarkdown);
-
   return (
-    <div
-      style={{
-        width: '14.8cm',
-        height: '21cm',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        backgroundColor: '#FFFFFF',
-        padding: '24px',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
-    >
-      {/* Header Section */}
-      <div
-        style={{
-          borderBottom: `3px solid ${config.color}`,
-          paddingBottom: '14px',
-          marginBottom: '18px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '32px' }}>{config.emoji}</span>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: '26px',
-              fontWeight: '700',
-              color: '#1F2937',
-              letterSpacing: '-0.5px'
-            }}
-          >
-            {config.label}
-          </h1>
-        </div>
-        <div
-          style={{
-            fontSize: '14px',
-            fontWeight: '600',
-            color: '#6B7280',
-            marginTop: '6px'
-          }}
-        >
-          Pre-Procedure Summary Card
-        </div>
-
-        {/* Patient & Procedure Info */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: '10px',
-            fontSize: '12px',
-            color: '#6B7280'
-          }}
-        >
-          <div>
-            {patientInfo?.name && <div><strong>Patient:</strong> {patientInfo.name}</div>}
-            {patientInfo?.mrn && <div><strong>MRN:</strong> {patientInfo.mrn}</div>}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            {operatorInfo?.date && <div><strong>Date:</strong> {operatorInfo.date}</div>}
-            {fields.indication && fields.indication !== 'Not specified' && (
-              <div style={{ fontSize: '11px', fontStyle: 'italic', marginTop: '2px' }}>
-                {fields.indication}
-              </div>
-            )}
-          </div>
+    <div className="bg-white border-2 border-gray-200 rounded-lg p-6 shadow-sm max-w-2xl">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4 pb-4 border-b-2 border-gray-100">
+        <span className="text-3xl">{procedureInfo.emoji}</span>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-gray-900">
+            {fields.procedure || procedureInfo.label}
+          </h2>
+          <p className="text-sm text-gray-600">{procedureType.replace(/_/g, '/')}</p>
         </div>
       </div>
 
-      {/* Procedure Details Grid */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr',
-            gap: '8px'
-          }}
-        >
-          {displayFields.map((field, index) => (
-            <div
-              key={index}
-              style={{
-                backgroundColor: index % 2 === 0 ? '#F9FAFB' : '#FFFFFF',
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '12px'
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: '#374151',
-                  minWidth: '120px',
-                  flexShrink: 0
-                }}
-              >
-                {field.label}
-              </div>
-              <div
-                style={{
-                  fontSize: '12px',
-                  color: '#1F2937',
-                  textAlign: 'right',
-                  fontWeight: field.value === 'Not specified' ? '400' : '500',
-                  fontStyle: field.value === 'Not specified' ? 'italic' : 'normal',
-                  opacity: field.value === 'Not specified' ? 0.5 : 1,
-                  flex: 1
-                }}
-              >
-                {field.value}
-              </div>
-            </div>
-          ))}
+      {/* Indication */}
+      {hasValue(fields.indication) && (
+        <div className="mb-4 pb-4 border-b border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Indication
+          </div>
+          <div className="text-base text-gray-900">{fields.indication}</div>
         </div>
+      )}
 
-        {/* Special Highlights Section (for critical fields) */}
-        {(fields.allergies || fields.protamine || fields.goals_of_care) && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '12px',
-              backgroundColor: '#FFFBEB',
-              border: '2px solid #FDE68A',
-              borderRadius: '8px'
-            }}
-          >
-            <div
-              style={{
-                fontSize: '11px',
-                fontWeight: '700',
-                color: '#92400E',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}
-            >
-              ⚠️ Important Considerations
+      {/* Access & Equipment Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-100">
+        {hasValue(fields.primary_access || fields.access_site) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Access
             </div>
-            <div style={{ fontSize: '11px', color: '#78350F', lineHeight: '1.5' }}>
-              {fields.allergies && fields.allergies !== 'Not specified' && (
-                <div><strong>Allergies:</strong> {fields.allergies}</div>
-              )}
-              {fields.protamine && fields.protamine !== 'Not specified' && (
-                <div><strong>Protamine:</strong> {fields.protamine}</div>
-              )}
-              {fields.goals_of_care && fields.goals_of_care !== 'Not specified' && (
-                <div><strong>Goals of Care:</strong> {fields.goals_of_care}</div>
-              )}
+            <div className="text-base text-gray-900">
+              {fields.primary_access || fields.access_site}
             </div>
+          </div>
+        )}
+
+        {hasValue(fields.sheath_size_fr) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Sheath
+            </div>
+            <div className="text-base text-gray-900">{fields.sheath_size_fr} Fr</div>
+          </div>
+        )}
+
+        {/* TAVI-specific: Valve */}
+        {procedureType === 'TAVI' && hasValue(fields.valve_type_size) && (
+          <div className="col-span-2">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Valve
+            </div>
+            <div className="text-base text-gray-900">{fields.valve_type_size}</div>
+          </div>
+        )}
+
+        {/* mTEER-specific: Transeptal Catheter */}
+        {procedureType === 'MITRAL_TEER' && hasValue(fields.transeptal_catheter) && (
+          <div className="col-span-2">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Transeptal Catheter
+            </div>
+            <div className="text-base text-gray-900">{fields.transeptal_catheter}</div>
           </div>
         )}
       </div>
 
-      {/* Footer Section */}
-      <div
-        style={{
-          marginTop: 'auto',
-          paddingTop: '14px',
-          borderTop: '2px solid #E5E7EB',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end'
-        }}
-      >
-        <div style={{ fontSize: '10px', color: '#9CA3AF' }}>
-          {operatorInfo?.operator && <div><strong>Operator:</strong> {operatorInfo.operator}</div>}
-          {operatorInfo?.institution && <div>{operatorInfo.institution}</div>}
-          {completenessScore && (
-            <div style={{ marginTop: '4px' }}>
-              <strong>Completeness:</strong> {completenessScore}
+      {/* Catheters */}
+      {hasValue(fields.catheters) && (
+        <div className="mb-4">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Catheters
+          </div>
+          <div className="text-base text-gray-900">
+            {Array.isArray(fields.catheters)
+              ? fields.catheters.join(', ')
+              : fields.catheters}
+          </div>
+        </div>
+      )}
+
+      {/* TAVI-specific: Safety Planning Grid */}
+      {procedureType === 'TAVI' && (
+        <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-100">
+          {hasValue(fields.pacing_wire_access) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Pacing Wire
+              </div>
+              <div className="text-sm text-gray-900">{fields.pacing_wire_access}</div>
+            </div>
+          )}
+          {hasValue(fields.closure_plan) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Closure
+              </div>
+              <div className="text-sm text-gray-900">{fields.closure_plan}</div>
+            </div>
+          )}
+          {hasValue(fields.protamine) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Protamine
+              </div>
+              <div className="text-sm text-gray-900">{fields.protamine}</div>
+            </div>
+          )}
+          {hasValue(fields.goals_of_care) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Goals of Care
+              </div>
+              <div className="text-sm text-gray-900">{fields.goals_of_care}</div>
             </div>
           )}
         </div>
-        <div style={{ fontSize: '10px', color: '#9CA3AF', textAlign: 'right' }}>
-          <div style={{ fontWeight: '600' }}>Generated by Operator</div>
-          <div>High-Fidelity Medical AI</div>
-          <div style={{ fontSize: '9px', marginTop: '2px' }}>
-            {new Date().toLocaleDateString('en-AU', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric'
-            })}
+      )}
+
+      {/* RHC-specific: CO Measurement & Blood Gases */}
+      {procedureType === 'RIGHT_HEART_CATH' && (
+        <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-100">
+          {hasValue(fields.co_measurement) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                CO Measurement
+              </div>
+              <div className="text-sm text-gray-900">{fields.co_measurement}</div>
+            </div>
+          )}
+          {hasValue(fields.blood_gas_samples) && (
+            <div>
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Blood Gas Samples
+              </div>
+              <div className="text-sm text-gray-900">{fields.blood_gas_samples}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* mTEER-specific: Echo Summary */}
+      {procedureType === 'MITRAL_TEER' && hasValue(fields.echo_summary) && (
+        <div className="mb-4 pb-4 border-b border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Echo Summary
+          </div>
+          <div className="text-sm text-gray-900">{fields.echo_summary}</div>
+        </div>
+      )}
+
+      {/* Clinical Info Grid */}
+      <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-100">
+        {hasValue(fields.anticoagulation_plan) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Antiplatelets
+            </div>
+            <div className="text-sm text-gray-900">{fields.anticoagulation_plan}</div>
+          </div>
+        )}
+        {hasValue(fields.sedation) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Sedation
+            </div>
+            <div className="text-sm text-gray-900">{fields.sedation}</div>
+          </div>
+        )}
+        {hasValue(fields.allergies) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Allergies
+            </div>
+            <div className="text-sm text-gray-900">{fields.allergies}</div>
+          </div>
+        )}
+        {hasValue(fields.site_prep) && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Site Prep
+            </div>
+            <div className="text-sm text-gray-900">{fields.site_prep}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Labs */}
+      {fields.recent_labs && (hasValue(fields.recent_labs.hb_g_per_l) || hasValue(fields.recent_labs.creatinine_umol_per_l)) && (
+        <div className="mb-4 pb-4 border-b border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Recent Labs
+          </div>
+          <div className="text-sm text-gray-900">
+            {hasValue(fields.recent_labs.hb_g_per_l) && `Hb ${fields.recent_labs.hb_g_per_l} g/L`}
+            {hasValue(fields.recent_labs.hb_g_per_l) && hasValue(fields.recent_labs.creatinine_umol_per_l) && ' • '}
+            {hasValue(fields.recent_labs.creatinine_umol_per_l) && `Creatinine ${fields.recent_labs.creatinine_umol_per_l} µmol/L`}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Follow-up */}
+      {hasValue(fields.planned_followup) && (
+        <div className="mb-4 pb-4 border-b border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Follow-up
+          </div>
+          <div className="text-sm text-gray-900">{fields.planned_followup}</div>
+        </div>
+      )}
+
+      {/* Next of Kin */}
+      {hasValue(fields.nok_name) && (
+        <div className="mt-4 pt-4 border-t-2 border-gray-200">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Next of Kin
+          </div>
+          <div className="text-base text-gray-900">
+            <span className="font-medium">{fields.nok_name}</span>
+            {hasValue(fields.nok_relationship) && (
+              <span className="text-gray-600"> ({fields.nok_relationship})</span>
+            )}
+            {hasValue(fields.nok_phone) && (
+              <span className="text-gray-600"> • {fields.nok_phone}</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

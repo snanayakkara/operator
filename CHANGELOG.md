@@ -9,6 +9,32 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.30.1] - 2025-11-05
+
+### Fixed
+
+- **Pre-Op Plan Critical Bugfixes**
+  - Fixed NOK regex patterns to handle flexible formats (e.g., "Next-of-kin Andrew (son) 0413571525")
+  - Changed from strict punctuation requirements to flexible patterns accepting `[\s:;,]+` and hyphens
+  - Fixed LLM ignoring validated data by creating enriched prompt with `VALIDATED DATA` JSON block
+  - Fixed validated JSON being overwritten by updating `parsePreOpResponse()` to accept optional `providedJsonData` parameter
+  - Updated system prompt to instruct LLM to use VALIDATED DATA instead of regenerating JSON
+  - Created `PreOpCardLayout` visual component for clean A5 card display with procedure-type aware rendering
+  - Fixed raw markdown display by replacing line-by-line rendering with visual card component
+  - Added Pre-Op validation fields to `PatientSession` interface (`preOpValidationResult`, `preOpValidationStatus`, `preOpExtractedData`)
+  - Fixed validation modal detection in `PreOpPlanDisplay` to use session validation fields
+  - Fixed `PreOpCardLayout` props in export utility to match correct interface (jsonData + procedureInfo)
+  - Added `PROCEDURE_TYPE_LABELS` to export utility for procedure info creation
+  - Added `onReprocessWithValidation` prop to `PreOpPlanDisplay` component signature
+
+### Changed
+
+- **Pre-Op Display & Export**
+  - Pre-Op cards now render as clean visual components matching RHC display style
+  - Export functions now properly create `procedureInfo` objects from procedure types
+  - Validation modal now uses session-level validation state instead of report-level state
+  - All export functions (copy, download, preview) use consistent PreOpCardLayout rendering
+
 ## [3.30.0] - 2025-11-05
 
 ### Added

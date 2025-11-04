@@ -196,7 +196,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
   // Expandable actions - hover to reveal Dictate/Type split
   return (
     <div
-      className={`relative overflow-hidden ${className}`}
+      className={`relative overflow-hidden w-full ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{ minHeight: '64px' }} // Ensure consistent height

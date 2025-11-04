@@ -139,10 +139,30 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   // Parse RHC report data or fall back to results string
   // Use edited data if available, otherwise use original rhcReport
   const effectiveRHCData = useMemo(() => {
+    // DEBUG: Log props to diagnose missing structured display
+    console.log('🔍 RHC Display Debug:', {
+      hasRhcReport: !!rhcReport,
+      hasResults: !!results,
+      hasEditedRHCReport: !!editedRHCReport,
+      rhcReportStatus: rhcReport?.status,
+      rhcReportKeys: rhcReport ? Object.keys(rhcReport) : null
+    });
+
+    if (results) {
+      console.log('📋 Results string preview (first 300 chars):', results.substring(0, 300));
+      console.log('📋 Results string end (last 500 chars):', results.substring(Math.max(0, results.length - 500)));
+
+      // Check if JSON marker exists
+      const hasJsonMarker = results.includes('<!-- RHC_STRUCTURED_DATA_JSON -->');
+      console.log('🎯 Has JSON marker:', hasJsonMarker);
+    }
+
     if (editedRHCReport) {
+      console.log('✅ Using editedRHCReport');
       return editedRHCReport;
     }
     if (rhcReport) {
+      console.log('✅ Using rhcReport prop');
       return rhcReport;
     }
 
@@ -152,6 +172,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
         // Look for the specific RHC structured data JSON marker
         const rhcDataMatch = results.match(/<!-- RHC_STRUCTURED_DATA_JSON -->\n(\{[\s\S]*?\})\s*$/);
         if (rhcDataMatch) {
+          console.log('✅ Found RHC JSON marker, parsing...');
           const jsonData = JSON.parse(rhcDataMatch[1]);
           // Create a mock RightHeartCathReport structure for display
           const mockReport: RightHeartCathReport = {
@@ -169,22 +190,30 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
             exerciseHaemodynamics: jsonData.exerciseHaemodynamics,
             complications: jsonData.complications
           };
+          console.log('✅ Successfully parsed RHC data from JSON marker');
           return mockReport;
         }
 
         // Fallback: try to parse any JSON object (for backward compatibility)
+        console.log('⚠️ No JSON marker found, trying generic JSON fallback...');
         const jsonMatch = results.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const jsonData = JSON.parse(jsonMatch[0]);
           if (jsonData.rhcData) {
+            console.log('✅ Found rhcData in generic JSON fallback');
             return jsonData as RightHeartCathReport;
+          } else {
+            console.log('❌ Generic JSON found but no rhcData property');
           }
+        } else {
+          console.log('❌ No JSON object found in results string');
         }
       } catch (error) {
-        console.warn('Could not parse RHC report from results:', error);
+        console.warn('❌ Could not parse RHC report from results:', error);
       }
     }
 
+    console.log('❌ effectiveRHCData is NULL - no structured display will show');
     return null;
   }, [rhcReport, results, editedRHCReport]);
 

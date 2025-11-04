@@ -50,25 +50,36 @@ export class PreOpPlanAgent extends MedicalAgent {
     });
 
     try {
+      // Progress callback helper
+      const reportProgress = (progress: number, details: string) => {
+        context?.onProgress?.('ai-analysis', progress, details);
+      };
+
+      reportProgress(5, 'Analyzing procedure type');
+
       // STEP 1: Detect procedure type from input
       const procedureType = this.detectProcedureType(input);
       logger.info('PreOpPlanAgent: Detected procedure type', { procedureType });
 
       // STEP 2: Regex extraction
+      reportProgress(10, 'Extracting procedure fields');
       logger.info('PreOpPlanAgent: Extracting fields with regex...');
       const extracted = this.extractPreOpFields(input, procedureType);
       const extractedFieldCount = Object.values(extracted).filter(v => v !== undefined && v !== null).length;
       logger.info('PreOpPlanAgent: Regex extraction complete', { extractedFieldCount });
 
       // STEP 3: Quick model validation
+      reportProgress(20, 'Validating extracted data');
       logger.info('PreOpPlanAgent: Starting validation phase...');
       const validation = await this.validateAndDetectGaps(extracted, input);
 
       // STEP 4: Apply high-confidence corrections automatically
+      reportProgress(35, 'Applying data corrections');
       logger.info('PreOpPlanAgent: Applying high-confidence corrections...');
       const correctedData = this.applyCorrections(extracted, validation.corrections, 0.8);
 
       // STEP 5: Check for critical gaps - INTERACTIVE CHECKPOINT
+      reportProgress(40, 'Checking for missing fields');
       const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
       const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
 
@@ -104,6 +115,7 @@ export class PreOpPlanAgent extends MedicalAgent {
       // STEP 6: Merge user input if provided (reprocessing after validation)
       let finalData = correctedData;
       if (context?.userProvidedFields) {
+        reportProgress(50, 'Merging validated fields');
         logger.info('PreOpPlanAgent: Merging user-provided fields...', {
           fieldCount: Object.keys(context.userProvidedFields).length
         });
@@ -111,27 +123,40 @@ export class PreOpPlanAgent extends MedicalAgent {
       }
 
       // STEP 7: Convert to JSON format
+      reportProgress(55, 'Preparing procedure card');
       const jsonData = this.convertToJSON(finalData);
       logger.info('PreOpPlanAgent: Converted to JSON format', {
         fieldCount: Object.keys(jsonData.fields).length
       });
 
       // STEP 8: Generate card markdown with reasoning model (ONLY after validation passes)
-      logger.info('PreOpPlanAgent: Generating card with reasoning model...');
+      reportProgress(60, 'Generating pre-op card');
+      logger.info('PreOpPlanAgent: Generating card with reasoning model using validated data...');
+
+      // Create enriched prompt with validated data
+      const enrichedPrompt = `VALIDATED DATA (use this exact data for card generation):
+${JSON.stringify(jsonData, null, 2)}
+
+ORIGINAL DICTATION (for context only):
+${input.trim()}
+
+Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All fields have been verified and corrected. Output ONLY the CARD markdown section, do NOT regenerate JSON.`;
+
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
-        `DICTATION\n${input.trim()}`,
+        enrichedPrompt,
         this.agentType,
         undefined,
         MODEL_CONFIG.REASONING_MODEL
       );
 
+      reportProgress(85, 'Formatting procedure card');
       logger.info('PreOpPlanAgent: Received LLM response', {
         responseLength: response.length
       });
 
-      // Parse the response into card and JSON
-      const { cardMarkdown } = this.parsePreOpResponse(response);
+      // Parse the response - ONLY extract card markdown, use our validated jsonData
+      const { cardMarkdown } = this.parsePreOpResponse(response, jsonData);
 
       // Create report sections
       const sections: ReportSection[] = [
@@ -152,6 +177,8 @@ export class PreOpPlanAgent extends MedicalAgent {
       // Calculate processing time
       const processingTime = Date.now() - startTime;
 
+      reportProgress(95, 'Finalizing report');
+
       // Create the medical report
       const report = this.createReport(
         cardMarkdown,
@@ -171,6 +198,8 @@ export class PreOpPlanAgent extends MedicalAgent {
         jsonData,
         completenessScore: this.calculateCompleteness(jsonData)
       };
+
+      reportProgress(100, 'Pre-op card generated');
 
       logger.info('PreOpPlanAgent: Processing completed', {
         processingTime,
@@ -221,8 +250,10 @@ export class PreOpPlanAgent extends MedicalAgent {
 
   /**
    * Parse LLM response into card markdown and JSON data
+   * @param response - LLM response text
+   * @param providedJsonData - Optional validated JSON data to use instead of parsing from response
    */
-  private parsePreOpResponse(response: string): {
+  private parsePreOpResponse(response: string, providedJsonData?: PreOpPlanJSON): {
     cardMarkdown: string;
     jsonData: any;
     procedureType: PreOpProcedureType;
@@ -250,49 +281,60 @@ export class PreOpPlanAgent extends MedicalAgent {
         cardMarkdown = response.replace(/^CARD:\s*/i, '').trim();
       }
 
-      // Extract JSON section (with or without code fences)
-      const jsonMatch = response.match(/JSON:\s*\n```json\s*\n([\s\S]*?)\n```/i) ||
-                       response.match(/JSON:\s*\n([\s\S]+?)(?=\n\s*$)/i) ||
-                       response.match(/```json\s*\n([\s\S]*?)\n```/i);
-
+      // Use provided validated JSON if available, otherwise parse from response
       let jsonData: any;
       let procedureType: PreOpProcedureType = 'ANGIOGRAM_OR_PCI'; // Default
 
-      if (jsonMatch) {
-        try {
-          const jsonString = jsonMatch[1].trim();
-          jsonData = JSON.parse(jsonString);
-          procedureType = jsonData.procedure_type || procedureType;
+      if (providedJsonData) {
+        // Use validated JSON data passed from validation workflow
+        jsonData = providedJsonData;
+        procedureType = providedJsonData.procedure_type;
+        logger.info('PreOpPlanAgent: Using provided validated JSON', {
+          procedureType,
+          fieldCount: Object.keys(jsonData.fields || {}).length
+        });
+      } else {
+        // Extract JSON section from response (legacy path)
+        const jsonMatch = response.match(/JSON:\s*\n```json\s*\n([\s\S]*?)\n```/i) ||
+                         response.match(/JSON:\s*\n([\s\S]+?)(?=\n\s*$)/i) ||
+                         response.match(/```json\s*\n([\s\S]*?)\n```/i);
 
-          logger.info('PreOpPlanAgent: Successfully parsed JSON', {
-            procedureType,
-            fieldCount: Object.keys(jsonData.fields || {}).length
-          });
-        } catch (parseError) {
-          logger.warn('PreOpPlanAgent: JSON parsing failed, using default structure', {
-            error: parseError instanceof Error ? parseError.message : String(parseError),
-            jsonString: jsonMatch[1].substring(0, 200) // Log first 200 chars for debugging
-          });
-          // Fallback JSON structure
+        if (jsonMatch) {
+          try {
+            const jsonString = jsonMatch[1].trim();
+            jsonData = JSON.parse(jsonString);
+            procedureType = jsonData.procedure_type || procedureType;
+
+            logger.info('PreOpPlanAgent: Successfully parsed JSON from response', {
+              procedureType,
+              fieldCount: Object.keys(jsonData.fields || {}).length
+            });
+          } catch (parseError) {
+            logger.warn('PreOpPlanAgent: JSON parsing failed, using default structure', {
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+              jsonString: jsonMatch[1].substring(0, 200) // Log first 200 chars for debugging
+            });
+            // Fallback JSON structure
+            jsonData = {
+              procedure_type: procedureType,
+              fields: {
+                procedure: 'Not specified',
+                indication: 'Not specified',
+                parsing_error: 'Failed to parse LLM response'
+              }
+            };
+          }
+        } else {
+          logger.warn('PreOpPlanAgent: No JSON found in response');
           jsonData = {
             procedure_type: procedureType,
             fields: {
               procedure: 'Not specified',
               indication: 'Not specified',
-              parsing_error: 'Failed to parse LLM response'
+              parsing_error: 'No JSON section found'
             }
           };
         }
-      } else {
-        logger.warn('PreOpPlanAgent: No JSON found in response');
-        jsonData = {
-          procedure_type: procedureType,
-          fields: {
-            procedure: 'Not specified',
-            indication: 'Not specified',
-            parsing_error: 'No JSON section found'
-          }
-        };
       }
 
       logger.info('PreOpPlanAgent: Parsing complete', {
@@ -448,10 +490,11 @@ export class PreOpPlanAgent extends MedicalAgent {
     const hbMatch = input.match(/(?:hb|h(?:ae)?moglobin)[:;\s]+(\d+)/i);
     const creatMatch = input.match(/creat(?:inine)?[:;\s]+(\d+)/i);
 
-    // Next of Kin
-    const nokNameMatch = input.match(/(?:next\s+of\s+kin|nok)[:;\s]+([A-Za-z\s]+?)(?:,|\s+\()/i);
-    const nokRelMatch = input.match(/(?:next\s+of\s+kin|nok).*?\(([^)]+)\)/i);
-    const nokPhoneMatch = input.match(/(\d{4}\s?\d{3}\s?\d{3}|\d{10})/);
+    // Next of Kin (flexible patterns to handle various formats)
+    // Handles: "Next of kin: Andrew (son) 0413571525", "NOK Andrew (son)", "Next-of-kin Andrew son 0413"
+    const nokNameMatch = input.match(/(?:next[-\s]+of[-\s]+kin|nok)[\s:;,]+([A-Za-z\s]+?)(?:\s*\(|\s*,|\s+\d)/i);
+    const nokRelMatch = input.match(/(?:next[-\s]+of[-\s]+kin|nok)[\s:;,]*[A-Za-z\s]*\(([^)]+)\)/i);
+    const nokPhoneMatch = input.match(/(\d{4}[-\s]?\d{3}[-\s]?\d{3}|\d{10})/);
 
     return {
       procedureType,

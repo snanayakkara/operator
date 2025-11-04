@@ -8,14 +8,17 @@
  * - Procedure type badge
  */
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { ResultsContainer } from './ResultsContainer';
+import { PreOpCardLayout } from './PreOpCardLayout';
+import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { Printer, Download, ChevronDown, ChevronRight, ClipboardList, Clipboard, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PatientSession, PreOpProcedureType } from '@/types/medical.types';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
 import { copyPreOpCardToClipboard, downloadPreOpCard, validatePreOpDataForExport } from '@/utils/preOpCardExport';
 import { ToastService } from '@/services/ToastService';
+import { getValidationConfig } from '@/config/validationFieldConfig';
 
 interface PreOpPlanDisplayProps {
   session: PatientSession;
@@ -28,6 +31,7 @@ interface PreOpPlanDisplayProps {
   transcriptionApprovalState?: TranscriptionApprovalState;
   onAgentReprocess?: () => void;
   isProcessing?: boolean;
+  onReprocessWithValidation?: (userFields: Record<string, any>) => void;
 }
 
 const PROCEDURE_TYPE_LABELS: Record<PreOpProcedureType, { label: string; color: string; emoji: string }> = {
@@ -47,14 +51,27 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
   onTranscriptionApprove,
   transcriptionApprovalState,
   onAgentReprocess,
-  isProcessing = false
+  isProcessing = false,
+  onReprocessWithValidation
 }) => {
   const [showJSON, setShowJSON] = useState(false);
   const [copyCardState, setCopyCardState] = useState<'idle' | 'copying' | 'success' | 'error'>('idle');
   const [downloadCardState, setDownloadCardState] = useState<'idle' | 'downloading' | 'success' | 'error'>('idle');
+  const [showValidationModal, setShowValidationModal] = useState(false);
+
+  // Get validation configuration
+  const { fieldConfig: PREOP_FIELD_CONFIG, copy: PREOP_VALIDATION_COPY } = getValidationConfig('pre-op-plan');
 
   // Extract pre-op plan data
   const preOpData = session.preOpPlanData;
+
+  // Detect validation state and show modal
+  useEffect(() => {
+    if (session.preOpValidationStatus === 'awaiting_validation' && session.preOpValidationResult) {
+      console.log('🔍 Pre-Op Display: Validation required, showing modal');
+      setShowValidationModal(true);
+    }
+  }, [session.preOpValidationStatus, session.preOpValidationResult]);
   if (!preOpData) {
     return (
       <div className="p-4 text-center text-gray-500">
@@ -168,10 +185,20 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       completenessScore
     });
 
-    // Only block if there's NO data at all (completely empty)
+    // Check if we have any data at all
     if (!validation.valid) {
       ToastService.getInstance().error(
-        'Cannot copy card: No data available. Please ensure the LLM has generated content.'
+        'Cannot copy card: No procedure data available. Please ensure validation workflow has completed.'
+      );
+      setCopyCardState('error');
+      setTimeout(() => setCopyCardState('idle'), 2000);
+      return;
+    }
+
+    // Also check if planData exists with fields
+    if (!preOpData || !jsonData || !jsonData.fields || Object.keys(jsonData.fields).length === 0) {
+      ToastService.getInstance().error(
+        'Cannot copy card: No validated data available. Please complete the validation workflow first.'
       );
       setCopyCardState('error');
       setTimeout(() => setCopyCardState('idle'), 2000);
@@ -235,10 +262,20 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       completenessScore
     });
 
-    // Only block if there's NO data at all (completely empty)
+    // Check if we have any data at all
     if (!validation.valid) {
       ToastService.getInstance().error(
-        'Cannot download card: No data available. Please ensure the LLM has generated content.'
+        'Cannot download card: No procedure data available. Please ensure validation workflow has completed.'
+      );
+      setDownloadCardState('error');
+      setTimeout(() => setDownloadCardState('idle'), 2000);
+      return;
+    }
+
+    // Also check if planData exists with fields
+    if (!preOpData || !jsonData || !jsonData.fields || Object.keys(jsonData.fields).length === 0) {
+      ToastService.getInstance().error(
+        'Cannot download card: No validated data available. Please complete the validation workflow first.'
       );
       setDownloadCardState('error');
       setTimeout(() => setDownloadCardState('idle'), 2000);
@@ -348,47 +385,11 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
           </div>
         )}
 
-        {/* Card Preview */}
-        <div className="bg-white border-2 border-gray-200 rounded-lg p-4 shadow-sm">
-          <div className="prose prose-sm max-w-none">
-            {cardMarkdown.split('\n').map((line, idx) => {
-              // Title line (first line with emoji)
-              if (idx === 0 && line.includes(procedureInfo.emoji)) {
-                return (
-                  <h3 key={idx} className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <span>{procedureInfo.emoji}</span>
-                    <span>{line.replace(procedureInfo.emoji, '').trim()}</span>
-                  </h3>
-                );
-              }
-              // Field lines (with **)
-              if (line.includes('**')) {
-                const parts = line.split('—');
-                if (parts.length === 2) {
-                  const label = parts[0].replace(/\*\*/g, '').trim();
-                  const value = parts[1].trim();
-                  return (
-                    <div key={idx} className="text-sm leading-relaxed mb-1.5">
-                      <span className="font-semibold text-gray-700">{label}</span>
-                      <span className="text-gray-500 mx-1">—</span>
-                      <span className="text-gray-900">{value}</span>
-                    </div>
-                  );
-                }
-              }
-              // Empty lines
-              if (!line.trim()) {
-                return <div key={idx} className="h-2" />;
-              }
-              // Other lines
-              return (
-                <div key={idx} className="text-sm text-gray-900 mb-1">
-                  {line}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Card Preview - Visual Component */}
+        <PreOpCardLayout
+          jsonData={jsonData}
+          procedureInfo={procedureInfo}
+        />
 
         {/* Custom Action Buttons */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -517,6 +518,31 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Validation Modal */}
+      {showValidationModal && session.preOpValidationResult && (
+        <FieldValidationPrompt
+          agentLabel="Pre-Op Plan"
+          validation={session.preOpValidationResult}
+          fieldConfig={PREOP_FIELD_CONFIG}
+          copy={PREOP_VALIDATION_COPY}
+          onCancel={() => {
+            console.log('🚫 Pre-Op Display: Validation cancelled');
+            setShowValidationModal(false);
+          }}
+          onSkip={() => {
+            console.log('⏭️ Pre-Op Display: Validation skipped');
+            setShowValidationModal(false);
+          }}
+          onContinue={(userFields) => {
+            console.log('✅ Pre-Op Display: Validation completed, reprocessing with user fields', userFields);
+            setShowValidationModal(false);
+            if (onReprocessWithValidation) {
+              onReprocessWithValidation(userFields);
+            }
+          }}
+        />
+      )}
     </ResultsContainer>
   );
 });

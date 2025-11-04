@@ -166,12 +166,19 @@ export class RightHeartCathAgent extends MedicalAgent {
 
       // STEP 4: Check for critical gaps - INTERACTIVE CHECKPOINT
       // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
-      const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
+      // CRITICAL FIX: Exclude fields that were successfully auto-corrected (≥0.8 confidence)
+      const autoCorrectedFieldPaths = validation.corrections
+        .filter(c => c.confidence >= 0.8)
+        .map(c => c.field);
+
+      const remainingCriticalGaps = validation.missingCritical
+        .filter(field => !autoCorrectedFieldPaths.includes(field.field)) // Exclude auto-corrected fields
+        .filter(field => field.critical === true); // Only truly critical
+
       const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
 
-      if (hasCriticalGaps || hasLowConfidenceCorrections) {
-        const criticalCount = validation.missingCritical.filter(f => f.critical === true).length;
-        console.log(`⚠️ RHC AGENT: Validation requires user input (${criticalCount} critical fields missing, ${validation.corrections.filter(c => c.confidence < 0.8).length} low-confidence corrections)`);
+      if (remainingCriticalGaps.length > 0 || hasLowConfidenceCorrections) {
+        console.log(`⚠️ RHC AGENT: Validation requires user input (${remainingCriticalGaps.length} critical fields missing, ${validation.corrections.filter(c => c.confidence < 0.8).length} low-confidence corrections)`);
 
         // Return incomplete report with validation state
         // UI will show validation modal and re-run process() with user input
