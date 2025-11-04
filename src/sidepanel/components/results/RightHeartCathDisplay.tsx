@@ -25,9 +25,10 @@ import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { RHCFieldEditor } from './RHCFieldEditor';
 import { RHCCardPreviewModal } from './RHCCardPreviewModal';
-import { FieldValidationPrompt, type FieldDisplayConfig, type ValidationPromptCopy } from './FieldValidationPrompt';
+import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import { useRHCValidation } from '@/hooks/useRHCValidation';
+import { getValidationConfig } from '@/config/validationFieldConfig';
 import type {
   RightHeartCathReport,
   RightHeartCathData as _RightHeartCathData,
@@ -81,26 +82,8 @@ interface SectionConfig {
   priority: 'high' | 'medium' | 'low';
 }
 
-const RHC_VALIDATION_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
-  'patientData.height': { label: 'Height (cm)', inputType: 'number' },
-  'patientData.weight': { label: 'Weight (kg)', inputType: 'number' },
-  'patientData.haemoglobin': { label: 'Haemoglobin (g/L)', inputType: 'number' },
-  'patientData.sao2': { label: 'Arterial O₂ Saturation (%)', inputType: 'number' },
-  'patientData.svo2': { label: 'Mixed Venous O₂ Saturation (%)', inputType: 'number' },
-  'patientData.heartRate': { label: 'Heart Rate (bpm)', inputType: 'number' },
-  'cardiacOutput.thermodilution.co': { label: 'Thermodilution CO (L/min)', inputType: 'number' },
-  'haemodynamicPressures.ra.mean': { label: 'RA Mean Pressure (mmHg)', inputType: 'number' },
-  'haemodynamicPressures.rv.systolic': { label: 'RV Systolic Pressure (mmHg)', inputType: 'number' },
-  'haemodynamicPressures.pa.mean': { label: 'PA Mean Pressure (mmHg)', inputType: 'number' },
-  'haemodynamicPressures.pcwp.mean': { label: 'PCWP Mean Pressure (mmHg)', inputType: 'number' }
-};
-
-const RHC_VALIDATION_COPY: ValidationPromptCopy = {
-  heading: 'RHC Data Validation Required',
-  criticalHelper: '(required for Fick calculations)',
-  optionalHelper: '(improves accuracy)',
-  suggestionsHelper: '(please review)'
-};
+// Use centralized validation configuration
+const { fieldConfig: RHC_VALIDATION_FIELD_CONFIG, copy: RHC_VALIDATION_COPY } = getValidationConfig('rhc');
 
 const SECTION_CONFIGS: SectionConfig[] = [
   { key: 'indication', title: 'Indication & Presentation', icon: FileTextIcon, color: 'blue', priority: 'high' },

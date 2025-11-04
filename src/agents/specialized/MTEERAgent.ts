@@ -111,10 +111,13 @@ export class MTEERAgent extends MedicalAgent {
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
       // Interactive checkpoint - require user input if critical gaps remain
-      if (validation.missingCritical.length > 0 ||
-          validation.corrections.some(correction => correction.confidence < 0.8)) {
+      // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
+      const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
+      const hasLowConfidenceCorrections = validation.corrections.some(correction => correction.confidence < 0.8);
 
-        console.log(`⚠️ MTEER AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+      if (hasCriticalGaps || hasLowConfidenceCorrections) {
+        const criticalCount = validation.missingCritical.filter(f => f.critical === true).length;
+        console.log(`⚠️ MTEER AGENT: Validation requires user input (${criticalCount} critical fields missing, ${validation.corrections.filter(c => c.confidence < 0.8).length} low-confidence corrections)`);
 
         const baseReport = this.createReport('', [], context, 0, 0);
         return {

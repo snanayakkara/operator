@@ -83,6 +83,15 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
   const top = position ? position.bottom + 8 : 0;
   const left = position ? position.left : 0;
 
+  // Debug logging for positioning
+  console.log('[DevicePopover] Rendering with position:', {
+    isOpen,
+    triggerExists: !!triggerRef.current,
+    position,
+    top,
+    left
+  });
+
   return (
     <DropdownPortal
       isOpen={isOpen}
@@ -90,6 +99,7 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
     >
       <div
         ref={popoverRef}
+        data-dropdown-menu
         role="dialog"
         aria-label="Audio device settings"
         aria-modal="true"

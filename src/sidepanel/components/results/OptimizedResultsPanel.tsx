@@ -533,7 +533,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     !isTAVIWorkup &&
     !isRightHeartCath &&
     agentType !== 'investigation-summary' &&
-    !isQuickLetterDualCards &&
     (hasTranscription || isViewingSession);
 
   // Debug TAVI detection
@@ -758,7 +757,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: ANIMATION_DURATIONS.normal }}
           >
-            {hasTranscription ? (
+            {hasTranscription && (
               <TranscriptionSection
                 originalTranscription={originalTranscription ?? ''}
                 onTranscriptionCopy={onTranscriptionCopy}
@@ -774,10 +773,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 approvalState={approvalState}
                 onTranscriptionApprove={onTranscriptionApprove}
               />
-            ) : (
-              <div className="px-4 py-3 border-b border-gray-200 text-xs text-gray-600 bg-gray-50">
-                No transcription was saved with this session.
-              </div>
             )}
           </motion.div>
         )}
@@ -1224,28 +1219,22 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               </AnimatePresence>
 
               {/* Raw Transcription */}
-              {(hasTranscription || isViewingSession) && (
-                hasTranscription ? (
-                  <TranscriptionSection
-                    originalTranscription={originalTranscription ?? ''}
-                    onTranscriptionCopy={onTranscriptionCopy}
-                    onTranscriptionInsert={onTranscriptionInsert}
-                    onTranscriptionEdit={onTranscriptionEdit}
-                    transcriptionSaveStatus={transcriptionSaveStatus}
-                    onAgentReprocess={onAgentReprocess}
-                    currentAgent={currentAgent}
-                    isProcessing={isProcessing}
-                    audioBlob={audioBlob}
-                    defaultExpanded={false}
-                    collapseWhen={false}
-                    approvalState={approvalState}
-                    onTranscriptionApprove={onTranscriptionApprove}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                    This historical session does not include an audio transcription.
-                  </div>
-                )
+              {hasTranscription && (
+                <TranscriptionSection
+                  originalTranscription={originalTranscription ?? ''}
+                  onTranscriptionCopy={onTranscriptionCopy}
+                  onTranscriptionInsert={onTranscriptionInsert}
+                  onTranscriptionEdit={onTranscriptionEdit}
+                  transcriptionSaveStatus={transcriptionSaveStatus}
+                  onAgentReprocess={onAgentReprocess}
+                  currentAgent={currentAgent}
+                  isProcessing={isProcessing}
+                  audioBlob={audioBlob}
+                  defaultExpanded={false}
+                  collapseWhen={false}
+                  approvalState={approvalState}
+                  onTranscriptionApprove={onTranscriptionApprove}
+                />
               )}
             </motion.div>
           ) : isTAVIWorkup ? (

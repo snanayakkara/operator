@@ -263,18 +263,39 @@ export function useRecorder(options: RecorderOptions) {
   // Start recording
   const startRecording = useCallback(async () => {
     console.log('🎤 useRecorder.startRecording() called');
-    
+
     setState(prev => ({ ...prev, isRequestingPermission: true }));
-    
+
     try {
       // Get the current microphone ID from either prop or function
       const currentMicrophoneId = getMicrophoneId?.() || selectedMicrophoneId;
-      
-      // Use relaxed constraints to avoid silent failures
-      // Let browser choose optimal sample rate instead of forcing 16kHz
+
+      // Detect if this is a Bluetooth device (requires special handling)
+      const isBluetoothDevice = async (deviceId: string | null): Promise<boolean> => {
+        if (!deviceId) return false;
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const device = devices.find(d => d.deviceId === deviceId);
+          return device?.label?.toLowerCase().includes('airpods') ||
+                 device?.label?.toLowerCase().includes('bluetooth') || false;
+        } catch {
+          return false;
+        }
+      };
+
+      const isBluetooth = await isBluetoothDevice(currentMicrophoneId || null);
+
+      // Phase 3: Add initialization delay for Bluetooth devices
+      if (isBluetooth && currentMicrophoneId) {
+        console.log('🎧 Bluetooth device detected, adding initialization delay...');
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Phase 1: Use EXACT device constraint to prevent silent fallback
+      // This ensures Chrome will fail with an error instead of silently using wrong device
       const constraints = {
         audio: currentMicrophoneId ? {
-          deviceId: currentMicrophoneId, // Non-exact by default for better compatibility
+          deviceId: { exact: currentMicrophoneId }, // EXACT constraint - no silent fallback
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
@@ -284,7 +305,13 @@ export function useRecorder(options: RecorderOptions) {
           autoGainControl: true
         }
       };
-      
+
+      console.log('🎤 Requesting media stream with constraints:', {
+        deviceId: currentMicrophoneId,
+        exact: true,
+        isBluetooth
+      });
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       streamRef.current = stream;
@@ -322,7 +349,7 @@ export function useRecorder(options: RecorderOptions) {
         }
       }
 
-      // Get actual device info from the stream
+      // Phase 2: Strict device validation - ensure we got the requested device
       let activeDeviceInfo: {
         label: string;
         deviceId: string;
@@ -330,7 +357,7 @@ export function useRecorder(options: RecorderOptions) {
         hasMismatch?: boolean;
         requestedDeviceId?: string;
       } | null = null;
-      
+
       if (audioTracks.length > 0) {
         const track = audioTracks[0];
         const settings = track.getSettings();
@@ -341,17 +368,40 @@ export function useRecorder(options: RecorderOptions) {
           isWorking: false, // Will be updated by voice activity detection
           hasMismatch: false
         };
-        
-        // Device verification
+
+        // Phase 2: Device mismatch validation - stop stream and throw error if wrong device
         if (currentMicrophoneId && settings.deviceId !== currentMicrophoneId) {
-          console.warn('⚠️ Using different microphone than requested');
-          if (activeDeviceInfo) {
-            activeDeviceInfo.hasMismatch = true;
-            activeDeviceInfo.requestedDeviceId = currentMicrophoneId;
-          }
-        } else if (activeDeviceInfo) {
-          activeDeviceInfo.hasMismatch = false;
+          console.error('❌ DEVICE MISMATCH DETECTED', {
+            requested: currentMicrophoneId,
+            received: settings.deviceId,
+            receivedLabel: track.label
+          });
+
+          // Clean up the stream immediately
+          stream.getTracks().forEach(track => track.stop());
+
+          // Get device names for better error message
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const requestedDevice = devices.find(d => d.deviceId === currentMicrophoneId);
+          const receivedDevice = devices.find(d => d.deviceId === settings.deviceId);
+
+          const errorMessage = `Failed to access selected microphone "${requestedDevice?.label || 'unknown'}". ` +
+            `System used "${receivedDevice?.label || track.label || 'unknown'}" instead. ` +
+            `\n\nPossible fixes:\n` +
+            `• Ensure AirPods are connected and selected as input device in macOS Sound settings\n` +
+            `• Try disconnecting and reconnecting your AirPods\n` +
+            `• Restart Chrome to refresh device permissions\n` +
+            `• Check System Settings → Privacy & Security → Microphone`;
+
+          throw new Error(errorMessage);
         }
+
+        console.log('✅ Device validation passed:', {
+          requested: currentMicrophoneId,
+          received: settings.deviceId,
+          label: track.label,
+          match: true
+        });
       }
 
       // Update the ref before setting state to ensure detectVoiceActivity has correct value

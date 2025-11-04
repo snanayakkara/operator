@@ -213,6 +213,16 @@ VALIDATION RULES:
 4. If value NOT in transcription at all, add to "missingCritical" or "missingOptional"
 5. Assign confidence scores (0-1) based on transcription clarity
 
+CRITICAL DECISION LOGIC:
+- ONLY add to "missingCritical" if BOTH conditions are true:
+  a) Field is NOT present in regex extraction (null/undefined/empty)
+  b) Field is REQUIRED for calculations (height, weight, Hb, SaO2, SvO2)
+  c) Set "critical": true ONLY if both conditions met
+
+- If field IS present in regex but needs correction → add to "corrections" instead
+- If field is missing but NOT required → add to "missingOptional" with "critical": false
+- If field is present and correct → do nothing (empty arrays are valid)
+
 CONFIDENCE SCORING:
 - 0.95-1.0: Unambiguous ("mixed venous oxygen saturation 58" → SvO2 = 58)
 - 0.80-0.94: Clear with minor ASR issues ("mixed mean is oxygen saturation 58" → SvO2 = 58)

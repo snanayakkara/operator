@@ -185,6 +185,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           <button
             ref={deviceButtonRef}
             onClick={handleDevicePopoverToggle}
+            data-dropdown-trigger
             className="
               w-full flex items-center justify-between gap-2
               px-2 py-1.5 rounded-md text-xs

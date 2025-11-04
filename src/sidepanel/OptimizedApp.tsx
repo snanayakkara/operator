@@ -199,12 +199,38 @@ const OptimizedAppContent: React.FC = memo(() => {
       activeWorkflowRef.current = null;
       actions.setUIMode('idle', { sessionId: null, origin: 'auto' });
 
-      // Show user-friendly error message
-      const errorMessage = error.name === 'NotAllowedError'
-        ? 'Microphone permission denied. Please allow microphone access to record.'
-        : `Recording failed: ${error.message}`;
+      // Enhanced error messages with specific handling for device issues
+      let errorMessage: string;
+      let errorTitle: string = 'Recording Failed';
 
+      if (error.name === 'NotAllowedError') {
+        errorTitle = 'Microphone Permission Denied';
+        errorMessage = 'Please allow microphone access in your browser settings to record.';
+      } else if (error.message.includes('Failed to access selected microphone')) {
+        // Device mismatch error - provide detailed troubleshooting
+        errorTitle = 'Microphone Device Error';
+        errorMessage = error.message;
+
+        // Also show a toast notification for better visibility
+        ToastService.getInstance().error(
+          'Microphone Selection Issue',
+          'The selected microphone could not be accessed. Please check your audio device settings.',
+          8000
+        );
+      } else if (error.name === 'OverconstrainedError' || error.name === 'NotFoundError') {
+        errorTitle = 'Microphone Not Available';
+        errorMessage = 'The selected microphone is not available. Please check that your audio device is connected and selected in System Settings → Sound.';
+      } else {
+        errorMessage = `Recording failed: ${error.message}`;
+      }
+
+      // Show error in UI
       actions.setErrors([errorMessage]);
+
+      // Show toast notification for critical errors
+      if (error.name === 'NotAllowedError' || error.message.includes('Failed to access selected microphone')) {
+        notifyError(errorTitle, errorMessage);
+      }
 
       // Clear any processing state
       actions.setProcessing(false);
@@ -1167,6 +1193,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.updatePatientSession(sessionId, {
           results: letterContent, // Store only letter content in results
           summary: extractedSummary, // Store summary separately
+          transcription: state.transcription || '', // Use state.transcription (already set during processing)
           status: 'completed',
           completed: true,
           completedTime: Date.now(),
@@ -1185,6 +1212,7 @@ const OptimizedAppContent: React.FC = memo(() => {
             ...completedSession,
             results: letterContent,
             summary: extractedSummary,
+            transcription: state.transcription || '', // Use state.transcription (already set during processing)
             status: 'completed',
             completed: true,
             completedTime: Date.now()
@@ -1787,6 +1815,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         modelName: 'MedGemma-27B'
       });
 
+      const latestTranscription =
+        state.transcription && state.transcription.trim().length > 0
+          ? state.transcription
+          : (correctedTranscription && correctedTranscription.trim().length > 0
+              ? correctedTranscription
+              : state.displaySession?.displayTranscription || '');
+
       // Complete the session with results
       const sessionUpdate: any = {
         results: result.content,
@@ -1810,7 +1845,8 @@ const OptimizedAppContent: React.FC = memo(() => {
           progress: 100,
           stageProgress: 100,
           details: 'Complete'
-        }
+        },
+        transcription: latestTranscription
       };
 
       sessionUpdate.preOpPlanData = result.preOpPlanData;
@@ -3097,6 +3133,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         return;
       }
 
+      const latestTranscription =
+        state.transcription && state.transcription.trim().length > 0
+          ? state.transcription
+          : state.displaySession?.displayTranscription || '';
+
       const sessionUpdate: any = {
         results: result.content,
         summary: result.summary || '',
@@ -3109,7 +3150,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         completedTime: Date.now(),
         processingTime: result.processingTime,
         warnings: result.warnings,
-        errors: result.errors
+        errors: result.errors,
+        transcription: latestTranscription
       };
 
       actions.updatePatientSession(sessionId, sessionUpdate);
@@ -3196,6 +3238,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         return;
       }
 
+      const latestTranscription =
+        state.transcription && state.transcription.trim().length > 0
+          ? state.transcription
+          : state.displaySession?.displayTranscription || '';
+
       const sessionUpdate: any = {
         results: result.content,
         summary: result.summary || '',
@@ -3207,7 +3254,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         completedTime: Date.now(),
         processingTime: result.processingTime,
         warnings: result.warnings,
-        errors: result.errors
+        errors: result.errors,
+        transcription: latestTranscription
       };
 
       actions.updatePatientSession(sessionId, sessionUpdate);
@@ -3290,6 +3338,11 @@ const OptimizedAppContent: React.FC = memo(() => {
         return;
       }
 
+      const latestTranscription =
+        state.transcription && state.transcription.trim().length > 0
+          ? state.transcription
+          : state.displaySession?.displayTranscription || '';
+
       const sessionUpdate: any = {
         results: result.content,
         summary: result.summary || '',
@@ -3301,7 +3354,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         completedTime: Date.now(),
         processingTime: result.processingTime,
         warnings: result.warnings,
-        errors: result.errors
+        errors: result.errors,
+        transcription: latestTranscription
       };
 
       actions.updatePatientSession(sessionId, sessionUpdate);
@@ -3382,6 +3436,11 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       // Update session with completed results
+      const latestTranscription =
+        state.transcription && state.transcription.trim().length > 0
+          ? state.transcription
+          : state.displaySession?.displayTranscription || '';
+
       const sessionUpdate: any = {
         results: result.content,
         rhcReport: result,
@@ -3390,7 +3449,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         completedTime: Date.now(),
         processingTime: result.processingTime,
         warnings: result.warnings,
-        errors: result.errors
+        errors: result.errors,
+        transcription: latestTranscription
       };
 
       actions.updatePatientSession(sessionId, sessionUpdate);

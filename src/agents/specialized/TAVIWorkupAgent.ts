@@ -89,10 +89,13 @@ export class TAVIWorkupAgent extends MedicalAgent {
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
       // INTERACTIVE CHECKPOINT: Check for critical gaps
-      if (validation.missingCritical.length > 0 ||
-          validation.corrections.some(c => c.confidence < 0.8)) {
+      // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
+      const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
+      const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
 
-        console.log(`⚠️ TAVI AGENT: Validation requires user input (${validation.missingCritical.length} critical fields missing)`);
+      if (hasCriticalGaps || hasLowConfidenceCorrections) {
+        const criticalCount = validation.missingCritical.filter(f => f.critical === true).length;
+        console.log(`⚠️ TAVI AGENT: Validation requires user input (${criticalCount} critical fields missing, ${validation.corrections.filter(c => c.confidence < 0.8).length} low-confidence corrections)`);
 
         // Return incomplete report with validation state
         const baseReport = this.createReport('', [], context, 0, 0);
