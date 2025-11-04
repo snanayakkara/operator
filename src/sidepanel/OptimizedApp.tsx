@@ -31,7 +31,6 @@ import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { SparsityStepperModal } from './components/SparsityStepperModal';
 import { LipidProfileImporter } from './components/LipidProfileImporter';
 import { TTETrendImporter } from './components/TTETrendImporter';
-import { StorageManagementModal } from './components/StorageManagementModal';
 import { ModelLoadingErrorDialog } from './components/ModelLoadingErrorDialog';
 import Lanyard from './components/Lanyard';
 import { useAppState } from '@/hooks/useAppState';
@@ -150,7 +149,6 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Storage management state
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
-  const [isStorageModalOpen, setIsStorageModalOpen] = useState(false);
 
   const [lanyardTextureUrl, setLanyardTextureUrl] = useState<string | null>(null);
 
@@ -2763,6 +2761,21 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [recorder, state.ui.activeWorkflow, actions, extractPatientData, state.patientSessions, state.modelStatus]);
 
+  const handleReturnHome = useCallback(() => {
+    if (recorder.isRecording) {
+      console.log('🏠 Home navigation blocked while recording in progress');
+      return;
+    }
+
+    console.log('🏠 Returning to idle home state');
+    actions.clearDisplaySession();
+    actions.setSelectedSessionId(null);
+    actions.setCurrentSessionId(null);
+    actions.setActiveWorkflow(null);
+    actions.setProcessingStatus('idle');
+    actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+  }, [actions, recorder.isRecording]);
+
   // Handle Type mode for expandable workflows (e.g., Quick Letter)
   const handleTypeClick = useCallback((workflowId: AgentType) => {
     console.log('⌨️ Type mode selected for workflow:', workflowId);
@@ -4064,7 +4077,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         onToggleSessionCheck={handleToggleSessionCheck}
         persistedSessionIds={state.persistedSessionIds}
         storageStats={storageStats}
-        onStorageClick={() => setIsStorageModalOpen(true)}
+        onDeleteAllChecked={handleDeleteAllChecked}
+        onDeleteOldSessions={handleDeleteOldSessions}
+        onTitleClick={handleReturnHome}
       />
 
       {/* Main Content Area - Single Column Layout */}
@@ -5198,18 +5213,6 @@ const OptimizedAppContent: React.FC = memo(() => {
       <OptimizationPanel
         isOpen={isOptimizationPanelOpen}
         onClose={() => setIsOptimizationPanelOpen(false)}
-      />
-
-      {/* Storage Management Modal */}
-      <StorageManagementModal
-        isOpen={isStorageModalOpen}
-        onClose={() => setIsStorageModalOpen(false)}
-        sessions={state.patientSessions}
-        persistedSessionIds={state.persistedSessionIds}
-        storageStats={storageStats}
-        onDeleteSession={handleDeleteSession}
-        onDeleteAllChecked={handleDeleteAllChecked}
-        onDeleteOldSessions={handleDeleteOldSessions}
       />
 
       {/* Model Loading Error Dialog */}

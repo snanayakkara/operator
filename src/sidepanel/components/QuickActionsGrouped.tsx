@@ -73,11 +73,6 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
     localStorage.setItem('quickActionsCollapsed', isCollapsed.toString());
   }, [isCollapsed]);
 
-  // Extract AI action configs for JSX rendering
-  const aiReviewAction = SECONDARY_ACTIONS.find(action => action.id === 'ai-medical-review');
-  const batchAiAction = SECONDARY_ACTIONS.find(action => action.id === 'batch-ai-review');
-  const AiReviewIcon = aiReviewAction?.icon;
-  const BatchAiIcon = batchAiAction?.icon;
 
   const handleAction = async (actionId: string, data?: unknown) => {
     // Show appointment builder for appointment wrap-up
@@ -374,7 +369,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="grid grid-cols-4 gap-x-2 gap-y-2.5">
+            <div className="grid grid-cols-5 gap-x-2 gap-y-2.5">
               {/* Record Button in first position */}
               {onStartWorkflow && (
                 <div className="flex items-center justify-center" style={{ position: 'relative', zIndex: 100 }}>
@@ -393,20 +388,21 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
 
               {/* All Core Actions */}
               {CORE_ACTIONS.map((action) => (
-                <QuickActionItem
-                  key={action.id}
-                  id={action.id}
-                  label={action.label}
-                  alias={action.alias}
-                  icon={action.icon}
-                  category="core"
-                  onClick={() => handleAction(action.id)}
-                  isProcessing={processingAction === action.id}
-                  isExpandable={action.isExpandable}
-                  workflowId={action.workflowId}
-                  onDictate={handleDictate}
-                  onType={handleType}
-                />
+                <div key={action.id} className="flex items-center justify-center">
+                  <QuickActionItem
+                    id={action.id}
+                    label={action.label}
+                    alias={action.alias}
+                    icon={action.icon}
+                    category="core"
+                    onClick={() => handleAction(action.id)}
+                    isProcessing={processingAction === action.id}
+                    isExpandable={action.isExpandable}
+                    workflowId={action.workflowId}
+                    onDictate={handleDictate}
+                    onType={handleType}
+                  />
+                </div>
               ))}
             </div>
           </motion.div>
@@ -416,7 +412,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             <div className="h-px bg-gray-100" />
           </div>
 
-          {/* Secondary Actions Group (6 items + AI split cell) */}
+          {/* Secondary Actions Group (all 10 items as individual buttons) */}
           <motion.div
             className="px-2"
             variants={withReducedMotion(staggerContainer)}
@@ -425,12 +421,13 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
               delayChildren: 0.1
             }}
           >
-            <div className="grid grid-cols-4 gap-x-2 gap-y-2.5">
-              {SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).map((action, index) => (
+            <div className="grid grid-cols-5 gap-x-2 gap-y-2.5">
+              {SECONDARY_ACTIONS.map((action, index) => (
                 <motion.div
                   key={action.id}
                   variants={withReducedMotion(listItemVariants)}
                   custom={index}
+                  className="flex items-center justify-center"
                 >
                   <QuickActionItem
                     id={action.id}
@@ -440,59 +437,10 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                     category="secondary"
                     onClick={() => handleAction(action.id)}
                     isProcessing={processingAction === action.id}
+                    colorTheme={action.colorTheme}
                   />
                 </motion.div>
               ))}
-
-              {/* AI Actions Split Cell - Last cell contains both AI actions side by side */}
-              <motion.div
-                variants={withReducedMotion(listItemVariants)}
-                custom={SECONDARY_ACTIONS.filter(action => !['ai-medical-review', 'batch-ai-review'].includes(action.id)).length}
-                className="relative overflow-hidden rounded-lg transition-all"
-                style={{ minHeight: '64px' }}
-              >
-                <div className="grid grid-cols-2 gap-0 h-full">
-                  {/* AI Medical Review (left half) */}
-                  <button
-                    onClick={() => handleAction('ai-medical-review')}
-                    disabled={processingAction === 'ai-medical-review'}
-                    className="flex flex-col items-center justify-center p-1 border-r border-gray-200 hover:bg-purple-50 transition-all"
-                    title="AI Medical Review"
-                  >
-                    {AiReviewIcon && (
-                      <>
-                        <AiReviewIcon className="w-4 h-4 text-purple-600 mb-1" strokeWidth={2} />
-                        <div className="text-[9px] font-medium text-gray-700 text-center leading-tight">
-                          AI Review
-                        </div>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Batch AI Review (right half) */}
-                  <button
-                    onClick={() => handleAction('batch-ai-review')}
-                    disabled={processingAction === 'batch-ai-review'}
-                    className="flex flex-col items-center justify-center p-1 hover:bg-purple-50 transition-all"
-                    title="Batch AI Review"
-                  >
-                    {BatchAiIcon && (
-                      <>
-                        <BatchAiIcon className="w-4 h-4 text-purple-600 mb-1" strokeWidth={2} />
-                        <div className="text-[9px] font-medium text-gray-700 text-center leading-tight">
-                          Batch AI
-                        </div>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {(processingAction === 'ai-medical-review' || processingAction === 'batch-ai-review') && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                    <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                )}
-              </motion.div>
             </div>
           </motion.div>
         </>

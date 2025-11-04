@@ -21,7 +21,6 @@ import { StateChip } from './StateChip';
 import { DevicePopover } from './DevicePopover';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
-import { StorageIconButton } from './StorageIconButton';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { formatDeviceSummary } from '@/utils/deviceNameUtils';
 
@@ -49,9 +48,11 @@ export interface SidebarHeaderProps {
 
   // Storage management
   storageStats?: StorageStats | null;
-  onStorageClick?: () => void;
+  onDeleteAllChecked?: () => Promise<void>;
+  onDeleteOldSessions?: (daysOld: number) => Promise<void>;
 
   // Actions (none currently needed - settings opens extension options page)
+  onTitleClick?: () => void;
 }
 
 export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
@@ -71,7 +72,9 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   onToggleSessionCheck,
   persistedSessionIds,
   storageStats,
-  onStorageClick
+  onDeleteAllChecked,
+  onDeleteOldSessions,
+  onTitleClick
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
@@ -119,9 +122,21 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
       <div className="flex items-center justify-between h-10 px-2.5">
         {/* Left: App name + State chip */}
         <div className="flex items-center gap-1 min-w-0">
-          <h1 className="text-sm font-semibold text-gray-900 flex-shrink-0">
-            operator
-          </h1>
+          {onTitleClick ? (
+            <button
+              type="button"
+              onClick={onTitleClick}
+              className="text-sm font-semibold text-gray-900 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+              title="Return to home"
+              aria-label="Return to home"
+            >
+              operator
+            </button>
+          ) : (
+            <h1 className="text-sm font-semibold text-gray-900 flex-shrink-0">
+              operator
+            </h1>
+          )}
           <StateChip
             status={status}
             isRecording={isRecording}
@@ -135,34 +150,24 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           {/* Queue Status */}
           <QueueStatusDisplay isCompact={true} />
 
-          {/* Session Notifications */}
-          {uncheckedCount > 0 && (
-            <button
-              ref={sessionButtonRef}
-              onClick={handleSessionDropdownToggle}
-              className="
-                relative p-1.5 rounded hover:bg-gray-100 transition-colors
-                focus:outline-none focus:ring-2 focus:ring-blue-500
-              "
-              aria-label={`${uncheckedCount} active session${uncheckedCount !== 1 ? 's' : ''}`}
-              title="View active sessions"
-            >
-              <Bell className="w-4 h-4 text-gray-600" />
-              {uncheckedCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {uncheckedCount > 9 ? '9+' : uncheckedCount}
-                </span>
-              )}
-            </button>
-          )}
-
-          {/* Storage Indicator */}
-          {storageStats && storageStats.sessionCount > 0 && (
-            <StorageIconButton
-              stats={storageStats}
-              onClick={onStorageClick}
-            />
-          )}
+          {/* Session Manager */}
+          <button
+            ref={sessionButtonRef}
+            onClick={handleSessionDropdownToggle}
+            className="
+              relative p-1.5 rounded hover:bg-gray-100 transition-colors
+              focus:outline-none focus:ring-2 focus:ring-blue-500
+            "
+            aria-label={uncheckedCount > 0 ? `${uncheckedCount} active session${uncheckedCount !== 1 ? 's' : ''}` : 'Session history'}
+            title={uncheckedCount > 0 ? 'View active sessions' : 'Session history'}
+          >
+            <Bell className="w-4 h-4 text-gray-600" />
+            {uncheckedCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {uncheckedCount > 9 ? '9+' : uncheckedCount}
+              </span>
+            )}
+          </button>
 
           {/* Settings */}
           <button
@@ -224,12 +229,15 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           onRemoveSession={onRemoveSession}
           onClearAllSessions={onClearAllSessions}
           onSessionSelect={onSessionSelect}
-              onResumeRecording={onResumeRecording}
-              selectedSessionId={selectedSessionId}
+          onResumeRecording={onResumeRecording}
+          selectedSessionId={selectedSessionId}
           activeRecordingSessionId={currentSessionId}
           checkedSessionIds={checkedSessionIds}
           onToggleSessionCheck={onToggleSessionCheck}
           persistedSessionIds={persistedSessionIds}
+          storageStats={storageStats}
+          onDeleteAllChecked={onDeleteAllChecked}
+          onDeleteOldSessions={onDeleteOldSessions}
         />
       )}
     </header>

@@ -802,7 +802,8 @@ export interface PatientSession {
   mteerExtractedData?: MTEERExtractedData;
   agentType: AgentType;
   agentName: string;
-  timestamp: number;
+  timestamp: number; // Session creation time (milliseconds since epoch)
+  recordedDate?: string; // Formatted date string for UI display (e.g., "2025-11-04")
   status: SessionStatus;
   completed: boolean; // Kept for backward compatibility
   processingTime?: number;
@@ -1664,11 +1665,56 @@ export interface PreOpPlanReport extends MedicalReport {
     completenessScore?: string;
     warnings?: string[];
   };
+  // Validation workflow support (uses base MedicalReport status field)
+  extractedData?: PreOpExtractedData;
 }
 
 export interface PreOpPlanJSON {
   procedure_type: PreOpProcedureType;
   fields: Record<string, any>; // Dynamic fields based on procedure type
+}
+
+/**
+ * Pre-Op Extracted Data - raw extraction from regex before validation
+ * Used in validation workflow: Regex → Quick Model → Checkpoint → Reasoning
+ */
+export interface PreOpExtractedData {
+  procedureType: PreOpProcedureType;
+  procedure?: string;
+  indication?: string;
+  // Angiogram/PCI fields
+  primaryAccess?: string;
+  sheathSizeFr?: number;
+  catheters?: string[];
+  // TAVI fields
+  valveTypeSize?: string;
+  wire?: string;
+  balloonSizeMm?: number;
+  pacingWireAccess?: string;
+  closurePlan?: string;
+  protamine?: string;
+  goalsOfCare?: string;
+  // RHC fields
+  accessSite?: string;
+  coMeasurement?: string;
+  bloodGasSamples?: number;
+  // mTEER fields
+  transeptalCatheter?: string;
+  echoSummary?: string;
+  // Common fields
+  anticoagulationPlan?: string;
+  sedation?: string;
+  sitePrep?: string;
+  allergies?: string;
+  recentLabs?: {
+    hb_g_per_l?: number;
+    creatinine_umol_per_l?: number;
+  };
+  plannedFollowup?: string;
+  nokName?: string;
+  nokRelationship?: string;
+  nokPhone?: string;
+  attachLatestLabs?: boolean;
 }
 
 // Procedure-specific field interfaces

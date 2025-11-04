@@ -90,10 +90,20 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   const [velocity, setVelocity] = useState<number>(0); // Progress per millisecond
   const [predictor] = useState(() => ProcessingTimePredictor.getInstance());
 
+  // Early exit: Don't show countdown for old/completed sessions
+  // If no start time or start time is > 5 minutes ago, this is a historical session
+  const isRecentSession = startTime && (Date.now() - startTime) <= 300000; // 5 minutes
+  const shouldShowTimer = showCircularTimer && isRecentSession;
+
   const effectiveStartTime = startTime || Date.now();
 
   // Update elapsed time and velocity every 500ms for smooth countdown
   useEffect(() => {
+    // Don't run interval for old/invalid sessions
+    if (!isRecentSession) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       const elapsed = Date.now() - effectiveStartTime;
       if (elapsed >= 0 && elapsed < 86400000) {
@@ -108,7 +118,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
     }, 500); // Update every 500ms for smooth countdown without excessive CPU usage
 
     return () => clearInterval(intervalId);
-  }, [effectiveStartTime, progress.progress]);
+  }, [effectiveStartTime, progress.progress, isRecentSession]);
 
   // Generate time prediction
   useEffect(() => {
@@ -166,7 +176,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       aria-label="Processing pipeline progress"
     >
       {/* Circular Timer (Large, Prominent) - Responsive sizing */}
-      {showCircularTimer &&
+      {shouldShowTimer &&
        remainingTime !== null &&
        progress.progress < 100 && (
         <div className="flex justify-center py-6 border-b border-gray-100">

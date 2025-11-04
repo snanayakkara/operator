@@ -9,6 +9,83 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.30.0] - 2025-11-05
+
+### Added
+
+- **Pre-Op Plan Interactive Validation Workflow**
+  - Implemented comprehensive validation workflow matching RHC pattern (Regex → Quick Model → Checkpoint → Reasoning)
+  - Quick model (qwen/qwen3-4b-2507) validates extracted pre-op fields before expensive card generation
+  - Auto-applies high-confidence corrections (≥0.8) for ASR errors (e.g., "rate deal" → "Right radial")
+  - Interactive checkpoint pauses workflow if critical fields missing (procedure, indication, access, NOK info)
+  - User fills missing fields via validation modal → reprocesses with validated data
+  - Only runs reasoning model (MedGemma-27B) AFTER validation passes
+  - Saves 3-15min of wasted generation time with incomplete dictation
+  - Supports all 4 procedure types: Angiogram/PCI, RHC, TAVI, mTEER
+
+- **Pre-Op Field Configuration System**
+  - Added `PREOP_FIELD_CONFIG` with 28 procedure fields (labels, input types, placeholders, helper text)
+  - Added `PREOP_VALIDATION_COPY` for validation modal UI text
+  - Registered `'pre-op-plan'` in centralized `VALIDATION_CONFIG_MAP`
+  - Generic `FieldValidationPrompt` component now supports Pre-Op Plan
+
+- **Pre-Op Data Validation Prompt**
+  - Added `PRE_OP_PLAN_DATA_VALIDATION_PROMPT` for quick model validation
+  - Critical field lists per procedure type (Angio: access/NOK; TAVI: valve sizing/pacing; RHC: CO measurement; mTEER: clip details)
+  - Confidence scoring guidance (0.95-1.0 unambiguous → 0.0-0.59 uncertain)
+  - ASR correction patterns for common transcription errors
+
+- **Pre-Op Type Definitions**
+  - Added `PreOpExtractedData` interface with all procedure-specific fields
+  - Updated `PreOpPlanReport` to support validation workflow with `status` and `extractedData`
+  - Reuses generic `ValidationResult`, `FieldCorrection`, `MissingField` types
+
+- **Pre-Op Agent Validation Methods**
+  - `extractPreOpFields()` - Regex extraction with 25+ field patterns for all procedure types
+  - `validateAndDetectGaps()` - Quick model validation with JSON response parsing
+  - `applyCorrections()` - Auto-apply high-confidence corrections (≥0.8 threshold)
+  - `mergeUserInput()` - Merge user-provided fields from validation modal (dot-notation support)
+  - `convertToJSON()` - Convert camelCase extracted data → snake_case JSON format
+  - Helper methods: `normalizeAccessSite()`, `setNestedField()`
+
+### Changed
+
+- **Pre-Op Agent Processing Flow**
+  - Complete rewrite of `process()` method to integrate 8-step validation workflow
+  - Now follows: Detect type → Regex → Validate → Auto-correct → Checkpoint → Merge user input → Convert JSON → Reasoning model
+  - Agent pauses at checkpoint if critical gaps or low-confidence corrections
+  - Returns `status: 'awaiting_validation'` with `validationResult` and `extractedData` for UI modal
+  - Reprocesses with `context.userProvidedFields` after user fills missing fields
+
+- **Pre-Op Export Validation**
+  - Changed `validatePreOpDataForExport()` from blocking mode to warning mode
+  - Now allows export with partial data, shows completeness percentage
+  - Only blocks if completely empty (no fields at all)
+  - Warning toast shows missing fields but allows export to proceed
+  - Success messages indicate completeness: "A5 card copied (67% complete)!"
+
+### Fixed
+
+- **Pre-Op JSON Parsing**
+  - Enhanced `parsePreOpResponse()` with robust regex patterns to strip `CARD:` and `JSON:` markers
+  - Now correctly extracts JSON content with or without markdown code fences
+  - Added multiple fallback patterns for reliable JSON extraction
+  - Fixed empty `{"fields": {}}` display bug - now shows all extracted fields
+
+- **Pre-Op Export Validation**
+  - Removed overly strict validation that blocked export when ANY required field was missing
+  - Users can now export incomplete cards and manually fill missing fields after paste
+  - Export validation shows informative warnings instead of blocking with cryptic errors
+
+- **Pre-Op LLM Output Display**
+  - Fixed mixed output format showing raw `CARD:`, `JSON:`, and code fence markers
+  - Display now shows clean card content without structural markup
+  - Structured JSON metadata displays correctly in collapsible section
+
+- **ESLint Errors**
+  - Fixed unused variable `lowerInput` in `extractPreOpFields()` method
+  - Fixed unnecessary escape character in NOK relationship regex pattern
+
 ## [3.28.0] - 2025-11-04
 
 ### Added

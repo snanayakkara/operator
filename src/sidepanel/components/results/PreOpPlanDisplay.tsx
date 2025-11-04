@@ -168,13 +168,19 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       completenessScore
     });
 
+    // Only block if there's NO data at all (completely empty)
     if (!validation.valid) {
       ToastService.getInstance().error(
-        `Cannot copy card: Missing essential data\n\n${validation.missingFields.map(f => `• ${f}`).join('\n')}`
+        'Cannot copy card: No data available. Please ensure the LLM has generated content.'
       );
       setCopyCardState('error');
       setTimeout(() => setCopyCardState('idle'), 2000);
       return;
+    }
+
+    // Show warning if incomplete but allow export to proceed
+    if (validation.warningMessage) {
+      ToastService.getInstance().warning(validation.warningMessage);
     }
 
     setCopyCardState('copying');
@@ -200,7 +206,11 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       );
 
       setCopyCardState('success');
-      ToastService.getInstance().success('A5 card copied to clipboard! Ready to paste into documents.');
+      ToastService.getInstance().success(
+        validation.completenessPercent === 100
+          ? 'A5 card copied to clipboard! Ready to paste into documents.'
+          : `A5 card copied to clipboard (${validation.completenessPercent}% complete)! Review and fill missing fields as needed.`
+      );
 
       // Reset to idle after 3 seconds
       setTimeout(() => setCopyCardState('idle'), 3000);
@@ -225,13 +235,19 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       completenessScore
     });
 
+    // Only block if there's NO data at all (completely empty)
     if (!validation.valid) {
       ToastService.getInstance().error(
-        `Cannot download card: Missing essential data\n\n${validation.missingFields.map(f => `• ${f}`).join('\n')}`
+        'Cannot download card: No data available. Please ensure the LLM has generated content.'
       );
       setDownloadCardState('error');
       setTimeout(() => setDownloadCardState('idle'), 2000);
       return;
+    }
+
+    // Show warning if incomplete but allow export to proceed
+    if (validation.warningMessage) {
+      ToastService.getInstance().warning(validation.warningMessage);
     }
 
     setDownloadCardState('downloading');
@@ -256,7 +272,11 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
       );
 
       setDownloadCardState('success');
-      ToastService.getInstance().success('A5 card downloaded successfully!');
+      ToastService.getInstance().success(
+        validation.completenessPercent === 100
+          ? 'A5 card downloaded successfully!'
+          : `A5 card downloaded (${validation.completenessPercent}% complete)! Review and fill missing fields as needed.`
+      );
 
       setTimeout(() => setDownloadCardState('idle'), 3000);
     } catch (error) {

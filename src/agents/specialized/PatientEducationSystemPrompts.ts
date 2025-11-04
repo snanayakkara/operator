@@ -139,6 +139,83 @@ export const PATIENT_EDUCATION_CONFIG: PatientEducationConfig = {
         { value: 'one', label: 'One fall' },
         { value: 'recurrent', label: 'Two or more' }
       ]
+    },
+    {
+      id: 'shift_work_schedule',
+      label: 'Shift work or irregular schedule',
+      description: 'Typical work pattern that may affect sleep, meals, or activity timing',
+      type: 'single-select',
+      options: [
+        { value: 'none', label: 'No shift work' },
+        { value: 'some_evenings', label: 'Some evenings' },
+        { value: 'rotating_overnights', label: 'Rotating/overnights' }
+      ]
+    },
+    {
+      id: 'dietary_preference',
+      label: 'Dietary preference',
+      description: 'General dietary pattern to respect in examples',
+      type: 'single-select',
+      options: [
+        { value: 'omnivore', label: 'Omnivore' },
+        { value: 'vegetarian', label: 'Vegetarian' },
+        { value: 'vegan', label: 'Vegan' }
+      ]
+    },
+    {
+      id: 'alcohol_pattern',
+      label: 'Alcohol drinking pattern',
+      description: 'Typical pattern of alcohol intake across the week',
+      type: 'single-select',
+      options: [
+        { value: 'steady_small', label: 'Steady small amounts' },
+        { value: 'occasional_binge', label: 'Occasional binge (>4/occasion)' },
+        { value: 'frequent_binge', label: 'Frequent binge' }
+      ]
+    },
+    {
+      id: 'food_budget',
+      label: 'Food budget',
+      description: 'Budget flexibility for grocery choices',
+      type: 'single-select',
+      options: [
+        { value: 'tight', label: 'Tight' },
+        { value: 'moderate', label: 'Moderate' },
+        { value: 'comfortable', label: 'Comfortable' }
+      ]
+    },
+    {
+      id: 'device_access',
+      label: 'Device for tracking',
+      description: 'Availability of smartphone or wearable for reminders/steps',
+      type: 'single-select',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: 'smartphone', label: 'Smartphone' },
+        { value: 'wearable_smartphone', label: 'Wearable + smartphone' }
+      ]
+    },
+    {
+      id: 'meal_prep_capacity',
+      label: 'Meal prep capacity',
+      description: 'Time/skills for cooking and batch prep',
+      type: 'single-select',
+      options: [
+        { value: 'limited', label: 'Limited time/skills' },
+        { value: 'some_time', label: 'Some time/skills' },
+        { value: 'batch_cook', label: 'Happy to batch-cook' }
+      ]
+    },
+    {
+      id: 'nocturia',
+      label: 'Night-time urination',
+      description: 'Typical number of times up at night to urinate',
+      type: 'single-select',
+      options: [
+        { value: 'none', label: 'None' },
+        { value: '1-2', label: '1–2 times/night' },
+        { value: '3+', label: '≥ 3 times/night' }
+      ]
     }
   ],
 
@@ -422,7 +499,7 @@ Create comprehensive lifestyle advice covering only the selected modules. Each s
 PRIORITY ORDER AND FOCUS LIMITATION:
 • Begin with a **Priority Plan** with exactly **3 top recommendations** ranked by expected impact for this patient (highest impact first). Consider their values and toggles:
   – Very high impact examples: smoking cessation; large BP load with scope to reduce; heavy alcohol use (esp. AF/HF context); very low steps (<5k) moving to daily walks; Multicomponent plan (PRT + balance + functional work) for recurrent fallers; Shift from aerobic-only to PRT-led plan when weakness is limiting mobility
-  – Include **magnitude notes** when available (e.g., isometric exercise ≈ −8/−4 mmHg; aerobic ≈ −4.5/−2.5 mmHg; fibre helps reduce BP and LDL)
+  – Include **magnitude notes** when available (e.g., isometric exercise ≈ −8/−4 mmHg; aerobic ≈ −4.5/−2.5 mmHg; fibre helps reduce BP and LDL; **5–10% weight loss** can improve BP/lipids/glucose; **alcohol abstinence** can reduce AF episodes for some)
 • Provide **detailed guidance** for only these top 3 priorities in the main letter content
 • Include **4-8 additional optimization opportunities** as brief summaries (1-2 sentences each) that can be explored in future appointments
 • Then provide focused module sections covering only the top 3 priorities, each with SMART goals and habit supports
@@ -464,7 +541,7 @@ Return **two parts in this exact order**:
 - additional_optimizations must contain **4-8 brief summaries** of other lifestyle improvements that can be explored in future appointments (1-2 sentences each).
 - smart_goals must include at least 1 goal, written in SMART style.
 - habit_plan provides 2–4 generic if-then habits aligned to the plan.
-- resources should list Australian organisations (Heart Foundation, Quitline, TIS National, etc.) relevant to the selected modules.
+- resources should list Australian organisations (Heart Foundation, Quitline, TIS National, Dietitians Australia, Healthdirect standard drinks calculator, LiveLighter, Get Healthy (NSW/QLD), Beyond Blue, 13YARN) relevant to the selected modules.
 - safety_net must use emergency wording when symptom cues are present.
 - reading_level must be "Year 7–8".
 
@@ -502,7 +579,7 @@ A Mediterranean-style eating pattern supports heart health. Focus on vegetables,
 **Evidence‑based targets:**
 • Fibre: aim for **30–35 g/day (most women)** and **35–45 g/day (most men)**
 • Sodium: choose products with <120 mg sodium per 100 g (low); if unavailable, ≤400 mg/100 g is a reasonable upper limit
-• Fish: include oily fish (e.g., salmon, sardines) twice per week
+• Omega‑3 fish: include **2–3 serves/week** of oily fish (e.g., salmon, sardines); vegetarians can consider **algal omega‑3** foods/supplements (discuss with your care team)
 • Fruit & veg: at least 2 serves of fruit and 5 serves of vegetables daily
 
 **Practical Steps:**
@@ -510,6 +587,11 @@ A Mediterranean-style eating pattern supports heart health. Focus on vegetables,
 • Build meals around plants: grain bowl + legumes + colourful veg + lean protein
 • Flavour with herbs/spices, citrus, garlic, chilli instead of salt
 • Read labels; compare sodium per 100 g and choose the lower option
+• Budget‑friendly: use **tinned fish**, **frozen veg**, and **dried or tinned legumes** to save money without sacrificing nutrition
+
+**Lower‑GI patterning (steady energy):**
+• Start meals with **vegetables first**, then eat **protein**, and finish with **starches**; this order can soften the post‑meal glucose rise
+• Prefer **lower‑GI carbs** (oats, barley, legumes, wholegrain pasta) over refined starches
 
 **Track your fibre (awareness helps):**
 • Use a food‑tracking app (e.g., **MyFitnessPal** or **Easy Diet Diary**) to log a typical day and estimate your fibre grams
@@ -583,6 +665,7 @@ Aim to **move every day**. Focus on the **frequency** of walking first to build 
 • 1–7 days/week, 1–2 sets of 4–10 exercises
 • Progress by narrowing your stance, changing surfaces, reducing vision/proprioception, and adding a simple thinking task while you move
 • Include sit-to-stands, starting/stopping walking, and small obstacle steps
+• Functional anchor: aim to perform **5 chair‑rises hands‑free** (or your best safe number) as a simple progress check
 
 **Sequencing when mobility is limited:**
 • Build Strength → Balance → Endurance. Don't push distance walking before you can stand steadily and rise from a chair safely.
@@ -607,12 +690,16 @@ These are average effects from large meta‑analysis data; your results can vary
 • Warm up 5 minutes; cool down and stretch afterwards
 • Exercise at a pace where you feel in control of your breathing
 • **Stop and seek help** if you develop chest pain, severe shortness of breath at rest, dizziness/near‑faint, or new palpitations
+• Also stop if you notice **neurological symptoms** (sudden weakness, facial droop, slurred speech) or **calf pain/swelling** after immobility/travel
 • Stay hydrated and dress for the weather
 
 **Build more movement into the day:**
 • Take stairs where possible; park further away or get off a stop early
+• Take **standing/step breaks every ~30 minutes** during long sitting periods
+• Add a relaxed 10-15 minute walk within 30 minutes after meals to smooth the post-meal blood sugar spike (research shows ~20-30% lower glucose rise) and support healthier triglycerides and blood pressure
 • Short active trips: walk or cycle for errands
 • Do household/garden tasks briskly
+• Busy days count: try **exercise snacks** — **3 × 5‑minute** brisk walks or stair climbs across the day to protect your streak
 
 If you’re recovering from a recent procedure or have a complex heart condition, follow the plan set by your care team or cardiac rehabilitation program.
 `,
@@ -627,6 +714,7 @@ Quitting smoking is the single best thing you can do for your heart health. With
 • Better healing and recovery from procedures
 • More energy and improved fitness
 • Significant long-term health improvements
+• Timeline: **24 h** carbon monoxide normalises; **2–12 weeks** circulation improves; **1 year** heart disease risk ≈ half of a smoker’s
 
 **Getting Support:**
 • Contact the Quitline (13 7848) for free telephone counselling
@@ -634,6 +722,7 @@ Quitting smoking is the single best thing you can do for your heart health. With
 • Consider medications like varenicline (Champix) if appropriate
 • Use smartphone apps like "My QuitBuddy" for daily support
 • Join online communities or local support groups
+• Ask about **combination NRT** (e.g., **patch + oral** lozenge/gum/inhalator) with your GP or pharmacist — many people find it more effective
 
 **Practical Strategies:**
 • Set a quit date and tell your family and friends
@@ -661,15 +750,31 @@ There is **no completely safe level** of alcohol for health. The **safest choice
 • Spirits 30 mL shot = 1 standard drink
 (Check labels as alcohol content varies.)
 
+**Hidden kilojoules (weight creep):**
+• Full-strength beer 375 mL (1.5 standard drinks) delivers ~650 kJ (~155 kcal)
+• Wine 150 mL glass (1.5 standard drinks) provides ~540 kJ (~130 kcal)
+• Spirit mixer (30 mL spirit + 150 mL tonic or cola) adds ~700-800 kJ (~170-190 kcal)
+• Two small glasses of wine each night adds ~2,800 kJ/week (~670 kcal) - similar to an extra meal
+Liquid calories don't trigger the same fullness signals, so regular drinking makes weight gain more likely around the waistline.
+
 **Heart‑specific considerations:**
 • **Atrial fibrillation (AF):** Alcohol can trigger AF; reducing intake — and for some, **abstaining** — can reduce episodes
 • **Heart failure:** Alcohol can worsen symptoms and contribute to cardiomyopathy; many people with heart failure are advised to **limit or avoid alcohol**, and those with alcohol‑related cardiomyopathy should **abstain**
+
+**Binge pattern risk:**
+• Having **>4 standard drinks in one sitting** increases health risks, even when weekly totals sit within guidelines
 
 **Strategies for cutting back (if you do drink):**
 • Plan alcohol‑free days (at least 2 per week)
 • Alternate alcoholic drinks with water or a non‑alcoholic option
 • Eat before and while drinking; set limits before social events
-• Choose lower‑alcohol options where possible
+• Choose lower‑alcohol or **no‑alcohol** options where possible, and use a **1:1 spacer rule** (water between drinks)
+
+**Helpful tools:**
+• Use the **Healthdirect Standard Drinks Calculator** to check your usual pours
+
+**Withdrawal caution:**
+• If you drink heavily most days, cutting down suddenly can cause withdrawal; seek advice from your GP. If you develop severe symptoms (confusion, seizures), seek urgent care (call 000).
 
 If alcohol is a challenge or you’re unsure what’s right for your condition, speak with your GP. National supports include **DirectLine** (Victoria) and local alcohol and other drug services.`,
 
@@ -687,9 +792,12 @@ Aim for **~2.5 L of fluids per day**, with roughly **1.5 L in the first half of 
 • **Track (optional):** Use an app such as **WaterMinder** or phone reminders.  
 • **Check colour:** Aim for **pale straw** urine; dark yellow often means you need more.  
 • **Evening:** If night‑time trips are an issue, taper fluids 2–3 h before bed.
+• **Snack or thirsty?** Try a glass of **water first** — thirst often feels like hunger
+• **Caffeine counts** toward fluids in moderation; to protect sleep, keep larger caffeine doses to the **morning**
 
 **Caveats:**
 • If you have **heart failure**, **kidney disease**, or have been told to **limit fluids**, follow your team’s personalised limit.
+• Watch for **too much** fluid: rapid weight gain (≥1–2 kg in 1–3 days), new swelling in ankles/feet, or headaches/nausea — discuss with your care team
 
 **Habit supports:**
 • **If/When‑Then:** When I put the kettle on in the morning, then I’ll drink a full glass of water.  
@@ -730,6 +838,8 @@ Chronic stress can negatively impact your heart health by raising blood pressure
 • Mindfulness meditation: Focus on the present moment without judgement
 • Regular physical activity: Even a short walk can reduce stress hormones
 • Spending time in nature: Combining movement with green spaces amplifies benefits
+• Paced breathing: **4–6 breaths per minute** for **5 minutes** once or twice daily to build a calmer baseline
+• Tiny pairing: Do a **30‑second body scan** while the kettle boils to create a reliable micro‑pause
 
 **Building Resilience:**
 • Maintain strong social connections with family and friends
@@ -762,6 +872,8 @@ Good quality sleep is essential for cardiovascular health. During sleep, your he
 • Keep your bedroom cool (around 18-20°C), dark, and quiet
 • Avoid screens (phone, TV, computer) for at least 1 hour before bed
 • Use your bedroom only for sleep and intimacy
+• Get **morning outdoor light** for 10–20 minutes to anchor your body clock
+• **Dim lights and screens** 1–2 hours before bed; use night‑shift modes if needed
 
 **Lifestyle Factors Affecting Sleep:**
 • Avoid caffeine after 2 PM as it can stay in your system for 6-8 hours
@@ -769,6 +881,10 @@ Good quality sleep is essential for cardiovascular health. During sleep, your he
 • Finish eating large meals at least 3 hours before bedtime
 • Get regular physical activity, but avoid vigorous exercise close to bedtime
 • Manage stress through relaxation techniques or journaling
+
+**CBT‑I micro‑tips:**
+• Fix your **wake time** first to stabilise sleep
+• If awake in bed >20 minutes, **get up** and do a calm activity in low light until sleepy
 
 **Signs You May Have Sleep Apnoea:**
 • Loud snoring followed by periods of silence
@@ -797,13 +913,17 @@ Maintaining a healthy weight reduces strain on your heart and helps manage blood
 • Include regular physical activity - both cardio and strength training
 • Eat regular meals and healthy snacks to maintain steady energy levels
 • Stay hydrated with water as your main beverage
+• Prioritise **lower energy‑density** foods (veg, salad, broth‑based soups) to feel full on fewer kilojoules
+• Consider a **higher‑protein breakfast** (eggs, yoghurt, legumes) to support appetite control
 
 **Practical Strategies:**
 • Use smaller plates and bowls to help with portion control
 • Fill half your plate with vegetables, quarter with lean protein, quarter with whole grains
 • Eat slowly and pay attention to hunger and fullness cues
+• Drink a 250-300 mL glass of water or a light vegetable soup 15-20 minutes before meals to help you feel satisfied with smaller portions; this can trim ~200-400 kJ (~50-100 kcal) from the meal
 • Plan and prepare healthy meals and snacks in advance
 • Keep a food diary to identify eating patterns and triggers
+• Aim for a **small, sustainable daily kilojoule reduction** via simple habits (fewer sugary drinks, swap refined carbs for legumes/veg)
 
 **Building Sustainable Habits:**
 • Make gradual changes rather than dramatic overhauls
@@ -811,6 +931,7 @@ Maintaining a healthy weight reduces strain on your heart and helps manage blood
 • Focus on how you feel rather than just weight loss
 • Celebrate non-scale victories like increased energy or better sleep
 • Be patient and kind to yourself - sustainable change takes time
+• Framing: **5–10% weight loss** (if appropriate) can improve blood pressure, cholesterol and blood sugars — focus on the process, not crash goals
 
 **When to Seek Additional Support:**
 • If you have significant weight to lose or complex health conditions

@@ -148,21 +148,75 @@ export const MTEER_VALIDATION_COPY: ValidationPromptCopy = {
 };
 
 // =============================================================================
+// Pre-Op Plan Configuration (Pre-Procedure Summary Cards)
+// =============================================================================
+
+export const PREOP_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
+  // Core Procedure Fields (All types)
+  'procedure': { label: 'Procedure', inputType: 'text', placeholder: 'e.g., Angiogram, TAVI, RHC, mTEER', helperText: 'Procedure type (REQUIRED for card generation)' },
+  'indication': { label: 'Indication', inputType: 'text', placeholder: 'e.g., NSTEMI, Severe AS, PHT', helperText: 'Clinical indication for procedure (REQUIRED)' },
+
+  // Access Fields
+  'primaryAccess': { label: 'Primary Access', inputType: 'text', placeholder: 'e.g., Right radial, Right femoral', helperText: 'Primary vascular access site (REQUIRED for most procedures)' },
+  'accessSite': { label: 'Access Site', inputType: 'text', placeholder: 'e.g., Right femoral vein', helperText: 'Access site for RHC or mTEER' },
+  'sheathSizeFr': { label: 'Sheath Size (Fr)', inputType: 'number', placeholder: 'Sheath size in French', helperText: 'Introducer sheath size (REQUIRED)' },
+
+  // Equipment
+  'catheters': { label: 'Catheters', inputType: 'text', placeholder: 'e.g., JL3.5, JR4', helperText: 'Diagnostic/guiding catheters' },
+  'valveTypeSize': { label: 'Valve Type/Size', inputType: 'text', placeholder: 'e.g., Sapien 3 Ultra 26mm', helperText: 'TAVI valve model and size (REQUIRED for TAVI)' },
+  'wire': { label: 'Wire', inputType: 'text', placeholder: 'e.g., Safari, Confida', helperText: 'Guide wire type' },
+  'balloonSizeMm': { label: 'Balloon Size (mm)', inputType: 'number', placeholder: 'Valvuloplasty balloon size', helperText: 'Pre-dilation balloon size for TAVI' },
+  'transeptalCatheter': { label: 'Transeptal Catheter', inputType: 'text', placeholder: 'e.g., Brockenbrough needle', helperText: 'Transeptal puncture equipment (REQUIRED for mTEER)' },
+
+  // Safety & Planning
+  'closurePlan': { label: 'Closure Plan', inputType: 'text', placeholder: 'e.g., 2× ProStyle', helperText: 'Vascular closure device plan' },
+  'pacingWireAccess': { label: 'Pacing Wire Access', inputType: 'text', placeholder: 'e.g., Left femoral venous', helperText: 'Temporary pacing wire access (REQUIRED for TAVI)' },
+  'protamine': { label: 'Protamine', inputType: 'text', placeholder: 'e.g., Yes (no contraindications)', helperText: 'Protamine reversal plan (REQUIRED for TAVI)' },
+  'goalsOfCare': { label: 'Goals of Care', inputType: 'text', placeholder: 'e.g., Routine theatre', helperText: 'Emergency theatre status and care goals (REQUIRED for TAVI)' },
+
+  // Clinical Info
+  'anticoagulationPlan': { label: 'Anticoagulation Plan', inputType: 'text', placeholder: 'e.g., Continue aspirin + ticagrelor', helperText: 'Antiplatelet/anticoagulation management' },
+  'sedation': { label: 'Sedation', inputType: 'text', placeholder: 'e.g., Light sedation', helperText: 'Sedation plan' },
+  'sitePrep': { label: 'Site Prep', inputType: 'text', placeholder: 'e.g., Radial only; chlorhexidine', helperText: 'Skin preparation sites and antiseptic' },
+  'allergies': { label: 'Allergies/Precautions', inputType: 'text', placeholder: 'e.g., Iodine (premed given)', helperText: 'Allergies and precautions taken' },
+  'coMeasurement': { label: 'CO Measurement', inputType: 'text', placeholder: 'e.g., Thermodilution + Fick', helperText: 'Cardiac output measurement method (REQUIRED for RHC)' },
+  'bloodGasSamples': { label: 'Blood Gas Samples', inputType: 'number', placeholder: 'Number of blood gas samples', helperText: 'Number of blood gas samples (RHC)' },
+  'echoSummary': { label: 'Echo Summary', inputType: 'text', placeholder: 'Key echo findings', helperText: 'Echo summary for mTEER (e.g., MR grade, mechanism)' },
+
+  // Labs
+  'recentLabs.hb_g_per_l': { label: 'Hemoglobin (g/L)', inputType: 'number', placeholder: 'Hb in g/L', helperText: 'Recent hemoglobin level' },
+  'recentLabs.creatinine_umol_per_l': { label: 'Creatinine (µmol/L)', inputType: 'number', placeholder: 'Creatinine in µmol/L', helperText: 'Recent creatinine level' },
+
+  // Next of Kin (REQUIRED)
+  'nokName': { label: 'Next of Kin Name', inputType: 'text', placeholder: 'Full name', helperText: 'Next of kin full name (REQUIRED)' },
+  'nokRelationship': { label: 'NOK Relationship', inputType: 'text', placeholder: 'e.g., Partner, Son', helperText: 'Relationship to patient' },
+  'nokPhone': { label: 'NOK Phone', inputType: 'text', placeholder: 'Contact number', helperText: 'Next of kin contact number (REQUIRED)' }
+};
+
+export const PREOP_VALIDATION_COPY: ValidationPromptCopy = {
+  heading: 'Pre-Op Plan Validation Required',
+  description: 'The quick model detected missing procedure details or next-of-kin information. These fields are REQUIRED for a complete pre-procedure summary card.',
+  criticalHelper: 'REQUIRED for complete pre-op card generation and procedural documentation.',
+  optionalHelper: 'Improves card completeness and clinical communication.'
+};
+
+// =============================================================================
 // Agent Type Mapping
 // =============================================================================
 
-export type ValidatableAgentType = 'rhc' | 'tavi' | 'angio-pci' | 'mteer';
+export type ValidatableAgentType = 'rhc' | 'tavi' | 'angio-pci' | 'mteer' | 'pre-op-plan';
 
 export const VALIDATION_CONFIG_MAP = {
   rhc: { fieldConfig: RHC_FIELD_CONFIG, copy: RHC_VALIDATION_COPY },
   tavi: { fieldConfig: TAVI_FIELD_CONFIG, copy: TAVI_VALIDATION_COPY },
   'angio-pci': { fieldConfig: ANGIO_PCI_FIELD_CONFIG, copy: ANGIO_PCI_VALIDATION_COPY },
-  mteer: { fieldConfig: MTEER_FIELD_CONFIG, copy: MTEER_VALIDATION_COPY }
+  mteer: { fieldConfig: MTEER_FIELD_CONFIG, copy: MTEER_VALIDATION_COPY },
+  'pre-op-plan': { fieldConfig: PREOP_FIELD_CONFIG, copy: PREOP_VALIDATION_COPY }
 } as const;
 
 /**
  * Get validation field configuration for a specific agent type
- * @param agentType - The agent type (rhc, tavi, angio-pci, mteer)
+ * @param agentType - The agent type (rhc, tavi, angio-pci, mteer, pre-op-plan)
  * @returns Field configuration and copy text for validation modal
  */
 export function getValidationConfig(agentType: ValidatableAgentType) {

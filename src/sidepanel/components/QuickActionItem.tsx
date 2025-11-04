@@ -31,7 +31,40 @@ export interface QuickActionItemProps {
   workflowId?: AgentType;
   onDictate?: (workflowId: AgentType, actionId: string) => void;
   onType?: (actionId: string) => void;
+  // Color theme for functional grouping
+  colorTheme?: 'blue' | 'cyan' | 'purple' | 'emerald' | 'violet';
 }
+
+/**
+ * Color theme mapping for icons and hover states
+ */
+const COLOR_THEMES = {
+  blue: {
+    icon: 'text-blue-600',
+    hover: 'hover:bg-blue-50',
+    spinner: 'border-blue-600'
+  },
+  cyan: {
+    icon: 'text-cyan-600',
+    hover: 'hover:bg-cyan-50',
+    spinner: 'border-cyan-600'
+  },
+  purple: {
+    icon: 'text-purple-600',
+    hover: 'hover:bg-purple-50',
+    spinner: 'border-purple-600'
+  },
+  emerald: {
+    icon: 'text-emerald-600',
+    hover: 'hover:bg-emerald-50',
+    spinner: 'border-emerald-600'
+  },
+  violet: {
+    icon: 'text-violet-600',
+    hover: 'hover:bg-violet-50',
+    spinner: 'border-violet-600'
+  }
+} as const;
 
 /**
  * Determines if we should use alias based on label length
@@ -55,11 +88,15 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
   isExpandable = false,
   workflowId,
   onDictate,
-  onType
+  onType,
+  colorTheme
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const displayLabel = shouldUseAlias(label, alias) && alias ? alias : label;
   const showTooltip = (alias && shouldUseAlias(label, alias)) || label.length > 15;
+
+  // Determine colors based on theme or default (blue for core, gray for secondary)
+  const theme = colorTheme ? COLOR_THEMES[colorTheme] : (category === 'core' ? COLOR_THEMES.blue : { icon: 'text-gray-600', hover: 'hover:bg-gray-50', spinner: 'border-gray-600' });
 
   const handleMouseEnter = useCallback(() => {
     if (!isProcessing && isExpandable) {
@@ -97,7 +134,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
           transition-all duration-150
           ${disabled || isProcessing
             ? 'opacity-50 cursor-not-allowed'
-            : 'hover:bg-gray-50 active:bg-gray-100 cursor-pointer'
+            : `${theme.hover} active:bg-gray-100 cursor-pointer`
           }
           ${className}
         `}
@@ -117,16 +154,16 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
           <Icon
             className={`
               w-5 h-5
-              ${category === 'core' ? 'text-blue-600' : 'text-gray-600'}
+              ${theme.icon}
               ${isProcessing ? 'animate-pulse' : ''}
             `}
             strokeWidth={2}
           />
         </div>
 
-        {/* Label - max 2 lines, centered, 12px font */}
+        {/* Label - max 2 lines, centered, 11px font for better 5-col fit */}
         <div className="
-          text-xs font-medium text-gray-700 text-center leading-tight
+          text-[11px] font-medium text-gray-700 text-center leading-tight
           max-w-full
           line-clamp-2
         ">
@@ -141,7 +178,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className={`w-4 h-4 border-2 ${theme.spinner} border-t-transparent rounded-full animate-spin`} />
           </motion.div>
         )}
 
@@ -174,7 +211,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
           className={`
             group w-full h-full flex flex-col items-center justify-center
             p-2 rounded-lg transition-all duration-150
-            hover:bg-gray-50
+            ${theme.hover}
             ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
           `}
           aria-label={label}
@@ -183,19 +220,19 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
           {/* Icon */}
           <div className="w-6 h-6 mb-1.5 flex items-center justify-center">
             <Icon
-              className={`w-5 h-5 ${category === 'core' ? 'text-blue-600' : 'text-gray-600'}`}
+              className={`w-5 h-5 ${theme.icon}`}
               strokeWidth={2}
             />
           </div>
 
           {/* Label */}
-          <div className="text-xs font-medium text-gray-700 text-center leading-tight line-clamp-2">
+          <div className="text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2">
             {displayLabel}
           </div>
 
           {isProcessing && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
-              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <div className={`w-4 h-4 border-2 ${theme.spinner} border-t-transparent rounded-full animate-spin`} />
             </div>
           )}
         </button>
@@ -215,14 +252,14 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
               flex flex-col items-center justify-center
               rounded-l-lg border-r border-gray-200
               transition-all duration-150
-              hover:bg-blue-50
+              ${theme.hover}
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             title={`Dictate ${label}`}
             aria-label={`Dictate ${label} with voice`}
           >
-            <Mic className="w-4 h-4 text-blue-600 mb-1" strokeWidth={2} />
-            <div className="text-[10px] font-medium text-blue-700 leading-none">
+            <Mic className={`w-4 h-4 ${theme.icon} mb-1`} strokeWidth={2} />
+            <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
               Dict
             </div>
           </button>
@@ -235,14 +272,14 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
               flex flex-col items-center justify-center
               rounded-r-lg
               transition-all duration-150
-              hover:bg-blue-50
+              ${theme.hover}
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             title={`Type ${label}`}
             aria-label={`Type ${label} manually`}
           >
-            <Keyboard className="w-4 h-4 text-blue-600 mb-1" strokeWidth={2} />
-            <div className="text-[10px] font-medium text-blue-700 leading-none">
+            <Keyboard className={`w-4 h-4 ${theme.icon} mb-1`} strokeWidth={2} />
+            <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
               Type
             </div>
           </button>

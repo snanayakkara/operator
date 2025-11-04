@@ -39,6 +39,8 @@ export interface QuickActionConfig {
   // Expandable actions (hover reveals Dictate vs Type)
   isExpandable?: boolean;
   workflowId?: 'investigation-summary' | 'background' | 'medication' | 'bloods' | 'imaging';
+  // Color theme for functional grouping
+  colorTheme?: 'blue' | 'cyan' | 'purple' | 'emerald' | 'violet';
 }
 
 /**
@@ -119,15 +121,6 @@ export const CORE_ACTIONS: QuickActionConfig[] = [
     category: 'documentation'
   },
   {
-    id: 'paste-letter',
-    label: 'Paste Letter',
-    alias: 'Paste',
-    icon: FileText,
-    description: 'Generate letter from pasted notes',
-    group: 'core',
-    category: 'documentation'
-  },
-  {
     id: 'appointment-wrap-up',
     label: 'Wrap Up',
     icon: Calendar,
@@ -149,7 +142,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: GraduationCap,
     description: 'Generate lifestyle advice and education',
     group: 'secondary',
-    category: 'documentation'
+    category: 'documentation',
+    colorTheme: 'blue' // Documentation (matches core)
   },
   {
     id: 'pre-op-plan',
@@ -158,7 +152,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: ClipboardList,
     description: 'Generate A5 pre-procedure summary card for cath lab',
     group: 'secondary',
-    category: 'documentation'
+    category: 'documentation',
+    colorTheme: 'blue' // Documentation (matches core)
   },
   {
     id: 'annotate-screenshots',
@@ -166,7 +161,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Combine,
     description: 'Capture, annotate, and combine multiple screenshots',
     group: 'secondary',
-    category: 'emr'
+    category: 'emr',
+    colorTheme: 'cyan' // Media/Visual tools
   },
   {
     id: 'profile-photo',
@@ -174,7 +170,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Camera,
     description: 'Capture screenshot for patient profile',
     group: 'secondary',
-    category: 'emr'
+    category: 'emr',
+    colorTheme: 'cyan' // Media/Visual tools
   },
   {
     id: 'bp-diary-importer',
@@ -182,7 +179,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Activity,
     description: 'Import and analyze blood pressure diary images',
     group: 'secondary',
-    category: 'analysis'
+    category: 'analysis',
+    colorTheme: 'purple' // Analysis/Data import
   },
   {
     id: 'lipid-profile-importer',
@@ -191,7 +189,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Droplet,
     description: 'Import lipid profiles from Investigation Summary and generate insights',
     group: 'secondary',
-    category: 'analysis'
+    category: 'analysis',
+    colorTheme: 'purple' // Analysis/Data import
   },
   {
     id: 'tte-trend-importer',
@@ -200,7 +199,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Scan,
     description: 'Import echo reports, trend LVEF/RVSP/LVEDD, and generate clinical insights',
     group: 'secondary',
-    category: 'analysis'
+    category: 'analysis',
+    colorTheme: 'purple' // Analysis/Data import
   },
   {
     id: 'create-task',
@@ -209,7 +209,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: CheckSquare,
     description: 'Add new task to workflow',
     group: 'secondary',
-    category: 'workflow'
+    category: 'workflow',
+    colorTheme: 'emerald' // Workflow/Tasks
   },
   {
     id: 'ai-medical-review',
@@ -218,7 +219,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Bot,
     description: 'Australian clinical oversight and guidelines review',
     group: 'secondary',
-    category: 'analysis'
+    category: 'analysis',
+    colorTheme: 'violet' // AI Intelligence
   },
   {
     id: 'batch-ai-review',
@@ -227,7 +229,8 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     icon: Users,
     description: 'AI review for multiple patients from appointment book',
     group: 'secondary',
-    category: 'analysis'
+    category: 'analysis',
+    colorTheme: 'violet' // AI Intelligence
   }
 ];
 

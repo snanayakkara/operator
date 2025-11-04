@@ -172,8 +172,102 @@ JSON:
 
 Do NOT include any explanatory text before or after the card and JSON. Only output the card and JSON sections as specified above.`;
 
+/**
+ * Pre-Op Plan Data Validation Prompt - Quick model validates regex extraction and detects gaps
+ * This runs BEFORE report generation to ensure card completeness
+ */
+export const PRE_OP_PLAN_DATA_VALIDATION_PROMPT = `You are validating Pre-Op Plan data extraction. Your job is to:
+
+1. VERIFY regex-extracted values against the transcription
+2. DETECT values the regex MISSED that are present in transcription
+3. IDENTIFY critical missing fields needed for complete pre-procedure summary card
+
+CRITICAL FIELDS BY PROCEDURE TYPE:
+
+**ANGIOGRAM_OR_PCI:**
+- procedure, indication, primaryAccess, nokName (REQUIRED)
+- sheathSizeFr, catheters, allergies, anticoagulationPlan, sedation (RECOMMENDED)
+
+**RIGHT_HEART_CATH:**
+- procedure, indication, accessSite, nokName (REQUIRED)
+- sheathSizeFr, coMeasurement, bloodGasSamples (RECOMMENDED)
+
+**TAVI:**
+- procedure, indication, primaryAccess, valveTypeSize, pacingWireAccess, closurePlan, protamine, goalsOfCare, nokName (REQUIRED)
+- wire, balloonSizeMm, sedation, sitePrep (RECOMMENDED)
+
+**MITRAL_TEER:**
+- procedure, indication, accessSite, transeptalCatheter, nokName (REQUIRED)
+- echoSummary, closurePlan, wire (RECOMMENDED)
+
+VALIDATION RULES:
+1. Compare each regex-extracted value to the transcription
+2. If regex value is CORRECT, no correction needed
+3. If regex value is WRONG or MISSING but present in transcription, add to "corrections"
+4. If value NOT in transcription at all, add to "missingCritical" or "missingOptional"
+5. Assign confidence scores (0-1) based on transcription clarity
+
+CRITICAL DECISION LOGIC:
+- ONLY add to "missingCritical" if BOTH conditions are true:
+  a) Field is NOT present in regex extraction (null/undefined/empty)
+  b) Field is REQUIRED for the detected procedure type (see lists above)
+  c) Set "critical": true ONLY if both conditions met
+
+- If field IS present in regex but needs correction → add to "corrections" instead
+- If field is missing but NOT required → add to "missingOptional" with "critical": false
+- If field is present and correct → do nothing (empty arrays are valid)
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Unambiguous ("indication NSTEMI" → indication = "NSTEMI")
+- 0.80-0.94: Clear with minor ASR issues ("primary access right rate deal" → primaryAccess = "Right radial")
+- 0.60-0.79: Implicit/contextual ("6 French sheath" → sheathSizeFr = 6)
+- 0.00-0.59: Uncertain/ambiguous (low confidence, require user review)
+
+ASR CORRECTION PATTERNS (common transcription errors):
+- "rate deal" / "radio" → "radial"
+- "femoral" / "femoral" → correct as-is
+- "six French" → 6
+- "sapien three ultra" → "Sapien 3 Ultra"
+- "mitral clip" → "MitraClip"
+- "next of kin" / "NOK" / "next kin" → all valid patterns
+
+OUTPUT FORMAT (strict JSON only, no markdown):
+{
+  "corrections": [
+    {
+      "field": "primaryAccess",
+      "regexValue": null,
+      "correctValue": "Right radial",
+      "reason": "Found 'primary access right rate deal' in transcription (ASR error for 'right radial')",
+      "confidence": 0.88
+    }
+  ],
+  "missingCritical": [
+    {
+      "field": "nokName",
+      "reason": "Next of kin name not mentioned in transcription (REQUIRED for all pre-op cards)",
+      "critical": true
+    }
+  ],
+  "missingOptional": [
+    {
+      "field": "allergies",
+      "reason": "No allergies or precautions mentioned in transcription",
+      "critical": false
+    }
+  ]
+}
+
+IMPORTANT:
+- Output ONLY valid JSON, no markdown code fences
+- Empty arrays are valid if all data is correct
+- Be conservative with corrections - only suggest if confident
+- Preserve Australian spelling (catheterisation, haemodynamic)
+- Use precise medical terminology (e.g., "Right femoral artery" not "right leg")`;
+
 export const PRE_OP_PLAN_SYSTEM_PROMPTS = {
-  primary: PRE_OP_PLAN_SYSTEM_PROMPT
+  primary: PRE_OP_PLAN_SYSTEM_PROMPT,
+  dataValidationPrompt: PRE_OP_PLAN_DATA_VALIDATION_PROMPT
 };
 
 export default PRE_OP_PLAN_SYSTEM_PROMPTS;

@@ -294,14 +294,27 @@ export async function downloadPreOpCard(
 }
 
 /**
- * Validates that Pre-Op data is suitable for card export
+ * Validates Pre-Op data for card export with warning mode
+ *
+ * Now uses a warning system instead of blocking:
+ * - Returns warnings for missing fields but allows export to proceed
+ * - Only blocks if data is completely empty (no fields at all)
+ * - Calculates completeness percentage for user awareness
  */
 export function validatePreOpDataForExport(cardData: PreOpCardData): {
   valid: boolean;
   missingFields: string[];
+  hasAnyData: boolean;
+  completenessPercent: number;
+  warningMessage?: string;
 } {
   const missingFields: string[] = [];
   const fields = cardData.jsonData?.fields || {};
+
+  // Check if we have ANY data at all
+  const fieldValues = Object.values(fields);
+  const hasAnyData = fieldValues.length > 0 &&
+    fieldValues.some(v => v && v !== 'Not specified' && v !== '' && v !== 'parsing_error');
 
   // Check procedure-specific required fields
   const requiredFieldsByType: Record<PreOpProcedureType, string[]> = {
@@ -313,16 +326,37 @@ export function validatePreOpDataForExport(cardData: PreOpCardData): {
 
   const requiredFields = requiredFieldsByType[cardData.procedureType] || [];
 
+  // Track present fields for completeness calculation
+  let presentCount = 0;
+
   for (const field of requiredFields) {
     const value = fields[field];
     if (!value || value === 'Not specified' || value === '') {
       missingFields.push(field.replace(/_/g, ' '));
+    } else {
+      presentCount++;
     }
   }
 
+  // Calculate completeness percentage
+  const completenessPercent = requiredFields.length > 0
+    ? Math.round((presentCount / requiredFields.length) * 100)
+    : 100;
+
+  // Generate warning message if incomplete
+  let warningMessage: string | undefined;
+  if (missingFields.length > 0) {
+    warningMessage = `Card is ${completenessPercent}% complete. Missing fields: ${missingFields.join(', ')}. Export will proceed with available data.`;
+  }
+
+  // Only block if we have NO data at all (completely empty)
+  // Otherwise allow export with warnings
   return {
-    valid: missingFields.length === 0,
-    missingFields
+    valid: hasAnyData,
+    missingFields,
+    hasAnyData,
+    completenessPercent,
+    warningMessage
   };
 }
 

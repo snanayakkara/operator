@@ -349,7 +349,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
 
   return (
     <>
-      <group position={[0, 18, 0]}>
+      <group position={[0, 19, 0]}>
         <RigidBody ref={fixed} {...segmentProps} type={'fixed' as RigidBodyProps['type']} />
         <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps} type={'dynamic' as RigidBodyProps['type']}>
           <BallCollider args={[0.1]} />

@@ -16,11 +16,14 @@ import {
   ArrowRight as _ArrowRight,
   XCircle,
   Search,
-  HardDrive
+  HardDrive,
+  Calendar,
+  Archive
 } from 'lucide-react';
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
 import type { PatientSession, SessionStatus } from '@/types/medical.types';
+import type { StorageStats } from '@/types/persistence.types';
 import { getStateColors, type ProcessingState } from '@/utils/stateColors';
 import { getAgentColors, getAgentCategoryIcon } from '@/utils/agentCategories';
 
@@ -40,10 +43,71 @@ interface SessionDropdownProps {
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked, from parent state)
   onToggleSessionCheck?: (sessionId: string) => void; // Callback to toggle check state in parent
   persistedSessionIds?: Set<string>; // Sessions stored locally (for hard drive icon)
+  // Storage management
+  storageStats?: StorageStats | null;
+  onDeleteAllChecked?: () => Promise<void>;
+  onDeleteOldSessions?: (daysOld: number) => Promise<void>;
 }
 
 // Performance constants
 const INITIAL_VISIBLE_SESSIONS = 3; // Show only first 3 sessions in each category initially
+
+// Date grouping helpers
+type DateGroup = 'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 30 Days' | 'Older';
+
+const getDateGroup = (timestamp: number): DateGroup => {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (diff < dayMs) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (timestamp >= today.getTime()) {
+      return 'Today';
+    }
+    return 'Yesterday';
+  }
+  if (diff < 2 * dayMs) return 'Yesterday';
+  if (diff < 7 * dayMs) return 'This Week';
+  if (diff < 30 * dayMs) return 'Last 30 Days';
+  return 'Older';
+};
+
+const formatRecordedDate = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  // Reset hours for date comparison
+  const dateOnly = new Date(date);
+  dateOnly.setHours(0, 0, 0, 0);
+  const todayOnly = new Date(today);
+  todayOnly.setHours(0, 0, 0, 0);
+  const yesterdayOnly = new Date(yesterday);
+  yesterdayOnly.setHours(0, 0, 0, 0);
+
+  if (dateOnly.getTime() === todayOnly.getTime()) {
+    return 'Today';
+  }
+  if (dateOnly.getTime() === yesterdayOnly.getTime()) {
+    return 'Yesterday';
+  }
+
+  // Format as "Mon, 4 Nov"
+  return date.toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short'
+  });
+};
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
 
 type TimelineState =
   | 'recording'
@@ -400,6 +464,10 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
               <span className="flex items-center gap-0.5">
+                <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                {formatRecordedDate(session.timestamp)}
+              </span>
+              <span className="flex items-center gap-0.5">
                 <Clock className="w-2.5 h-2.5 text-slate-400" />
                 {formatClockTime(session.timestamp)}
               </span>
@@ -506,7 +574,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   position,
   checkedSessionIds = new Set(),
   onToggleSessionCheck,
-  persistedSessionIds = new Set()
+  persistedSessionIds = new Set(),
+  storageStats,
+  onDeleteAllChecked,
+  onDeleteOldSessions
 }) => {
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   // Local state for lazy loading
@@ -514,6 +585,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   const [showAllInProgress, setShowAllInProgress] = useState(false);
   const [showAllErrored, setShowAllErrored] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
   useEffect(() => {
     if (!copiedSessionId) return;
@@ -651,6 +723,36 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   const handleClearAll = () => {
     onClearAllSessions();
     onClose();
+  };
+
+  const handleDeleteAllChecked = async () => {
+    if (!onDeleteAllChecked) return;
+    if (!confirm('Delete all checked sessions from storage? This cannot be undone.')) {
+      return;
+    }
+    setIsDeletingBulk(true);
+    try {
+      await onDeleteAllChecked();
+    } catch (error) {
+      console.error('Failed to delete checked sessions:', error);
+    } finally {
+      setIsDeletingBulk(false);
+    }
+  };
+
+  const handleDeleteOldSessions = async (daysOld: number) => {
+    if (!onDeleteOldSessions) return;
+    if (!confirm(`Delete all sessions older than ${daysOld} days from storage? This cannot be undone.`)) {
+      return;
+    }
+    setIsDeletingBulk(true);
+    try {
+      await onDeleteOldSessions(daysOld);
+    } catch (error) {
+      console.error('Failed to delete old sessions:', error);
+    } finally {
+      setIsDeletingBulk(false);
+    }
   };
 
   // Optimized position calculation with debouncing and caching
@@ -972,6 +1074,94 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
           </>
         )}
       </div>
+
+      {/* Storage Bar and Bulk Actions */}
+      {storageStats && storageStats.sessionCount > 0 && (
+        <div className="border-t border-gray-200 bg-gray-50">
+          {/* Bulk Actions */}
+          {(checkedSessionIds.size > 0 || persistedSessionIds.size > 3) && (
+            <div className="p-3 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                  <Archive className="w-3 h-3" />
+                  Storage Actions
+                </span>
+                {persistedSessionIds.size > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {persistedSessionIds.size} saved
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {checkedSessionIds.size > 0 && onDeleteAllChecked && (
+                  <button
+                    onClick={handleDeleteAllChecked}
+                    disabled={isDeletingBulk}
+                    className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete all checked sessions from storage"
+                  >
+                    Delete Checked ({checkedSessionIds.size})
+                  </button>
+                )}
+                {persistedSessionIds.size > 3 && onDeleteOldSessions && (
+                  <>
+                    <button
+                      onClick={() => handleDeleteOldSessions(7)}
+                      disabled={isDeletingBulk}
+                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete sessions older than 7 days"
+                    >
+                      Delete &gt;7d
+                    </button>
+                    <button
+                      onClick={() => handleDeleteOldSessions(30)}
+                      disabled={isDeletingBulk}
+                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete sessions older than 30 days"
+                    >
+                      Delete &gt;30d
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Storage Usage Bar */}
+          <div className="p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
+                <HardDrive className="w-3 h-3" />
+                Storage
+              </span>
+              <span className={`text-xs font-semibold ${
+                storageStats.usedPercentage >= 90 ? 'text-red-600' :
+                storageStats.usedPercentage >= 80 ? 'text-amber-600' :
+                'text-emerald-600'
+              }`}>
+                {formatBytes(storageStats.usedBytes)} / {formatBytes(storageStats.totalBytes)}
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  storageStats.usedPercentage >= 90 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                  storageStats.usedPercentage >= 80 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
+                  'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                }`}
+                style={{ width: `${Math.min(100, storageStats.usedPercentage)}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-600">
+              <span>{storageStats.sessionCount} session{storageStats.sessionCount !== 1 ? 's' : ''}</span>
+              <span>{storageStats.usedPercentage.toFixed(1)}% used</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
