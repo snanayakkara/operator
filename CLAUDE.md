@@ -331,12 +331,28 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.29.0**
+**Current Version**: **3.29.1**
 **Last Updated**: November 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.29.1 (Nov 2025)** - Critical Bugfix Release
+- **Fixed validation checkpoint logic bug** affecting all 4 procedural agents (RHC, TAVI, AngioPCI, mTEER)
+  - **Issue**: Agents incorrectly triggered validation modal even when all critical fields were present
+  - **Root cause**: Checkpoint checked `missingCritical.length > 0` without filtering by `critical: true` property
+  - **Fix**: Now filters with `.some(field => field.critical === true)` before triggering checkpoint
+  - **Impact**: Agents correctly distinguish between "field present but flagged by model" vs "field truly missing and critical"
+- **Enhanced quick model validation prompt** (RHC)
+  - Added explicit "CRITICAL DECISION LOGIC" section with clear rules for when to mark fields as critical
+  - Guidance: Only add to `missingCritical` if BOTH (a) field not in regex extraction AND (b) field required for calculations
+  - Prevents model confusion about when to set `critical: true` vs `critical: false`
+- **Migrated RHC to centralized validation config**
+  - RHC now uses `getValidationConfig('rhc')` instead of local field definitions
+  - Ensures consistency with TAVI, AngioPCI, mTEER agents (v3.29.0 pattern)
+- **Improved console logging**: Shows accurate critical field counts ("X critical fields missing, Y low-confidence corrections")
+- **Files modified**: 4 agents (checkpoint logic), 1 system prompt (validation guidance), 1 display component (centralized config)
 
 **v3.29.0 (Nov 2025)**
 - **Universal Validation Workflow Extension**: Interactive validation now deployed across 4 procedural agents (RHC → TAVI, AngioPCI, mTEER)
