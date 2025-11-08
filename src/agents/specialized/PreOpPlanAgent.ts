@@ -78,10 +78,36 @@ export class PreOpPlanAgent extends MedicalAgent {
       logger.info('PreOpPlanAgent: Applying high-confidence corrections...');
       const correctedData = this.applyCorrections(extracted, validation.corrections, 0.8);
 
+      // DIAGNOSTIC LOGGING: Validation result structure
+      console.log('🔍 PreOpPlanAgent: Validation result:', {
+        correctionsCount: validation.corrections.length,
+        missingCriticalCount: validation.missingCritical.length,
+        missingOptionalCount: validation.missingOptional?.length || 0,
+        missingCriticalFields: validation.missingCritical.map(f => ({
+          field: f.field,
+          critical: f.critical,
+          reason: f.reason
+        })),
+        lowConfidenceCorrections: validation.corrections.filter(c => c.confidence < 0.8).map(c => ({
+          field: c.field,
+          confidence: c.confidence,
+          correctValue: c.correctValue
+        }))
+      });
+
       // STEP 5: Check for critical gaps - INTERACTIVE CHECKPOINT
       reportProgress(40, 'Checking for missing fields');
       const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
       const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
+
+      // DIAGNOSTIC LOGGING: Checkpoint decision
+      console.log('🚦 PreOpPlanAgent: Checkpoint decision:', {
+        hasCriticalGaps,
+        hasLowConfidenceCorrections,
+        willTriggerCheckpoint: hasCriticalGaps || hasLowConfidenceCorrections,
+        criticalGapsCount: validation.missingCritical.filter(f => f.critical === true).length,
+        lowConfCount: validation.corrections.filter(c => c.confidence < 0.8).length
+      });
 
       if (hasCriticalGaps || hasLowConfidenceCorrections) {
         const criticalCount = validation.missingCritical.filter(f => f.critical === true).length;

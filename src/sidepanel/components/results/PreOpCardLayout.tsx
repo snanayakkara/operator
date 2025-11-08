@@ -24,9 +24,18 @@ export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
   const fields = jsonData.fields || {};
   const procedureType = jsonData.procedure_type;
 
-  // Helper to check if field has value
+  // Helper to check if field has value (show "Not specified" for transparency)
   const hasValue = (value: any): boolean => {
-    return value && value !== 'Not specified' && value !== '';
+    return value && value !== '';
+  };
+
+  // Helper to format values (add styling for "Not specified")
+  const formatValue = (value: any): React.ReactNode => {
+    if (!value || value === '') return null;
+    if (value === 'Not specified') {
+      return <span className="text-gray-400 italic">Not specified</span>;
+    }
+    return value;
   };
 
   return (
@@ -48,7 +57,7 @@ export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
             Indication
           </div>
-          <div className="text-base text-gray-900">{fields.indication}</div>
+          <div className="text-base text-gray-900">{formatValue(fields.indication)}</div>
         </div>
       )}
 
@@ -60,7 +69,7 @@ export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
               Access
             </div>
             <div className="text-base text-gray-900">
-              {fields.primary_access || fields.access_site}
+              {formatValue(fields.primary_access || fields.access_site)}
             </div>
           </div>
         )}
@@ -70,7 +79,9 @@ export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Sheath
             </div>
-            <div className="text-base text-gray-900">{fields.sheath_size_fr} Fr</div>
+            <div className="text-base text-gray-900">
+              {formatValue(fields.sheath_size_fr)} {fields.sheath_size_fr !== 'Not specified' && 'Fr'}
+            </div>
           </div>
         )}
 
@@ -246,12 +257,12 @@ export const PreOpCardLayout: React.FC<PreOpCardLayoutProps> = ({
             Next of Kin
           </div>
           <div className="text-base text-gray-900">
-            <span className="font-medium">{fields.nok_name}</span>
+            <span className="font-medium">{formatValue(fields.nok_name)}</span>
             {hasValue(fields.nok_relationship) && (
-              <span className="text-gray-600"> ({fields.nok_relationship})</span>
+              <span className="text-gray-600"> ({formatValue(fields.nok_relationship)})</span>
             )}
             {hasValue(fields.nok_phone) && (
-              <span className="text-gray-600"> • {fields.nok_phone}</span>
+              <span className="text-gray-600"> • {formatValue(fields.nok_phone)}</span>
             )}
           </div>
         </div>

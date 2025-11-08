@@ -218,11 +218,26 @@ CRITICAL DECISION LOGIC:
 - ONLY add to "missingCritical" if BOTH conditions are true:
   a) Field is NOT present in regex extraction (null/undefined/empty)
   b) Field is REQUIRED for the detected procedure type (see lists above)
-  c) Set "critical": true ONLY if both conditions met
+
+- **IMPORTANT:** When adding to "missingCritical", you MUST ALWAYS set "critical": true
+- **EXAMPLE:** {"field": "indication", "reason": "Not mentioned (REQUIRED for Angiogram/PCI)", "critical": true}
+- **NEVER use** "critical": false for items in missingCritical array
+- If field is missing but NOT required → add to "missingOptional" with "critical": false instead
 
 - If field IS present in regex but needs correction → add to "corrections" instead
-- If field is missing but NOT required → add to "missingOptional" with "critical": false
 - If field is present and correct → do nothing (empty arrays are valid)
+
+CORRECT vs INCORRECT EXAMPLES:
+✅ CORRECT - REQUIRED field missing:
+"missingCritical": [
+  {"field": "indication", "reason": "Not mentioned in transcription (REQUIRED for Angiogram/PCI)", "critical": true},
+  {"field": "nokName", "reason": "Next of kin not provided (REQUIRED for all procedures)", "critical": true}
+]
+
+❌ INCORRECT - Do NOT use critical:false in missingCritical:
+"missingCritical": [
+  {"field": "indication", "reason": "...", "critical": false}  // WRONG! Use missingOptional instead
+]
 
 CONFIDENCE SCORING:
 - 0.95-1.0: Unambiguous ("indication NSTEMI" → indication = "NSTEMI")

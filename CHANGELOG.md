@@ -9,6 +9,31 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.30.2] - 2025-11-08
+
+### Fixed
+
+- **Pre-Op Plan Validation Checkpoint Improvements**
+  - Added enhanced diagnostic logging to track validation decisions and checkpoint triggers
+  - Logs validation result structure (missing critical fields, low-confidence corrections)
+  - Logs checkpoint decision logic (hasCriticalGaps, willTriggerCheckpoint)
+  - Fixed typo in logging code (`correctedValue` → `correctValue`)
+
+### Changed
+
+- **Pre-Op Plan Quick Model Instructions**
+  - Strengthened validation prompt to explicitly require `"critical": true` for missing REQUIRED fields
+  - Added clear examples of correct vs incorrect `missingCritical` array formatting
+  - Emphasized that items in `missingCritical` MUST ALWAYS have `critical: true`
+  - Added warning against using `critical: false` in `missingCritical` (should use `missingOptional` instead)
+
+- **Pre-Op Card Display**
+  - Updated `PreOpCardLayout` to show "Not specified" values instead of hiding them
+  - Added visual styling for "Not specified" values (gray, italic) for transparency
+  - Created `formatValue()` helper to distinguish between empty fields and unspecified REQUIRED fields
+  - Ensures cards aren't empty when LLM generates "Not specified" for missing fields
+  - Applied formatting to key fields: indication, access, sheath size, NOK information
+
 ## [3.30.1] - 2025-11-05
 
 ### Fixed
@@ -255,7 +280,7 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 ### Added
 
 - **RHC Card Preview Modal**
-  - New preview modal for 13×13cm RHC cards before export
+  - New preview modal for 18×10cm RHC cards before export
   - **Copy to Clipboard** button using Clipboard API for images
   - **Download PNG** button for saving cards
   - Modal dismissable by clicking outside (overlay click handler)
