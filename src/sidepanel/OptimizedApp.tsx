@@ -2777,12 +2777,15 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [actions, recorder.isRecording]);
 
   // Handle Type mode for expandable workflows (e.g., Quick Letter)
+  // Track which workflow invoked Type mode
+  const [typeWorkflowId, setTypeWorkflowId] = React.useState<AgentType | null>(null);
+
   const handleTypeClick = useCallback((workflowId: AgentType) => {
     console.log('⌨️ Type mode selected for workflow:', workflowId);
 
-    // For Quick Letter, open the paste notes modal
-    if (workflowId === 'quick-letter') {
-      console.log('📋 Opening Paste Notes Panel for Quick Letter');
+    // Open the paste-notes panel for supported workflows
+    if (workflowId === 'quick-letter' || workflowId === 'right-heart-cath') {
+      setTypeWorkflowId(workflowId);
       actions.openOverlay('paste-notes');
       actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
     }
@@ -5051,13 +5054,16 @@ const OptimizedAppContent: React.FC = memo(() => {
       {overlayState.pasteNotes && (
         <PasteNotesPanel
           isVisible={overlayState.pasteNotes}
-          isGenerating={state.isProcessing && state.currentAgent === 'quick-letter'}
+          isGenerating={state.isProcessing && (state.currentAgent === 'quick-letter' || state.currentAgent === 'right-heart-cath')}
           onClose={() => {
             actions.closeOverlay('paste-notes');
             actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+            setTypeWorkflowId(null);
           }}
           onGenerate={async (notes: string) => {
-            console.log('📋 Processing pasted notes for Quick Letter...');
+            // Route based on which workflow invoked Type mode
+            const wf = typeWorkflowId || 'quick-letter';
+            console.log('📋 Processing pasted notes for workflow:', wf);
 
             try {
               // Close the paste modal
@@ -5066,116 +5072,151 @@ const OptimizedAppContent: React.FC = memo(() => {
               // Extract patient data from EMR
               const patientData = await extractPatientData();
 
-              // Create EMR context for processPaste
-              const emrContext = {
-                demographics: {
-                  name: patientData.name,
-                  age: patientData.age,
-                  dob: patientData.dob,
-                  gender: patientData.gender,
-                  mrn: patientData.mrn
-                },
-                gp: patientData.gp,
-                allergies: patientData.allergies || [],
-                background: patientData.background || '',
-                investigation_summary: patientData.investigationSummary || '',
-                medications_emr: (patientData.medications || []).map((med: any) => ({
-                  name: med.name || med,
-                  dose: med.dose || '',
-                  frequency: med.frequency || '',
-                  indication: med.indication || ''
-                }))
-              };
-
-              // Create a session for this paste operation
-              const sessionId = `paste-${Date.now()}`;
-              const patientSession: PatientSession = {
-                id: sessionId,
-                patient: patientData,
-                timestamp: Date.now(),
-                agentType: 'quick-letter' as AgentType,
-                agentName: 'Quick Letter',
-                status: 'processing' as const,
-                transcription: notes, // Use pasted notes as "transcription"
-                results: '',
-                completed: false,
-                processingTime: 0,
-                modelUsed: '',
-                pipelineProgress: { stage: 'ai-analysis', progress: 0, stageProgress: 0 }
-              };
-
-              actions.addPatientSession(patientSession);
-              actions.setCurrentSessionId(sessionId);
-              actions.setSelectedSessionId(sessionId);
-              actions.setUIMode('processing', { sessionId, origin: 'user' });
-              actions.setProcessing(true);
-              actions.setProcessingStatus('processing');
-              actions.setProcessingStartTime(Date.now());
-
-              // Get QuickLetterAgent instance
-              const QuickLetterAgentClass = (await import('@/agents/specialized/QuickLetterAgent')).QuickLetterAgent;
-              const quickLetterAgent = new QuickLetterAgentClass();
-
-              // Call processPaste method
-              const report = await quickLetterAgent.processPaste(
-                notes,
-                emrContext,
-                {
-                  identity_mismatch: false,
-                  patient_friendly_requested: false
-                },
-                {
-                  onProgress: (message: string) => {
-                    console.log(`📝 Paste processing: ${message}`);
-                    // Update pipeline progress if needed
+              if (wf === 'quick-letter') {
+                // Create EMR context for processPaste
+                const emrContext = {
+                  demographics: {
+                    name: patientData.name,
+                    age: patientData.age,
+                    dob: patientData.dob,
+                    gender: patientData.gender,
+                    mrn: patientData.mrn
                   },
-                  onSparsityDetected: async (missing: string[], prefillData?: { diagnosis?: string; plan?: string }) => {
-                    console.log('📝 Sparsity detected, missing fields:', missing);
-                    console.log('📝 Prefill data:', prefillData);
+                  gp: patientData.gp,
+                  allergies: patientData.allergies || [],
+                  background: patientData.background || '',
+                  investigation_summary: patientData.investigationSummary || '',
+                  medications_emr: (patientData.medications || []).map((med: any) => ({
+                    name: med.name || med,
+                    dose: med.dose || '',
+                    frequency: med.frequency || '',
+                    indication: med.indication || ''
+                  }))
+                };
 
-                    // Return a Promise that resolves when user completes the stepper
-                    return new Promise((resolve) => {
-                      setSparsityData({
-                        missingFields: missing,
-                        prefillData,
-                        onComplete: (result) => {
-                          resolve(result);
-                          // Close modal
-                          actions.closeOverlay('sparsity-stepper');
-                          setSparsityData(null);
-                        }
-                      });
-                      // Open the stepper modal
-                      actions.openOverlay('sparsity-stepper');
-                    });
+                // Create a session for this paste operation
+                const sessionId = `paste-${Date.now()}`;
+                const patientSession: PatientSession = {
+                  id: sessionId,
+                  patient: patientData,
+                  timestamp: Date.now(),
+                  agentType: 'quick-letter' as AgentType,
+                  agentName: 'Quick Letter',
+                  status: 'processing' as const,
+                  transcription: notes,
+                  results: '',
+                  completed: false,
+                  processingTime: 0,
+                  modelUsed: '',
+                  pipelineProgress: { stage: 'ai-analysis', progress: 0, stageProgress: 0 }
+                };
+
+                actions.addPatientSession(patientSession);
+                actions.setCurrentSessionId(sessionId);
+                actions.setSelectedSessionId(sessionId);
+                actions.setUIMode('processing', { sessionId, origin: 'user' });
+                actions.setProcessing(true);
+                actions.setProcessingStatus('processing');
+                actions.setProcessingStartTime(Date.now());
+
+                const QuickLetterAgentClass = (await import('@/agents/specialized/QuickLetterAgent')).QuickLetterAgent;
+                const quickLetterAgent = new QuickLetterAgentClass();
+
+                const report = await quickLetterAgent.processPaste(
+                  notes,
+                  emrContext,
+                  { identity_mismatch: false, patient_friendly_requested: false },
+                  {
+                    onProgress: (message: string) => {
+                      console.log(`📝 Paste processing: ${message}`);
+                    }
                   }
-                }
-              );
+                );
 
-              // Update session with results
-              const processingTime = Date.now() - (patientSession.timestamp || Date.now());
-              actions.updatePatientSession(sessionId, {
-                status: 'completed',
-                completed: true,
-                results: report.content,
-                processingTime,
-                pipelineProgress: { stage: 'generation', progress: 100, stageProgress: 100 }
-              });
+                const processingTime = Date.now() - (patientSession.timestamp || Date.now());
+                actions.updatePatientSession(sessionId, {
+                  status: 'completed',
+                  completed: true,
+                  results: report.content,
+                  processingTime,
+                  pipelineProgress: { stage: 'generation', progress: 100, stageProgress: 100 }
+                });
 
-              actions.setResults(report.content);
-              actions.setProcessing(false);
-              actions.setProcessingStatus('idle');
-              actions.setUIMode('idle', { sessionId, origin: 'user' });
+                actions.setResults(report.content);
+                actions.setProcessing(false);
+                actions.setProcessingStatus('idle');
+                actions.setUIMode('idle', { sessionId, origin: 'user' });
 
-              console.log('✅ Paste letter generated successfully');
-              ToastService.getInstance().success('Letter generated from pasted notes!');
+                console.log('✅ Paste letter generated successfully');
+                ToastService.getInstance().success('Letter generated from pasted notes!');
+              } else if (wf === 'right-heart-cath') {
+                // Create a session for RHC typed workflow
+                const sessionId = `rhc-paste-${Date.now()}`;
+                const patientSession: PatientSession = {
+                  id: sessionId,
+                  patient: patientData,
+                  timestamp: Date.now(),
+                  agentType: 'right-heart-cath' as AgentType,
+                  agentName: 'Right Heart Cath Agent',
+                  status: 'processing' as const,
+                  transcription: notes,
+                  results: '',
+                  rhcReport: undefined,
+                  completed: false,
+                  processingTime: 0,
+                  modelUsed: '',
+                  pipelineProgress: { stage: 'ai-analysis', progress: 0, stageProgress: 0 }
+                };
 
+                actions.addPatientSession(patientSession);
+                actions.setCurrentSessionId(sessionId);
+                actions.setSelectedSessionId(sessionId);
+                actions.setUIMode('processing', { sessionId, origin: 'user' });
+                actions.setProcessing(true);
+                actions.setProcessingStatus('processing');
+                actions.setProcessingStartTime(Date.now());
+                actions.setCurrentAgent('right-heart-cath');
+
+                // Load and run RHC agent with typed notes just like transcription
+                const { RightHeartCathAgent } = await import('@/agents/specialized/RightHeartCathAgent');
+                const rhcAgent = new RightHeartCathAgent();
+
+                const report = await rhcAgent.process(notes, {
+                  onProgress: (_phase: string, progress: number, details?: string) => {
+                    try {
+                      actions.setProcessingPhase('ai-analysis', { 'ai-analysis': progress }, progress);
+                      actions.updatePatientSession(sessionId, {
+                        pipelineProgress: { stage: 'ai-analysis', progress, stageProgress: progress, details }
+                      });
+                    } catch (_) {}
+                  }
+                } as any);
+
+                const processingTime = Date.now() - (patientSession.timestamp || Date.now());
+                actions.updatePatientSession(sessionId, {
+                  status: report.status === 'awaiting_validation' ? 'awaiting_validation' : 'completed',
+                  completed: report.status !== 'awaiting_validation',
+                  results: report.content,
+                  rhcReport: report,
+                  processingTime,
+                  pipelineProgress: { stage: 'generation', progress: 100, stageProgress: 100 }
+                });
+
+                actions.setResults(report.content);
+                actions.setProcessing(false);
+                actions.setProcessingStatus('idle');
+                actions.setUIMode('idle', { sessionId, origin: 'user' });
+
+                console.log('✅ RHC report generated from typed notes');
+                ToastService.getInstance().success('RHC report generated from typed notes!');
+              }
             } catch (error) {
               console.error('❌ Failed to process pasted notes:', error);
               actions.setProcessing(false);
               actions.setProcessingStatus('error');
-              actions.setErrors([`Failed to generate letter: ${error instanceof Error ? error.message : 'Unknown error'}`]);
-              ToastService.getInstance().error('Failed to generate letter from pasted notes');
+              const errMsg = error instanceof Error ? error.message : 'Unknown error';
+              actions.setErrors([`Failed to generate report: ${errMsg}`]);
+              ToastService.getInstance().error('Failed to generate report from typed notes');
             }
           }}
         />

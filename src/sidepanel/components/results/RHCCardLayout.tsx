@@ -46,7 +46,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
         height: '378px', // 10cm at 96 DPI
         fontFamily: 'Avenir, "Avenir Next", system-ui, -apple-system, sans-serif',
         backgroundColor: '#FFFFFF',
-        padding: '16px',
+        padding: '12px',
         boxSizing: 'border-box',
         display: 'grid',
         gridTemplateColumns: '1fr 1fr 1fr',
@@ -59,10 +59,12 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
         style={{
           border: '2px solid #DC2626',
           borderRadius: '0',
-          padding: '16px',
+          padding: '12px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px'
+          gap: '10px',
+          overflow: 'hidden', // Prevent content overflow
+          boxSizing: 'border-box'
         }}
       >
         <h3
@@ -73,7 +75,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             textTransform: 'uppercase',
             color: '#6B7280',
             letterSpacing: '0.5px',
-            marginBottom: '8px'
+            marginBottom: '4px'
           }}
         >
           Haemodynamic Pressures
@@ -85,15 +87,13 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             Right Atrial (RA)
           </div>
           <div style={{ fontSize: '18px', fontWeight: '700', color: '#000000' }}>
-            {haemodynamicPressures.ra.mean
-              ? `${displayValue(haemodynamicPressures.ra.mean)} mmHg`
-              : `${displayValue(haemodynamicPressures.ra.aWave)}/${displayValue(haemodynamicPressures.ra.vWave)} mmHg`}
+            {displayValue(haemodynamicPressures.ra.mean)} mmHg
           </div>
-          {haemodynamicPressures.ra.mean && (
-            <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>mean</div>
-          )}
-          {!haemodynamicPressures.ra.mean && (haemodynamicPressures.ra.aWave || haemodynamicPressures.ra.vWave) && (
-            <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>a-wave / v-wave</div>
+          <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>mean</div>
+          {(haemodynamicPressures.ra.aWave || haemodynamicPressures.ra.vWave) && (
+            <div style={{ fontSize: '8px', color: '#6B7280', marginTop: '2px' }}>
+              a-wave: {displayValue(haemodynamicPressures.ra.aWave)}, v-wave: {displayValue(haemodynamicPressures.ra.vWave)}
+            </div>
           )}
         </div>
 
@@ -118,13 +118,10 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             Pulmonary Artery (PA)
           </div>
           <div style={{ fontSize: '18px', fontWeight: '700', color: '#000000' }}>
-            {displayValue(haemodynamicPressures.pa.systolic)}/{displayValue(haemodynamicPressures.pa.diastolic)} mmHg
+            {displayValue(haemodynamicPressures.pa.systolic)}/{displayValue(haemodynamicPressures.pa.diastolic)}
+            {haemodynamicPressures.pa.mean && ` (${haemodynamicPressures.pa.mean})`} mmHg
           </div>
-          {haemodynamicPressures.pa.mean && (
-            <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
-              mean: {haemodynamicPressures.pa.mean} mmHg
-            </div>
-          )}
+          <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>systolic/diastolic (mean)</div>
         </div>
 
         {/* PCWP */}
@@ -133,15 +130,13 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             PCWP
           </div>
           <div style={{ fontSize: '18px', fontWeight: '700', color: '#000000' }}>
-            {haemodynamicPressures.pcwp.mean
-              ? `${displayValue(haemodynamicPressures.pcwp.mean)} mmHg`
-              : `${displayValue(haemodynamicPressures.pcwp.aWave)}/${displayValue(haemodynamicPressures.pcwp.vWave)} mmHg`}
+            {displayValue(haemodynamicPressures.pcwp.mean)} mmHg
           </div>
-          {haemodynamicPressures.pcwp.mean && (
-            <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>mean</div>
-          )}
-          {!haemodynamicPressures.pcwp.mean && (haemodynamicPressures.pcwp.aWave || haemodynamicPressures.pcwp.vWave) && (
-            <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>a-wave / v-wave</div>
+          <div style={{ fontSize: '9px', color: '#6B7280', marginTop: '2px' }}>mean</div>
+          {(haemodynamicPressures.pcwp.aWave || haemodynamicPressures.pcwp.vWave) && (
+            <div style={{ fontSize: '8px', color: '#6B7280', marginTop: '2px' }}>
+              a-wave: {displayValue(haemodynamicPressures.pcwp.aWave)}, v-wave: {displayValue(haemodynamicPressures.pcwp.vWave)}
+            </div>
           )}
         </div>
       </div>
@@ -152,10 +147,12 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
           border: '2px solid #2563EB',
           borderLeft: '0',
           borderRadius: '0',
-          padding: '16px',
+          padding: '12px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px'
+          gap: '10px',
+          overflow: 'hidden', // Prevent content overflow
+          boxSizing: 'border-box'
         }}
       >
         <h3
@@ -166,7 +163,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             textTransform: 'uppercase',
             color: '#6B7280',
             letterSpacing: '0.5px',
-            marginBottom: '8px'
+            marginBottom: '4px'
           }}
         >
           Cardiac Output
@@ -178,7 +175,7 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             Thermodilution
           </div>
           {cardiacOutput.thermodilution.co && (
-            <div style={{ marginBottom: '4px' }}>
+            <div style={{ marginBottom: '2px' }}>
               <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>
                 {cardiacOutput.thermodilution.co}
               </span>
@@ -186,24 +183,20 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             </div>
           )}
           {cardiacOutput.thermodilution.ci && (
-            <div>
-              <span style={{ fontSize: '12px', color: '#000000' }}>CI: </span>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: '#000000' }}>
-                {cardiacOutput.thermodilution.ci}
-              </span>
-              <span style={{ fontSize: '10px', color: '#6B7280', marginLeft: '4px' }}>L/min/m²</span>
+            <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+              CI: {cardiacOutput.thermodilution.ci} L/min/m²
             </div>
           )}
         </div>
 
         {/* Fick Method */}
-        {(cardiacOutput.fick.co || cardiacOutput.fick.ci) && (
-          <div style={{ borderBottom: '1px solid #E5E7EB', paddingBottom: '10px' }}>
+        {(cardiacOutput.fick.co || cardiacOutput.fick.ci || calculations?.estimatedVO2) && (
+          <div>
             <div style={{ fontSize: '10px', fontWeight: '600', color: '#2563EB', marginBottom: '6px' }}>
               Fick Method
             </div>
             {cardiacOutput.fick.co && (
-              <div style={{ marginBottom: '4px' }}>
+              <div style={{ marginBottom: '2px' }}>
                 <span style={{ fontSize: '16px', fontWeight: '700', color: '#000000' }}>
                   {cardiacOutput.fick.co}
                 </span>
@@ -211,29 +204,15 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
               </div>
             )}
             {cardiacOutput.fick.ci && (
-              <div>
-                <span style={{ fontSize: '12px', color: '#000000' }}>CI: </span>
-                <span style={{ fontSize: '12px', fontWeight: '600', color: '#000000' }}>
-                  {cardiacOutput.fick.ci}
-                </span>
-                <span style={{ fontSize: '10px', color: '#6B7280', marginLeft: '4px' }}>L/min/m²</span>
+              <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>
+                CI: {cardiacOutput.fick.ci} L/min/m²
               </div>
             )}
-          </div>
-        )}
-
-        {/* Mixed Venous O2 Saturation */}
-        {cardiacOutput.mixedVenousO2 && (
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: '#2563EB', marginBottom: '4px' }}>
-              Mixed Venous O₂
-            </div>
-            <div>
-              <span style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
-                {cardiacOutput.mixedVenousO2}
-              </span>
-              <span style={{ fontSize: '11px', color: '#6B7280', marginLeft: '4px' }}>%</span>
-            </div>
+            {calculations?.estimatedVO2 && (
+              <div style={{ fontSize: '8px', color: '#6B7280', marginTop: '4px' }}>
+                Assumed VO₂: {calculations.estimatedVO2.toFixed(0)} mL/min (based on BSA/gender)
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -244,10 +223,12 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
           border: '2px solid #7C3AED',
           borderLeft: '0',
           borderRadius: '0',
-          padding: '16px',
+          padding: '12px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px'
+          gap: '6px',
+          overflow: 'hidden', // Prevent content overflow
+          boxSizing: 'border-box'
         }}
       >
         <h3
@@ -258,99 +239,187 @@ export const RHCCardLayout: React.FC<RHCCardLayoutProps> = ({
             textTransform: 'uppercase',
             color: '#6B7280',
             letterSpacing: '0.5px',
-            marginBottom: '8px'
+            marginBottom: '4px'
           }}
         >
           Calculated Parameters
         </h3>
 
-        {/* Primary Calculations */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        {/* All Calculations */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
           {/* PVR */}
           {calculations?.pulmonaryVascularResistance && (
             <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>PVR</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>PVR</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
                 {calculations.pulmonaryVascularResistance.toFixed(1)}
               </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>WU</div>
-            </div>
-          )}
-
-          {/* CI */}
-          {calculations?.cardiacIndex && (
-            <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>CI</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
-                {calculations.cardiacIndex.toFixed(1)}
-              </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>L/min/m²</div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>WU</div>
             </div>
           )}
 
           {/* TPG */}
           {calculations?.transpulmonaryGradient && (
             <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>TPG</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>TPG</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
                 {calculations.transpulmonaryGradient.toFixed(0)}
               </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>mmHg</div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>mmHg</div>
             </div>
           )}
 
           {/* DPG */}
           {calculations?.diastolicPressureGradient && (
             <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>DPG</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>DPG</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
                 {calculations.diastolicPressureGradient.toFixed(0)}
               </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>mmHg</div>
-            </div>
-          )}
-
-          {/* SVR */}
-          {calculations?.systemicVascularResistance && (
-            <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>SVR</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
-                {calculations.systemicVascularResistance.toFixed(1)}
-              </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>WU</div>
-            </div>
-          )}
-
-          {/* RVSWI */}
-          {calculations?.rvswi && (
-            <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>RVSWI</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
-                {calculations.rvswi.toFixed(1)}
-              </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>g·m/m²</div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>mmHg</div>
             </div>
           )}
 
           {/* PAPi */}
           {calculations?.papi && (
             <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>PAPi</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>PAPi</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
                 {calculations.papi.toFixed(2)}
               </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>&nbsp;</div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>&nbsp;</div>
+            </div>
+          )}
+
+          {/* PVRI */}
+          {calculations?.pulmonaryVascularResistanceIndex && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>PVRI</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.pulmonaryVascularResistanceIndex.toFixed(1)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>WU·m²</div>
+            </div>
+          )}
+
+          {/* SVR */}
+          {calculations?.systemicVascularResistance && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>SVR</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.systemicVascularResistance.toFixed(1)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>WU</div>
+            </div>
+          )}
+
+          {/* SVRI */}
+          {calculations?.systemicVascularResistanceIndex && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>SVRI</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.systemicVascularResistanceIndex.toFixed(1)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>WU·m²</div>
+            </div>
+          )}
+
+          {/* SVI */}
+          {calculations?.strokeVolumeIndex && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>SVI</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.strokeVolumeIndex.toFixed(0)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>mL/m²</div>
+            </div>
+          )}
+
+          {/* RVSWI */}
+          {calculations?.rvswi && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>RVSWI</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.rvswi.toFixed(0)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>g·m/m²</div>
+            </div>
+          )}
+
+          {/* PAC */}
+          {calculations?.pulmonaryArterialCompliance && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>PAC</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.pulmonaryArterialCompliance.toFixed(1)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>mL/mmHg</div>
+            </div>
+          )}
+
+          {/* RC Time */}
+          {calculations?.pulmonaryRCTime && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>RC Time</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.pulmonaryRCTime.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>s</div>
+            </div>
+          )}
+
+          {/* Ea */}
+          {calculations?.effectivePulmonaryEa && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>Ea</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.effectivePulmonaryEa.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>mmHg/mL</div>
+            </div>
+          )}
+
+          {/* RAP:PCWP Ratio */}
+          {calculations?.rapPawpRatio && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>RAP:PCWP</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.rapPawpRatio.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>&nbsp;</div>
+            </div>
+          )}
+
+          {/* O2ER */}
+          {calculations?.oxygenExtractionRatio && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>O₂ER</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.oxygenExtractionRatio.toFixed(0)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>%</div>
             </div>
           )}
 
           {/* CPO */}
           {calculations?.cardiacPowerOutput && (
             <div>
-              <div style={{ fontSize: '9px', color: '#7C3AED', fontWeight: '600' }}>CPO</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000' }}>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>CPO</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
                 {calculations.cardiacPowerOutput.toFixed(2)}
               </div>
-              <div style={{ fontSize: '8px', color: '#6B7280' }}>W</div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>W</div>
+            </div>
+          )}
+
+          {/* RV CPO */}
+          {calculations?.rvCardiacPowerOutput && (
+            <div>
+              <div style={{ fontSize: '8px', color: '#7C3AED', fontWeight: '600' }}>RV CPO</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#000000' }}>
+                {calculations.rvCardiacPowerOutput.toFixed(2)}
+              </div>
+              <div style={{ fontSize: '7px', color: '#6B7280' }}>W</div>
             </div>
           )}
         </div>

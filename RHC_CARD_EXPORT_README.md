@@ -1,13 +1,13 @@
-# Right Heart Catheterisation 13×13cm Card Export
+# Right Heart Catheterisation 18×10cm Card Export
 
 ## Feature Overview
 
-The RHC Agent now supports exporting procedural data as high-resolution 13×13cm PNG cards, perfect for presentations and case discussions.
+The RHC Agent now supports exporting procedural data as high-resolution 18×10cm PNG cards, perfect for presentations and case discussions.
 
 ## Technical Specifications
 
-- **Card Dimensions**: 13cm × 13cm (square format)
-- **Output Resolution**: 300 DPI (1535×1535 pixels)
+- **Card Dimensions**: 18cm × 10cm (landscape format)
+- **Output Resolution**: 300 DPI (2126×1181 pixels)
 - **File Format**: PNG with maximum quality compression
 - **File Size**: ~200-400KB per card (depending on content)
 - **Export Time**: ~1-2 seconds
@@ -25,12 +25,12 @@ The RHC Agent now supports exporting procedural data as high-resolution 13×13cm
 
 ### 2. Export the Card
 - Navigate to the RHC results panel
-- Click the **"13×13 Card"** button (purple button with image icon)
+- Click the **"18×10 Card"** button (purple button with image icon)
 - The card will be generated and automatically downloaded as a PNG file
 - Default filename: `RHC_Card_[MRN/Date].png`
 
 ### 3. Export States
-- **Normal**: Shows "13×13 Card" with image icon
+- **Normal**: Shows "18×10 Card" with image icon
 - **Generating**: Shows "Generating..." with spinner animation
 - **Complete**: Shows "Downloaded!" with checkmark (3 seconds)
 - **Disabled**: Button is grayed out if essential data is missing
@@ -137,7 +137,7 @@ If the export fails (rare):
 
 ### Architecture
 ```
-User clicks "13×13 Card" button
+User clicks "18×10 Card" button
     ↓
 RightHeartCathDisplay.tsx validates data
     ↓
@@ -193,7 +193,7 @@ This implementation matches your other RHC application (Reflow/CathReporter) fun
 
 | Feature | Other App | Operator Extension |
 |---------|-----------|-------------------|
-| Card dimensions | 13×13cm | ✅ 13×13cm |
+| Card dimensions | 18×10cm | ✅ 18×10cm |
 | Resolution | 300 DPI | ✅ 300 DPI |
 | Format | PNG | ✅ PNG |
 | Library | html2canvas | ✅ html2canvas |
@@ -241,7 +241,7 @@ For issues or questions:
 
 ## Version History
 
-- **v3.17.0** (Jan 2025): Initial 13×13cm card export feature
+- **v3.17.0** (Jan 2025): Initial 18×10cm card export feature
   - html2canvas integration
   - 300 DPI high-resolution export
   - Validation and error handling

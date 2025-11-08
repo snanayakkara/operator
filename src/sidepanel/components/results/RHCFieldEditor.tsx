@@ -25,12 +25,15 @@ interface RHCFieldEditorProps {
   rhcReport: RightHeartCathReport;
   onSave: (updatedReport: RightHeartCathReport) => void;
   onCancel: () => void;
+  // Called on every relevant edit so the parent view can live-update its calculations section
+  onLiveUpdate?: (updatedReport: RightHeartCathReport) => void;
 }
 
 export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
   rhcReport,
   onSave,
-  onCancel
+  onCancel,
+  onLiveUpdate
 }) => {
   // Local state for editable fields
   const [pressures, setPressures] = useState<HaemodynamicPressures>(rhcReport.haemodynamicPressures);
@@ -159,6 +162,21 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
 
     return calculations;
   }, [pressures, cardiacOutput, patientData]);
+
+  // Live-update parent with current calculated values whenever inputs change
+  useEffect(() => {
+    if (!onLiveUpdate) return;
+    const updatedReport: RightHeartCathReport = {
+      ...rhcReport,
+      haemodynamicPressures: pressures,
+      cardiacOutput,
+      rhcData,
+      patientData,
+      calculations: calculatedHaemodynamics
+    };
+    onLiveUpdate(updatedReport);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pressures, cardiacOutput, rhcData, patientData, calculatedHaemodynamics]);
 
   // Auto-calculate thermodilution CI from CO + BSA
   useEffect(() => {
@@ -436,23 +454,6 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                   <div className="mt-1 text-xs text-gray-500">Normal: 0.5-2.0 mmol/L</div>
                 </div>
 
-                {/* Arterial O2 Saturation (SaO2) */}
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Arterial O₂ Saturation (SaO₂) %
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="100"
-                    value={patientData.sao2 || ''}
-                    onChange={(e) => handlePatientDataChange('sao2', e.target.value)}
-                    placeholder="%"
-                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <div className="mt-1 text-xs text-gray-500">Normal: 95-100%</div>
-                </div>
               </div>
             </section>
 
@@ -863,6 +864,20 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                   </label>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-500 w-24">Arterial (SaO₂):</span>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="100"
+                        value={patientData.sao2 || ''}
+                        onChange={(e) => handlePatientDataChange('sao2', e.target.value)}
+                        placeholder="%"
+                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <span className="text-xs text-gray-400">%</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <span className="text-xs text-gray-500 w-24">Mixed Venous:</span>
                       <input
                         type="number"
@@ -887,7 +902,7 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                       <span className="text-xs text-gray-400">%</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">Normal Mixed Venous: 65-75%</div>
+                  <div className="mt-2 text-xs text-gray-500">Normal SaO₂: 95–100%; Mixed Venous: 65–75%</div>
                 </div>
               </div>
             </section>

@@ -218,7 +218,7 @@ Right heart catheter, height 168 cm, weight 72 kg, Indication chronic thromboemb
 7. ✅ Incorrect thermodilution CI (prioritized explicit "thermodilution" keyword)
 8. ✅ Missing fluoro time (comma separator)
 9. ✅ Fick vs "thick" confusion (added transcription error handling)
-10. ✅ 13×13 card missing data (now displays all pressure values + procedure details)
+10. ✅ 18×10 card missing data (now displays all pressure values + procedure details)
 
 ## Date
 

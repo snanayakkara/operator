@@ -111,7 +111,8 @@ export const WORKFLOWS: readonly WorkflowConfig[] = [
     color: 'orange',
     category: 'procedure',
     estimatedTime: '6-10 min',
-    complexity: 'medium'
+    complexity: 'medium',
+    isExpandable: true // Hover to reveal Dictate vs Type options (typed text handled like transcription)
   },
   {
     id: 'ohif-viewer',

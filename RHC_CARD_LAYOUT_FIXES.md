@@ -1,4 +1,4 @@
-# RHC 13×13 Card Layout Fixes - Complete Implementation
+# RHC 18×10 Card Layout Fixes - Complete Implementation
 
 ## Date
 2025-10-28
@@ -207,7 +207,7 @@ console.log('🃏 RHC Card Rendering:', {
 
 ## Expected Results
 
-After these fixes, the 13×13 card should display:
+After these fixes, the 18×10 card should display:
 
 ### Header Section ✅
 - Title: "Right Heart Catheterisation"

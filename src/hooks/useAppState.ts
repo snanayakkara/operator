@@ -1031,7 +1031,8 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayProcessingTime: session.processingTime,
           displayModelUsed: session.modelUsed || null,
           displayAudioDuration: session.audioDuration || null,
-          displayPipelineProgress: session.pipelineProgress || null
+          // Hide progress UI when viewing completed sessions to avoid stale bars
+          displayPipelineProgress: session.status === 'completed' ? null : (session.pipelineProgress || null)
         }
       };
     }

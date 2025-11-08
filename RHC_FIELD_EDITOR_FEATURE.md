@@ -2,7 +2,7 @@
 
 ## Overview
 
-Added comprehensive **manual field editing** capability to the Right Heart Catheterization agent, allowing users to correct transcription errors, add missing measurements, and verify data before generating the 13×13 PNG export card.
+Added comprehensive **manual field editing** capability to the Right Heart Catheterization agent, allowing users to correct transcription errors, add missing measurements, and verify data before generating the 18×10 PNG export card.
 
 ## Features Implemented
 
@@ -58,7 +58,7 @@ Auto-recalculates derived metrics as you edit fields:
 ### 3. **Integration with RightHeartCathDisplay**
 
 **Button Location:**
-- New **"Edit Fields"** button appears between "Copy" and "13×13 Card" buttons
+- New **"Edit Fields"** button appears between "Copy" and "18×10 Card" buttons
 - Blue styling to differentiate from export action
 
 **Workflow:**
@@ -67,7 +67,7 @@ Auto-recalculates derived metrics as you edit fields:
 3. User edits values (live calculations update)
 4. User clicks **"Apply Changes"**
 5. Display refreshes with edited data
-6. **"13×13 Card"** export uses edited values
+6. **"18×10 Card"** export uses edited values
 
 **State Management:**
 - Original data preserved in `rhcReport`
@@ -162,7 +162,7 @@ const calculatedHaemodynamics = useMemo<CalculatedHaemodynamics>(() => {
          │
          v
 ┌─────────────────┐
-│ 13×13 Card      │
+│ 18×10 Card      │
 │ Export (PNG)    │
 └─────────────────┘
 ```

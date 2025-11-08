@@ -40,7 +40,7 @@ interface ExportOptions {
 }
 
 /**
- * Exports RHC data as a high-resolution 13×13cm PNG card
+ * Exports RHC data as a high-resolution 18×10cm PNG card
  */
 export async function exportRHCCard(
   rhcData: RightHeartCathReport,
@@ -70,7 +70,7 @@ export async function exportRHCCard(
       // Use setTimeout to ensure React has finished rendering (300ms for reliable state propagation)
       setTimeout(async () => {
         try {
-          const cardElement = container.querySelector('div') as HTMLElement;
+          const cardElement = container.firstElementChild as HTMLElement;
 
           if (!cardElement) {
             throw new Error('Card element not found after rendering');
@@ -222,7 +222,7 @@ export async function generateRHCCardBlob(
 
       setTimeout(async () => {
         try {
-          const cardElement = container.querySelector('div') as HTMLElement;
+          const cardElement = container.firstElementChild as HTMLElement;
 
           if (!cardElement) {
             throw new Error('Card element not found after rendering');
@@ -299,7 +299,7 @@ export async function previewRHCCard(
       // Wait for rendering, then capture
       setTimeout(async () => {
         try {
-          const cardElement = container.querySelector('div') as HTMLElement;
+          const cardElement = container.firstElementChild as HTMLElement;
 
           if (!cardElement) {
             throw new Error('Card element not found after rendering');

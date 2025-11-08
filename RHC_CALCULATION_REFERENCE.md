@@ -8,7 +8,7 @@ The Operator RHC Agent automatically calculates comprehensive haemodynamic param
 - **Automatic Calculation**: All calculations happen automatically when you dictate RHC pressures
 - **Three-Tier System**: Essential → High-Value → Advanced metrics
 - **Color-Coded Display**: Green (normal), Amber (borderline), Red (abnormal)
-- **13×13cm Card Export**: Key calculations included in presentation-ready PNG cards
+- **18×10cm Card Export**: Key calculations included in presentation-ready PNG cards
 - **Australian/ESC 2022 Guidelines**: All normal ranges follow current Australian and European guidelines
 
 ---
@@ -526,7 +526,7 @@ Dictation → RightHeartCathAgent.extractPatientData()
 
 ---
 
-#### 2. RHCCardLayout (13×13cm PNG Export)
+#### 2. RHCCardLayout (18×10cm PNG Export)
 **Calculated Values Section:**
 ```
 ┌─ Calculated Haemodynamics
@@ -697,7 +697,7 @@ Arterial oxygen saturation 98%, mixed venous saturation 70%, haemoglobin 140 gra
 - Initial implementation of all three tiers
 - 25+ calculations across anthropometrics, haemodynamics, oxygen transport, and coupling
 - Color-coded display with clinical assessment
-- Integration with 13×13cm card export
+- Integration with 18×10cm card export
 - Automatic calculation from dictated pressures
 
 ---

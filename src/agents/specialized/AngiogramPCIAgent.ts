@@ -63,8 +63,15 @@ export class AngiogramPCIAgent extends MedicalAgent {
     await this.initializeSystemPrompt();
 
     const startTime = Date.now();
-    
+
     try {
+      // Progress callback helper
+      const reportProgress = (progress: number, details: string) => {
+        context?.onProgress?.('ai-analysis', progress, details);
+      };
+
+      reportProgress(5, 'Analyzing procedure type');
+
       // Store input in memory
       this.updateMemory('currentInput', input);
       this.updateMemory('processingContext', context);
@@ -79,6 +86,8 @@ export class AngiogramPCIAgent extends MedicalAgent {
       // Correct terminology
       const correctedInput = this.correctTerminology(input);
 
+      reportProgress(10, 'Extracting intervention details');
+
       // Detect critical findings that must be preserved
       const criticalFindingsDetected = this.detectCriticalFindings(correctedInput);
       if (criticalFindingsDetected.length > 0) {
@@ -91,10 +100,16 @@ export class AngiogramPCIAgent extends MedicalAgent {
       const regexExtracted = this.extractAngioPCIData(correctedInput, procedureType);
       console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
 
+      reportProgress(20, 'Validating stent and lesion data');
+
       const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
+
+      reportProgress(35, 'Applying data corrections');
+
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
       // INTERACTIVE CHECKPOINT: Check for critical gaps
+      reportProgress(40, 'Checking registry fields');
       // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
       const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
       const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
@@ -115,6 +130,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
       // Merge user input if provided
       let finalData = correctedData;
       if (context?.userProvidedFields) {
+        reportProgress(50, 'Merging validated data');
         console.log('🚨 ANGIO/PCI AGENT: Merging user-provided fields...');
         finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
       }
@@ -128,6 +144,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
       const missingInfo = await this.detectMissingInformation(correctedInput, procedureType);
 
       // Generate structured report content based on procedure type
+      reportProgress(60, 'Generating report');
       const reportContent = await this.generateStructuredReport(correctedInput, procedureData, procedureType);
 
       // Validate dominance before normalization
@@ -136,10 +153,14 @@ export class AngiogramPCIAgent extends MedicalAgent {
         console.warn(`⚠️ Dominance mismatch: input="${dominanceValidation.dictatedDominance}", output="${dominanceValidation.reportedDominance}"`);
       }
 
+      reportProgress(85, 'Formatting report');
+
       const normalizedReportContent = this.normalizeReportContent(reportContent, procedureData, procedureType);
 
       // Parse response into sections
       const sections = this.parseResponse(normalizedReportContent, context);
+
+      reportProgress(95, 'Finalizing report');
 
       // Create comprehensive report
       const processingTime = Date.now() - startTime;
@@ -167,16 +188,18 @@ export class AngiogramPCIAgent extends MedicalAgent {
 
       // Store procedure in memory
       this.addProcedureMemory(
-        procedureType === 'DIAGNOSTIC_ANGIOGRAM' ? 'Angiogram' : 'PCI', 
+        procedureType === 'DIAGNOSTIC_ANGIOGRAM' ? 'Angiogram' : 'PCI',
         {
           procedureType,
           indication: procedureData.indication,
           findings: procedureData.vesselFindings,
           intervention: 'interventionDetails' in procedureData ? procedureData.interventionDetails : undefined,
           outcome: procedureData.proceduralOutcome
-        }, 
+        },
         procedureData.proceduralOutcome
       );
+
+      reportProgress(100, 'Report generated');
 
       return report;
 

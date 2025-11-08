@@ -12,6 +12,8 @@ type ValidationMissingField = {
   field: string;
   reason: string;
   critical?: boolean;
+  // Optional suggested value from validator; if present, allow one-click accept
+  suggestedValue?: unknown;
 };
 
 export interface ValidationPromptData {
@@ -93,6 +95,12 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 }: FieldValidationPromptProps<TValidation>) => {
   const [userFields, setUserFields] = useState<Record<string, unknown>>({});
   const [acceptedCorrections, setAcceptedCorrections] = useState<Set<string>>(new Set());
+  const hasAnySuggestions = useMemo(() => {
+    const missingWithSuggestions = [...validation.missingCritical, ...validation.missingOptional]
+      .some(m => m.suggestedValue !== undefined || /suggest(ed|ion)\s*[:\-]\s*([^\s]+)/i.test(m.reason));
+    const unacceptedCorrections = validation.corrections.some(c => !acceptedCorrections.has(c.field));
+    return missingWithSuggestions || unacceptedCorrections;
+  }, [validation.missingCritical, validation.missingOptional, validation.corrections, acceptedCorrections]);
 
   const mergedCopy = useMemo(() => ({
     heading: copy.heading ?? `${agentLabel} Validation Required`,
@@ -119,6 +127,53 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
       ...prev,
       [fieldPath]: value
     }));
+  };
+
+  // Parse a suggested value out of reason text if validator didn't provide structured value
+  const parseSuggestedFromReason = (reason: string): unknown => {
+    // Try to find a number (int or float) after words like "suggested" or in parentheses
+    const m1 = reason.match(/suggest(?:ed|ion)?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+    if (m1) return Number(m1[1]);
+    const m2 = reason.match(/\((\d+(?:\.\d+)?)\)/);
+    if (m2) return Number(m2[1]);
+    // Fallback: plain number anywhere
+    const m3 = reason.match(/(\d+(?:\.\d+)?)/);
+    if (m3) return Number(m3[1]);
+    return undefined;
+  };
+
+  const getSuggestedValue = (field: ValidationMissingField): unknown => {
+    if (field.suggestedValue !== undefined) return field.suggestedValue;
+    return parseSuggestedFromReason(field.reason);
+  };
+
+  const acceptMissingFieldSuggestion = (field: ValidationMissingField) => {
+    const value = getSuggestedValue(field);
+    if (value !== undefined) {
+      handleFieldChange(field.field, value);
+    }
+  };
+
+  const handleAcceptAll = () => {
+    const nextAccepted = new Set<string>(acceptedCorrections);
+    const nextFields: Record<string, unknown> = { ...userFields };
+
+    // Accept all low-confidence corrections
+    for (const c of lowConfidenceCorrections) {
+      nextAccepted.add(c.field);
+      nextFields[c.field] = c.correctValue;
+    }
+
+    // Accept suggestions for missing fields when we can parse a suggested value
+    for (const m of [...validation.missingCritical, ...validation.missingOptional]) {
+      const suggestion = getSuggestedValue(m);
+      if (suggestion !== undefined) {
+        nextFields[m.field] = suggestion;
+      }
+    }
+
+    setAcceptedCorrections(nextAccepted);
+    setUserFields(nextFields);
   };
 
   const handleCorrectionToggle = (correction: ValidationCorrection, accept: boolean) => {
@@ -148,6 +203,7 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
     const inputType = config?.inputType ?? 'text';
     const placeholder = config?.placeholder ?? (isCritical ? field.reason : 'Optional');
     const helperText = config?.helperText ?? field.reason;
+    const suggestion = getSuggestedValue(field);
 
     if (inputType === 'textarea') {
       return (
@@ -161,7 +217,18 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
             rows={3}
             onChange={(event) => handleFieldChange(field.field, event.target.value)}
           />
-          <span className="text-xs text-gray-500">{helperText}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 flex-1">{helperText}</span>
+            {suggestion !== undefined && (
+              <button
+                type="button"
+                className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+                onClick={() => acceptMissingFieldSuggestion(field)}
+              >
+                Accept {String(suggestion)}
+              </button>
+            )}
+          </div>
         </div>
       );
     }
@@ -178,7 +245,18 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
           placeholder={placeholder}
           onChange={(event) => handleFieldChange(field.field, event.target.value)}
         />
-        <span className="text-xs text-gray-500">{helperText}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 flex-1">{helperText}</span>
+          {suggestion !== undefined && (
+            <button
+              type="button"
+              className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+              onClick={() => acceptMissingFieldSuggestion(field)}
+            >
+              Accept {String(suggestion)}
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -286,7 +364,19 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
         )}
 
         {/* Action buttons */}
-        <div className="flex flex-wrap gap-3 justify-end pt-4 border-t border-gray-200">
+        <div className="flex flex-wrap gap-3 justify-between items-center pt-4 border-t border-gray-200">
+          <div className="flex items-center gap-2">
+            {hasAnySuggestions && (
+              <button
+                type="button"
+                onClick={handleAcceptAll}
+                className="px-4 py-2 text-sm text-white bg-emerald-600 rounded hover:bg-emerald-700"
+                title="Accept all suggested values and low-confidence corrections"
+              >
+                Accept All Suggestions
+              </button>
+            )}
+          </div>
           <button
             onClick={onCancel}
             className="px-4 py-2 text-sm text-gray-700 bg-gray-200 rounded hover:bg-gray-300"
@@ -313,4 +403,3 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
     </div>
   );
 };
-

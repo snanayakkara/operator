@@ -9,7 +9,7 @@ This document summarizes the complete implementation of three major enhancement 
 
 1. **Data Extraction Fixes** - Enhanced regex patterns to capture all 22 critical fields
 2. **Manual Field Editor** - Built comprehensive editing interface with real-time calculations
-3. **13×13 Card Layout Fixes** - Fixed empty cards, reduced spacing, added calculations
+3. **18×10 Card Layout Fixes** - Fixed empty cards, reduced spacing, added calculations
 
 ---
 
@@ -18,7 +18,7 @@ This document summarizes the complete implementation of three major enhancement 
 The user reported three critical issues with the RHC agent:
 
 ### Issue 1: Missing Data Extraction
-**User feedback:** "When I use this agent, the 13x13 card seems to be missing many details as does the structured breakdown."
+**User feedback:** "When I use this agent, the card seems to be missing many details as does the structured breakdown."
 
 **User's transcription sample:**
 ```
@@ -41,7 +41,7 @@ systemic blood pressure 83 on 55 map 65
 **Need:** Way to verify and correct extracted data before card export
 
 ### Issue 3: Card Display Problems
-**User feedback (with screenshot):** "the 13x13 card has some parts cutoff, and should also include the advanced haemodynamic calculations"
+**User feedback (with screenshot):** "the card has some parts cutoff, and should also include the advanced haemodynamic calculations"
 
 **User question:** "also is this agent using the reasoning model (currently medgemma-27b)? it should."
 
@@ -295,7 +295,7 @@ const effectiveRHCData = useMemo(() => {
 
 ---
 
-## Solution 3: 13×13 Card Layout Fixes
+## Solution 3: 18×10 Card Layout Fixes
 
 ### Root Causes
 
@@ -521,7 +521,7 @@ console.log('🃏 RHC Card Rendering:', {
 - [ ] Original data preserved
 - [ ] Card export uses edited values
 
-### 13×13 Card Display
+### 18×10 Card Display
 - [ ] RA card shows: 7 mmHg
 - [ ] RV card shows: 50/1 with "RVEDP: 8 mmHg"
 - [ ] PA card shows: 50/22, mean 36 mmHg
@@ -565,9 +565,9 @@ Right heart catheter, height 168 cm, weight 72 kg, Indication chronic thromboemb
 
 **Expected behavior:** Non-destructive editing with real-time calculation updates
 
-### Step 3: Test 13×13 Card Export
+### Step 3: Test 18×10 Card Export
 
-1. Click **"13×13 Card"** button
+1. Click **"18×10 Card"** button
 2. Open console (Cmd+Option+J)
 3. Look for debug log: `🃏 RHC Card Rendering: { ... }`
 4. Verify console shows complete data structure
@@ -577,7 +577,7 @@ Right heart catheter, height 168 cm, weight 72 kg, Indication chronic thromboemb
    - Procedure details box visible
    - No content cutoff at bottom
 
-**Expected output:** Complete 13×13cm card with all data visible
+**Expected output:** Complete 18×10cm card with all data visible
 
 ### Step 4: Test Edge Cases
 
@@ -692,7 +692,7 @@ Thick cardiac output 5.2. Tick cardiac index 2.88.
 
 1. **Test with actual transcription data** - Use your real RHC dictations to verify extraction
 2. **Try the field editor** - Correct any missed values and observe live calculations
-3. **Generate 13×13 cards** - Verify all pressure cards populate and calculations display
+3. **Generate 18×10 cards** - Verify all pressure cards populate and calculations display
 4. **Report any issues** - Check console debug log if problems occur
 5. **Provide feedback** - Suggest additional features or improvements
 

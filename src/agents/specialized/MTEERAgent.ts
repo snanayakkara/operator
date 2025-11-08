@@ -93,8 +93,15 @@ export class MTEERAgent extends MedicalAgent {
     await this.initializeSystemPrompt();
 
     const startTime = Date.now();
-    
+
     try {
+      // Progress callback helper
+      const reportProgress = (progress: number, details: string) => {
+        context?.onProgress?.('ai-analysis', progress, details);
+      };
+
+      reportProgress(5, 'Analyzing procedure');
+
       // Store input in memory
       this.updateMemory('currentInput', input);
       this.updateMemory('processingContext', context);
@@ -102,15 +109,23 @@ export class MTEERAgent extends MedicalAgent {
       // Correct mTEER-specific terminology with Australian spelling
       const correctedInput = this.correctMTEERTerminology(input);
 
+      reportProgress(10, 'Extracting clip deployment data');
+
       // Phase 1.5: Regex extraction + quick-model validation
       console.log('🚨 MTEER AGENT: Starting validation workflow...');
       const regexExtracted = this.extractMTEERValidationData(correctedInput);
       console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
 
+      reportProgress(20, 'Validating MR grading');
+
       const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
+
+      reportProgress(35, 'Applying data corrections');
+
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
       // Interactive checkpoint - require user input if critical gaps remain
+      reportProgress(40, 'Checking critical fields');
       // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
       const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
       const hasLowConfidenceCorrections = validation.corrections.some(correction => correction.confidence < 0.8);
@@ -135,6 +150,7 @@ export class MTEERAgent extends MedicalAgent {
       // Merge user-provided fields from validation modal
       let finalData = correctedData;
       if (context?.userProvidedFields) {
+        reportProgress(50, 'Merging validated data');
         console.log('🚨 MTEER AGENT: Merging user-provided fields...');
         finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
       }
@@ -143,19 +159,20 @@ export class MTEERAgent extends MedicalAgent {
 
       // Extract mTEER data from input
       const mteerData = this.extractMTEERData(correctedInput);
-      
+
       // Analyze mitral regurgitation
       const mitralRegurgitation = this.extractMitralRegurgitationData(correctedInput);
-      
+
       // Assess clip deployment and positioning
       const clipAssessment = this.assessClipDeployment(correctedInput);
-      
+
       // Identify complications
       const complications = this.identifyComplications(correctedInput);
 
       // Build messages for LLM processing - interface compliance
-      
+
       // Generate structured report content
+      reportProgress(60, 'Generating report');
       const reportContent = await this.generateStructuredReport(
         mteerData, 
         mitralRegurgitation, 
@@ -165,7 +182,10 @@ export class MTEERAgent extends MedicalAgent {
       );
 
       // Parse response into sections
+      reportProgress(85, 'Formatting report');
       const sections = this.parseResponse(reportContent, context);
+
+      reportProgress(95, 'Finalizing report');
 
       // Create comprehensive mTEER report
       const processingTime = Date.now() - startTime;
@@ -183,6 +203,8 @@ export class MTEERAgent extends MedicalAgent {
         finalMRGrade: mitralRegurgitation.postProcedure.mrGrade,
         complications: complications.length
       }, clipAssessment.deploymentSuccess);
+
+      reportProgress(100, 'Report generated');
 
       return report;
 

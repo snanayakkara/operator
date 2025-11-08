@@ -27,6 +27,7 @@ import { RHCFieldEditor } from './RHCFieldEditor';
 import { RHCCardPreviewModal } from './RHCCardPreviewModal';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
+import * as RHCCalc from '@/services/RHCCalculationService';
 import { useRHCValidation } from '@/hooks/useRHCValidation';
 import { getValidationConfig } from '@/config/validationFieldConfig';
 import type {
@@ -126,7 +127,9 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   );
   const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
+  const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
+  const [inlineReportDraft, setInlineReportDraft] = useState<RightHeartCathReport | null>(null);
 
   // Validation hook
   const rhcValidation = useRHCValidation();
@@ -237,6 +240,152 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     });
   }, []);
 
+  // Inline edit: nested field updater
+  const updateInlineField = useCallback((path: string, value: string, numeric: boolean = false) => {
+    setInlineReportDraft(prev => {
+      if (!prev) return prev;
+      const next = JSON.parse(JSON.stringify(prev)) as RightHeartCathReport;
+      const keys = path.split('.');
+      let cur: any = next;
+      for (let i = 0; i < keys.length - 1; i++) {
+        cur[keys[i]] = cur[keys[i]] ?? {};
+        cur = cur[keys[i]];
+      }
+      cur[keys[keys.length - 1]] = numeric ? (value === '' ? undefined : parseFloat(value)) : (value || null);
+      return next;
+    });
+  }, []);
+
+  // Validation style helper for inline numeric cells
+  const getValidationClass = useCallback((path: string, rawValue: string | number | null | undefined) => {
+    const val = rawValue === '' || rawValue === null || rawValue === undefined ? undefined : Number(rawValue);
+    if (val === undefined || Number.isNaN(val)) return '';
+
+    const RANGES: Record<string, { min?: number; max?: number }> = {
+      'haemodynamicPressures.ra.mean': { min: 2, max: 8 },
+      'haemodynamicPressures.rv.systolic': { min: 15, max: 30 },
+      'haemodynamicPressures.rv.diastolic': { min: 2, max: 8 },
+      'haemodynamicPressures.rv.rvedp': { min: 0, max: 8 },
+      'haemodynamicPressures.pa.systolic': { min: 15, max: 30 },
+      'haemodynamicPressures.pa.diastolic': { min: 4, max: 12 },
+      'haemodynamicPressures.pa.mean': { min: 9, max: 18 },
+      'haemodynamicPressures.pcwp.mean': { min: 6, max: 15 },
+      'patientData.sao2': { min: 95, max: 100 },
+      'cardiacOutput.mixedVenousO2': { min: 60, max: 80 },
+      'cardiacOutput.wedgeSaturation': { min: 60, max: 100 },
+      'cardiacOutput.thermodilution.co': { min: 4, max: 8 },
+      'cardiacOutput.thermodilution.ci': { min: 2.5, max: 4.0 },
+      'cardiacOutput.fick.co': { min: 4, max: 8 },
+      'cardiacOutput.fick.ci': { min: 2.5, max: 4.0 }
+    };
+
+    // Find a direct match or a prefix match for waves (aWave/vWave don't have strict ranges)
+    const range = RANGES[path];
+    if (!range) return '';
+    const { min, max } = range;
+    const within = (min === undefined || val >= min) && (max === undefined || val <= max);
+    const nearBoundary = () => {
+      if (min !== undefined && val < min) return true;
+      if (max !== undefined && val > max) return true;
+      if (min !== undefined && val < min + (max !== undefined ? (max - min) * 0.1 : 0)) return true;
+      if (max !== undefined && val > max - (max !== undefined && min !== undefined ? (max - min) * 0.1 : 0)) return true;
+      return false;
+    };
+
+    if (within) {
+      return 'border-emerald-300 bg-emerald-50';
+    }
+    return nearBoundary() ? 'border-amber-300 bg-amber-50' : 'border-rose-300 bg-rose-50';
+  }, []);
+
+  // Auto-calc key fields while inline editing (TD CI, Fick CO/CI) and keep calculations live
+  React.useEffect(() => {
+    if (!isInlineEditing || !inlineReportDraft) return;
+
+    const d = inlineReportDraft;
+    const getNum = (v?: string | null) => (v != null && v !== '' ? parseFloat(v) : undefined);
+
+    // Derive BSA from height/weight if available
+    const height = d.patientData?.height;
+    const weight = d.patientData?.weight;
+    const bsa = d.patientData?.bsa ?? (height && weight ? RHCCalc.calculateBSA(height, weight) : undefined);
+
+    // Prepare numbers
+    const tdCO = getNum(d.cardiacOutput.thermodilution.co);
+    const sao2 = d.patientData?.sao2;
+    const svo2 = d.patientData?.svo2 ?? (d.cardiacOutput.mixedVenousO2 ? parseFloat(d.cardiacOutput.mixedVenousO2) : undefined);
+    const hb = d.patientData?.haemoglobin;
+    const gender = d.patientData?.gender;
+
+    // Estimate VO2 when BSA present
+    const estimatedVO2 = bsa ? RHCCalc.estimateVO2(bsa, gender) : undefined;
+
+    // Compute CI (thermodilution)
+    const tdCI = tdCO && bsa ? RHCCalc.calculateCardiacIndex(tdCO, bsa) : undefined;
+
+    // Compute Fick CO/CI when inputs available
+    const fickCO = (estimatedVO2 && hb && sao2 !== undefined && svo2 !== undefined)
+      ? RHCCalc.calculateFickCO(estimatedVO2, hb, sao2, svo2)
+      : undefined;
+    const fickCI = fickCO && bsa ? RHCCalc.calculateCardiacIndex(fickCO, bsa) : undefined;
+
+    // Apply updates only when values change to avoid loops
+    setInlineReportDraft(prev => {
+      if (!prev) return prev;
+      const next = JSON.parse(JSON.stringify(prev)) as RightHeartCathReport;
+      let changed = false;
+
+      if (bsa && bsa !== next.patientData?.bsa) {
+        next.patientData = { ...(next.patientData || {}), bsa };
+        changed = true;
+      }
+
+      if (tdCI !== undefined) {
+        const ciStr = tdCI.toFixed(2);
+        if (next.cardiacOutput.thermodilution.ci !== ciStr) {
+          next.cardiacOutput.thermodilution.ci = ciStr;
+          changed = true;
+        }
+      }
+
+      if (fickCO !== undefined) {
+        const coStr = fickCO.toFixed(2);
+        if (next.cardiacOutput.fick.co !== coStr) {
+          next.cardiacOutput.fick.co = coStr;
+          changed = true;
+        }
+      }
+      if (fickCI !== undefined) {
+        const ciStr = fickCI.toFixed(2);
+        if (next.cardiacOutput.fick.ci !== ciStr) {
+          next.cardiacOutput.fick.ci = ciStr;
+          changed = true;
+        }
+      }
+
+      // Keep the Calculated Haemodynamics section in sync (minimal set)
+      const rap = getNum(next.haemodynamicPressures.ra.mean);
+      const paSys = getNum(next.haemodynamicPressures.pa.systolic);
+      const paDia = getNum(next.haemodynamicPressures.pa.diastolic);
+      const paMean = getNum(next.haemodynamicPressures.pa.mean);
+      const pcwp = getNum(next.haemodynamicPressures.pcwp.mean);
+      const calc: any = next.calculations ? { ...next.calculations } : {};
+      calc.transpulmonaryGradient = RHCCalc.calculateTPG(paMean, pcwp);
+      calc.diastolicPressureGradient = RHCCalc.calculateDPG(paDia, pcwp);
+      calc.pulmonaryVascularResistance = RHCCalc.calculatePVR(paMean, pcwp, tdCO);
+      if (calc.pulmonaryVascularResistance && bsa) calc.pulmonaryVascularResistanceIndex = RHCCalc.calculatePVRI(calc.pulmonaryVascularResistance, bsa);
+      if (tdCI !== undefined) calc.cardiacIndex = tdCI;
+      if (tdCO && next.patientData?.heartRate) calc.strokeVolume = RHCCalc.calculateStrokeVolume(tdCO, next.patientData.heartRate);
+      calc.papi = RHCCalc.calculatePAPi(paSys, paDia, rap);
+      if (estimatedVO2 !== undefined) calc.estimatedVO2 = estimatedVO2;
+      next.calculations = calc;
+      // We always rebuilt calculations – mark changed to propagate
+      changed = true;
+
+      return changed ? next : prev;
+    });
+  }, [isInlineEditing, inlineReportDraft]);
+
   const handleCopy = useCallback(async () => {
     if (!onCopy) return;
 
@@ -263,21 +412,107 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       return;
     }
 
-    // DEBUG: Verify we're using edited data if available
+    // Ensure calculations are populated before export
+    const { haemodynamicPressures, cardiacOutput } = effectiveRHCData;
+    const parse = (v?: string | null) => (v ? parseFloat(v) : undefined);
+
+    const rap = parse(haemodynamicPressures.ra.mean);
+    const paSys = parse(haemodynamicPressures.pa.systolic);
+    const paDia = parse(haemodynamicPressures.pa.diastolic);
+    const paMean = parse(haemodynamicPressures.pa.mean);
+    const pcwp = parse(haemodynamicPressures.pcwp.mean);
+    const tdCO = parse(cardiacOutput.thermodilution.co);
+    const bsa = effectiveRHCData.patientData?.bsa;
+    const hr = effectiveRHCData.patientData?.heartRate;
+    const gender = effectiveRHCData.patientData?.gender as 'male' | 'female' | 'other' | undefined;
+    const sao2 = effectiveRHCData.patientData?.sao2;
+    const svo2 = parse(cardiacOutput.mixedVenousO2);
+
+    // Calculate MAP if systemic BP available
+    const sysBP = effectiveRHCData.patientData?.systolicBP;
+    const diaBP = effectiveRHCData.patientData?.diastolicBP;
+    const map = sysBP && diaBP ? RHCCalc.calculateMAP(sysBP, diaBP) : undefined;
+
+    // Compute calculations if missing or incomplete
+    const hasAnyNumeric = (c?: any) => !!c && Object.values(c).some(v => typeof v === 'number');
+    let calculations: any = effectiveRHCData.calculations || {};
+
+    if (!hasAnyNumeric(calculations)) {
+      // TIER 1: Basic calculations
+      const tpg = RHCCalc.calculateTPG(paMean, pcwp);
+      const dpg = RHCCalc.calculateDPG(paDia, pcwp);
+      const pvr = RHCCalc.calculatePVR(paMean, pcwp, tdCO);
+      const pvri = pvr && bsa ? RHCCalc.calculatePVRI(pvr, bsa) : undefined;
+      const ci = tdCO && bsa ? RHCCalc.calculateCardiacIndex(tdCO, bsa) : undefined;
+      const sv = tdCO && hr ? RHCCalc.calculateStrokeVolume(tdCO, hr) : undefined;
+      const svi = ci && hr ? RHCCalc.calculateSVI(ci, hr) : undefined;
+      const svr = map && tdCO ? RHCCalc.calculateSVR(map, rap || 0, tdCO) : undefined;
+      const svri = svr && bsa ? RHCCalc.calculateSVRI(svr, bsa) : undefined;
+
+      // TIER 2: Advanced calculations
+      const papi = RHCCalc.calculatePAPi(paSys, paDia, rap);
+      const rvswi = paMean && svi ? RHCCalc.calculateRVSWI(paMean, rap || 0, svi) : undefined;
+      const cpo = map && tdCO ? RHCCalc.calculateCPO(map, tdCO) : undefined;
+      const rvCPO = paMean && tdCO ? RHCCalc.calculateRVCPO(paMean, tdCO) : undefined;
+      const estimatedVO2 = bsa ? RHCCalc.estimateVO2(bsa, gender) : undefined;
+
+      // TIER 3: Specialized calculations
+      const pac = sv && paSys && paDia ? RHCCalc.calculatePAC(sv, paSys, paDia) : undefined;
+      const rcTime = pvr && pac ? RHCCalc.calculatePulmonaryRCTime(pvr, pac) : undefined;
+      const ea = paMean && pcwp && sv ? RHCCalc.calculateEffectivePulmonaryEa(paMean, pcwp, sv) : undefined;
+      const rapPawpRatio = rap && pcwp ? RHCCalc.calculateRAPPCWPRatio(rap, pcwp) : undefined;
+      const o2er = sao2 && svo2 ? RHCCalc.calculateOxygenExtractionRatio(sao2, svo2) : undefined;
+
+      calculations = {
+        // Basic
+        transpulmonaryGradient: tpg,
+        diastolicPressureGradient: dpg,
+        pulmonaryVascularResistance: pvr,
+        pulmonaryVascularResistanceIndex: pvri,
+        cardiacIndex: ci,
+        strokeVolume: sv,
+        strokeVolumeIndex: svi,
+        systemicVascularResistance: svr,
+        systemicVascularResistanceIndex: svri,
+        // Advanced
+        papi,
+        rvswi,
+        cardiacPowerOutput: cpo,
+        rvCardiacPowerOutput: rvCPO,
+        estimatedVO2,
+        // Specialized
+        pulmonaryArterialCompliance: pac,
+        pulmonaryRCTime: rcTime,
+        effectivePulmonaryEa: ea,
+        rapPawpRatio,
+        oxygenExtractionRatio: o2er
+      };
+    }
+
+    // Create export data with ensured calculations
+    const exportData: RightHeartCathReport = {
+      ...effectiveRHCData,
+      calculations
+    };
+
+    // DEBUG: Verify calculations before export
     console.log('📤 Export Card - Data Source:', {
       hasEditedReport: !!editedRHCReport,
       usingEditedData: effectiveRHCData === editedRHCReport,
       pressures: {
-        ra: effectiveRHCData.haemodynamicPressures.ra,
-        rv: effectiveRHCData.haemodynamicPressures.rv,
-        pa: effectiveRHCData.haemodynamicPressures.pa,
-        pcwp: effectiveRHCData.haemodynamicPressures.pcwp
+        ra: haemodynamicPressures.ra,
+        rv: haemodynamicPressures.rv,
+        pa: haemodynamicPressures.pa,
+        pcwp: haemodynamicPressures.pcwp
       },
-      cardiacOutput: effectiveRHCData.cardiacOutput
+      cardiacOutput: cardiacOutput,
+      calculations: calculations,
+      hasCalculations: !!calculations,
+      calculationKeys: calculations ? Object.keys(calculations) : []
     });
 
     // Validate data completeness
-    const validation = validateRHCDataForExport(effectiveRHCData);
+    const validation = validateRHCDataForExport(exportData);
     if (!validation.valid) {
       const missingFieldsList = validation.missingFields.join('\n• ');
       alert(`Cannot export card: Missing essential data\n\nMissing fields:\n• ${missingFieldsList}\n\nPlease ensure all haemodynamic measurements are recorded.`);
@@ -291,7 +526,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       // Extract patient info from context or report metadata
       const patientInfo = {
         name: selectedPatientName || undefined,
-        mrn: effectiveRHCData.id || undefined,
+        mrn: exportData.id || undefined,
         dob: undefined
       };
 
@@ -306,7 +541,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       };
 
       // Generate blob and data URL for preview
-      const { blob, dataUrl } = await generateRHCCardBlob(effectiveRHCData, { patientInfo, operatorInfo });
+      const { blob, dataUrl } = await generateRHCCardBlob(exportData, { patientInfo, operatorInfo });
 
       // Show preview modal
       setCardPreview({ dataUrl, blob });
@@ -512,23 +747,56 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 {buttonStates.copied ? 'Copied' : 'Copy'}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsEditingFields(true)}
-                disabled={!effectiveRHCData}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                title="Edit haemodynamic fields before export"
-              >
-                <Edit3 className="w-3 h-3 mr-1" />
-                Edit Fields
-              </button>
+              {!isInlineEditing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!effectiveRHCData) return;
+                    setInlineReportDraft(JSON.parse(JSON.stringify(effectiveRHCData)) as RightHeartCathReport);
+                    setIsInlineEditing(true);
+                  }}
+                  disabled={!effectiveRHCData}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  title="Edit haemodynamic fields inline"
+                >
+                  <Edit3 className="w-3 h-3 mr-1" />
+                  Edit Inline
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!inlineReportDraft) return;
+                      setEditedRHCReport(inlineReportDraft);
+                      setIsInlineEditing(false);
+                      if (onUpdateRhcReport) onUpdateRhcReport(inlineReportDraft);
+                    }}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap"
+                    title="Save edits"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsInlineEditing(false);
+                      setInlineReportDraft(null);
+                    }}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                    title="Cancel edits"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
 
               <button
                 type="button"
                 onClick={handleExportCard}
                 disabled={buttonStates.exporting || !effectiveRHCData}
                 className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                title="Export 13×13cm PNG card (300 DPI)"
+                title="Export 18×10cm PNG card (300 DPI)"
               >
                 {buttonStates.exporting ? (
                   <>
@@ -543,7 +811,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                 ) : (
                   <>
                     <Image className="w-3 h-3 mr-1" />
-                    13×13 Card
+                    18×10 Card
                   </>
                 )}
               </button>
@@ -684,7 +952,11 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                       transition={{ duration: 0.2 }}
                       className="px-4 pb-4"
                     >
-                      {renderSectionContent(key, effectiveRHCData)}
+                      {renderSectionContent(
+                        key,
+                        (isInlineEditing && inlineReportDraft) ? inlineReportDraft : effectiveRHCData,
+                        isInlineEditing ? { editable: true, onChange: (path, value, numeric=false) => updateInlineField(path, value, numeric), getClass: getValidationClass } : undefined
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -830,7 +1102,11 @@ const renderCardiacOutputSection = (cardiacOutput: CardiacOutput, patientData?: 
 );
 
 // Helper function to render section content
-function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport | null) {
+function renderSectionContent(
+  sectionKey: string,
+  rhcData: RightHeartCathReport | null,
+  opts?: { editable?: boolean; onChange?: (path: string, value: string, numeric?: boolean) => void; getClass?: (path: string, value: string | number | null | undefined) => string }
+) {
   if (!rhcData) {
     return <div className="text-gray-500 italic">No structured data available</div>;
   }
@@ -870,6 +1146,20 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
             </div>
           )}
 
+          {/* Patient Demographics */}
+          {rhcData.patientData && (rhcData.patientData.height || rhcData.patientData.weight || rhcData.patientData.bsa || rhcData.patientData.heartRate) && (
+            <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
+              <span className="font-medium text-green-900">Patient Demographics:</span>
+              <div className="mt-1 space-y-1 grid grid-cols-2 gap-x-4">
+                {rhcData.patientData.height && <div>Height: {rhcData.patientData.height} cm</div>}
+                {rhcData.patientData.weight && <div>Weight: {rhcData.patientData.weight} kg</div>}
+                {rhcData.patientData.bmi && <div>BMI: {rhcData.patientData.bmi.toFixed(1)} kg/m²</div>}
+                {rhcData.patientData.bsa && <div>BSA: {rhcData.patientData.bsa.toFixed(2)} m²</div>}
+                {rhcData.patientData.heartRate && <div className="col-span-2">Heart Rate: {rhcData.patientData.heartRate} bpm</div>}
+              </div>
+            </div>
+          )}
+
           {/* Laboratory Values */}
           {(data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
             <div className="bg-gray-50 p-3 rounded">
@@ -882,16 +1172,178 @@ function renderSectionContent(sectionKey: string, rhcData: RightHeartCathReport 
       );
 
     case 'pressures':
+      if (opts?.editable) {
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* RA */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Right Atrial Pressures</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.ra.aWave', haemodynamicPressures.ra.aWave) || 'border-gray-300'}`} placeholder="A"
+                  value={haemodynamicPressures.ra.aWave ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.ra.aWave', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.ra.vWave', haemodynamicPressures.ra.vWave) || 'border-gray-300'}`} placeholder="V"
+                  value={haemodynamicPressures.ra.vWave ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.ra.vWave', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.ra.mean', haemodynamicPressures.ra.mean) || 'border-gray-300'}`} placeholder="Mean"
+                  value={haemodynamicPressures.ra.mean ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.ra.mean', e.target.value)} />
+              </div>
+            </div>
+
+            {/* RV */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Right Ventricular Pressures</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.rv.systolic', haemodynamicPressures.rv.systolic) || 'border-gray-300'}`} placeholder="Sys"
+                  value={haemodynamicPressures.rv.systolic ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.rv.systolic', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.rv.diastolic', haemodynamicPressures.rv.diastolic) || 'border-gray-300'}`} placeholder="Dia"
+                  value={haemodynamicPressures.rv.diastolic ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.rv.diastolic', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.rv.rvedp', haemodynamicPressures.rv.rvedp) || 'border-gray-300'}`} placeholder="RVEDP"
+                  value={haemodynamicPressures.rv.rvedp ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.rv.rvedp', e.target.value)} />
+              </div>
+            </div>
+
+            {/* PA */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Pulmonary Artery Pressures</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pa.systolic', haemodynamicPressures.pa.systolic) || 'border-gray-300'}`} placeholder="Sys"
+                  value={haemodynamicPressures.pa.systolic ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pa.systolic', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pa.diastolic', haemodynamicPressures.pa.diastolic) || 'border-gray-300'}`} placeholder="Dia"
+                  value={haemodynamicPressures.pa.diastolic ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pa.diastolic', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pa.mean', haemodynamicPressures.pa.mean) || 'border-gray-300'}`} placeholder="Mean"
+                  value={haemodynamicPressures.pa.mean ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pa.mean', e.target.value)} />
+              </div>
+            </div>
+
+            {/* PCWP */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">PCWP</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pcwp.aWave', haemodynamicPressures.pcwp.aWave) || 'border-gray-300'}`} placeholder="A"
+                  value={haemodynamicPressures.pcwp.aWave ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pcwp.aWave', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pcwp.vWave', haemodynamicPressures.pcwp.vWave) || 'border-gray-300'}`} placeholder="V"
+                  value={haemodynamicPressures.pcwp.vWave ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pcwp.vWave', e.target.value)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('haemodynamicPressures.pcwp.mean', haemodynamicPressures.pcwp.mean) || 'border-gray-300'}`} placeholder="Mean"
+                  value={haemodynamicPressures.pcwp.mean ?? ''}
+                  onChange={(e)=>opts.onChange?.('haemodynamicPressures.pcwp.mean', e.target.value)} />
+              </div>
+            </div>
+          </div>
+        );
+      }
       return renderPressuresSection(haemodynamicPressures);
 
     case 'cardiac_output':
+      if (opts?.editable) {
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Thermodilution</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-12 text-gray-600 text-xs">CO</span>
+                  <input className={`flex-1 px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.thermodilution.co', cardiacOutput.thermodilution.co) || 'border-gray-300'}`} placeholder="L/min"
+                    value={cardiacOutput.thermodilution.co ?? ''}
+                    onChange={(e)=>opts.onChange?.('cardiacOutput.thermodilution.co', e.target.value, true)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-12 text-gray-600 text-xs">CI</span>
+                  <input className={`flex-1 px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.thermodilution.ci', cardiacOutput.thermodilution.ci) || 'border-gray-300'}`} placeholder="L/min/m²"
+                    value={cardiacOutput.thermodilution.ci ?? ''}
+                    onChange={(e)=>opts.onChange?.('cardiacOutput.thermodilution.ci', e.target.value, true)} />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-gray-900 mb-2">Fick Method</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-12 text-gray-600 text-xs">CO</span>
+                  <input className={`flex-1 px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.fick.co', cardiacOutput.fick.co) || 'border-gray-300'}`} placeholder="L/min"
+                    value={cardiacOutput.fick.co ?? ''}
+                    onChange={(e)=>opts.onChange?.('cardiacOutput.fick.co', e.target.value, true)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-12 text-gray-600 text-xs">CI</span>
+                  <input className={`flex-1 px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.fick.ci', cardiacOutput.fick.ci) || 'border-gray-300'}`} placeholder="L/min/m²"
+                    value={cardiacOutput.fick.ci ?? ''}
+                    onChange={(e)=>opts.onChange?.('cardiacOutput.fick.ci', e.target.value, true)} />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg md:col-span-2">
+              <h4 className="font-medium text-gray-900 mb-2">Oxygen Saturations</h4>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('patientData.sao2', rhcData.patientData?.sao2) || 'border-gray-300'}`} placeholder="SaO₂ %"
+                  value={String(rhcData.patientData?.sao2 ?? '')}
+                  onChange={(e)=>opts.onChange?.('patientData.sao2', e.target.value, true)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.mixedVenousO2', cardiacOutput.mixedVenousO2) || 'border-gray-300'}`} placeholder="Mixed Venous %"
+                  value={cardiacOutput.mixedVenousO2 ?? ''}
+                  onChange={(e)=>opts.onChange?.('cardiacOutput.mixedVenousO2', e.target.value, true)} />
+                <input className={`px-2 py-1 text-xs font-mono text-right border rounded-md bg-white focus:ring-2 focus:ring-blue-500 ${opts?.getClass?.('cardiacOutput.wedgeSaturation', cardiacOutput.wedgeSaturation) || 'border-gray-300'}`} placeholder="Wedge %"
+                  value={cardiacOutput.wedgeSaturation ?? ''}
+                  onChange={(e)=>opts.onChange?.('cardiacOutput.wedgeSaturation', e.target.value, true)} />
+              </div>
+            </div>
+          </div>
+        );
+      }
       return renderCardiacOutputSection(cardiacOutput, rhcData.patientData);
 
     case 'calculations':
-      if (!rhcData.calculations || Object.keys(rhcData.calculations).length === 0) {
+      // Use provided calculations when they have any numeric values; otherwise compute a lightweight fallback
+      const hasAnyNumeric = (c?: any) => !!c && Object.values(c).some(v => typeof v === 'number');
+
+      let calcToShow: any = rhcData.calculations;
+
+      // Build fallback using currently visible inputs
+      const parse = (v?: string | null) => (v ? parseFloat(v) : undefined);
+      const rap = parse(haemodynamicPressures.ra.mean);
+      const paSys = parse(haemodynamicPressures.pa.systolic);
+      const paDia = parse(haemodynamicPressures.pa.diastolic);
+      const paMean = parse(haemodynamicPressures.pa.mean);
+      const pcwp = parse(haemodynamicPressures.pcwp.mean);
+      const tdCO = parse(cardiacOutput.thermodilution.co);
+      const bsa = rhcData.patientData?.bsa;
+      const hr = rhcData.patientData?.heartRate;
+
+      const fallback: any = {};
+      fallback.transpulmonaryGradient = RHCCalc.calculateTPG(paMean, pcwp);
+      fallback.diastolicPressureGradient = RHCCalc.calculateDPG(paDia, pcwp);
+      fallback.pulmonaryVascularResistance = RHCCalc.calculatePVR(paMean, pcwp, tdCO);
+      if (fallback.pulmonaryVascularResistance && bsa) {
+        fallback.pulmonaryVascularResistanceIndex = RHCCalc.calculatePVRI(fallback.pulmonaryVascularResistance, bsa);
+      }
+      if (tdCO && bsa) fallback.cardiacIndex = RHCCalc.calculateCardiacIndex(tdCO, bsa);
+      if (tdCO && hr) fallback.strokeVolume = RHCCalc.calculateStrokeVolume(tdCO, hr);
+      fallback.papi = RHCCalc.calculatePAPi(paSys, paDia, rap);
+
+      // Decide what to show
+      if (!hasAnyNumeric(calcToShow) && hasAnyNumeric(fallback)) {
+        calcToShow = fallback;
+      } else if (hasAnyNumeric(calcToShow) && hasAnyNumeric(fallback)) {
+        // Fill gaps without overwriting existing values
+        for (const [k, v] of Object.entries(fallback)) {
+          if (v !== undefined && (calcToShow?.[k] === undefined || calcToShow?.[k] === null)) {
+            calcToShow[k] = v;
+          }
+        }
+      }
+
+      if (!hasAnyNumeric(calcToShow)) {
         return <div className="text-gray-500 italic">No calculated haemodynamics available</div>;
       }
-      return <CalculatedHaemodynamicsDisplay calculations={rhcData.calculations} />;
+      return <CalculatedHaemodynamicsDisplay calculations={calcToShow} />;
 
     case 'exercise':
       if (!exerciseHaemodynamics) {

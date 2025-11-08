@@ -122,12 +122,19 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
 
   // Generate time prediction
   useEffect(() => {
-    if (agentType && transcriptionLength && showTimeEstimate && !prediction) {
+    // Use audioDuration if available, otherwise fall back to transcriptionLength
+    const hasInputData = audioDuration || transcriptionLength;
+
+    if (agentType && hasInputData && showTimeEstimate && !prediction) {
       try {
-        const estimate = predictor.predictProcessingTime(agentType, transcriptionLength, {
-          audioDuration,
-          includeTranscriptionTime: true
-        });
+        const estimate = predictor.predictProcessingTime(
+          agentType,
+          transcriptionLength || 0, // Use 0 if no transcription yet (audio duration will be primary)
+          {
+            audioDuration,
+            includeTranscriptionTime: true
+          }
+        );
         setPrediction(estimate);
       } catch (error) {
         console.warn('Failed to generate time prediction:', error);

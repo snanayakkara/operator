@@ -9,6 +9,68 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.31.0] - 2025-11-09
+
+### Added
+
+- **RHC 18×10 Card Export - Comprehensive Redesign**
+  - **Column 1 (Haemodynamic Pressures)**: Enhanced display format
+    - RA: Shows mean pressure in large text with a/v-waves below in small grey text when available
+    - PCWP: Same pattern as RA - mean in large text, a/v-waves below
+    - PA: All three values on one line: "51/25 (34) mmHg" (systolic/diastolic (mean))
+    - Improved spacing optimization (12px padding, reduced gaps)
+
+  - **Column 2 (Cardiac Output)**: Restructured layout
+    - Thermodilution: CO in large text, CI below in small grey text
+    - Fick Method: CO and CI with same formatting
+    - Added "Assumed VO₂" display showing gender/BSA-based estimation with formula note
+    - Removed redundant Mixed Venous O₂ standalone section
+
+  - **Column 3 (Calculated Parameters)**: Expanded from 8 to 16 advanced haemodynamic metrics
+    - **Basic**: PVR, PVRI, TPG, DPG, SVR, SVRI, SVI
+    - **Advanced**: PAPi, RVSWI, PAC, RC Time, Ea, RAP:PCWP ratio
+    - **Specialized**: O₂ER, CPO, RV CPO
+    - All displayed in compact 2-column grid with proper formatting
+
+- **RHC Enhanced Calculation Engine**
+  - Comprehensive computation of Tier 1, 2, and 3 calculations from RHCCalculationService
+  - Gender-based VO₂ estimation (Male: 150, Female: 130, Other: 125 mL/min/m² × BSA)
+  - MAP calculation from systemic BP when available
+  - Oxygen extraction ratio (O₂ER) from SaO₂ and SvO₂
+  - All calculations follow Australian/ESC 2022 guidelines and AHA 2021 standards
+
+- **RHC Patient Demographics Panel**
+  - New structured panel in Procedure Details section showing all extracted patient data
+  - Displays: Height (cm), Weight (kg), BMI (kg/m²), BSA (m²), Heart Rate (bpm)
+  - Green-themed panel with 2-column grid layout for compact display
+  - Only appears when patient data is available
+
+### Fixed
+
+- **RHC Card Export - Empty Calculated Parameters Column**
+  - Fixed issue where calculations weren't being computed before export
+  - Added fallback calculation logic matching UI display behavior
+  - Ensures all haemodynamic calculations are populated in exported cards
+
+- **RHC Card Export - Border Overflow**
+  - Fixed bottom borders being cut off due to content overflow
+  - Added `overflow: hidden` and `boxSizing: border-box` to all column divs
+  - Reduced parent container padding from 16px to 12px
+  - Ensured all four borders (top, right, bottom, left) are fully visible
+
+- **Validation Workflow - Property Name Consistency**
+  - Fixed `rapPcwpRatio` typo (should be `rapPawpRatio` per type definitions)
+  - Updated both RHCCardLayout and RightHeartCathDisplay for consistency
+
+### Changed
+
+- **RHC Card Layout Spacing Optimization**
+  - Reduced column padding: 16px → 12px (all three columns)
+  - Reduced column gaps: 12px/10px → 10px/6px
+  - Reduced header margins: 8px → 4px (marginBottom)
+  - Optimized font sizes in Column 3: labels 9px→8px, values 14px→13px, units 8px→7px
+  - Prevents future content overflow while maintaining visual hierarchy
+
 ## [3.30.2] - 2025-11-08
 
 ### Fixed

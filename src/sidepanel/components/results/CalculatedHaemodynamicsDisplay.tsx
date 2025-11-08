@@ -347,7 +347,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
           >
             <div className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-purple-600" />
-              <h3 className="text-base font-semibold text-gray-900">Advanced Metrics (AHA 2021)</h3>
+              <h3 className="text-base font-semibold text-gray-900">Advanced Metrics)</h3>
               <span className="text-xs text-gray-500">(Tier 2)</span>
             </div>
             {expandedTiers.has('tier2') ? (

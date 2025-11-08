@@ -1,7 +1,7 @@
 /**
  * RHC Card Preview Modal Component
  *
- * Shows a preview of the 13×13cm RHC card with options to:
+ * Shows a preview of the 18×10cm RHC card with options to:
  * - Copy to clipboard
  * - Download as PNG
  * - Dismiss by clicking outside
@@ -82,7 +82,7 @@ export const RHCCardPreviewModal: React.FC<RHCCardPreviewModalProps> = ({
         <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-blue-200 px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">RHC Card Preview</h2>
-            <p className="text-sm text-gray-600 mt-1">13×13cm @ 300 DPI</p>
+            <p className="text-sm text-gray-600 mt-1">18×10cm @ 300 DPI</p>
           </div>
           <button
             onClick={onClose}

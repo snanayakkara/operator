@@ -10,6 +10,15 @@ import type { FieldDisplayConfig, ValidationPromptCopy } from '@/sidepanel/compo
 // =============================================================================
 
 export const RHC_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
+  // Patient Data (for Fick calculations)
+  'patientData.height': { label: 'Height', inputType: 'number', placeholder: 'Height in cm', helperText: 'Required for BSA and CI calculation (normal: 150-200 cm)' },
+  'patientData.weight': { label: 'Weight', inputType: 'number', placeholder: 'Weight in kg', helperText: 'Required for BSA and CI calculation (normal: 40-120 kg)' },
+  'patientData.hemoglobin': { label: 'Haemoglobin', inputType: 'number', placeholder: 'Hb in g/L', helperText: 'Required for Fick CO calculation (normal: 120-180 g/L)' },
+  'patientData.haemoglobin': { label: 'Haemoglobin', inputType: 'number', placeholder: 'Hb in g/L', helperText: 'Required for Fick CO calculation (normal: 120-180 g/L)' },
+  'patientData.sao2': { label: 'Arterial O₂ Saturation (SaO₂)', inputType: 'number', placeholder: 'SaO₂ in %', helperText: 'Required for Fick CO (normal: 95-100%)' },
+  'patientData.svo2': { label: 'Mixed Venous O₂ (SvO₂)', inputType: 'number', placeholder: 'SvO₂ in %', helperText: 'Required for Fick CO (normal: 60-80%)' },
+  'patientData.heartRate': { label: 'Heart Rate', inputType: 'number', placeholder: 'HR in bpm', helperText: 'For stroke volume calculation (normal: 60-100 bpm)' },
+
   // Pressures
   'pressures.raP': { label: 'RA Pressure', inputType: 'number', placeholder: 'Mean RA pressure in mmHg', helperText: 'Right atrial mean pressure (normal: 2-8 mmHg)' },
   'pressures.rvSystolic': { label: 'RV Systolic Pressure', inputType: 'number', placeholder: 'RV systolic in mmHg', helperText: 'Right ventricular systolic pressure (normal: 15-30 mmHg)' },
@@ -19,6 +28,10 @@ export const RHC_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
   'pressures.paMean': { label: 'PA Mean Pressure', inputType: 'number', placeholder: 'Mean PA pressure in mmHg', helperText: 'Pulmonary artery mean pressure (normal: 9-18 mmHg)' },
   'pressures.pcwp': { label: 'PCWP', inputType: 'number', placeholder: 'PCWP in mmHg', helperText: 'Pulmonary capillary wedge pressure (normal: 6-12 mmHg)' },
 
+  // Cardiac Output
+  'cardiacOutput.thermodilution.co': { label: 'Thermodilution CO', inputType: 'number', placeholder: 'CO in L/min', helperText: 'Cardiac output by thermodilution (normal: 4-8 L/min)' },
+  'cardiacOutput.thermodilution.ci': { label: 'Thermodilution CI', inputType: 'number', placeholder: 'CI in L/min/m²', helperText: 'Cardiac index (normal: 2.5-4.0 L/min/m²)' },
+
   // Calculations
   'calculations.cardiacOutput': { label: 'Cardiac Output', inputType: 'number', placeholder: 'CO in L/min', helperText: 'Cardiac output (normal: 4-8 L/min)' },
   'calculations.cardiacIndex': { label: 'Cardiac Index', inputType: 'number', placeholder: 'CI in L/min/m²', helperText: 'Cardiac index normalized to BSA (normal: 2.5-4.0 L/min/m²)' },
@@ -26,9 +39,15 @@ export const RHC_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
   'calculations.svr': { label: 'SVR', inputType: 'number', placeholder: 'SVR in dynes·s·cm⁻⁵', helperText: 'Systemic vascular resistance (normal: 800-1200 dynes·s·cm⁻⁵)' },
   'calculations.transValvularGradient': { label: 'Transvalvular Gradient', inputType: 'number', placeholder: 'Gradient in mmHg', helperText: 'Pressure gradient across valve (if applicable)' },
 
-  // Resources
-  'resources.fluoroscopyTime': { label: 'Fluoroscopy Time', inputType: 'number', placeholder: 'Total fluoroscopy time in minutes', helperText: 'Total radiation exposure time' },
-  'resources.contrastVolume': { label: 'Contrast Volume', inputType: 'number', placeholder: 'Total contrast in mL', helperText: 'Total iodinated contrast volume administered' }
+  // Radiation Safety & Contrast (OPTIONAL fields)
+  'rhcData.fluoroscopyTime': { label: 'Fluoroscopy Time', inputType: 'number', placeholder: 'Total fluoroscopy time in minutes', helperText: 'Total radiation exposure time (OPTIONAL - for ALARA compliance)' },
+  'rhcData.fluoroscopyDose': { label: 'Fluoroscopy Dose', inputType: 'number', placeholder: 'Dose in mGy', helperText: 'Total fluoroscopy dose (OPTIONAL - for radiation safety documentation)' },
+  'rhcData.doseAreaProduct': { label: 'Dose Area Product (DAP)', inputType: 'number', placeholder: 'DAP in Gy·cm²', helperText: 'Dose area product (OPTIONAL - alternative radiation metric)' },
+  'rhcData.contrastVolume': { label: 'Contrast Volume', inputType: 'number', placeholder: 'Total contrast in mL', helperText: 'Total iodinated contrast volume (OPTIONAL - for nephrotoxicity assessment)' },
+
+  // Legacy field paths (for backward compatibility)
+  'resources.fluoroscopyTime': { label: 'Fluoroscopy Time', inputType: 'number', placeholder: 'Total fluoroscopy time in minutes', helperText: 'Total radiation exposure time (OPTIONAL)' },
+  'resources.contrastVolume': { label: 'Contrast Volume', inputType: 'number', placeholder: 'Total contrast in mL', helperText: 'Total iodinated contrast volume (OPTIONAL)' }
 };
 
 export const RHC_VALIDATION_COPY: ValidationPromptCopy = {
