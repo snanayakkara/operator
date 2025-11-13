@@ -43,3 +43,8 @@ test-*.js
 test-*.cjs
 offline-check.py
 *.backup
+
+# Runtime files
+*.pid
+dspy-server.pid
+dspy-server.log
