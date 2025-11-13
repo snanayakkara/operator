@@ -9,6 +9,116 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.32.0] - 2025-11-13
+
+### Added
+
+- **Quick Letter Agent - Intelligent First Name Extraction**
+  - New `extractFirstName()` method parses full patient names to extract first name only
+  - Strips common titles (Mr, Ms, Mrs, Miss, Dr, Prof, Professor) before extraction
+  - Handles multiple name formats: "Mr John Smith" → "John", "Dr Jane Doe" → "Jane", "Mary" → "Mary"
+  - Patient demographics now provide both "Patient Full Name" and "Patient First Name" separately
+  - System prompts enhanced with explicit instructions to use ONLY first name in greetings
+  - Prevents awkward title-heavy greetings (e.g., "I saw Mr Bruce Taylor today" → "I saw Bruce today")
+  - Formal titles with surnames still available for subsequent references in letter body
+
+- **RHC Agent - Anti-Hallucination Post-Processing Pipeline**
+  - Comprehensive post-processing to detect and remove example text leaked from system prompts
+  - Pattern matching for example phrases (e.g., "Moderate pulmonary hypertension, with preserved cardiac output...")
+  - Detects and removes placeholder brackets: `[Age]`, `[gender]`, `[stated diagnosis]`, `[actual]`, `[explicitly dictated]`
+  - Console warnings logged when suspicious example text detected
+  - Preserves legitimate bracketed content (e.g., `[site not specified]`, `[not stated]`)
+  - Ensures only dictated content appears in final report
+
+- **Enhanced Progress Tracking System**
+  - Time-based progress interpolation during prompt processing phase (50% → 68%)
+  - 1-second interval updates with linear interpolation over 20-second estimated prompt processing time
+  - Character-based progress tracking during streaming (70% → 98%)
+  - Throttled progress updates every 500ms to avoid excessive re-renders
+  - Stage progress tracking: "Processing prompt..." → "Streaming response (X%)" → "Complete"
+  - Proper cleanup of progress intervals on completion or interruption
+
+- **Session Management Enhancements**
+  - Added `processingStartTime` to session state for accurate ETA calculation
+  - Enhanced diagnostic logging for session loading with detailed metadata
+  - Patient context header now shows during both recording/processing AND when viewing completed sessions
+  - Better audio duration tracking with fallback to most recent processing session
+
+- **EMR Integration Timeout Protection**
+  - Added 3-second timeout wrapper for EMR field insertion operations
+  - Prevents hanging when content script doesn't respond (due to page state changes)
+  - Graceful error handling with continuation of auto-check workflow
+  - Console logging distinguishes between successful insertion and timeout scenarios
+
+### Changed
+
+- **Quick Letter System Prompts**
+  - Strengthened patient demographics handling instructions
+  - Added "CRITICAL" markers emphasizing first name usage in greetings
+  - Explicit prohibition of titles (Mr/Ms/Mrs/Dr) or surnames in opening greetings
+  - Golden standard example updated to show correct first name usage
+  - Both dictation and typed letter modes updated with consistent guidance
+
+- **RHC Agent Data Extraction**
+  - Enhanced regex patterns for patient data extraction with more flexible matching
+  - Now handles "Patient height", "Patient weight" variations (not just "height:", "weight:")
+  - Added support for period separators (e.g., "height. 180") in addition to colons
+  - Improved heart rate extraction with multiple pattern variations
+  - Better handling of whitespace and optional units
+
+- **OptimizedApp Progress Flow**
+  - Refactored streaming workflow to track generation progress with character counts
+  - Added `currentAgent` setting during processing for proper timer and UI display
+  - Enhanced progress pipeline: Audio → Transcribing → AI Analysis (prompt) → Generation (streaming) → Complete
+  - Progress capping at 98% during streaming (prevents showing 100% before done)
+
+- **Session Auto-Check Functionality**
+  - Fixed auto-check after "Insert to EMR" by setting `selectedSessionId` after completion
+  - Now works for both streaming and background processing workflows
+  - Added defensive timing to ensure session is available before auto-check triggers
+
+### Fixed
+
+- **Patient Context Header Display Bug**
+  - Fixed header not showing when viewing completed sessions
+  - Now displays during recording/processing AND when viewing past sessions from timeline
+  - Proper patient info and agent type display for both active and display sessions
+  - Processing status correctly shows 'complete' for displayed sessions
+
+- **Audio Duration Tracking**
+  - Fixed missing audio duration in ETA predictions during processing
+  - Added fallback logic: tries `currentSessionId` first, then falls back to most recent processing session
+  - Console logging shows which session was used for duration lookup
+  - Prevents "undefined" audio duration in progress calculations
+
+- **Session Display Data Flow**
+  - Fixed `processingStartTime` not being passed through to display sessions
+  - Now properly flows from session state → display state → OptimizedResultsPanel
+  - Enables accurate ETA calculation for both active and displayed sessions
+
+- **Progress Interval Cleanup**
+  - Added proper cleanup of prompt processing intervals on streaming completion
+  - Prevents memory leaks from orphaned intervals
+  - Cleanup occurs on both successful completion and error scenarios
+
+### Technical Improvements
+
+- **State Management**
+  - Added `processingStartTime` field to `PatientSession`, `DisplaySessionState`, and `CurrentDisplayData` types
+  - Enhanced `getCurrentDisplayData()` to include processing start time in all branches
+  - Better type safety with optional chaining for audio duration lookups
+
+- **Performance Optimizations**
+  - Character count tracking for streaming progress (updates every 500ms vs every token)
+  - Estimated character calculation: `maxTokens * 3.5` (1 token ≈ 3.5 chars)
+  - Blended progress calculation: time-based (prompt) + character-based (streaming)
+  - Hardware-accelerated progress animations with CSS transitions
+
+- **Code Quality**
+  - Comprehensive console logging for diagnostics (session loading, audio duration, EMR insertion)
+  - Better error messages distinguishing between timeout and actual failures
+  - Defensive programming with proper null checks and optional chaining
+
 ## [3.31.0] - 2025-11-09
 
 ### Added

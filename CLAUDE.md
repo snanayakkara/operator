@@ -331,12 +331,19 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.29.1**
+**Current Version**: **3.32.0**
 **Last Updated**: November 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.32.0 (Nov 2025)**
+- **Quick Letter - Intelligent First Name Extraction**: Parses full patient names (strips titles) to extract first name only; prevents awkward title-heavy greetings ("I saw Bruce today" not "I saw Mr Bruce Taylor today"); system prompts enhanced with explicit first-name-only instructions
+- **RHC - Anti-Hallucination Post-Processing**: Comprehensive pipeline to detect and remove example text leaked from system prompts; pattern matching for placeholder brackets `[Age]`, `[gender]`, `[stated diagnosis]`; console warnings for suspicious content; preserves legitimate bracketed content like `[site not specified]`
+- **Enhanced Progress Tracking**: Time-based interpolation during prompt processing (50% → 68%); character-based tracking during streaming (70% → 98%); throttled updates every 500ms; proper cleanup of progress intervals
+- **Session Management Improvements**: Added `processingStartTime` for accurate ETA; patient context header now shows for both active and displayed sessions; audio duration tracking with fallback logic; auto-check fixes via `selectedSessionId` setting
+- **EMR Integration Timeout Protection**: 3-second timeout wrapper prevents hanging when content script doesn't respond; graceful error handling with workflow continuation
 
 **v3.29.1 (Nov 2025)** - Critical Bugfix Release
 - **Fixed validation checkpoint logic bug** affecting all 4 procedural agents (RHC, TAVI, AngioPCI, mTEER)
