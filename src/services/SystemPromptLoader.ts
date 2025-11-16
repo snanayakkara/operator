@@ -15,9 +15,15 @@
 import type { AgentType } from '@/types/medical.types';
 import { logger } from '@/utils/Logger';
 import { toError } from '@/utils/errorHelpers';
+import * as MedicationSystemPromptsModule from '@/agents/specialized/MedicationSystemPrompts';
 
 // System prompt cache to avoid repeated imports
 const promptCache = new Map<string, any>();
+
+// Worker-safe prompt modules (statically imported to avoid DOM-dependent preloading)
+const WORKER_SAFE_PROMPT_MODULES: Record<string, any> = {
+  MedicationSystemPrompts: MedicationSystemPromptsModule
+};
 
 // Agent type to SystemPrompts file mapping
 const SYSTEM_PROMPT_FILES: Partial<Record<AgentType, string>> = {
@@ -235,6 +241,11 @@ export class SystemPromptLoader {
 
   private async dynamicImportSystemPrompts(fileName: string): Promise<any> {
     try {
+      const isWorkerContext = typeof document === 'undefined';
+      if (isWorkerContext && WORKER_SAFE_PROMPT_MODULES[fileName]) {
+        return WORKER_SAFE_PROMPT_MODULES[fileName];
+      }
+
       // Dynamic import for code splitting
       // Note: Vite requires file extension in static part of import path
       const module = await import(`@/agents/specialized/${fileName}.ts`);

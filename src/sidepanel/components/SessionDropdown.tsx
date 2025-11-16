@@ -18,11 +18,12 @@ import {
   Search,
   HardDrive,
   Calendar,
-  Archive
+  Archive,
+  RefreshCw
 } from 'lucide-react';
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
-import type { PatientSession, SessionStatus } from '@/types/medical.types';
+import type { PatientSession, SessionStatus, AgentType } from '@/types/medical.types';
 import type { StorageStats } from '@/types/persistence.types';
 import { getStateColors, type ProcessingState } from '@/utils/stateColors';
 import { getAgentColors, getAgentCategoryIcon } from '@/utils/agentCategories';
@@ -34,6 +35,7 @@ interface SessionDropdownProps {
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
   onStopRecording?: () => void;
+  onAgentReprocess?: (agentType: AgentType) => void; // Callback for reprocessing failed sessions
   selectedSessionId?: string | null;
   activeRecordingSessionId?: string | null;
   isOpen: boolean;
@@ -275,6 +277,7 @@ interface EnhancedSessionItemProps {
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
   onStopRecording?: () => void;
+  onAgentReprocess?: (agentType: AgentType) => void; // Callback for reprocessing failed sessions
   onRemoveSession: (sessionId: string) => void;
   onCopyResults: (session: PatientSession) => Promise<void>;
   onClose?: () => void; // Function to close the dropdown
@@ -294,6 +297,7 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
   onSessionSelect,
   onResumeRecording,
   onStopRecording,
+  onAgentReprocess,
   onRemoveSession,
   onCopyResults,
   onClose
@@ -494,9 +498,44 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
             </div>
 
             {state === 'error' && session.errors?.length ? (
-              <div className="mt-1 text-[10px] text-rose-600 flex items-center gap-1">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                {session.errors[0]}
+              <div className="mt-1 space-y-1">
+                <div className="text-[10px] text-rose-600 flex items-center gap-1">
+                  <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
+                  <span className="font-medium">{session.errors[0]}</span>
+                </div>
+
+                {session.errors.length > 1 && (
+                  <details className="text-[9px] text-rose-500">
+                    <summary className="cursor-pointer hover:text-rose-700 ml-3">
+                      Show {session.errors.length - 1} more error{session.errors.length > 2 ? 's' : ''}
+                    </summary>
+                    <ul className="mt-0.5 pl-3 space-y-0.5 list-disc">
+                      {session.errors.slice(1).map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
+                <div className="flex items-start gap-1.5 ml-3">
+                  <div className="text-[9px] text-amber-600 flex-1">
+                    💡 Try: Check LM Studio is running → Click "Retry"
+                  </div>
+                  {onAgentReprocess && onSessionSelect && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSessionSelect(session); // Open session first
+                        setTimeout(() => onAgentReprocess(session.agentType), 100); // Then reprocess
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 hover:bg-amber-100 transition-colors"
+                      title="Retry processing this session"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Retry
+                    </button>
+                  )}
+                </div>
               </div>
             ) : null}
 
@@ -566,6 +605,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   onSessionSelect,
   onResumeRecording,
   onStopRecording,
+  onAgentReprocess,
   selectedSessionId,
   activeRecordingSessionId = null,
   isOpen,
@@ -967,6 +1007,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                         onSessionSelect={onSessionSelect}
                         onResumeRecording={onResumeRecording}
                         onStopRecording={onStopRecording}
+                        onAgentReprocess={onAgentReprocess}
                         onRemoveSession={onRemoveSession}
                         onCopyResults={handleCopyResults}
                         onClose={onClose}
@@ -1010,6 +1051,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                         onSessionSelect={onSessionSelect}
                         onResumeRecording={onResumeRecording}
                         onStopRecording={onStopRecording}
+                        onAgentReprocess={onAgentReprocess}
                         onRemoveSession={onRemoveSession}
                         onCopyResults={handleCopyResults}
                         onClose={onClose}
@@ -1055,6 +1097,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                         onSessionSelect={onSessionSelect}
                         onResumeRecording={onResumeRecording}
                         onStopRecording={onStopRecording}
+                        onAgentReprocess={onAgentReprocess}
                         onRemoveSession={onRemoveSession}
                         onCopyResults={handleCopyResults}
                         onClose={onClose}

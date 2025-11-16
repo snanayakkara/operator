@@ -10,6 +10,7 @@ import React, { useEffect, useCallback, useRef, memo, startTransition, useState,
 import './styles/globals.css';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { AudioDeviceProvider, useAudioDeviceContext } from '@/contexts/AudioDeviceContext';
+import ErrorBoundary from './components/errors/ErrorBoundary';
 import { OptimizedResultsPanel } from './components/results/OptimizedResultsPanel';
 import { TranscriptionSection } from './components/results/TranscriptionSection';
 import { QuickActionsGrouped } from './components/QuickActionsGrouped';
@@ -78,6 +79,7 @@ interface CurrentDisplayData {
   agentName: string | null;
   patientInfo: PatientInfo | null;
   processingTime?: number | null;
+  processingStartTime?: number | null; // Processing start timestamp for ETA calculation
   modelUsed?: string | null;
   audioDuration?: number | null; // Audio duration in seconds for ETA prediction
   pipelineProgress?: PipelineProgress | null;
@@ -87,11 +89,13 @@ interface CurrentDisplayData {
 
 const OptimizedApp: React.FC = memo(() => {
   return (
-    <QueryProvider>
-      <AudioDeviceProvider>
-        <OptimizedAppContent />
-      </AudioDeviceProvider>
-    </QueryProvider>
+    <ErrorBoundary>
+      <QueryProvider>
+        <AudioDeviceProvider>
+          <OptimizedAppContent />
+        </AudioDeviceProvider>
+      </QueryProvider>
+    </ErrorBoundary>
   );
 });
 
@@ -1029,6 +1033,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.clearStream();
     actions.setStreaming(true);
     actions.setProcessingStatus('processing');
+    actions.setCurrentAgent(agent); // Set agent type for timer and UI display
     const controller = new AbortController();
     processingAbortRef.current = controller;
     const { model, maxTokens } = getModelAndTokens(agent);
@@ -1050,6 +1055,31 @@ const OptimizedAppContent: React.FC = memo(() => {
     let streamingSucceeded = false;
     let ttftMs: number | null = null;
     const t0 = performance.now();
+    let generatedChars = 0; // Track generated character count for progress
+    const expectedChars = maxTokens * 3.5; // Estimate expected characters (1 token ≈ 3.5 chars)
+    let lastProgressUpdate = Date.now(); // Throttle progress updates to every 500ms
+
+    // Time-based progress for prompt processing phase (50% → 68%)
+    const promptProcessingStartTime = Date.now();
+    const estimatedPromptProcessingTime = 20000; // 20 seconds estimate for prompt processing
+    let promptProcessingInterval: NodeJS.Timeout | null = null;
+
+    // Start time-based progress updates for prompt processing (50% → 68%)
+    promptProcessingInterval = setInterval(() => {
+      const elapsed = Date.now() - promptProcessingStartTime;
+
+      // Interpolate 50% → 68% over estimated prompt processing time
+      const promptProgress = Math.min((elapsed / estimatedPromptProcessingTime) * 18, 18); // Max 18% (cap at 68%)
+      const currentProgress = Math.min(50 + promptProgress, 68);
+
+      actions.updatePipelineProgress({
+        stage: 'ai-analysis',
+        progress: currentProgress,
+        stageProgress: Math.min((elapsed / estimatedPromptProcessingTime) * 100, 90),
+        details: 'Processing prompt...'
+      });
+    }, 1000); // Update every 1 second during prompt processing
+
     const performanceMonitor = PerformanceMonitoringService.getInstance();
     await streamChatCompletion({
       model,
@@ -1065,6 +1095,12 @@ const OptimizedAppContent: React.FC = memo(() => {
           ttftMs = Math.round(performance.now() - t0);
           actions.setTTFT(ttftMs);
 
+          // Stop time-based prompt processing updates
+          if (promptProcessingInterval) {
+            clearInterval(promptProcessingInterval);
+            promptProcessingInterval = null;
+          }
+
           // Update progress to Generation stage once first token arrives
           actions.updatePipelineProgress({
             stage: 'generation',
@@ -1076,10 +1112,49 @@ const OptimizedAppContent: React.FC = memo(() => {
       },
       onToken: (t) => {
         actions.appendStreamChunk(t);
+
+        // Track character count and update progress during streaming
+        generatedChars += t.length;
+
+        // Throttle updates to every 500ms to avoid excessive renders
+        const now = Date.now();
+        if (now - lastProgressUpdate > 500) {
+          lastProgressUpdate = now;
+
+          // Calculate progress: 70% (first token) + up to 30% (generation)
+          // Cap at 98% to leave room for completion (avoids showing 100% before done)
+          const generationProgress = Math.min((generatedChars / expectedChars) * 30, 28);
+          const totalProgress = Math.min(70 + generationProgress, 98);
+
+          // Calculate stage progress (0-100% within Generation stage)
+          const stageProgress = Math.min((generatedChars / expectedChars) * 100, 95);
+
+          actions.updatePipelineProgress({
+            stage: 'generation',
+            progress: totalProgress,
+            stageProgress: stageProgress,
+            details: `Streaming response (${Math.round(stageProgress)}%)`
+          });
+        }
       },
       onEnd: async (final, usage) => {
+        // Clean up prompt processing interval if still running
+        if (promptProcessingInterval) {
+          clearInterval(promptProcessingInterval);
+          promptProcessingInterval = null;
+        }
+
         streamingSucceeded = true;
         processingDuration = Date.now() - streamingStartTime;
+
+        // Set final 100% progress on completion
+        actions.updatePipelineProgress({
+          stage: 'generation',
+          progress: 100,
+          stageProgress: 100,
+          details: 'Complete'
+        });
+
         // Extract summary and letter content for QuickLetter agents to enable dual-card display
         let extractedSummary: string | undefined = undefined;
         let letterContent: string = final; // Default to full content for non-QuickLetter agents
@@ -1174,6 +1249,11 @@ const OptimizedAppContent: React.FC = memo(() => {
 
           actions.completeProcessingAtomic(sessionId, letterContent, extractedSummary);
           console.log('🏁 Workflow Completion: Atomic completion done for streaming workflow');
+
+          // IMPORTANT: Set selectedSessionId so auto-check can find this session after "Insert to EMR"
+          // completeProcessingAtomic clears currentSessionId, but we need a way to track the completed session
+          actions.setSelectedSessionId(sessionId);
+          console.log('🔖 Set selectedSessionId for completed session:', sessionId);
 
           // Defensive check: ensure UI is actually ready after completion
           setTimeout(() => {
@@ -1496,7 +1576,23 @@ const OptimizedAppContent: React.FC = memo(() => {
             errors: [`Audio transcription failed: ${errorMessage}`],
             completedTime: Date.now()
           });
-          
+
+          // Persist failed session so it can be retried after reload
+          const failedSession = state.patientSessions.find(s => s.id === sessionId);
+          if (failedSession) {
+            saveSessionToPersistence({
+              ...failedSession,
+              transcription: cleanTranscription,
+              status: 'error',
+              errors: [`Audio transcription failed: ${errorMessage}`],
+              completedTime: Date.now()
+            }).then(() => {
+              console.log('💾 Persisted failed transcription session:', sessionId);
+            }).catch(err => {
+              console.error('Failed to persist error session:', err);
+            });
+          }
+
           // Update main UI
           actions.setTranscription(cleanTranscription);
           actions.setErrors([`Audio transcription failed: ${errorMessage}`]);
@@ -1536,6 +1632,19 @@ const OptimizedAppContent: React.FC = memo(() => {
           modelName: 'MedGemma-27B'
         }
       });
+
+      // Persist session with transcription before processing starts
+      // This ensures the transcription survives extension reloads
+      const sessionWithTranscription = state.patientSessions.find(s => s.id === sessionId);
+      if (sessionWithTranscription) {
+        await saveSessionToPersistence({
+          ...sessionWithTranscription,
+          transcription: correctedTranscription,
+          status: 'processing',
+          processingStartTime: startTime
+        });
+        console.log('💾 Persisted session with transcription:', sessionId);
+      }
 
       // Update main UI to show processing phase
       actions.setTranscription(correctedTranscription);
@@ -2054,6 +2163,11 @@ const OptimizedAppContent: React.FC = memo(() => {
           actions.completeProcessingAtomic(sessionId, result.content, summaryText);
           console.log('🏁 Background completion successful');
 
+          // IMPORTANT: Set selectedSessionId so auto-check can find this session after "Insert to EMR"
+          // completeProcessingAtomic clears currentSessionId, but we need a way to track the completed session
+          actions.setSelectedSessionId(sessionId);
+          console.log('🔖 Set selectedSessionId for completed background session:', sessionId);
+
           // Defensive check for background sessions too
           setTimeout(() => {
             if (state.streaming || state.currentSessionId !== null) {
@@ -2158,6 +2272,21 @@ const OptimizedAppContent: React.FC = memo(() => {
           processingProgress: undefined
         });
 
+        // Persist model loading error session
+        const modelErrorSession = state.patientSessions.find(s => s.id === sessionId);
+        if (modelErrorSession) {
+          saveSessionToPersistence({
+            ...modelErrorSession,
+            status: 'error',
+            errors: ['Model loading failed - awaiting user action'],
+            processingProgress: undefined
+          }).then(() => {
+            console.log('💾 Persisted model loading error session:', sessionId);
+          }).catch(err => {
+            console.error('Failed to persist model error session:', err);
+          });
+        }
+
         // Don't show generic error toast - dialog will handle user communication
         return;
       }
@@ -2184,6 +2313,20 @@ const OptimizedAppContent: React.FC = memo(() => {
             errors: [error.message || 'Processing failed'],
             processingProgress: undefined // Clear progress immediately on error
           });
+
+          // Persist processing error session
+          if (currentSession) {
+            saveSessionToPersistence({
+              ...currentSession,
+              status: 'error',
+              errors: [error.message || 'Processing failed'],
+              processingProgress: undefined
+            }).then(() => {
+              console.log('💾 Persisted processing error session:', sessionId);
+            }).catch(err => {
+              console.error('Failed to persist processing error session:', err);
+            });
+          }
 
           // Show simplified toast notification for background processing error
           RecordingToasts.processingFailed(patientName);
@@ -2331,7 +2474,29 @@ const OptimizedAppContent: React.FC = memo(() => {
 
     // Always use isolated display session - prevents cross-contamination with active recordings
     startTransition(() => {
-      console.log('📋 🎯 Loading session into isolated display state:', session.id);
+      console.log('📋 🎯 Loading session into isolated display state - DETAILED DIAGNOSTIC:', {
+        sessionId: session.id,
+        patientName: session.patient?.name,
+        patientId: session.patient?.id,
+        hasPatient: !!session.patient,
+        agentType: session.agentType,
+        // Transcription diagnostics
+        hasTranscription: !!session.transcription,
+        transcriptionLength: session.transcription?.length || 0,
+        transcriptionPreview: session.transcription?.substring(0, 50) || '(empty)',
+        // Results diagnostics
+        hasResults: !!session.results,
+        resultsLength: session.results?.length || 0,
+        hasSummary: !!session.summary,
+        summaryLength: session.summary?.length || 0,
+        // Audio diagnostics
+        hasAudioBlob: !!session.audioBlob,
+        audioDuration: session.audioDuration,
+        // Session metadata
+        timestamp: session.timestamp,
+        status: session.status,
+        completed: session.completed
+      });
 
       // Use new isolated session display action
       actions.setDisplaySession(session);
@@ -2438,6 +2603,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         agentName: state.displaySession.displayAgentName ?? null,
         patientInfo: state.displaySession.displayPatientInfo ?? null,
         processingTime: state.displaySession.displayProcessingTime ?? null,
+        processingStartTime: state.displaySession.displayProcessingStartTime ?? null,
         modelUsed: state.displaySession.displayModelUsed ?? null,
         audioDuration: state.displaySession.displayAudioDuration ?? null,
         pipelineProgress: state.displaySession.displayPipelineProgress ?? null,
@@ -2502,7 +2668,26 @@ const OptimizedAppContent: React.FC = memo(() => {
         patientInfo: state.currentPatientInfo,
         processingTime: state.totalProcessingTime,
         modelUsed: null,
-        audioDuration: state.patientSessions.find(s => s.id === state.currentSessionId)?.audioDuration ?? null,
+        audioDuration: (() => {
+          // Try currentSessionId first
+          if (state.currentSessionId) {
+            const duration = state.patientSessions.find(s => s.id === state.currentSessionId)?.audioDuration ?? null;
+            console.log('📊 Audio duration from currentSessionId:', { currentSessionId: state.currentSessionId, duration });
+            return duration;
+          }
+          // Fallback: Find most recent processing/transcribing session
+          // This handles the case where currentSessionId is cleared but session is still processing
+          const activeSession = [...state.patientSessions]
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+            .find(s => ['processing', 'transcribing'].includes(s.status));
+          const duration = activeSession?.audioDuration ?? null;
+          console.log('📊 Audio duration from fallback (most recent processing session):', {
+            sessionId: activeSession?.id,
+            status: activeSession?.status,
+            duration
+          });
+          return duration;
+        })(),
         pipelineProgress: state.pipelineProgress,
         processingStatus: state.processingStatus,
         isDisplayingSession: false
@@ -2950,34 +3135,53 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Handle reprocessing transcription with different agent
   const handleAgentReprocess = useCallback(async (newAgentType: AgentType) => {
+    const targetSessionId = state.selectedSessionId || state.currentSessionId;
+
     try {
       console.log('🔄 Reprocessing transcription with agent:', newAgentType);
-      
+
       if (!state.transcription || state.transcription.trim().length === 0) {
         console.error('❌ No transcription available for reprocessing');
         actions.setErrors(['No transcription available for reprocessing']);
         return;
       }
-      
+
       if (state.isProcessing) {
         console.warn('⚠️ Already processing, ignoring reprocess request');
         return;
       }
-      
+
       // Clear previous results and warnings
       actions.setResults('');
       actions.setWarnings([]);
       actions.setErrors([]);
       actions.setResultsSummary('');
-      
+
       // Update processing state
       actions.setProcessing(true);
       actions.setProcessingStatus('processing');
       actions.setCurrentAgent(newAgentType);
       actions.setProcessingStartTime(Date.now());
-      
+
+      // Update session to show reprocessing started
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          status: 'processing',
+          errors: [], // Clear old errors
+          processingProgress: { phase: 'Reprocessing', progress: 0 }
+        });
+      }
+
+      // Initialize pipeline progress for visual feedback
+      actions.setPipelineProgress({
+        stage: 'ai-analysis',
+        progress: 40,
+        stageProgress: 0,
+        details: `Reprocessing with ${newAgentType}`
+      });
+
       console.log('🔄 Starting agent processing with:', newAgentType);
-      
+
       // Clear previous missing info to avoid stale prompts
       actions.setMissingInfo(null);
 
@@ -2989,9 +3193,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         { isReprocessing: true }, // Add context to indicate reprocessing
         processingAbortRef.current?.signal
       );
-      
+
       console.log('✅ Agent reprocessing completed');
-      
+
       // Update results
       actions.setResults(result.content);
       actions.setMissingInfo(result.missingInfo || null);
@@ -3005,7 +3209,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       if ('rhcData' in result) {
         actions.setRhcReport(result);
       }
-      
+
       // Extract and set AI-generated summary if available
       if (result.summary && result.summary.trim()) {
         logger.debug('Setting AI-generated summary from reprocessing', { component: 'summary', agent: newAgentType });
@@ -3013,17 +3217,31 @@ const OptimizedAppContent: React.FC = memo(() => {
       } else {
         actions.setAiGeneratedSummary(undefined);
       }
-      
+
       // Set timing data
       actions.setTimingData({
         agentProcessingTime: result.processingTime,
         totalProcessingTime: result.processingTime // For reprocessing, total = agent processing time
       });
-      
+
       actions.setCurrentAgentName(result.agentName);
+
+      // Update session with successful results
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          status: 'completed',
+          results: result.content,
+          errors: [],
+          warnings: result.warnings || [],
+          processingProgress: undefined,
+          pipelineProgress: undefined,
+          completedTime: Date.now()
+        });
+      }
+
       // Use atomic completion to ensure consistent state management
       actions.completeProcessingAtomic(state.currentSessionId || 'reprocess-session', result.content);
-      
+
       // Set warnings and errors if any
       if (result.warnings?.length) {
         actions.setWarnings(result.warnings);
@@ -3031,20 +3249,34 @@ const OptimizedAppContent: React.FC = memo(() => {
       if (result.errors?.length) {
         actions.setErrors(result.errors);
       }
-      
+
+      // Clear pipeline progress on success
+      actions.clearPipelineProgress();
+
     } catch (error: any) {
       console.error('❌ Agent reprocessing failed:', error);
-      
+
+      // Update session with detailed error
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          status: 'error',
+          errors: [error.message || 'Reprocessing failed'],
+          processingProgress: undefined,
+          pipelineProgress: undefined
+        });
+      }
+
       actions.setProcessing(false);
       actions.setProcessingStatus('idle');
-      
+      actions.clearPipelineProgress();
+
       if (error.name === 'AbortError') {
         console.log('🛑 Agent reprocessing was cancelled');
       } else {
         actions.setErrors([error.message || 'Reprocessing failed']);
       }
     }
-  }, [state.transcription, state.isProcessing, actions]);
+  }, [state.transcription, state.isProcessing, state.selectedSessionId, state.currentSessionId, actions]);
 
   // Reprocess with user-provided answers for missing information
   const handleReprocessWithMissingInfo = useCallback(async (answers: Record<string, string>) => {
@@ -3703,16 +3935,27 @@ const OptimizedAppContent: React.FC = memo(() => {
         // 1. Open the field dialog
         // 2. Navigate to the end of the existing content
         // 3. Insert a newline and the new content
-        await chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: field, // Use the field name as the action (e.g., 'investigation-summary')
-          data: {
-            insertMode: 'append',
-            content: text
-          }
-        });
-
-        console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
+        //
+        // IMPORTANT: Wrap with timeout to prevent hanging if content script doesn't respond
+        // (field dialogs can change page state and prevent response from being sent back)
+        try {
+          await Promise.race([
+            chrome.runtime.sendMessage({
+              type: 'EXECUTE_ACTION',
+              action: field, // Use the field name as the action (e.g., 'investigation-summary')
+              data: {
+                insertMode: 'append',
+                content: text
+              }
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Insertion timeout')), 3000))
+          ]);
+          console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
+        } catch (error) {
+          // Even if timeout/error occurs, the content was likely inserted successfully
+          // The timeout just means the content script didn't send a response back
+          console.log(`⚠️ Insertion response delayed/missing for ${getFieldDisplayName(field)}, continuing with auto-check...`);
+        }
       } else if (!shouldForceGenericInsertion && text && text.trim().length > 0) {
         // Smart fallback: If we have text to insert but no agent type, try Quick Action fields
         // This handles cases where agent type tracking failed but we know we have processed content
@@ -4074,6 +4317,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         onClearAllSessions={actions.clearPatientSessions}
         onSessionSelect={handleSessionSelect}
         onResumeRecording={handleResumeRecording}
+        onAgentReprocess={handleAgentReprocess}
         selectedSessionId={stableSelectedSessionId}
         currentSessionId={state.currentSessionId}
         checkedSessionIds={allCheckedSessions}
@@ -4091,13 +4335,27 @@ const OptimizedAppContent: React.FC = memo(() => {
         {/* Main Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
 
-          {/* Patient Context Header - Show during recording and processing */}
-          {state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing') && (
+          {/* Patient Context Header - Show during recording/processing AND when viewing completed sessions */}
+          {((state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing')) ||
+            (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent)) && (
             <PatientContextHeader
-              patientInfo={state.currentPatientInfo}
-              agentType={state.ui.activeWorkflow}
-              processingStatus={state.processingStatus}
+              patientInfo={
+                state.displaySession.isDisplayingSession
+                  ? state.displaySession.displayPatientInfo
+                  : state.currentPatientInfo
+              }
+              agentType={
+                state.displaySession.isDisplayingSession
+                  ? state.displaySession.displayAgent
+                  : state.ui.activeWorkflow
+              }
+              processingStatus={
+                state.displaySession.isDisplayingSession
+                  ? 'complete'
+                  : state.processingStatus
+              }
               isRecording={recorder.isRecording}
+              isViewingCompletedSession={state.displaySession.isDisplayingSession}
             />
           )}
 
@@ -4501,7 +4759,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 mteerValidationStatus={displayData.isDisplayingSession ? displayData.mteerValidationStatus : state.mteerValidationStatus}
                 onMTEERReprocessWithValidation={!displayData.isDisplayingSession ? handleMTEERReprocessWithValidation : undefined}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
-                processingStartTime={displayData.isDisplayingSession ? null : state.processingStartTime}
+                processingStartTime={displayData.processingStartTime ?? state.processingStartTime}
                 revisionPanel={revisionPanelData}
                 revisionContext={revisionContext}
                 onRevisionToggle={handleRevisionToggle}

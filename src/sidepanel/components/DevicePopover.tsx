@@ -9,6 +9,7 @@ import React, { useRef, useEffect } from 'react';
 import { Mic, Speaker, X } from 'lucide-react';
 import { useAudioDevices, type AudioDevice } from '@/hooks/useAudioDevices';
 import { DropdownPortal } from './DropdownPortal';
+import { Button, IconButton } from './buttons';
 
 export interface DevicePopoverProps {
   isOpen: boolean;
@@ -119,16 +120,14 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
           <h2 className="text-sm font-semibold text-gray-900">
             Audio Devices
           </h2>
-          <button
+          <IconButton
+            icon={<X />}
             onClick={onClose}
-            className="
-              p-1 rounded hover:bg-gray-100 transition-colors
-              focus:outline-none focus:ring-2 focus:ring-blue-500
-            "
+            variant="ghost"
+            size="sm"
             aria-label="Close device settings"
-          >
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
+            className="text-gray-500"
+          />
         </div>
 
         {/* Content */}
@@ -138,16 +137,13 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
               <p className="text-sm text-gray-600 mb-3">
                 Audio access required to select devices
               </p>
-              <button
+              <Button
                 onClick={requestPermission}
-                className="
-                  px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md
-                  hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500
-                  transition-colors
-                "
+                variant="secondary"
+                size="md"
               >
                 Enable Access
-              </button>
+              </Button>
             </div>
           ) : isLoading ? (
             <div className="p-4 text-center text-sm text-gray-500">
@@ -168,28 +164,26 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {microphones.map((device) => (
-                      <button
+                      <Button
                         key={device.deviceId}
                         onClick={() => handleDeviceSelect(device)}
-                        className={`
-                          w-full px-3 py-2 text-left text-sm rounded-md
-                          transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500
-                          ${selectedMicrophoneId === device.deviceId
+                        variant="ghost"
+                        size="md"
+                        fullWidth
+                        className={`justify-between ${
+                          selectedMicrophoneId === device.deviceId
                             ? 'bg-blue-50 text-blue-900 font-medium'
-                            : 'text-gray-700 hover:bg-gray-50'
-                          }
-                        `}
+                            : 'text-gray-700'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="truncate">{device.label}</span>
-                          {selectedMicrophoneId === device.deviceId && (
-                            <div
-                              className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"
-                              aria-label="Selected"
-                            />
-                          )}
-                        </div>
-                      </button>
+                        <span className="truncate">{device.label}</span>
+                        {selectedMicrophoneId === device.deviceId && (
+                          <div
+                            className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"
+                            aria-label="Selected"
+                          />
+                        )}
+                      </Button>
                     ))}
                   </div>
                 )}
@@ -208,28 +202,26 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {speakers.map((device) => (
-                      <button
+                      <Button
                         key={device.deviceId}
                         onClick={() => handleDeviceSelect(device)}
-                        className={`
-                          w-full px-3 py-2 text-left text-sm rounded-md
-                          transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500
-                          ${selectedSpeakerId === device.deviceId
+                        variant="ghost"
+                        size="md"
+                        fullWidth
+                        className={`justify-between ${
+                          selectedSpeakerId === device.deviceId
                             ? 'bg-blue-50 text-blue-900 font-medium'
-                            : 'text-gray-700 hover:bg-gray-50'
-                          }
-                        `}
+                            : 'text-gray-700'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="truncate">{device.label}</span>
-                          {selectedSpeakerId === device.deviceId && (
-                            <div
-                              className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"
-                              aria-label="Selected"
-                            />
-                          )}
-                        </div>
-                      </button>
+                        <span className="truncate">{device.label}</span>
+                        {selectedSpeakerId === device.deviceId && (
+                          <div
+                            className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0"
+                            aria-label="Selected"
+                          />
+                        )}
+                      </Button>
                     ))}
                   </div>
                 )}
@@ -240,16 +232,15 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
-          <button
+          <Button
             onClick={onClose}
-            className="
-              w-full px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md
-              hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500
-              transition-colors
-            "
+            variant="primary"
+            size="md"
+            fullWidth
+            className="bg-gray-900 hover:bg-gray-800 from-gray-900 to-gray-900"
           >
             Done
-          </button>
+          </Button>
         </div>
       </div>
     </DropdownPortal>

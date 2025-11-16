@@ -39,6 +39,11 @@ export const RHC_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
   'calculations.svr': { label: 'SVR', inputType: 'number', placeholder: 'SVR in dynes·s·cm⁻⁵', helperText: 'Systemic vascular resistance (normal: 800-1200 dynes·s·cm⁻⁵)' },
   'calculations.transValvularGradient': { label: 'Transvalvular Gradient', inputType: 'number', placeholder: 'Gradient in mmHg', helperText: 'Pressure gradient across valve (if applicable)' },
 
+  // Procedural Details
+  'rhcData.vascularAccess': { label: 'Vascular Access Site', inputType: 'text', placeholder: 'e.g., Right internal jugular, Right brachial vein', helperText: 'Venous access site for RHC catheter insertion' },
+  'rhcData.catheterDetails': { label: 'Catheter Details', inputType: 'text', placeholder: 'e.g., 7 French Swan-Ganz catheter', helperText: 'Catheter type and size (French)' },
+  'rhcData.indication': { label: 'Indication', inputType: 'text', placeholder: 'e.g., Heart failure assessment, Pulmonary hypertension workup', helperText: 'Clinical indication for procedure' },
+
   // Radiation Safety & Contrast (OPTIONAL fields)
   'rhcData.fluoroscopyTime': { label: 'Fluoroscopy Time', inputType: 'number', placeholder: 'Total fluoroscopy time in minutes', helperText: 'Total radiation exposure time (OPTIONAL - for ALARA compliance)' },
   'rhcData.fluoroscopyDose': { label: 'Fluoroscopy Dose', inputType: 'number', placeholder: 'Dose in mGy', helperText: 'Total fluoroscopy dose (OPTIONAL - for radiation safety documentation)' },

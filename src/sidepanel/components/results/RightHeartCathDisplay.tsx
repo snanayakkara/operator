@@ -18,14 +18,14 @@ import {
   ChevronDownIcon as _ChevronDownIcon,
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, Image, Loader2, Edit3, X } from 'lucide-react';
-import AnimatedCopyIcon from '../AnimatedCopyIcon';
+import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, User as UserIcon, Image, Loader2, Edit3, X } from 'lucide-react';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { RHCFieldEditor } from './RHCFieldEditor';
 import { RHCCardPreviewModal } from './RHCCardPreviewModal';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
+import { ReportDisplay } from './ReportDisplay';
 import { generateRHCCardBlob, validateRHCDataForExport } from '@/utils/rhcCardExport';
 import * as RHCCalc from '@/services/RHCCalculationService';
 import { useRHCValidation } from '@/hooks/useRHCValidation';
@@ -87,6 +87,7 @@ interface SectionConfig {
 const { fieldConfig: RHC_VALIDATION_FIELD_CONFIG, copy: RHC_VALIDATION_COPY } = getValidationConfig('rhc');
 
 const SECTION_CONFIGS: SectionConfig[] = [
+  { key: 'patient_details', title: 'Patient Details', icon: UserIcon, color: 'teal', priority: 'high' },
   { key: 'indication', title: 'Indication & Presentation', icon: FileTextIcon, color: 'blue', priority: 'high' },
   { key: 'procedure', title: 'Procedure Details', icon: ActivityIcon, color: 'green', priority: 'high' },
   { key: 'pressures', title: 'Haemodynamic Pressures', icon: HeartIcon, color: 'red', priority: 'high' },
@@ -123,13 +124,11 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   onReprocessWithValidation
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(['indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
+    new Set(['patient_details', 'procedure', 'indication', 'pressures', 'cardiac_output', 'calculations', 'complications'])
   );
-  const [buttonStates, setButtonStates] = useState({ copied: false, inserted: false, exporting: false, exported: false });
+  const [buttonStates, setButtonStates] = useState({ exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
-  const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
-  const [inlineReportDraft, setInlineReportDraft] = useState<RightHeartCathReport | null>(null);
 
   // Validation hook
   const rhcValidation = useRHCValidation();
@@ -219,6 +218,85 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     console.log('❌ effectiveRHCData is NULL - no structured display will show');
     return null;
   }, [rhcReport, results, editedRHCReport]);
+
+  // Extract prose report (PREAMBLE, FINDINGS, CONCLUSION sections)
+  const proseReport = useMemo(() => {
+    if (effectiveRHCData?.content) {
+      // Remove JSON marker if present
+      let content = effectiveRHCData.content;
+      const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
+      if (jsonMarkerIndex !== -1) {
+        content = content.substring(0, jsonMarkerIndex).trim();
+      }
+      return content;
+    }
+
+    // Fallback to results prop
+    if (results) {
+      let content = results;
+      const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
+      if (jsonMarkerIndex !== -1) {
+        content = content.substring(0, jsonMarkerIndex).trim();
+      }
+      return content;
+    }
+
+    return null;
+  }, [effectiveRHCData, results]);
+
+  // Helper function: Count missing optional fields for badge notification
+  const countMissingOptionalFields = useCallback((rhcData: RightHeartCathReport | null): number => {
+    if (!rhcData?.rhcData) return 0;
+
+    let count = 0;
+    const data = rhcData.rhcData;
+    const patientData = rhcData.rhcData.patientData;
+
+    const optionalFields = [
+      { path: 'fluoroscopyTime', value: data.fluoroscopyTime },
+      { path: 'fluoroscopyDose', value: data.fluoroscopyDose },
+      { path: 'doseAreaProduct', value: data.doseAreaProduct },
+      { path: 'contrastVolume', value: data.contrastVolume },
+      { path: 'heartRate', value: patientData?.heartRate }
+    ];
+
+    for (const field of optionalFields) {
+      if (!field.value || field.value === '' || field.value === 0) {
+        count++;
+      }
+    }
+
+    return count;
+  }, []);
+
+  // Helper function: Get names of missing optional fields for tooltip
+  const getMissingOptionalFieldNames = useCallback((rhcData: RightHeartCathReport | null): string[] => {
+    if (!rhcData?.rhcData) return [];
+
+    const missing: string[] = [];
+    const data = rhcData.rhcData;
+    const patientData = rhcData.rhcData.patientData;
+
+    if (!data.fluoroscopyTime || data.fluoroscopyTime === 0) missing.push('Fluoroscopy time');
+    if (!data.fluoroscopyDose || data.fluoroscopyDose === 0) missing.push('Fluoroscopy dose');
+    if (!data.doseAreaProduct || data.doseAreaProduct === 0) missing.push('Dose area product (DAP)');
+    if (!data.contrastVolume || data.contrastVolume === 0) missing.push('Contrast volume');
+    if (!patientData?.heartRate || patientData.heartRate === 0) missing.push('Heart rate');
+
+    return missing;
+  }, []);
+
+  // Calculate missing optional field count for badge (memoized for performance)
+  const missingOptionalCount = useMemo(
+    () => countMissingOptionalFields(effectiveRHCData),
+    [effectiveRHCData, countMissingOptionalFields]
+  );
+
+  // Get missing field names for detailed tooltip
+  const missingFieldNames = useMemo(
+    () => getMissingOptionalFieldNames(effectiveRHCData),
+    [effectiveRHCData, getMissingOptionalFieldNames]
+  );
 
   // Detect validation state and show modal
   React.useEffect(() => {
@@ -386,26 +464,6 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     });
   }, [isInlineEditing, inlineReportDraft]);
 
-  const handleCopy = useCallback(async () => {
-    if (!onCopy) return;
-
-    const content = formatForClipboard(effectiveRHCData, results);
-    await onCopy(content);
-
-    setButtonStates(prev => ({ ...prev, copied: true }));
-    setTimeout(() => setButtonStates(prev => ({ ...prev, copied: false })), 2000);
-  }, [effectiveRHCData, results, onCopy]);
-
-  const handleInsertToEMR = useCallback(async () => {
-    if (!onInsertToEMR) return;
-
-    const content = formatForEMR(effectiveRHCData, results);
-    await onInsertToEMR(content);
-
-    setButtonStates(prev => ({ ...prev, inserted: true }));
-    setTimeout(() => setButtonStates(prev => ({ ...prev, inserted: false })), 2000);
-  }, [effectiveRHCData, results, onInsertToEMR]);
-
   const handleExportCard = useCallback(async () => {
     if (!effectiveRHCData) {
       alert('No RHC data available to export');
@@ -456,6 +514,13 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       const rvCPO = paMean && tdCO ? RHCCalc.calculateRVCPO(paMean, tdCO) : undefined;
       const estimatedVO2 = bsa ? RHCCalc.estimateVO2(bsa, gender) : undefined;
 
+      // Fick CO/CI calculation (requires VO2, Hb, SaO2, SvO2)
+      const hb = effectiveRHCData.patientData?.haemoglobin;
+      const fickCO = (estimatedVO2 && hb && sao2 !== undefined && svo2 !== undefined)
+        ? RHCCalc.calculateFickCO(estimatedVO2, hb, sao2, svo2)
+        : undefined;
+      const fickCI = fickCO && bsa ? RHCCalc.calculateCardiacIndex(fickCO, bsa) : undefined;
+
       // TIER 3: Specialized calculations
       const pac = sv && paSys && paDia ? RHCCalc.calculatePAC(sv, paSys, paDia) : undefined;
       const rcTime = pvr && pac ? RHCCalc.calculatePulmonaryRCTime(pvr, pac) : undefined;
@@ -480,6 +545,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
         cardiacPowerOutput: cpo,
         rvCardiacPowerOutput: rvCPO,
         estimatedVO2,
+        fickCO,
+        fickCI,
         // Specialized
         pulmonaryArterialCompliance: pac,
         pulmonaryRCTime: rcTime,
@@ -489,10 +556,22 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       };
     }
 
-    // Create export data with ensured calculations
+    // Extract Fick CO/CI from calculations for cardiacOutput
+    const calculatedFickCO = calculations.fickCO;
+    const calculatedFickCI = calculations.fickCI;
+
+    // Create export data with ensured calculations and Fick CO/CI in cardiacOutput
     const exportData: RightHeartCathReport = {
       ...effectiveRHCData,
-      calculations
+      calculations,
+      cardiacOutput: {
+        ...effectiveRHCData.cardiacOutput,
+        fick: {
+          ...effectiveRHCData.cardiacOutput.fick,
+          co: calculatedFickCO !== undefined ? calculatedFickCO.toFixed(2) : effectiveRHCData.cardiacOutput.fick.co,
+          ci: calculatedFickCI !== undefined ? calculatedFickCI.toFixed(2) : effectiveRHCData.cardiacOutput.fick.ci
+        }
+      }
     };
 
     // DEBUG: Verify calculations before export
@@ -700,6 +779,45 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
         />
       )}
 
+      {/* Prose Report Section (PREAMBLE, CONCLUSION) */}
+      {proseReport && (
+        <ReportDisplay
+          results={proseReport}
+          agentType="right-heart-cath"
+          className="mb-4"
+        />
+      )}
+
+      {/* Report Image Button - Inline after prose sections */}
+      {effectiveRHCData && (
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={handleExportCard}
+            disabled={buttonStates.exporting || !effectiveRHCData}
+            className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-lg border-2 border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+            title="Export 18×10cm PNG card (300 DPI) - serves as the FINDINGS section"
+          >
+            {buttonStates.exporting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Generating Report Image...
+              </>
+            ) : buttonStates.exported ? (
+              <>
+                <Image className="w-4 h-4 mr-2" />
+                Report Image Downloaded!
+              </>
+            ) : (
+              <>
+                <Image className="w-4 h-4 mr-2" />
+                Generate Report Image (Findings)
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Missing Calculation Fields Panel */}
       {effectiveRHCData?.missingCalculationFields && effectiveRHCData.missingCalculationFields.length > 0 && (
         <AnimatePresence>
@@ -726,109 +844,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="border border-gray-200 rounded-lg bg-white shadow-sm"
+        className="border border-gray-200 rounded-lg bg-white shadow-sm relative"
       >
-        {/* Header */}
-        <div className="border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <HeartIcon className="w-5 h-5 text-red-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Right Heart Catheterisation Report</h3>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleCopy}
-                disabled={!onCopy}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                <AnimatedCopyIcon className="w-3 h-3 mr-1" />
-                {buttonStates.copied ? 'Copied' : 'Copy'}
-              </button>
-
-              {!isInlineEditing ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!effectiveRHCData) return;
-                    setInlineReportDraft(JSON.parse(JSON.stringify(effectiveRHCData)) as RightHeartCathReport);
-                    setIsInlineEditing(true);
-                  }}
-                  disabled={!effectiveRHCData}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  title="Edit haemodynamic fields inline"
-                >
-                  <Edit3 className="w-3 h-3 mr-1" />
-                  Edit Inline
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!inlineReportDraft) return;
-                      setEditedRHCReport(inlineReportDraft);
-                      setIsInlineEditing(false);
-                      if (onUpdateRhcReport) onUpdateRhcReport(inlineReportDraft);
-                    }}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap"
-                    title="Save edits"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsInlineEditing(false);
-                      setInlineReportDraft(null);
-                    }}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 whitespace-nowrap"
-                    title="Cancel edits"
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-
-              <button
-                type="button"
-                onClick={handleExportCard}
-                disabled={buttonStates.exporting || !effectiveRHCData}
-                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                title="Export 18×10cm PNG card (300 DPI)"
-              >
-                {buttonStates.exporting ? (
-                  <>
-                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                    Generating...
-                  </>
-                ) : buttonStates.exported ? (
-                  <>
-                    <Image className="w-3 h-3 mr-1" />
-                    Downloaded!
-                  </>
-                ) : (
-                  <>
-                    <Image className="w-3 h-3 mr-1" />
-                    18×10 Card
-                  </>
-                )}
-              </button>
-
-              {onInsertToEMR && (
-                <button
-                  type="button"
-                  onClick={handleInsertToEMR}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
-                >
-                  <FileTextIcon className="w-3 h-3 mr-1" />
-                  {buttonStates.inserted ? 'Inserted' : 'Insert to EMR'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Custom Fields Section */}
         {(Object.keys(customFields).length > 0 || showAddField) && (
@@ -909,15 +926,6 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           </div>
         )}
 
-        {/* Add Custom Field Button (when no custom fields) */}
-        {Object.keys(customFields).length === 0 && !showAddField && (
-          <button
-            onClick={() => setShowAddField(true)}
-            className="w-full mb-4 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 rounded-lg transition-colors"
-          >
-            + Add Custom Field
-          </button>
-        )}
 
         {/* Sections */}
         <div className="divide-y divide-gray-200">
@@ -964,7 +972,39 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
             );
           })}
         </div>
+
       </motion.div>
+
+      {/* Sticky Footer - Always Visible Edit Button */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-white via-white/95 to-transparent pt-8 pb-4 px-4 pointer-events-none shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
+        <div className="max-w-full pointer-events-auto">
+          <div className="bg-white/95 backdrop-blur-sm shadow-lg border border-gray-200 rounded-lg p-3">
+            <button
+              type="button"
+              onClick={() => setIsEditingFields(true)}
+              disabled={!effectiveRHCData}
+              className="relative w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+              title={missingOptionalCount > 0
+                ? `Edit all fields - ${missingOptionalCount} optional field${missingOptionalCount > 1 ? 's' : ''} available: ${missingFieldNames.join(', ')}`
+                : "Edit all fields including patient data, haemodynamics, access, catheter details, and add custom fields"
+              }
+            >
+              <Edit3 className="w-4 h-4 mr-2" />
+              Edit All Fields
+
+              {/* Badge for missing optional fields */}
+              {missingOptionalCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-blue-500 rounded-full border-2 border-white shadow-sm"
+                  aria-label={`${missingOptionalCount} optional fields available`}
+                >
+                  {missingOptionalCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Field Editor Modal */}
       {isEditingFields && effectiveRHCData && (
@@ -1111,7 +1151,7 @@ function renderSectionContent(
     return <div className="text-gray-500 italic">No structured data available</div>;
   }
 
-  const { rhcData: data, haemodynamicPressures, cardiacOutput, exerciseHaemodynamics, complications } = rhcData;
+  const { rhcData: data, haemodynamicPressures, cardiacOutput, exerciseHaemodynamics, complications, patientData } = rhcData;
 
   switch (sectionKey) {
     case 'indication':
@@ -1123,6 +1163,38 @@ function renderSectionContent(
           )}
           {data.recentInvestigations && (
             <div><span className="font-medium">Recent Investigations:</span> {data.recentInvestigations}</div>
+          )}
+        </div>
+      );
+
+    case 'patient_details':
+      return (
+        <div className="space-y-3 text-sm">
+          {/* Patient Demographics & Anthropometrics */}
+          {patientData && (patientData.height || patientData.weight || patientData.bsa || patientData.bmi || patientData.heartRate || patientData.age || patientData.gender) && (
+            <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
+              <span className="font-medium text-green-900">Demographics & Anthropometrics:</span>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                {patientData.age && <div>Age: {patientData.age} years</div>}
+                {patientData.gender && <div>Gender: {patientData.gender}</div>}
+                {patientData.height && <div>Height: {patientData.height} cm</div>}
+                {patientData.weight && <div>Weight: {patientData.weight} kg</div>}
+                {patientData.bmi && <div>BMI: {patientData.bmi.toFixed(1)} kg/m²</div>}
+                {patientData.bsa && <div>BSA: {patientData.bsa.toFixed(2)} m²</div>}
+                {patientData.heartRate && <div>Heart Rate: {patientData.heartRate} bpm</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Laboratory Values */}
+          {(data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
+            <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+              <span className="font-medium">Laboratory Values:</span>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                {data.laboratoryValues.haemoglobin && <div>Haemoglobin: {data.laboratoryValues.haemoglobin} g/L</div>}
+                {data.laboratoryValues.lactate && <div>Lactate: {data.laboratoryValues.lactate} mmol/L</div>}
+              </div>
+            </div>
           )}
         </div>
       );
@@ -1143,29 +1215,6 @@ function renderSectionContent(
                 {data.doseAreaProduct && <div>DAP: {data.doseAreaProduct} Gy·cm²</div>}
                 {data.contrastVolume && <div>Contrast Volume: {data.contrastVolume} mL</div>}
               </div>
-            </div>
-          )}
-
-          {/* Patient Demographics */}
-          {rhcData.patientData && (rhcData.patientData.height || rhcData.patientData.weight || rhcData.patientData.bsa || rhcData.patientData.heartRate) && (
-            <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
-              <span className="font-medium text-green-900">Patient Demographics:</span>
-              <div className="mt-1 space-y-1 grid grid-cols-2 gap-x-4">
-                {rhcData.patientData.height && <div>Height: {rhcData.patientData.height} cm</div>}
-                {rhcData.patientData.weight && <div>Weight: {rhcData.patientData.weight} kg</div>}
-                {rhcData.patientData.bmi && <div>BMI: {rhcData.patientData.bmi.toFixed(1)} kg/m²</div>}
-                {rhcData.patientData.bsa && <div>BSA: {rhcData.patientData.bsa.toFixed(2)} m²</div>}
-                {rhcData.patientData.heartRate && <div className="col-span-2">Heart Rate: {rhcData.patientData.heartRate} bpm</div>}
-              </div>
-            </div>
-          )}
-
-          {/* Laboratory Values */}
-          {(data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
-            <div className="bg-gray-50 p-3 rounded">
-              <span className="font-medium">Laboratory Values:</span>
-              {data.laboratoryValues.haemoglobin && <div>Haemoglobin: {data.laboratoryValues.haemoglobin} g/L</div>}
-              {data.laboratoryValues.lactate && <div>Lactate: {data.laboratoryValues.lactate} mmol/L</div>}
             </div>
           )}
         </div>

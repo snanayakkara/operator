@@ -1090,3 +1090,25 @@ textarea:focus-visible {
   background-size: 16px 16px;
   background-position: 0 0, 8px 8px;
 }
+
+/* Skeleton Loading Animation */
+@keyframes skeleton-pulse {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-skeleton-pulse {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Reduced motion override for skeleton */
+@media (prefers-reduced-motion: reduce) {
+  .animate-skeleton-pulse {
+    animation: none !important;
+    background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
+  }
+}

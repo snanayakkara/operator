@@ -106,6 +106,7 @@ interface DisplaySessionState {
   displayAgentName?: string | null;
   displayPatientInfo?: PatientInfo | null;
   displayProcessingTime?: number; // Processing time in milliseconds
+  displayProcessingStartTime?: number | null; // Processing start timestamp for ETA calculation
   displayModelUsed?: string | null; // Model used for processing (e.g., 'qwen/qwen3-4b-2507', 'medgemma-27b-text-it-mlx')
   displayAudioDuration?: number | null; // Audio duration in seconds for ETA prediction
   displayPipelineProgress?: PipelineProgress | null; // Pipeline progress for sessions still processing
@@ -1029,6 +1030,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayAgentName: session.agentName || null,
           displayPatientInfo: session.patient || null,
           displayProcessingTime: session.processingTime,
+          displayProcessingStartTime: session.processingStartTime ?? null,
           displayModelUsed: session.modelUsed || null,
           displayAudioDuration: session.audioDuration || null,
           // Hide progress UI when viewing completed sessions to avoid stale bars
@@ -1062,6 +1064,7 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
           displayAgentName: null,
           displayPatientInfo: null,
           displayProcessingTime: undefined,
+          displayProcessingStartTime: null,
           displayAudioDuration: null,
           displayModelUsed: null,
           displayPipelineProgress: null

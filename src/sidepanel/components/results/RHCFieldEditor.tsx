@@ -41,6 +41,14 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
   const [rhcData, setRhcData] = useState<RightHeartCathData>(rhcReport.rhcData);
   const [patientData, setPatientData] = useState<RHCPatientData>(rhcReport.patientData || {});
 
+  // Custom fields state
+  const [showAddCustomField, setShowAddCustomField] = useState(false);
+  const [newCustomFieldName, setNewCustomFieldName] = useState('');
+  const [newCustomFieldValue, setNewCustomFieldValue] = useState('');
+
+  // Ref for modal container to control scroll position
+  const modalRef = React.useRef<HTMLDivElement>(null);
+
   // Reset state when rhcReport changes
   useEffect(() => {
     setPressures(rhcReport.haemodynamicPressures);
@@ -48,6 +56,13 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     setRhcData(rhcReport.rhcData);
     setPatientData(rhcReport.patientData || {});
   }, [rhcReport]);
+
+  // Scroll modal to top when it opens
+  useEffect(() => {
+    if (modalRef.current) {
+      modalRef.current.scrollTop = 0;
+    }
+  }, []);
 
   // Auto-recalculate derived haemodynamics when inputs change
   const calculatedHaemodynamics = useMemo<CalculatedHaemodynamics>(() => {
@@ -301,6 +316,24 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     }));
   };
 
+  const handleAddCustomField = () => {
+    if (!newCustomFieldName.trim() || !newCustomFieldValue.trim()) {
+      return;
+    }
+
+    // Custom fields would be added to rhcData or a custom fields object
+    // For now, we'll add it to rhcData as a custom property
+    setRhcData(prev => ({
+      ...prev,
+      [`custom_${newCustomFieldName.toLowerCase().replace(/\s+/g, '_')}`]: newCustomFieldValue
+    }));
+
+    // Reset form
+    setNewCustomFieldName('');
+    setNewCustomFieldValue('');
+    setShowAddCustomField(false);
+  };
+
   const handleSave = () => {
     const updatedReport: RightHeartCathReport = {
       ...rhcReport,
@@ -331,6 +364,7 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
         onClick={onCancel}
       >
         <motion.div
+          ref={modalRef}
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           exit={{ scale: 0.95 }}
@@ -1093,24 +1127,91 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              Changes will be applied to the card export. Original data is preserved.
-            </p>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={onCancel}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2"
-              >
-                <Check className="w-4 h-4" />
-                <span>Apply Changes</span>
-              </button>
+          <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4">
+            {/* Add Custom Field Form */}
+            {showAddCustomField && (
+              <div className="mb-4 p-4 bg-white border border-emerald-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Add Custom Field</h4>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    value={newCustomFieldName}
+                    onChange={(e) => setNewCustomFieldName(e.target.value)}
+                    placeholder="Field name (e.g., 'Fluoroscopy time')"
+                    className="px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomField();
+                      }
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={newCustomFieldValue}
+                    onChange={(e) => setNewCustomFieldValue(e.target.value)}
+                    placeholder="Value (e.g., '8.2 minutes')"
+                    className="px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomField();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-end space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowAddCustomField(false);
+                      setNewCustomFieldName('');
+                      setNewCustomFieldValue('');
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddCustomField}
+                    disabled={!newCustomFieldName.trim() || !newCustomFieldValue.trim()}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add Field
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <p className="text-sm text-gray-600">
+                  Changes will be applied to the card export. Original data is preserved.
+                </p>
+                {!showAddCustomField && (
+                  <button
+                    onClick={() => setShowAddCustomField(true)}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm"
+                  >
+                    + Add Custom Field
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={onCancel}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Apply Changes</span>
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>

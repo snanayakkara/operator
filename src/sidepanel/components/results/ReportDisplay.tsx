@@ -102,8 +102,9 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       }
     };
 
-    // For angiogram-pci, only split on main section headers
+    // For angiogram-pci and right-heart-cath, only split on main section headers
     const isAngiogramPCI = agentType === 'angiogram-pci';
+    const isRHC = agentType === 'right-heart-cath';
     const mainSectionHeaders = [
       'PREAMBLE',
       'FINDINGS',
@@ -126,8 +127,8 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
         if (!normalizedHeading) return false;
         const upper = normalizedHeading.toUpperCase();
 
-        // For angiogram-pci, only treat main section headers as headings
-        if (isAngiogramPCI) {
+        // For angiogram-pci and right-heart-cath, only treat main section headers as headings
+        if (isAngiogramPCI || isRHC) {
           return mainSectionHeaders.includes(upper);
         }
 

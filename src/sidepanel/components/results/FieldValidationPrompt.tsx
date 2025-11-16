@@ -1,4 +1,8 @@
 import React, { useMemo, useState } from 'react';
+import { Modal } from '../modals';
+import { FormInput, FormTextarea } from '../forms';
+import { Button, ButtonGroup } from '../buttons';
+import { AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 type ValidationCorrection = {
   field: string;
@@ -207,67 +211,95 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 
     if (inputType === 'textarea') {
       return (
-        <div key={field.field} className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">
-            {label}
-          </label>
-          <textarea
-            className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <div key={field.field} className="space-y-2">
+          <FormTextarea
+            label={label}
             placeholder={placeholder}
             rows={3}
+            helperText={helperText}
             onChange={(event) => handleFieldChange(field.field, event.target.value)}
           />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 flex-1">{helperText}</span>
-            {suggestion !== undefined && (
-              <button
-                type="button"
-                className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
-                onClick={() => acceptMissingFieldSuggestion(field)}
-              >
-                Accept {String(suggestion)}
-              </button>
-            )}
-          </div>
+          {suggestion !== undefined && (
+            <Button
+              variant="success"
+              size="sm"
+              onClick={() => acceptMissingFieldSuggestion(field)}
+            >
+              Accept {String(suggestion)}
+            </Button>
+          )}
         </div>
       );
     }
 
     return (
-      <div key={field.field} className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          {label}
-        </label>
-        <input
+      <div key={field.field} className="space-y-2">
+        <FormInput
+          label={label}
           type={inputType}
           step="any"
-          className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder={placeholder}
+          helperText={helperText}
           onChange={(event) => handleFieldChange(field.field, event.target.value)}
         />
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 flex-1">{helperText}</span>
-          {suggestion !== undefined && (
-            <button
-              type="button"
-              className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
-              onClick={() => acceptMissingFieldSuggestion(field)}
-            >
-              Accept {String(suggestion)}
-            </button>
-          )}
-        </div>
+        {suggestion !== undefined && (
+          <Button
+            variant="success"
+            size="sm"
+            onClick={() => acceptMissingFieldSuggestion(field)}
+          >
+            Accept {String(suggestion)}
+          </Button>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {mergedCopy.heading}
-          </h2>
+    <Modal
+      isOpen={true}
+      onClose={onCancel}
+      size="lg"
+      title={mergedCopy.heading}
+      footer={
+        <div className="flex items-center gap-3 w-full">
+          {hasAnySuggestions && (
+            <Button
+              variant="success"
+              size="md"
+              onClick={handleAcceptAll}
+            >
+              Accept All Suggestions
+            </Button>
+          )}
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            onClick={onCancel}
+          >
+            {mergedCopy.cancelLabel}
+          </Button>
+          {onSkip && (
+            <Button
+              variant="outline"
+              onClick={onSkip}
+            >
+              {mergedCopy.skipLabel}
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={() => onContinue(userFields)}
+            disabled={validation.missingCritical.length > 0 && Object.keys(userFields).length === 0}
+          >
+            {mergedCopy.continueLabel}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* Description and confidence */}
+        <div className="space-y-2">
           {mergedCopy.description && (
             <p className="text-sm text-gray-600">
               {mergedCopy.description}
@@ -282,10 +314,11 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
         {validation.missingCritical.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-red-600 font-medium">⚠️ {mergedCopy.criticalTitle}</span>
+              <AlertCircle className="w-5 h-5 text-rose-600" />
+              <span className="text-rose-600 font-medium">{mergedCopy.criticalTitle}</span>
               <span className="text-xs text-gray-500">{mergedCopy.criticalHelper}</span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {validation.missingCritical.map(field => renderInput(field, true))}
             </div>
           </section>
@@ -295,16 +328,18 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
         {lowConfidenceCorrections.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-yellow-600 font-medium">✏️ {mergedCopy.suggestionsTitle}</span>
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <span className="text-amber-600 font-medium">{mergedCopy.suggestionsTitle}</span>
               <span className="text-xs text-gray-500">{mergedCopy.suggestionsHelper}</span>
             </div>
             <div className="space-y-3">
               {lowConfidenceCorrections.map(correction => {
                 const config = fieldConfig[correction.field];
                 const label = config?.label ?? formatFieldPath(correction.field);
+                const isAccepted = acceptedCorrections.has(correction.field);
 
                 return (
-                  <div key={correction.field} className="border border-gray-200 rounded p-3 space-y-2">
+                  <div key={correction.field} className="border border-gray-200 rounded-lg p-4 space-y-3">
                     <div className="text-sm font-medium text-gray-700">
                       {label}
                     </div>
@@ -318,28 +353,22 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
                     <div className="text-xs text-gray-500">
                       {correction.reason}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        className={`px-3 py-1 text-sm rounded transition-colors ${
-                          acceptedCorrections.has(correction.field)
-                            ? 'bg-green-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
+                    <ButtonGroup spacing="sm">
+                      <Button
+                        variant={isAccepted ? 'success' : 'outline'}
+                        size="sm"
                         onClick={() => handleCorrectionToggle(correction, true)}
                       >
                         Accept
-                      </button>
-                      <button
-                        className={`px-3 py-1 text-sm rounded transition-colors ${
-                          !acceptedCorrections.has(correction.field)
-                            ? 'bg-gray-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
+                      </Button>
+                      <Button
+                        variant={!isAccepted ? 'primary' : 'outline'}
+                        size="sm"
                         onClick={() => handleCorrectionToggle(correction, false)}
                       >
                         Keep Original
-                      </button>
-                    </div>
+                      </Button>
+                    </ButtonGroup>
                     <div className="text-xs text-gray-400">
                       Confidence: {(correction.confidence * 100).toFixed(0)}%
                     </div>
@@ -354,52 +383,16 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
         {validation.missingOptional.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-blue-600 font-medium">ℹ️ {mergedCopy.optionalTitle}</span>
+              <Info className="w-5 h-5 text-blue-600" />
+              <span className="text-blue-600 font-medium">{mergedCopy.optionalTitle}</span>
               <span className="text-xs text-gray-500">{mergedCopy.optionalHelper}</span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {validation.missingOptional.map(field => renderInput(field, false))}
             </div>
           </section>
         )}
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-3 justify-between items-center pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-2">
-            {hasAnySuggestions && (
-              <button
-                type="button"
-                onClick={handleAcceptAll}
-                className="px-4 py-2 text-sm text-white bg-emerald-600 rounded hover:bg-emerald-700"
-                title="Accept all suggested values and low-confidence corrections"
-              >
-                Accept All Suggestions
-              </button>
-            )}
-          </div>
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-gray-700 bg-gray-200 rounded hover:bg-gray-300"
-          >
-            {mergedCopy.cancelLabel}
-          </button>
-          {onSkip && (
-            <button
-              onClick={onSkip}
-              className="px-4 py-2 text-sm text-gray-700 bg-yellow-200 rounded hover:bg-yellow-300"
-            >
-              {mergedCopy.skipLabel}
-            </button>
-          )}
-          <button
-            onClick={() => onContinue(userFields)}
-            className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={validation.missingCritical.length > 0 && Object.keys(userFields).length === 0}
-          >
-            {mergedCopy.continueLabel}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };

@@ -42,6 +42,20 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
   const asrLog = useMemo(() => ASRCorrectionsLog.getInstance(), []);
   const dynamicASR = useMemo(() => DynamicASRCorrections.getInstance(), []);
 
+  // Refs for preventing duplicate loads
+  const hasLoadedInitialData = React.useRef(false);
+  const isLoadingInitialData = React.useRef(false);
+
+  // Refs for stable callback references (prevents dependency chain re-renders)
+  const onErrorRef = React.useRef(onError);
+  const onLoadingChangeRef = React.useRef(onLoadingChange);
+
+  // Update refs when props change (keeps latest version)
+  React.useEffect(() => {
+    onErrorRef.current = onError;
+    onLoadingChangeRef.current = onLoadingChange;
+  });
+
   // State
   const [preview, setPreview] = useState<ASRPreview | null>(null);
   const [currentState, setCurrentState] = useState<ASRCurrentState | null>(null);
@@ -69,9 +83,14 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
   useEffect(() => {
     const abortController = new AbortController();
 
+    // Prevent duplicate loads
+    if (hasLoadedInitialData.current || isLoadingInitialData.current) {
+      return;
+    }
+
     // Defer initialization to prevent blocking on mount
     const timeoutId = setTimeout(() => {
-      if (!abortController.signal.aborted) {
+      if (!abortController.signal.aborted && !isLoadingInitialData.current) {
         loadInitialData();
       }
     }, 200);
@@ -98,7 +117,14 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
   }, [optimizationService]);
 
   const loadInitialData = useCallback(async () => {
+    // Prevent duplicate concurrent loads
+    if (isLoadingInitialData.current) {
+      return;
+    }
+
     try {
+      isLoadingInitialData.current = true;
+
       // Check server availability first
       setIsCheckingServer(true);
       const serverStatus = await checkServerAvailability();
@@ -118,14 +144,18 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
           rules: state.rules?.length || 0
         });
       } else {
-        // Clear server-dependent state when server is unavailable
-        setCurrentState(null);
+        // DON'T clear currentState - preserve last known good state
+        // Only clear preview since it's transient
         setPreview(null);
-        logger.info('ASR server unavailable, using local-only mode', {
+        logger.info('ASR server unavailable, preserving cached state', {
           component: 'ASROptimizationSection',
-          localCorrections: corrections.length
+          localCorrections: corrections.length,
+          hasCurrentState: currentState !== null
         });
       }
+
+      // Mark as successfully loaded
+      hasLoadedInitialData.current = true;
 
     } catch (error) {
       logger.warn('Failed to load ASR data', {
@@ -133,15 +163,17 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         error: error instanceof Error ? error.message : String(error)
       });
       setServerAvailable(false);
+      // Don't clear currentState on error either - preserve last known state
     } finally {
       setIsCheckingServer(false);
+      isLoadingInitialData.current = false;
     }
-  }, [optimizationService, asrLog, checkServerAvailability]);
+  }, [optimizationService, asrLog, checkServerAvailability, currentState]);
 
   const uploadCorrections = useCallback(async () => {
     try {
       setIsUploadingCorrections(true);
-      onLoadingChange(true);
+      onLoadingChangeRef.current(true);
       setUploadProgressText('Loading corrections from local storage...');
 
       // Get corrections from Chrome storage
@@ -173,17 +205,17 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
     } catch (error) {
       setUploadProgressText('');
-      onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
+      onErrorRef.current(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsUploadingCorrections(false);
-      onLoadingChange(false);
+      onLoadingChangeRef.current(false);
     }
-  }, [asrLog, optimizationService, onError, onLoadingChange]);
+  }, [asrLog, optimizationService]);
 
   const generatePreview = useCallback(async () => {
     try {
       setIsPreviewLoading(true);
-      onLoadingChange(true);
+      onLoadingChangeRef.current(true);
       setPreviewProgressText('Analyzing correction patterns...');
 
       // Request preview from server
@@ -223,19 +255,19 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
     } catch (error) {
       setPreviewProgressText('');
-      onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
+      onErrorRef.current(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsPreviewLoading(false);
-      onLoadingChange(false);
+      onLoadingChangeRef.current(false);
     }
-  }, [optimizationService, onError, onLoadingChange]);
+  }, [optimizationService]);
 
   const applyChanges = useCallback(async () => {
     if (!preview) return;
 
     try {
       setIsApplying(true);
-      onLoadingChange(true);
+      onLoadingChangeRef.current(true);
 
       const approvedGlossary = Array.from(selectedGlossaryTerms);
       const approvedRules = Array.from(selectedRules).map(ruleKey => {
@@ -281,12 +313,12 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
     } catch (error) {
       setApplyProgressText('');
-      onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
+      onErrorRef.current(error instanceof ASROptimizationError ? error : new ASROptimizationError(error instanceof Error ? error.message : String(error)));
     } finally {
       setIsApplying(false);
-      onLoadingChange(false);
+      onLoadingChangeRef.current(false);
     }
-  }, [preview, selectedGlossaryTerms, selectedRules, optimizationService, dynamicASR, onError, onLoadingChange]);
+  }, [preview, selectedGlossaryTerms, selectedRules, optimizationService, dynamicASR]);
 
   const toggleGlossaryTerm = useCallback((term: string) => {
     setSelectedGlossaryTerms(prev => {
@@ -401,8 +433,8 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
 
   // Handle error propagation to LocalCorrectionsViewer
   const handleLocalError = useCallback((error: Error) => {
-    onError(error instanceof ASROptimizationError ? error : new ASROptimizationError(error.message));
-  }, [onError]);
+    onErrorRef.current(error instanceof ASROptimizationError ? error : new ASROptimizationError(error.message));
+  }, []);
 
   // Show loading skeleton during initial check
   if (isCheckingServer && serverAvailable === null) {
@@ -430,7 +462,11 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
             </p>
           </div>
           <button
-            onClick={() => loadInitialData()}
+            onClick={() => {
+              // Allow manual retry by resetting the loaded flag
+              hasLoadedInitialData.current = false;
+              loadInitialData();
+            }}
             disabled={isCheckingServer}
             className="flex items-center space-x-1 px-3 py-1 text-sm border border-orange-300 rounded hover:bg-orange-100 disabled:opacity-50"
           >
@@ -440,8 +476,8 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
         </div>
       )}
 
-      {/* Current State Display - only show if server is available */}
-      {serverAvailable && renderCurrentState()}
+      {/* Current State Display - show if we have data (regardless of current server status) */}
+      {renderCurrentState()}
 
       {/* Local Corrections Viewer - always visible */}
       <div className="border-t pt-6">

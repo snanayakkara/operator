@@ -832,6 +832,7 @@ export interface PatientSession {
   pipelineProgress?: PipelineProgress;
   reviewedAt?: number;
   finalizedAt?: number;
+  markedCompleteAt?: number; // Timestamp when user explicitly marked session complete (for 24h expiry vs 7d)
 }
 
 export interface LetterTemplate {

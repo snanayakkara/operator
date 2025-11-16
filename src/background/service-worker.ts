@@ -549,6 +549,45 @@ class BackgroundService {
           break;
         }
 
+        case 'NAVIGATE_TO_PATIENT': {
+          try {
+            // Find Xestro tab
+            const xestroTabs = await chrome.tabs.query({
+              url: 'https://my.xestro.com/*'
+            });
+
+            if (xestroTabs.length === 0) {
+              console.warn('⚠️ No Xestro tab found for patient navigation');
+              sendResponse({ success: false, error: 'No Xestro tab found' });
+              break;
+            }
+
+            // Use first Xestro tab found
+            const tab = xestroTabs[0];
+            console.log('🧭 Navigating Xestro tab to patient:', message.fileNumber);
+
+            // Send search message to content script (direct search, no URL changes)
+            await chrome.tabs.sendMessage(tab.id!, {
+              type: 'EXECUTE_ACTION',
+              action: 'GO_TO_PATIENT_BY_FILING',
+              data: {
+                fileNumber: message.fileNumber,
+                patientName: message.patientName
+              }
+            });
+
+            console.log('✅ Patient navigation request sent successfully');
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('❌ Failed to navigate to patient:', error);
+            sendResponse({
+              success: false,
+              error: error instanceof Error ? error.message : 'Unknown error'
+            });
+          }
+          break;
+        }
+
         default:
           sendResponse({ error: 'Unknown message type' });
       }

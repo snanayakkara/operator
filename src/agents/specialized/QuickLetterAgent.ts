@@ -134,27 +134,60 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
     console.log(`📝 QuickLetter [${processingType}]: Starting processing with enhanced capabilities`);
 
+    let enhancedError: Error | null = null;
+    let legacyError: Error | null = null;
+
     try {
       // Enhanced processing attempt
       if (this.enableEnhanced) {
-        const enhancedResult = await this.processWithEnhancedAnalysis(input, _context, processingType);
-        if (enhancedResult) {
-          const processingTime = Date.now() - startTime;
-          console.log(`✅ QuickLetterAgent completed with enhanced processing in ${processingTime}ms`);
-          return enhancedResult;
+        try {
+          const enhancedResult = await this.processWithEnhancedAnalysis(input, _context, processingType);
+          if (enhancedResult) {
+            const processingTime = Date.now() - startTime;
+            console.log(`✅ QuickLetterAgent completed with enhanced processing in ${processingTime}ms`);
+            return enhancedResult;
+          }
+          // If enhanced returns null (validation failed), fall through to legacy
+          console.warn('⚠️ Enhanced processing returned null (quality validation failed)');
+        } catch (error) {
+          enhancedError = error instanceof Error ? error : new Error(String(error));
+          console.error('❌ Enhanced processing threw error:', enhancedError.message);
         }
       }
 
       // Fallback to legacy processing if needed
       if (this.fallbackToLegacy) {
-        console.log('📋 QuickLetterAgent falling back to legacy processing');
-        return await this.processWithLegacy(input, _context, processingType);
+        try {
+          console.log('📋 QuickLetterAgent falling back to legacy processing');
+          return await this.processWithLegacy(input, _context, processingType);
+        } catch (error) {
+          legacyError = error instanceof Error ? error : new Error(String(error));
+          console.error('❌ Legacy processing threw error:', legacyError.message);
+        }
       }
 
-      throw new Error('Both enhanced and legacy processing failed');
+      // Build detailed error message
+      const errorParts: string[] = ['Quick Letter processing failed'];
+      if (enhancedError) {
+        errorParts.push(`Enhanced: ${enhancedError.message}`);
+      } else if (this.enableEnhanced) {
+        errorParts.push('Enhanced: Quality validation failed');
+      }
+      if (legacyError) {
+        errorParts.push(`Legacy: ${legacyError.message}`);
+      }
+
+      const detailedError = new Error(errorParts.join('. '));
+      console.error('❌ QuickLetterAgent processing failed completely:', detailedError.message);
+      throw detailedError;
 
     } catch (error) {
-      console.error('❌ QuickLetterAgent processing failed completely:', error);
+      // Re-throw if it's already our detailed error
+      if (error instanceof Error && error.message.includes('Quick Letter processing failed')) {
+        throw error;
+      }
+      // Otherwise wrap it
+      console.error('❌ QuickLetterAgent unexpected error:', error);
       throw error;
     }
   }
@@ -1527,7 +1560,7 @@ If you have any questions about this information, please don't hesitate to call 
       fallback = 'We have reviewed your medical information and will contact you with next steps. ';
     }
     
-    fallback += 'Please contact our office if you have any questions about your care.';
+    fallback += 'Please contact our team if you have any questions about your care.';
     
     return fallback;
   }
@@ -1625,6 +1658,27 @@ If you have any questions about this information, please don't hesitate to call 
   }
 
   /**
+   * Parse patient name to extract first name from full name
+   * Handles formats like:
+   * - "Mr John Smith" → "John"
+   * - "Dr Jane Doe" → "Jane"
+   * - "John Smith" → "John"
+   * - "Mary" → "Mary"
+   */
+  private extractFirstName(fullName: string): string {
+    if (!fullName) return '';
+
+    // Remove common titles
+    const withoutTitle = fullName
+      .replace(/^(Mr|Ms|Mrs|Miss|Dr|Prof|Professor)\s+/i, '')
+      .trim();
+
+    // Split by whitespace and take first part (first name)
+    const parts = withoutTitle.split(/\s+/);
+    return parts[0] || '';
+  }
+
+  /**
    * Format patient demographics for inclusion in system prompt
    */
   private formatDemographicsContext(_context?: MedicalContext): string | null {
@@ -1635,12 +1689,18 @@ If you have any questions about this information, please don't hesitate to call 
       const { name, age, dob } = _context.patientInfo;
       const parts: string[] = [];
 
-      if (name) parts.push(`Patient Name: ${name}`);
+      if (name) {
+        parts.push(`Patient Full Name: ${name}`);
+        const firstName = this.extractFirstName(name);
+        if (firstName) {
+          parts.push(`Patient First Name: ${firstName}`);
+        }
+      }
       if (age) parts.push(`Age: ${age}`);
       if (dob) parts.push(`DOB: ${dob}`);
 
       if (parts.length > 0) {
-        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nUse these demographics when appropriate in the letter (e.g., salutations, patient identification).`;
+        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nIMPORTANT: Use "Patient First Name" for greetings (e.g., "I saw ${this.extractFirstName(name || '')} today"), and "Patient Full Name" only when formal identification is required.`;
       }
     }
 
@@ -1649,14 +1709,20 @@ If you have any questions about this information, please don't hesitate to call 
       const { name, age, dateOfBirth, gender, mrn } = _context.demographics;
       const parts: string[] = [];
 
-      if (name) parts.push(`Patient Name: ${name}`);
+      if (name) {
+        parts.push(`Patient Full Name: ${name}`);
+        const firstName = this.extractFirstName(name);
+        if (firstName) {
+          parts.push(`Patient First Name: ${firstName}`);
+        }
+      }
       if (age) parts.push(`Age: ${age}`);
       if (dateOfBirth) parts.push(`DOB: ${dateOfBirth}`);
       if (gender) parts.push(`Gender: ${gender}`);
       if (mrn) parts.push(`MRN: ${mrn}`);
 
       if (parts.length > 0) {
-        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nUse these demographics when appropriate in the letter (e.g., salutations, patient identification).`;
+        return `\n\nPATIENT DEMOGRAPHICS:\n${parts.join('\n')}\nIMPORTANT: Use "Patient First Name" for greetings (e.g., "I saw ${this.extractFirstName(name || '')} today"), and "Patient Full Name" only when formal identification is required.`;
       }
     }
 

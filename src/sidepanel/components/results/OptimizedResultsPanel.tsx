@@ -534,7 +534,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     !isTAVIWorkup &&
     !isRightHeartCath &&
     agentType !== 'investigation-summary' &&
-    (hasTranscription || isViewingSession);
+    hasTranscription; // Show transcription for all agents including Quick Letter
 
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
@@ -568,26 +568,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       animate="visible"
       variants={withReducedMotion(cardVariants)}
     >
-      {/* Selected Session Indicator */}
-      {selectedSessionId && selectedPatientName && (
-        <motion.div 
-          className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: ANIMATION_DURATIONS.quick }}
-        >
-          <motion.div 
-            className="flex items-center space-x-2"
-            variants={withReducedMotion(textVariants)}
-          >
-            <Eye className="w-3 h-3 text-blue-600" />
-            <span className="text-blue-800 text-xs font-medium">
-              Viewing session for: {selectedPatientName}
-            </span>
-          </motion.div>
-        </motion.div>
-      )}
-      
+      {/* Selected Session Indicator - Removed: Patient info now shown in green PatientContextHeader */}
+
       <motion.div 
         className="flex items-center justify-between"
         variants={withReducedMotion(listItemVariants)}
@@ -707,7 +689,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* TAVI Workup Progress - Uses unified progress for consistency */}
       <AnimatePresence>
-        {agentType === 'tavi-workup' && pipelineProgress && (
+        {agentType === 'tavi-workup' && pipelineProgress && processingStatus !== 'complete' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -728,7 +710,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* Unified Pipeline Progress for all agents during processing */}
       <AnimatePresence>
-        {pipelineProgress && agentType !== 'tavi-workup' && (
+        {pipelineProgress && agentType !== 'tavi-workup' && processingStatus !== 'complete' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -914,6 +896,9 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 resultsLength: results?.length || 0,
                 hasSummary: !!resultsSummary,
                 summaryLength: resultsSummary?.length || 0,
+                hasTranscription,
+                transcriptionLength: originalTranscription?.length || 0,
+                hasAudioBlob: !!audioBlob,
                 agentType,
                 streaming
               });
@@ -1219,24 +1204,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 )}
               </AnimatePresence>
 
-              {/* Raw Transcription */}
-              {hasTranscription && (
-                <TranscriptionSection
-                  originalTranscription={originalTranscription ?? ''}
-                  onTranscriptionCopy={onTranscriptionCopy}
-                  onTranscriptionInsert={onTranscriptionInsert}
-                  onTranscriptionEdit={onTranscriptionEdit}
-                  transcriptionSaveStatus={transcriptionSaveStatus}
-                  onAgentReprocess={onAgentReprocess}
-                  currentAgent={currentAgent}
-                  isProcessing={isProcessing}
-                  audioBlob={audioBlob}
-                  defaultExpanded={false}
-                  collapseWhen={false}
-                  approvalState={approvalState}
-                  onTranscriptionApprove={onTranscriptionApprove}
-                />
-              )}
+              {/* Transcription section now shown at the top with showPrimaryTranscriptionSection - no duplicate needed here */}
             </motion.div>
           ) : isTAVIWorkup ? (
             // TAVI Workup with transcription section + structured display

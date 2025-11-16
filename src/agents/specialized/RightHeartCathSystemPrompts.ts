@@ -29,15 +29,19 @@ CRITICAL INSTRUCTIONS:
 
 ANTI-HALLUCINATION RULES (CRITICAL - MEDICAL SAFETY):
 - ONLY include information explicitly stated in the dictation
+- NEVER copy example text from these instructions into your output
+- NEVER use placeholder phrases like "Moderate pulmonary hypertension, with preserved cardiac output..." unless those EXACT findings are in the dictation
 - NEVER infer symptoms (dyspnoea, fatigue, chest pain, orthopnoea, etc.)
 - NEVER infer test results (echocardiography findings, BNP values, PASP estimates, biomarkers)
 - NEVER infer functional class (NYHA class, WHO functional class)
 - NEVER infer clinical severity descriptors (progressive, worsening, improving, stable, acute, chronic)
 - NEVER infer specific measurements, dates, or numbers not provided
 - NEVER infer physical examination findings (JVP, oedema, murmurs)
+- NEVER infer laboratory findings (anaemia, electrolytes) unless explicitly dictated with values
 - If clinical context not dictated: state ONLY "The indication for the procedure was haemodynamic assessment"
 - Minimal safe inference allowed: "indication was haemodynamic assessment" when performing RHC on patient with stated diagnosis
 - When in doubt: OMIT rather than INFER
+- Examples in these instructions are STRUCTURAL TEMPLATES ONLY - generate your conclusion based on the ACTUAL dictated findings
 
 Required sections (use exactly these headers in PLAIN TEXT):
 
@@ -49,51 +53,33 @@ PREAMBLE (CONDITIONAL CONTENT - Include ONLY what was dictated):
 - Recent investigations: ONLY if specific test results (echo/BNP/imaging) were dictated, include verbatim. OTHERWISE: completely omit this paragraph
 - Pre-procedure assessment: ONLY documented vital signs that were explicitly stated (BP, HR, O2 saturation, haemoglobin, weight, height)
   CRITICAL: Always extract height (cm), weight (kg), haemoglobin (g/L), lactate (mmol/L) if mentioned - needed for Fick CO calculations
-- Vascular access and equipment: ONLY what was explicitly dictated (access site, catheter type, catheter size, guidance method)
+- Vascular access and catheter positioning: Describe access site, guidance method, catheter type/size, and positioning in narrative form
   CRITICAL: If vascular access site is NOT explicitly dictated, write: "Vascular access was obtained [site not specified]"
   DO NOT infer or assume common access sites (right femoral, right internal jugular, etc.) - only state what was dictated
+  Include catheter advancement and positioning: "Right heart catheterisation was performed using a [X] French [catheter type]. The catheter was advanced through [chambers] with haemodynamic measurements obtained at each level."
+- Mixed venous/wedge saturations: If dictated, include narrative: "Mixed venous oxygen saturation was [X]% with wedge saturation of [X]%."
+- Laboratory assessment: If haemoglobin/lactate values were dictated: "Laboratory assessment showed haemoglobin of [X] g/L and lactate of [X] mmol/L."
+- Exercise testing (if performed): "Straight leg raising exercise was performed for [X] minutes with repeat haemodynamic measurements demonstrating [describe pressure changes and exercise response]."
 
-PREAMBLE EXAMPLE (when minimal context dictated - NO symptoms/investigations):
-"[Age] year old [gender] with [stated diagnosis only]. Pre-procedure assessment demonstrated resting blood pressure [X/X] mmHg, heart rate [X] bpm, and haemoglobin [X] g/L. Vascular access was obtained via [stated access site] using a [X] French [catheter type] catheter."
+PREAMBLE TEMPLATE STRUCTURE (when minimal context dictated - NO symptoms/investigations):
+"[Age] year old [gender] with [stated diagnosis only]. Pre-procedure assessment demonstrated resting blood pressure [actual BP] mmHg, heart rate [actual HR] bpm, and haemoglobin [actual Hb] g/L. Vascular access was obtained via [actual access site] using a [actual size] French [actual catheter type] catheter. Right heart catheterisation was performed with haemodynamic measurements obtained at each level. [Include saturations/labs/exercise if dictated]."
 
-PREAMBLE EXAMPLE (when comprehensive context dictated):
-"[Age] year old [gender] with [stated diagnosis]. The patient presented with [explicitly dictated symptoms]. Recent investigations included [explicitly dictated test results with specific values]. Pre-procedure assessment demonstrated [dictated vital signs]. Vascular access was obtained via [stated access site] using [equipment details]."
+PREAMBLE TEMPLATE STRUCTURE (when comprehensive context dictated):
+"[Age] year old [gender] with [stated diagnosis]. The patient presented with [explicitly dictated symptoms]. Recent investigations included [explicitly dictated test results with specific values]. Pre-procedure assessment demonstrated [dictated vital signs]. Vascular access was obtained via [actual access site] using [actual equipment details]. Right heart catheterisation was performed with the catheter advanced through [chambers]. [Include saturations/labs/exercise if dictated]."
 
-FINDINGS:
-- Vascular access approach and catheter positioning with specific details in narrative form
-- Haemodynamic measurements presented in structured list format followed by clinical interpretation:
+CRITICAL: Replace ALL bracketed placeholders with ACTUAL dictated data - never leave brackets or placeholder text in final output.
 
-Structured haemodynamic data format:
-RA | [a wave]/[v wave] ([mean])
-RV | [systolic]/[diastolic] (RVEDP [value])
-PA | [systolic]/[diastolic] (mean [value])
-PCWP | [a wave]/[v wave] (mean [value])
-CO [value]
-CI [value]
-
-TPG [value] (if calculated)
-PVR [value] (if calculated)
-
-Example presentation:
-RA | 8/12 (11)
-RV | 74/12 (RVEDP 8)
-PA | 74/40 (mean 55)
-PCWP | 8/12 (mean 11)
-CO 3.4
-CI 1.1
-
-TPG 44
-PVR 13
-
-Followed by clinical narrative: "Mixed venous oxygen saturation was 68% with wedge saturation of 95%. Laboratory assessment showed haemoglobin of 125 g/L and lactate of 1.8 mmol/L."
-
-Exercise testing (if performed):
-"Straight leg raising exercise was performed for 2 minutes with repeat haemodynamic measurements demonstrating [describe pressure changes and exercise response]."
+DO NOT GENERATE A FINDINGS SECTION:
+- The structured haemodynamic data (RA, RV, PA, PCWP, CO, CI, TPG, PVR) will be displayed as an 18×10cm card image
+- Do not include text-based pressure measurements, structured data tables, or pressure lists
+- The card image serves as the FINDINGS section
+- Only generate PREAMBLE and CONCLUSION sections
 
 CONCLUSION:
 - Extremely concise 1-2 sentence summary only
 - Primary haemodynamic finding + cardiac output status + notable abnormalities
-- Example: "Moderate pulmonary hypertension, with preserved cardiac output and normal left sided pressures. Significant anaemia noted."
+- TEMPLATE STRUCTURE (write your own based on ACTUAL findings): "[Primary haemodynamic finding from dictated data], with [cardiac output status from measurements] and [other significant abnormalities if dictated]."
+- DO NOT copy this template literally - generate conclusion from the actual dictated findings only
 
 CLINICAL LANGUAGE REQUIREMENTS:
 - Australian spelling: catheterisation, haemodynamic, colour, recognised, anaesthesia
@@ -196,6 +182,7 @@ CRITICAL: Generate flowing clinical narrative, NOT tables, bullet points, or num
 1. VERIFY regex-extracted values against the transcription
 2. DETECT values the regex MISSED that are present in transcription
 3. IDENTIFY critical missing fields needed for Fick calculations
+4. VALIDATE procedural parameters (vascular access, catheter details, indication)
 
 CRITICAL FIELDS FOR FICK CALCULATIONS:
 - Height (cm) → required for BSA calculation
@@ -205,6 +192,16 @@ CRITICAL FIELDS FOR FICK CALCULATIONS:
 - SvO2 (%) → mixed venous oxygen saturation, required for Fick CO
 - RA, RV, PA, PCWP pressures → required for haemodynamic assessment
 - Thermodilution CO (L/min) → primary cardiac output measurement
+
+PROCEDURAL PARAMETERS (MUST BE VALIDATED IF DICTATED):
+- Vascular access site → internal jugular/femoral/brachial/basilic vein
+  * Common ASR error: "venous axis" → "venous access"
+  * If dictated but regex missed or defaulted incorrectly → add to "corrections"
+- Catheter details → French size (e.g., 7F), catheter type (Swan-Ganz/standard)
+  * Common ASR error: "swan GANS" → "Swan-Ganz"
+  * If dictated but regex missed → add to "corrections"
+- Clinical indication → heart failure/pulmonary hypertension/transplant eval/haemodynamic assessment
+  * If dictated but regex defaulted to generic → add to "corrections"
 
 VALIDATION RULES:
 1. Compare each regex-extracted value to the transcription
@@ -228,6 +225,53 @@ CONFIDENCE SCORING:
 - 0.80-0.94: Clear with minor ASR issues ("mixed mean is oxygen saturation 58" → SvO2 = 58)
 - 0.60-0.79: Implicit/contextual ("PA sat 65" → SvO2 = 65)
 - 0.00-0.59: Uncertain/ambiguous (low confidence, require user review)
+
+CRITICAL vs PROCEDURAL DISTINCTION:
+- CRITICAL missing → stops Fick calculations (height, weight, Hb, SaO2, SvO2)
+  * If NOT in transcription → add to "missingCritical" with "critical": true
+- PROCEDURAL missing → doesn't stop report, but if DICTATED and MISSED by regex, must correct
+  * If dictated but regex missed/wrong → add to "corrections"
+  * If NOT dictated at all → skip (don't mark as missing)
+
+EXAMPLE 1 - Height/Weight with Period Separator:
+Transcription: "Patient height. 180 centimeters. Patient weight 100 kilograms."
+Regex extracted: "height": null, "weight": null (regex expects colon, missed period separator)
+Correction needed:
+{
+  "field": "patientData.height",
+  "regexValue": null,
+  "correctValue": 180,
+  "reason": "Transcription clearly states 'height. 180 centimeters' - regex missed due to period separator",
+  "confidence": 0.98
+},
+{
+  "field": "patientData.weight",
+  "regexValue": null,
+  "correctValue": 100,
+  "reason": "Transcription clearly states 'weight 100 kilograms'",
+  "confidence": 0.98
+}
+
+EXAMPLE 2 - Vascular Access Correction:
+Transcription: "7 French right brachial venous axis"
+Regex extracted: "vascularAccess": "right_femoral" (default fallback)
+Correction needed:
+{
+  "field": "rhcData.vascularAccess",
+  "regexValue": "right_femoral",
+  "correctValue": "right_brachial",
+  "reason": "Transcription states 'right brachial venous axis' (ASR error for 'access')",
+  "confidence": 0.95
+}
+
+VALIDATION STRATEGY:
+1. Scan ENTIRE transcription for all mentioned parameters (calculation + procedural)
+2. For each parameter found in transcription:
+   - If regex got it RIGHT → skip
+   - If regex got it WRONG → add to "corrections"
+   - If regex MISSED it → add to "corrections"
+3. For CRITICAL fields not in transcription → add to "missingCritical"
+4. For PROCEDURAL fields not in transcription → skip (assumed not needed)
 
 OUTPUT FORMAT (strict JSON only, no markdown):
 {

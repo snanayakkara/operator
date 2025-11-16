@@ -456,9 +456,10 @@ export class SessionPersistenceService {
       modelUsed: session.modelUsed,
       completedTime: session.completedTime,
       quickActionField: session.quickActionField,
+      completed: session.completed, // Processing completion status
       persistedAt: now,
       lastAccessedAt: now,
-      markedCompleteAt: session.completed ? now : undefined
+      markedCompleteAt: session.markedCompleteAt // Only set when user explicitly marks complete, not when processing finishes
       // Note: audioBlob intentionally excluded to save space
     };
   }
@@ -482,7 +483,8 @@ export class SessionPersistenceService {
       modelUsed: persisted.modelUsed,
       completedTime: persisted.completedTime,
       quickActionField: persisted.quickActionField,
-      completed: !!persisted.markedCompleteAt
+      completed: persisted.completed || false, // Processing completion status
+      markedCompleteAt: persisted.markedCompleteAt // User-initiated completion timestamp
       // audioBlob not restored (was not persisted)
     };
   }

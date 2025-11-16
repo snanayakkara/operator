@@ -8,7 +8,9 @@
  */
 
 import React, { useState } from 'react';
-import { X, Copy, Download, CheckCircle2 } from 'lucide-react';
+import { Copy, Download } from 'lucide-react';
+import { Modal } from '../modals';
+import { Button } from '../buttons';
 
 interface RHCCardPreviewModalProps {
   imageDataUrl: string;
@@ -23,7 +25,8 @@ export const RHCCardPreviewModal: React.FC<RHCCardPreviewModalProps> = ({
   patientName,
   onClose
 }) => {
-  const [buttonStates, setButtonStates] = useState({ copied: false, downloaded: false });
+  const [copyState, setCopyState] = useState<'idle' | 'success'>('idle');
+  const [downloadState, setDownloadState] = useState<'idle' | 'success'>('idle');
 
   const handleCopyToClipboard = async () => {
     try {
@@ -34,8 +37,8 @@ export const RHCCardPreviewModal: React.FC<RHCCardPreviewModalProps> = ({
         })
       ]);
 
-      setButtonStates(prev => ({ ...prev, copied: true }));
-      setTimeout(() => setButtonStates(prev => ({ ...prev, copied: false })), 2000);
+      setCopyState('success');
+      setTimeout(() => setCopyState('idle'), 2000);
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
       alert('Failed to copy to clipboard. Please try downloading instead.');
@@ -61,89 +64,53 @@ export const RHCCardPreviewModal: React.FC<RHCCardPreviewModalProps> = ({
       URL.revokeObjectURL(url);
     }, 100);
 
-    setButtonStates(prev => ({ ...prev, downloaded: true }));
-    setTimeout(() => setButtonStates(prev => ({ ...prev, downloaded: false })), 2000);
-  };
-
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only close if clicking the overlay, not the modal content
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
+    setDownloadState('success');
+    setTimeout(() => setDownloadState('idle'), 2000);
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={handleOverlayClick}
-    >
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto m-4">
-        {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-blue-200 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">RHC Card Preview</h2>
-            <p className="text-sm text-gray-600 mt-1">18×10cm @ 300 DPI</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-blue-100 rounded-lg transition-colors"
-            aria-label="Close preview"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      size="lg"
+      header={
+        <div className="w-full -mx-6 -mt-5 px-6 py-4 rounded-t-2xl bg-gradient-to-r from-blue-50 to-cyan-50 border-b-2 border-blue-200">
+          <h2 className="text-xl font-bold text-gray-900">RHC Card Preview</h2>
+          <p className="text-sm text-gray-600 mt-1">18×10cm @ 300 DPI</p>
         </div>
-
-        {/* Preview Image */}
-        <div className="p-6">
-          <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
-            <img
-              src={imageDataUrl}
-              alt="RHC Card Preview"
-              className="max-w-full h-auto rounded shadow-lg"
-              style={{ maxHeight: '60vh' }}
-            />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="sticky bottom-0 bg-gradient-to-r from-gray-50 to-slate-50 border-t-2 border-gray-200 px-6 py-4 flex gap-3">
-          <button
+      }
+      footer={
+        <div className="flex items-center gap-3 w-full -mx-6 -mb-4 px-6 py-4 bg-gradient-to-r from-gray-50 to-slate-50 rounded-b-2xl border-t-2 border-gray-200">
+          <Button
+            variant="primary"
             onClick={handleCopyToClipboard}
-            disabled={buttonStates.copied}
-            className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
+            isSuccess={copyState === 'success'}
+            icon={Copy}
+            className="flex-1"
           >
-            {buttonStates.copied ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="w-5 h-5" />
-                Copy to Clipboard
-              </>
-            )}
-          </button>
+            {copyState === 'success' ? 'Copied!' : 'Copy to Clipboard'}
+          </Button>
 
-          <button
+          <Button
+            variant="success"
             onClick={handleDownload}
-            disabled={buttonStates.downloaded}
-            className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
+            isSuccess={downloadState === 'success'}
+            icon={Download}
+            className="flex-1"
           >
-            {buttonStates.downloaded ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                Downloaded!
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5" />
-                Download PNG
-              </>
-            )}
-          </button>
+            {downloadState === 'success' ? 'Downloaded!' : 'Download PNG'}
+          </Button>
         </div>
+      }
+    >
+      <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
+        <img
+          src={imageDataUrl}
+          alt="RHC Card Preview"
+          className="max-w-full h-auto rounded shadow-lg"
+          style={{ maxHeight: '60vh' }}
+        />
       </div>
-    </div>
+    </Modal>
   );
 };

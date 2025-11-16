@@ -34,6 +34,7 @@ import {
   withReducedMotion,
   STAGGER_CONFIGS
 } from '@/utils/animations';
+import { Button, IconButton } from './buttons';
 
 interface QuickActionsGroupedProps {
   onQuickAction: (actionId: string, data?: unknown) => Promise<void>;
@@ -157,13 +158,14 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <button
+            <IconButton
               onClick={handleBackToActions}
-              className="flex items-center text-blue-600 hover:text-blue-700"
+              variant="ghost"
+              size="sm"
+              icon={<ArrowLeft className="w-4 h-4" />}
               aria-label="Back to actions"
-            >
-              <ArrowLeft className="w-4 h-4 mr-1" />
-            </button>
+              className="text-blue-600 hover:text-blue-700"
+            />
             <Search className="w-5 h-5 text-blue-600" />
             <div className="text-left">
               <h3 className="text-gray-900 font-medium text-sm">Investigation Summary</h3>
@@ -175,7 +177,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
         {/* Options */}
         <div className="p-4">
           <div className="grid grid-cols-1 gap-3">
-            <button
+            <Button
               onClick={() => {
                 if (onStartWorkflow) {
                   onStartWorkflow('investigation-summary', 'investigation-summary');
@@ -183,32 +185,34 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                 setShowInvestigationOptions(false);
               }}
               disabled={processingAction === 'investigation-summary'}
-              className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all rounded-lg p-4 text-left"
+              variant="outline"
+              className="justify-start h-auto py-4"
             >
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start space-x-3 w-full">
                 <Mic className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 text-left">
                   <div className="text-gray-900 text-sm font-semibold mb-1">Dictate</div>
                   <div className="text-gray-600 text-xs">Voice-to-text with AI formatting</div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
               </div>
-            </button>
+            </Button>
 
-            <button
+            <Button
               onClick={() => handleType('investigation-summary')}
               disabled={processingAction === 'investigation-summary'}
-              className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all rounded-lg p-4 text-left"
+              variant="outline"
+              className="justify-start h-auto py-4"
             >
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start space-x-3 w-full">
                 <Keyboard className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 text-left">
                   <div className="text-gray-900 text-sm font-semibold mb-1">Type</div>
                   <div className="text-gray-600 text-xs">Open field for manual entry</div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
               </div>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -225,17 +229,18 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   // Appointment Wrap-Up - FULL PANEL TAKEOVER
   if (showAppointmentBuilder) {
     return (
-      <div className="bg-white rounded-2xl overflow-hidden" style={{ zIndex: 20 }}>
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
+      <div className="bg-white rounded-2xl overflow-hidden flex flex-col" style={{ zIndex: 20, maxHeight: 'calc(100vh - 100px)' }}>
+        {/* Header - Fixed */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <button
+            <IconButton
               onClick={handleBackToActions}
-              className="flex items-center text-blue-600 hover:text-blue-700"
+              variant="ghost"
+              size="sm"
+              icon={<ArrowLeft className="w-4 h-4" />}
               aria-label="Back to actions"
-            >
-              <ArrowLeft className="w-4 h-4 mr-1" />
-            </button>
+              className="text-blue-600 hover:text-blue-700"
+            />
             <Calendar className="w-5 h-5 text-blue-600" />
             <div className="text-left flex-1">
               <h3 className="text-gray-900 font-medium text-sm">Appointment Wrap-up</h3>
@@ -244,8 +249,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
           </div>
         </div>
 
-        {/* Content - Matrix Builder Only */}
-        <div className="p-4">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4">
           <AppointmentMatrixBuilder
             onGenerate={async (preset) => {
               try {
@@ -254,7 +259,8 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                     id: 'matrix-generated',
                     displayName: preset.displayName,
                     itemCode: preset.itemCode,
-                    notes: preset.notes
+                    notes: preset.notes,
+                    taskMessage: preset.taskMessage
                   }
                 });
               } finally {
@@ -264,10 +270,10 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
           />
         </div>
 
-        {/* Footer */}
-        <div className="p-4 bg-gray-50">
+        {/* Footer - Fixed */}
+        <div className="flex-shrink-0 p-4 bg-gray-50">
           <p className="text-gray-600 text-xs">
-            💡 <strong>Tip:</strong> Use keyboard shortcuts (1-4) to quickly navigate and cycle through options
+            💡 <strong>Tip:</strong> Use keyboard shortcuts (1-5) to quickly navigate and cycle through options
           </p>
         </div>
       </div>
@@ -293,17 +299,14 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
             <h3 className="text-gray-900 font-semibold text-[13px]">Quick Actions</h3>
           </div>
-          <button
+          <IconButton
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="text-gray-600 hover:text-gray-900 transition-colors p-1"
+            variant="ghost"
+            size="sm"
+            icon={isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             aria-label={isCollapsed ? "Expand quick actions" : "Collapse quick actions"}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
-          </button>
+            className="text-gray-600 hover:text-gray-900"
+          />
         </div>
         <div className="h-px bg-gray-200" />
       </motion.div>

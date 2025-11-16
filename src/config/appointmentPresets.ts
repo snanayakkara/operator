@@ -3,6 +3,7 @@ export interface AppointmentPreset {
   displayName: string;
   itemCode: string;
   notes: string;
+  taskMessage?: string; // NEW: Task message body for "Post Appointment Tasks"
 }
 
 // Matrix configuration for building custom appointments
@@ -11,11 +12,21 @@ export type AppointmentModality = 'f2f' | 'telehealth' | 'phone';
 export type AppointmentType = 'new' | 'review';
 export type FollowUpPeriod = '6wk' | '3mth' | '12mth' | 'none';
 
+// NEW: Follow-up task structure
+export interface FollowUpTask {
+  name: string; // e.g., "TTE", "CTCA"
+  location?: string; // e.g., "The Alfred", "Capital Radiology Carlton"
+  timeframe?: string; // e.g., "2 weeks", "4 weeks", "6-8 weeks", "next available"
+  notes?: string; // e.g., "chest discomfort", "worsening dyspnoea"
+}
+
 export interface AppointmentMatrix {
   complexity: AppointmentComplexity;
   modality: AppointmentModality;
   type: AppointmentType;
   followUp: FollowUpPeriod;
+  followUpMethod: AppointmentModality; // NEW: How the follow-up will be conducted
+  followUpTasks: FollowUpTask[]; // NEW: List of tasks to complete
 }
 
 // Item code mapping based on appointment characteristics
@@ -53,21 +64,54 @@ export const getItemCodeFromMatrix = (matrix: AppointmentMatrix): string => {
 };
 
 export const getNotesFromMatrix = (matrix: AppointmentMatrix): string => {
-  const { modality, followUp } = matrix;
+  const { followUpMethod, followUp } = matrix;
 
   if (followUp === 'none') {
     return 'no follow up required';
   }
 
-  const modalityText = modality === 'f2f' ? 'F2F' : modality === 'telehealth' ? 'TH' : 'Phone';
+  const modalityText = followUpMethod === 'f2f' ? 'F2F' : followUpMethod === 'telehealth' ? 'TH' : 'Phone';
   const periodText = followUp === '6wk' ? '6 weeks' : followUp === '3mth' ? '3 months' : '12 months';
 
   return `${modalityText} follow up in ${periodText} please`;
 };
 
+// NEW: Generate task message body combining follow-up notes + task list
+export const getTaskMessageFromMatrix = (matrix: AppointmentMatrix): string => {
+  const followUpText = getNotesFromMatrix(matrix); // e.g., "F2F follow up in 3 months please"
+
+  if (matrix.followUpTasks.length === 0) {
+    return followUpText; // Just the follow-up note if no tasks
+  }
+
+  const taskLines = matrix.followUpTasks.map(task => {
+    let taskLine = `- ${task.name}`;
+
+    // Add location if provided
+    if (task.location) {
+      taskLine += ` @ ${task.location}`;
+    }
+
+    // Add timeframe if provided
+    if (task.timeframe) {
+      taskLine += ` (${task.timeframe})`;
+    }
+
+    // Add notes/indication if provided
+    if (task.notes) {
+      taskLine += `, notes: ${task.notes}`;
+    }
+
+    return taskLine;
+  });
+
+  return `${followUpText}\n\nTasks to complete:\n${taskLines.join('\n')}`;
+};
+
 export const generatePresetFromMatrix = (matrix: AppointmentMatrix): AppointmentPreset => {
   const itemCode = getItemCodeFromMatrix(matrix);
-  const notes = getNotesFromMatrix(matrix);
+  const notes = ''; // Always blank now - notes go into task instead
+  const taskMessage = getTaskMessageFromMatrix(matrix); // NEW: Generate task message
 
   // Generate display name
   const complexityText = matrix.complexity === 'complex' ? 'complex ' : '';
@@ -87,7 +131,8 @@ export const generatePresetFromMatrix = (matrix: AppointmentMatrix): Appointment
     id: `matrix-${itemCode}-${followUpText.replace(/\s+/g, '-')}`,
     displayName,
     itemCode,
-    notes
+    notes,
+    taskMessage // NEW: Include task message in preset
   };
 };
 

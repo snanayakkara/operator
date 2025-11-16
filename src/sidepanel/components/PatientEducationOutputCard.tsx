@@ -14,6 +14,7 @@ import {
   Send
 } from 'lucide-react';
 import type { PatientEducationReport } from '@/types/medical.types';
+import { Button } from './buttons';
 
 interface PatientEducationOutputCardProps {
   report: PatientEducationReport;
@@ -112,13 +113,15 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
               <p key={index} className="text-xs text-red-700 mt-1">{error}</p>
             ))}
             {onRetry && (
-              <button
+              <Button
                 onClick={onRetry}
-                className="mt-2 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs rounded-md font-medium transition-colors"
+                variant="ghost"
+                size="sm"
+                startIcon={<RefreshCw />}
+                className="mt-2 bg-red-100 hover:bg-red-200 text-red-800"
               >
-                <RefreshCw className="w-3 h-3 inline mr-1" />
                 Regenerate
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -433,38 +436,26 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
             <h4 className="text-sm font-semibold text-gray-900">Patient Letter</h4>
           </div>
           <div className="flex items-center space-x-2">
-            <button
+            <Button
               onClick={() => handleCopy(letterContent, 'letter')}
-              className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+              variant="outline"
+              size="sm"
+              startIcon={isCopied ? <CheckCircle /> : <Copy />}
+              isSuccess={isCopied}
+              className={isCopied ? 'text-green-600' : ''}
             >
-              {isCopied ? (
-                <>
-                  <CheckCircle className="w-3 h-3 text-green-600" />
-                  <span className="text-green-600">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-            <button
+              {isCopied ? 'Copied!' : 'Copy'}
+            </Button>
+            <Button
               onClick={() => handleInsert(letterContent, 'letter')}
-              className="flex items-center space-x-1 px-3 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-medium rounded-md transition-colors"
+              variant="success"
+              size="sm"
+              startIcon={insertedContent === 'letter' ? <CheckCircle /> : <Send />}
+              isSuccess={insertedContent === 'letter'}
+              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700"
             >
-              {insertedContent === 'letter' ? (
-                <>
-                  <CheckCircle className="w-3 h-3 text-emerald-600" />
-                  <span className="text-emerald-600">Inserted!</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-3 h-3" />
-                  <span>Insert</span>
-                </>
-              )}
-            </button>
+              {insertedContent === 'letter' ? 'Inserted!' : 'Insert'}
+            </Button>
           </div>
         </div>
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -505,30 +496,25 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
             <h4 className="text-sm font-semibold text-gray-900">Quick Action Plan</h4>
           </div>
           <div className="flex items-center space-x-2">
-            <button
+            <Button
               onClick={() => handleCopy(JSON.stringify(jsonMetadata, null, 2), 'json')}
-              className="flex items-center space-x-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+              variant="outline"
+              size="sm"
+              startIcon={isCopied ? <CheckCircle /> : <Copy />}
+              isSuccess={isCopied}
               title="Copy structured data as JSON"
+              className={isCopied ? 'text-green-600' : ''}
             >
-              {isCopied ? (
-                <>
-                  <CheckCircle className="w-3 h-3 text-green-600" />
-                  <span className="text-green-600">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" />
-                  <span>Copy JSON</span>
-                </>
-              )}
-            </button>
-            <button
+              {isCopied ? 'Copied!' : 'Copy JSON'}
+            </Button>
+            <Button
               onClick={handlePrintPDF}
-              className="flex items-center space-x-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+              variant="secondary"
+              size="sm"
+              startIcon={<Download />}
             >
-              <Download className="w-3 h-3" />
-              <span>Export PDF</span>
-            </button>
+              Export PDF
+            </Button>
           </div>
         </div>
 

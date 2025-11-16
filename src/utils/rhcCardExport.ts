@@ -82,6 +82,7 @@ export async function exportRHCCard(
           // 10cm at 96 DPI = 378px
           // 10cm at 300 DPI = 1181px
           // Scale factor = 300 / 96 = 3.125
+          // Content is sized smaller to fit within fixed dimensions without overflow
           const canvas = await html2canvas(cardElement, {
             scale: 3.125, // 300 DPI resolution
             backgroundColor: '#FFFFFF',
@@ -89,7 +90,7 @@ export async function exportRHCCard(
             useCORS: true, // Handle cross-origin images if any
             allowTaint: false,
             width: 680, // 18cm at 96 DPI
-            height: 378 // 10cm at 96 DPI
+            height: 378 // 10cm at 96 DPI (fixed format)
           });
 
           // 4. Convert canvas to blob

@@ -1,0 +1,50 @@
+[
+  {
+    "agentType": "investigation-summary",
+    "approvalStatus": "approved",
+    "approvalTimestamp": 1762945370393,
+    "correctedText": "Stress echocardiogram, 7th of November, 2025. Normal LV size and function, 8.6 METs. Inferior hypokinesis.",
+    "editTimestamp": 1762945367669,
+    "id": "asr-1762945370393-wdojfeu0t",
+    "rawText": "Stress echo cardiogram, 7th of November, 2025. Normal LV size and function, 8.6 mits. Inferior hypokinesis.",
+    "sessionId": "streaming",
+    "timestamp": 1762945370393,
+    "userExplicitlyApproved": true
+  },
+  {
+    "agentType": "investigation-summary",
+    "approvalStatus": "approved",
+    "approvalTimestamp": 1762945364791,
+    "correctedText": "Stress echo cardiogram, 7th of November, 2025. Normal LV size and function, 8.6 METs. Inferior hypokinesis.",
+    "editTimestamp": 1762945363028,
+    "id": "asr-1762945364791-68u920n8z",
+    "rawText": "Stress echo cardiogram, 7th of November, 2025. Normal LV size and function, 8.6 mits. Inferior hypokinesis.",
+    "sessionId": "streaming",
+    "timestamp": 1762945364791,
+    "userExplicitlyApproved": true
+  },
+  {
+    "agentType": "investigation-summary",
+    "approvalStatus": "approved",
+    "approvalTimestamp": 1762944482038,
+    "correctedText": "Coronary Angiogram 23 October 2025 Mild LAD disease Severe circumflex; PCI to the circumflex with a drug-eluting stent",
+    "editTimestamp": 1762944478068,
+    "id": "asr-1762944482038-zp8wgivjf",
+    "rawText": "Chironary Angiogram 23 October 2025 Mild LAD disease Severe circumflex PCI to the circumflex of the drug-aluting stent",
+    "sessionId": "streaming",
+    "timestamp": 1762944482038,
+    "userExplicitlyApproved": true
+  },
+  {
+    "agentType": "quick-letter",
+    "approvalStatus": "approved",
+    "approvalTimestamp": 1762542827186,
+    "correctedText": "right heart catheter 82 year old male acute decompensated heart failure height 180 centimeters weight 100 kilos ra 14 14 mean of 13 rv 49 7 rv edp 13 pa 51 25 mean 34 pulmonary capillary wedge pressure 17 slash 18, mean of 16. Cardiac output 3.94 by thermodilution. Cardiac index 1.79. Pulmonary artery saturation 64. Arterial saturation 99. Hemoglobin 157. Right brachial venous access. Seven French sheath. Seven French Swan-Ganz catheter. No complications.",
+    "editTimestamp": 1762542823896,
+    "id": "asr-1762542827186-yl6xhmv0v",
+    "rawText": "I spoke with Diane to follow up now that she's over 12 months after her transcathedotic valve intervention and pleasingly she's doing exceedingly well. She recently returned from Tasmania and completed two significant hikes over there and was not limited in terms of her functional capacity. Specifically she notes that she feels significantly better since having this valve done. I'm pleased to hear how well she's doing and I'll arrange a follow-up in 12 months.",
+    "sessionId": "session-1762499112618-3pmqhrkuf",
+    "timestamp": 1762542827186,
+    "userExplicitlyApproved": true
+  }
+]

@@ -10,13 +10,9 @@
  */
 
 import React, { memo, useState, Suspense } from 'react';
-import {
-  CheckIcon,
-  SquareIcon,
-  AlertCircleIcon
-} from '../icons/OptimizedIcons';
-import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
-import { Brain, Edit3, HelpCircle } from 'lucide-react';
+import { SquareIcon, AlertCircleIcon } from '../icons/OptimizedIcons';
+import { Copy, Brain, Edit3, HelpCircle } from 'lucide-react';
+import { Button } from '../buttons';
 import type { AgentType, ReportMetadata } from '@/types/medical.types';
 
 // Lazy load the AI Reasoning Modal for better performance
@@ -102,103 +98,73 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
     <div className={`p-4 border-t border-emerald-200/50 ${className}`}>
       <div className={`grid gap-2 ${gridCols}`}>
         {/* Copy Button */}
-        <button
+        <Button
           onClick={handleCopy}
-          className={`
-            p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-            ${copiedRecently 
-              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 btn-success-animation completion-celebration' 
-              : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-            }
-          `}
+          variant="outline"
+          size="md"
+          isSuccess={copiedRecently}
+          icon={Copy}
+          className="flex-col h-auto py-3"
         >
-          {copiedRecently ? (
-            <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" />
-          ) : (
-            <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
-          )}
-          <span className={`text-xs ${copiedRecently ? 'text-emerald-700' : 'text-gray-700'}`}>
-            {copiedRecently ? 'Copied!' : 'Copy'}
-          </span>
-        </button>
+          {copiedRecently ? 'Copied!' : 'Copy'}
+        </Button>
 
         {/* Insert to EMR Button */}
-        <button
+        <Button
           onClick={handleInsertToEMR}
-          className={`
-            p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-            ${insertedRecently
-              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 btn-success-animation completion-celebration'
-              : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-            }
-          `}
+          variant="outline"
+          size="md"
+          isSuccess={insertedRecently}
+          icon={SquareIcon}
+          className="flex-col h-auto py-3"
           title="Paste into the active EMR field"
         >
-          {insertedRecently ? (
-            <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" />
-          ) : (
-            <SquareIcon className="w-4 h-4" />
-          )}
-          <span className={`text-xs ${insertedRecently ? 'text-emerald-700' : 'text-gray-700'}`}>
-            {insertedRecently ? 'Inserted!' : 'Insert to EMR'}
-          </span>
-        </button>
+          {insertedRecently ? 'Inserted!' : 'Insert to EMR'}
+        </Button>
 
         {/* Edit & Train Button */}
         {onEditAndTrain && (
-          <button
+          <Button
             onClick={onEditAndTrain}
             disabled={disableEditAndTrain}
-            className={`
-              p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-              ${editAndTrainActive
-                ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
-              }
-              ${disableEditAndTrain ? 'opacity-60 cursor-not-allowed' : ''}
-            `}
+            variant={editAndTrainActive ? 'primary' : 'outline'}
+            size="md"
+            icon={Edit3}
+            className="flex-col h-auto py-3"
             title="Revise output and capture training example"
           >
-            <Edit3 className={`w-4 h-4 ${editAndTrainActive ? 'text-white' : 'text-blue-700'}`} />
-            <span className={`text-xs ${editAndTrainActive ? 'text-white font-semibold' : 'text-blue-700'}`}>
-              {editAndTrainActive ? 'Editing…' : 'Edit & Train'}
-            </span>
-          </button>
+            {editAndTrainActive ? 'Editing…' : 'Edit & Train'}
+          </Button>
         )}
 
         {/* AI Reasoning Viewer Button - Only show if reasoning artifacts are available */}
         {hasReasoningArtifacts && (
-          <button
+          <Button
             onClick={() => setIsReasoningModalOpen(true)}
-            className="bg-white border-2 border-gray-300 p-3 rounded-lg flex flex-col items-center space-y-1 hover:border-gray-400 hover:shadow-sm transition-all duration-200 ease-out btn-micro-press"
+            variant="outline"
+            size="md"
+            icon={Brain}
+            className="flex-col h-auto py-3"
             title="View AI Reasoning Process"
           >
-            <Brain className="w-4 h-4 text-gray-700" />
-            <span className="text-xs text-gray-700 font-medium">Reasoning</span>
-          </button>
+            Reasoning
+          </Button>
         )}
 
         {/* Agent-Specific Custom Actions */}
         {customActions.map((action) => {
-          const Icon = action.icon;
-          const isPrimary = action.variant === 'primary';
-
           return (
-            <button
+            <Button
               key={action.id}
               onClick={action.onClick}
-              className={`
-                p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                ${isPrimary
-                  ? 'bg-blue-50 border-blue-300 hover:bg-blue-100 text-blue-700'
-                  : 'bg-white/60 border-gray-300 hover:bg-gray-50 text-gray-700'
-                }
-              `}
+              variant={action.variant === 'primary' ? 'primary' : 'outline'}
+              size="md"
+              icon={action.icon}
+              className="flex-col h-auto py-3"
               title={action.label}
             >
-              <Icon className="w-4 h-4" />
-              <span className="text-xs">{action.label}</span>
-            </button>
+              {action.label}
+            </Button>
           );
         })}
       </div>

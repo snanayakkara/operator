@@ -31,6 +31,16 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
   // Services
   const asrLog = useMemo(() => ASRCorrectionsLog.getInstance(), []);
 
+  // Refs for stable callback references (prevents dependency chain re-renders)
+  const onErrorRef = React.useRef(onError);
+  const onLoadingChangeRef = React.useRef(onLoadingChange);
+
+  // Update refs when props change (keeps latest version)
+  React.useEffect(() => {
+    onErrorRef.current = onError;
+    onLoadingChangeRef.current = onLoadingChange;
+  });
+
   // State
   const [corrections, setCorrections] = useState<ASRCorrectionsEntry[]>([]);
   const [filteredCorrections, setFilteredCorrections] = useState<ASRCorrectionsEntry[]>([]);
@@ -91,47 +101,29 @@ export const LocalCorrectionsViewer: React.FC<LocalCorrectionsViewerProps> = ({
   const loadCorrections = useCallback(async () => {
     try {
       setIsLoading(true);
-      onLoadingChange(true);
+      onLoadingChangeRef.current(true);
 
-      // Load only first chunk initially (50 items) for faster UI response
-      const initialCorrections = await asrLog.getCorrections({ limit: CHUNK_SIZE });
-      setCorrections(initialCorrections);
+      // Load all corrections at once (up to 500 items)
+      // Removed double-loading pattern that was causing visual flashing
+      const allCorrections = await asrLog.getCorrections({ limit: 500 });
+      setCorrections(allCorrections);
       setLoadedChunks(1);
 
-      logger.info('Local corrections (initial chunk) loaded', {
+      logger.info('Local corrections loaded', {
         component: 'LocalCorrectionsViewer',
-        count: initialCorrections.length
+        count: allCorrections.length
       });
-
-      // Load remaining data in background after a delay
-      setTimeout(async () => {
-        try {
-          const allCorrections = await asrLog.getCorrections({ limit: 500 });
-          setCorrections(allCorrections);
-          setLoadedChunks(1); // Reset chunks for full dataset
-
-          logger.info('Local corrections (full) loaded', {
-            component: 'LocalCorrectionsViewer',
-            count: allCorrections.length
-          });
-        } catch (bgError) {
-          logger.warn('Failed to load full corrections in background', {
-            component: 'LocalCorrectionsViewer',
-            error: bgError instanceof Error ? bgError.message : String(bgError)
-          });
-        }
-      }, 1000);
 
     } catch (error) {
       logger.error('Failed to load local corrections', error instanceof Error ? error : new Error(String(error)), {
         component: 'LocalCorrectionsViewer'
       });
-      onError(error instanceof Error ? error : new Error(String(error)));
+      onErrorRef.current(error instanceof Error ? error : new Error(String(error)));
     } finally {
       setIsLoading(false);
-      onLoadingChange(false);
+      onLoadingChangeRef.current(false);
     }
-  }, [asrLog, onError, onLoadingChange, CHUNK_SIZE]);
+  }, [asrLog]);
 
   const applyFilters = useCallback(() => {
     let filtered = [...corrections];

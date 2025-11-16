@@ -210,6 +210,11 @@ export const ASRCorrections: ASRCorrectionCategories = {
     // Date format: remove leading zeros from day numbers in medical reports
     [/\b0(\d)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/gi, '$1 $2'],
 
+    // Heart Rate common ASR errors
+    [/\bhard\s+rate\b/gi, 'heart rate'],
+    [/\bhart\s+rate\b/gi, 'heart rate'],
+    [/\bheart\s+raid\b/gi, 'heart rate'],
+
     // Right Heart Catheterization (RHC) specific corrections
     // Common ASR errors in haemodynamic measurements
     [/\bmixed\s+mean\s+is\s+oxygen\s+saturation\b/gi, 'mixed venous oxygen saturation'],

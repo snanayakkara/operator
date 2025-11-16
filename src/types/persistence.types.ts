@@ -30,11 +30,12 @@ export interface PersistedSession {
   audioDuration?: number; // Audio duration in seconds for ETA prediction
   completedTime?: number;
   quickActionField?: string;
+  completed: boolean; // Processing completion status (not the same as markedCompleteAt)
 
   // Lifecycle metadata
   persistedAt: number; // When saved to storage
   lastAccessedAt: number; // Last time user viewed this session
-  markedCompleteAt?: number; // When user checked the completion checkbox
+  markedCompleteAt?: number; // When user checked the completion checkbox (triggers 24h expiry)
 }
 
 /**

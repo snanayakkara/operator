@@ -40,21 +40,21 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 
 /**
  * Format milliseconds to countdown string
- * Examples: "23.4s", "2m 34s", "+1.5s" (overtime)
+ * Examples: "23s", "2m 34s", "+5s" (overtime)
  */
 function formatCountdown(ms: number): string {
   const isNegative = ms < 0;
   const absMs = Math.abs(ms);
-  const totalSeconds = absMs / 1000;
+  const totalSeconds = Math.floor(absMs / 1000);
 
   if (totalSeconds < 60) {
-    // Show precise seconds with 1 decimal for times under 60s
-    const formatted = `${totalSeconds.toFixed(1)}s`;
+    // Show whole seconds only (no decimals)
+    const formatted = `${totalSeconds}s`;
     return isNegative ? `+${formatted}` : formatted;
   }
 
   const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
+  const seconds = totalSeconds % 60;
   const formatted = `${minutes}m ${seconds}s`;
 
   // Show "+" prefix for overtime

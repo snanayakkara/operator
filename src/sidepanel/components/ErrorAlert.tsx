@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, X, RotateCcw, Edit3, CheckCircle } from 'lucide-react';
+import { Button, IconButton } from './buttons';
 
 interface ErrorAlertProps {
   warnings?: string[];
@@ -38,13 +39,14 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-amber-800 text-sm font-medium">Content Warning</h3>
                 {onDismiss && (
-                  <button
+                  <IconButton
+                    icon={<X />}
                     onClick={onDismiss}
-                    className="text-amber-600 hover:text-amber-800 transition-colors"
-                    title="Dismiss warning"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Dismiss warning"
+                    className="text-amber-600 hover:text-amber-800"
+                  />
                 )}
               </div>
               {warnings.map((warning, index) => (
@@ -56,33 +58,39 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({
               {/* Warning Actions */}
               <div className="flex flex-wrap gap-2 mt-3">
                 {onEditTranscription && (
-                  <button
+                  <Button
                     onClick={onEditTranscription}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-medium rounded transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    startIcon={<Edit3 />}
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-800"
                   >
-                    <Edit3 className="w-3 h-3" />
-                    <span>Edit Transcription</span>
-                  </button>
+                    Edit Transcription
+                  </Button>
                 )}
-                
+
                 {onRetry && (
-                  <button
+                  <Button
                     onClick={onRetry}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-medium rounded transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    startIcon={<RotateCcw />}
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-800"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Retry</span>
-                  </button>
+                    Retry
+                  </Button>
                 )}
-                
+
                 {onAcceptWarning && (
-                  <button
+                  <Button
                     onClick={onAcceptWarning}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-medium rounded transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    startIcon={<CheckCircle />}
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-800"
                   >
-                    <CheckCircle className="w-3 h-3" />
-                    <span>Accept</span>
-                  </button>
+                    Accept
+                  </Button>
                 )}
               </div>
             </div>
@@ -99,13 +107,14 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-red-800 text-sm font-medium">Processing Error</h3>
                 {onDismiss && (
-                  <button
+                  <IconButton
+                    icon={<X />}
                     onClick={onDismiss}
-                    className="text-red-600 hover:text-red-800 transition-colors"
-                    title="Dismiss error"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Dismiss error"
+                    className="text-red-600 hover:text-red-800"
+                  />
                 )}
               </div>
               {errors.map((error, index) => (
@@ -117,13 +126,15 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({
               {/* Error Actions */}
               <div className="flex flex-wrap gap-2 mt-3">
                 {onRetry && (
-                  <button
+                  <Button
                     onClick={onRetry}
-                    className="inline-flex items-center space-x-1 px-2 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-medium rounded transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    startIcon={<RotateCcw />}
+                    className="bg-red-100 hover:bg-red-200 text-red-800"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Retry</span>
-                  </button>
+                    Retry
+                  </Button>
                 )}
               </div>
             </div>

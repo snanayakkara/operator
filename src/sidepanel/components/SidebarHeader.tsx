@@ -40,6 +40,7 @@ export interface SidebarHeaderProps {
   onClearAllSessions?: () => void;
   onSessionSelect?: (session: PatientSession) => void;
   onResumeRecording?: (session: PatientSession) => void;
+  onAgentReprocess?: (agentType: AgentType) => void; // Callback for reprocessing failed sessions
   selectedSessionId?: string | null;
   currentSessionId?: string | null;
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked)
@@ -66,6 +67,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   onClearAllSessions,
   onSessionSelect,
   onResumeRecording,
+  onAgentReprocess,
   selectedSessionId,
   currentSessionId,
   checkedSessionIds,
@@ -230,6 +232,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           onClearAllSessions={onClearAllSessions}
           onSessionSelect={onSessionSelect}
           onResumeRecording={onResumeRecording}
+          onAgentReprocess={onAgentReprocess}
           selectedSessionId={selectedSessionId}
           activeRecordingSessionId={currentSessionId}
           checkedSessionIds={checkedSessionIds}

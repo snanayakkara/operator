@@ -95,12 +95,22 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   const isRecentSession = startTime && (Date.now() - startTime) <= 300000; // 5 minutes
   const shouldShowTimer = showCircularTimer && isRecentSession;
 
+  // Debug logging to understand timer visibility
+  console.log('🔍 Timer visibility check:', {
+    startTime,
+    sessionAge: startTime ? `${((Date.now() - startTime) / 1000 / 60).toFixed(1)} min` : 'no startTime',
+    isRecentSession,
+    shouldShowTimer,
+    progress: progress.progress,
+    isCompleted: progress.progress >= 100
+  });
+
   const effectiveStartTime = startTime || Date.now();
 
   // Update elapsed time and velocity every 500ms for smooth countdown
   useEffect(() => {
-    // Don't run interval for old/invalid sessions
-    if (!isRecentSession) {
+    // Don't run interval for old/invalid sessions or completed processing
+    if (!isRecentSession || progress.progress >= 100) {
       return;
     }
 
@@ -115,7 +125,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
           setVelocity(currentVelocity);
         }
       }
-    }, 500); // Update every 500ms for smooth countdown without excessive CPU usage
+    }, 1000); // Update every 1000ms (1 second) for clean countdown
 
     return () => clearInterval(intervalId);
   }, [effectiveStartTime, progress.progress, isRecentSession]);
@@ -124,6 +134,15 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   useEffect(() => {
     // Use audioDuration if available, otherwise fall back to transcriptionLength
     const hasInputData = audioDuration || transcriptionLength;
+
+    console.log('⏱️ Prediction check:', {
+      agentType,
+      hasInputData,
+      audioDuration,
+      transcriptionLength,
+      showTimeEstimate,
+      hasPrediction: !!prediction
+    });
 
     if (agentType && hasInputData && showTimeEstimate && !prediction) {
       try {
@@ -136,6 +155,11 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
           }
         );
         setPrediction(estimate);
+        console.log('✅ Prediction generated:', {
+          agentType,
+          estimatedDurationMs: estimate.estimatedDurationMs,
+          estimatedDurationSec: (estimate.estimatedDurationMs / 1000).toFixed(1)
+        });
       } catch (error) {
         console.warn('Failed to generate time prediction:', error);
       }
@@ -167,9 +191,10 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   }, [progress.progress]);
 
   // Calculate remaining time using shared utility
+  // Note: velocity is passed but not used in dependencies to prevent fluctuation
   const remainingTime = useMemo(() => {
     return calculateAdaptiveRemainingTime(prediction, progress.progress, velocity, elapsedTime);
-  }, [prediction, progress.progress, velocity, elapsedTime]);
+  }, [prediction, progress.progress, elapsedTime]);
 
   return (
     <motion.div
@@ -183,22 +208,29 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       aria-label="Processing pipeline progress"
     >
       {/* Circular Timer (Large, Prominent) - Responsive sizing */}
-      {shouldShowTimer &&
-       remainingTime !== null &&
-       progress.progress < 100 && (
-        <div className="flex justify-center py-6 border-b border-gray-100">
-          {/* Desktop: 240px, Tablet: 200px, Mobile: 160px */}
-          <div className="w-40 h-40 sm:w-52 sm:h-52 md:w-60 md:h-60">
-            <CircularCountdownTimer
-              remainingMs={remainingTime}
-              progress={progress.progress}
-              stage={progress.stage}
-              size={240}
-              className="w-full h-full"
-            />
+      {(() => {
+        const willRender = shouldShowTimer && remainingTime !== null && progress.progress < 100;
+        console.log('⏱️ Timer render decision:', {
+          willRender,
+          shouldShowTimer,
+          remainingTime,
+          progressComplete: progress.progress >= 100
+        });
+        return willRender && (
+          <div className="flex justify-center py-6 border-b border-gray-100">
+            {/* Desktop: 240px, Tablet: 200px, Mobile: 160px */}
+            <div className="w-40 h-40 sm:w-52 sm:h-52 md:w-60 md:h-60">
+              <CircularCountdownTimer
+                remainingMs={remainingTime}
+                progress={progress.progress}
+                stage={progress.stage}
+                size={240}
+                className="w-full h-full"
+              />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Horizontal Progress Bar Section */}
       <div className="p-4">

@@ -9,6 +9,50 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.33.0] - 2025-11-16
+
+### Added
+
+- **Design System Upgrade + Reference Docs**
+  - Introduced centralized tokens plus button, form, modal, dropdown, status, loading, and error boundary component libraries for the side panel (`src/utils/design-tokens.ts`, `src/sidepanel/components/{buttons,forms,modals,dropdowns,status,loading,errors}`).
+  - Added `DESIGN_SYSTEM_UPGRADE.md` and `COMPONENT_QUICK_REFERENCE.md` to document usage patterns and provide code samples for the new primitives.
+- **Appointment Wrap-Up Task Generation**
+  - Appointment presets now capture follow-up modality, task lists, and task messaging alongside billing metadata for richer automation (`src/config/appointmentPresets.ts`).
+  - The matrix builder UI supports keyboard shortcuts, follow-up method toggles, and inline task editors so wrap-up requests feed both EMR fields and task payloads (`src/sidepanel/components/AppointmentMatrixBuilder.tsx`).
+- **Patient Navigation Shortcuts**
+  - Content script listens for `#filing=` hashes, exposes `GO_TO_PATIENT_BY_FILING`, and automates the “Create Task” workflow with field population safeguards (`src/content/content-script.ts`).
+  - Background service worker relays new `NAVIGATE_TO_PATIENT` messages, and the patient header exposes a “Go To Patient” CTA when reviewing archived sessions (`src/background/service-worker.ts`, `src/sidepanel/components/PatientContextHeader.tsx`).
+- **ASR Corrections Toolkit**
+  - Seeded `data/asr/uploaded_corrections.json` and enhanced the ASR optimization and local viewer screens with cached state persistence, duplicate-load guards, stable callbacks, and simplified chunking (`src/components/settings/ASROptimizationSection.tsx`, `src/components/settings/LocalCorrectionsViewer.tsx`).
+- **Generative Safety Enhancements**
+  - Quick Letter agents capture patient first-name metadata, enforce greeting instructions, and surface richer fallback errors while still falling back to legacy processing when needed (`src/agents/specialized/QuickLetterAgent.ts`, `src/agents/specialized/QuickLetterSystemPrompts.ts`).
+  - RHC agents received anti-hallucination stripping plus validation prompt updates covering placeholder removal, regex correction guidance, and custom field editing within the RHC modal (`src/agents/specialized/RightHeartCathAgent.ts`, `src/agents/specialized/RightHeartCathSystemPrompts.ts`, `src/sidepanel/components/results/RHCFieldEditor.tsx`).
+
+### Changed
+
+- **Processing & Session UX**
+  - OptimizedApp now wraps in an ErrorBoundary, tracks prompt-processing vs streaming progress separately, persists transcription snapshots early, and exposes “Retry” affordances within the session dropdown (`src/sidepanel/OptimizedApp.tsx`, `src/sidepanel/components/SessionDropdown.tsx`, `src/sidepanel/components/errors/ErrorBoundary.tsx`).
+  - Pipeline progress, countdown timers, and action buttons were realigned with the new design primitives; transcription panes now stay visible for all agents (`src/sidepanel/components/UnifiedPipelineProgress.tsx`, `src/sidepanel/components/results/{OptimizedResultsPanel.tsx,ActionButtons.tsx}`).
+- **Right Heart Cath Presentation**
+  - Restructured card layout, preview modal, and display screens to highlight patient demographics, calculated haemodynamics, and export-safe formatting, plus smoother html2canvas sizing (`src/sidepanel/components/results/{RightHeartCathDisplay.tsx,RHCCardLayout.tsx,RHCCardPreviewModal.tsx}`, `src/utils/rhcCardExport.ts`).
+- **Quick Actions & Device Handling**
+  - Quick actions footer, workflows, device popover, and patient mismatch modal were rebuilt on the shared button/modal components to reduce bespoke styling while keeping the expand/collapse and “Investigation Summary” flows intact (`src/sidepanel/components/{QuickActionsGrouped.tsx,DevicePopover.tsx,PatientMismatchConfirmationModal.tsx}`).
+- **Options/Settings UI**
+  - Full-page optimization panel extracts section cards, shares loading/error state management, and wires ASR callbacks through stable references to prevent rerenders (`src/options/components/FullPageOptimizationPanel.tsx`).
+
+### Fixed
+
+- Ensured persisted sessions retain completion + markedComplete metadata instead of overwriting “done” state when rehydrated (`src/services/SessionPersistenceService.ts`, `src/types/{medical.types.ts,persistence.types.ts}`).
+- Content script now guards against duplicate ASR uploads, surfaces actionable alerts when task automation fails, and keeps appointment wrap-up billing entries from being rejected by the EMR (`src/content/content-script.ts`).
+- Optimized results header now shows transcription + selected session context simultaneously, while the patient header only renders progress badges during active workflows (`src/sidepanel/components/results/OptimizedResultsPanel.tsx`, `src/sidepanel/components/PatientContextHeader.tsx`).
+- ASR corrections panel no longer clears state when the dynamic server is unavailable, preventing unnecessary re-fetches and preserving cached rules/glossaries (`src/components/settings/ASROptimizationSection.tsx`).
+
+### Technical Improvements
+
+- Worker-safe prompt loading for medication agents prevents DOM access errors inside service workers (`src/services/SystemPromptLoader.ts`).
+- Added targeted ASR regex fixes for heart-rate misrecognitions and provided additional sample corrections for validation prompts (`src/utils/ASRCorrections.ts`, `src/config/validationFieldConfig.ts`).
+- Expanded instrumentation + logging around pipeline timelines, prediction calculators, and content-script flows to simplify support triage (`src/sidepanel/components/UnifiedPipelineProgress.tsx`, `src/content/content-script.ts`).
+
 ## [3.32.0] - 2025-11-13
 
 ### Added

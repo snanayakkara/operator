@@ -117,9 +117,10 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
   }, [asrLog, onError, onLoadingChange]);
 
   // Load corrections on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadCorrections();
-  }, [loadCorrections]);
+  }, []); // Run only on mount - loadCorrections is stable due to useCallback with stable dependencies
 
   const applyFiltersAndSort = useCallback(() => {
     let filtered = [...corrections];
@@ -215,7 +216,8 @@ export const FullPageCorrectionsViewer: React.FC<FullPageCorrectionsViewerProps>
   useEffect(() => {
     applyFiltersAndSort();
     setCurrentPage(1); // Reset to first page when filters change
-  }, [corrections, filters, sortField, sortDirection, applyFiltersAndSort]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corrections, filters, sortField, sortDirection]); // applyFiltersAndSort omitted - it's stable and would cause unnecessary re-runs
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {

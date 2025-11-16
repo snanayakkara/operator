@@ -150,6 +150,20 @@ class ContentScriptHandler {
       attributes: true,
       attributeFilter: ['class', 'id']
     });
+
+    // Listen for hash changes to auto-trigger patient search
+    window.addEventListener('hashchange', () => {
+      this.autoSearchFromHash();
+    });
+
+    // Check hash on initial page load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        this.autoSearchFromHash();
+      });
+    } else {
+      this.autoSearchFromHash();
+    }
   }
 
   private async handleMessage(
@@ -494,6 +508,17 @@ class ContentScriptHandler {
           } catch (error) {
             console.error('🧭 Patient navigation failed:', error);
             sendResponse({ success: false, error: error instanceof Error ? error.message : 'Navigation failed' });
+          }
+          break;
+
+        case 'GO_TO_PATIENT_BY_FILING':
+          console.log('🔍 Received GO_TO_PATIENT_BY_FILING request');
+          try {
+            await this.searchPatientByFiling(data.fileNumber);
+            sendResponse({ success: true });
+          } catch (error) {
+            console.error('🔍 Patient search by filing failed:', error);
+            sendResponse({ success: false, error: error instanceof Error ? error.message : 'Search failed' });
           }
           break;
 
@@ -1519,15 +1544,260 @@ class ContentScriptHandler {
   }
 
   private async createTask() {
-    const taskButton = await this.findElement(
-      'button:contains("Task"), [data-action="create-task"], .task-btn, .create-task'
-    );
-    
-    if (taskButton) {
-      taskButton.click();
-    } else {
-      console.warn('Task creation button not found');
+    console.log('📝 Starting Create Task workflow (3-step sequence)...');
+
+    try {
+      // STEP 1: Click the "Actions" button to open the actions menu
+      console.log('🔘 Step 1: Clicking Actions button...');
+      const actionsButtonXPath = '/html/body/div[3]/div[2]/div/div[4]/div[1]/div[1]/button';
+      const actionsButton = this.findByXPath(actionsButtonXPath) as HTMLElement;
+
+      if (!actionsButton) {
+        throw new Error('Actions button not found. Please ensure you are viewing a patient record.');
+      }
+
+      console.log('✅ Found Actions button, clicking...');
+      actionsButton.click();
+      await this.wait(500); // Wait for menu to render
+      console.log('✅ Actions menu should be open');
+
+      // STEP 2: Click the dropdown toggle button to expand task submenu
+      console.log('🔘 Step 2: Clicking dropdown toggle...');
+      const dropdownToggleXPath = '/html/body/div[2]/div[7]/div/div[3]/div/div[2]/div[2]/div/div/div[1]/div[2]/div[1]/div/button';
+      const dropdownToggle = this.findByXPath(dropdownToggleXPath) as HTMLElement;
+
+      if (!dropdownToggle) {
+        throw new Error('Dropdown toggle not found. Actions menu may not have loaded properly.');
+      }
+
+      console.log('✅ Found dropdown toggle, clicking...');
+      dropdownToggle.click();
+      await this.wait(100); // Wait for submenu to expand
+      console.log('✅ Dropdown submenu should be expanded');
+
+      // STEP 3: Click "Create Task" option in the submenu
+      console.log('🔘 Step 3: Clicking Create Task button...');
+      const createTaskXPath = '/html/body/div[2]/div[7]/div/div[3]/div/div[2]/div[2]/div/div/div[1]/div[2]/div[1]/div/ul/li[2]/a';
+      const createTaskButton = this.findByXPath(createTaskXPath) as HTMLElement;
+
+      if (!createTaskButton) {
+        throw new Error('Create Task button not found in dropdown menu.');
+      }
+
+      console.log('✅ Found Create Task button, clicking...', {
+        tagName: createTaskButton.tagName,
+        className: createTaskButton.className,
+        textContent: createTaskButton.textContent?.trim()
+      });
+      createTaskButton.click();
+      await this.wait(500); // Wait for task dialog to open
+      console.log('✅ Create Task clicked successfully - dialog should be opening');
+
+    } catch (error) {
+      console.error('❌ Task creation failed:', error);
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`❌ Failed to create task: ${errorMessage}\n\nPlease create the task manually.`);
+
+      throw error; // Re-throw to prevent workflow from continuing
     }
+  }
+
+  // NEW: Create task with subject and message content
+  private async createTaskWithContent(taskData: { subject: string; message: string }) {
+    console.log('📝 Creating task with content:', taskData);
+
+    try {
+      // Step 1: Click task button to open task dialog
+      await this.createTask();
+
+      // Step 2: Wait for task dialog to fully load
+      await this.wait(1000);
+      console.log('⏳ Waiting for task dialog to load...');
+
+      // Step 3: Find and populate Subject field
+      const subjectInput = await this.findTaskSubjectField();
+      if (subjectInput) {
+        console.log('✅ Found Subject field, populating...');
+        subjectInput.value = '';
+        subjectInput.focus();
+        subjectInput.value = taskData.subject;
+        this.triggerAllEvents(subjectInput, taskData.subject);
+        console.log(`✅ Populated Subject: ${taskData.subject}`);
+      } else {
+        console.warn('⚠️ Subject field not found - task may need manual entry');
+      }
+
+      // Step 4: Find and populate Message textarea
+      const messageTextarea = await this.findTaskMessageField();
+      if (messageTextarea) {
+        console.log('✅ Found Message field, populating...');
+        messageTextarea.value = '';
+        messageTextarea.focus();
+        messageTextarea.value = taskData.message;
+        this.triggerAllEvents(messageTextarea, taskData.message);
+        console.log(`✅ Populated Message: ${taskData.message.substring(0, 50)}...`);
+      } else {
+        console.warn('⚠️ Message field not found - task may need manual entry');
+      }
+
+      console.log('✅ Task populated with content successfully');
+    } catch (error) {
+      console.error('❌ Error creating task with content:', error);
+
+      // Show user-friendly error message
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Failed to create task with follow-up information:\n\n${errorMsg}\n\nPlease create the task manually with this content:\n\nSubject: ${taskData.subject}\nMessage: ${taskData.message.substring(0, 200)}...`);
+
+      // Re-throw to stop workflow
+      throw error;
+    }
+  }
+
+  // NEW: Find Subject field in task dialog
+  private async findTaskSubjectField(): Promise<HTMLInputElement | null> {
+    console.log('🔍 Searching for task Subject field...');
+
+    // Strategy 1: Try common Subject field selectors
+    const subjectSelectors = [
+      'input[name*="subject"]',
+      'input[id*="subject"]',
+      'input[placeholder*="Subject"]',
+      'input[placeholder*="subject"]',
+      'input.subject',
+      'input.Subject'
+    ];
+
+    for (const selector of subjectSelectors) {
+      const element = document.querySelector(selector) as HTMLInputElement;
+      if (element && element.offsetParent !== null) {
+        console.log(`✅ Found Subject field via selector: ${selector}`);
+        return element;
+      }
+    }
+
+    // Strategy 2: Try label-based search
+    const subjectByLabel = this.findFieldByLabelText('subject') as HTMLInputElement;
+    if (subjectByLabel) {
+      console.log('✅ Found Subject field via label text');
+      return subjectByLabel;
+    }
+
+    // Strategy 3: Find first visible text input in modal (fallback)
+    const allInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])')) as HTMLInputElement[];
+    const visibleInputs = allInputs.filter(input => input.offsetParent !== null);
+    if (visibleInputs.length > 0) {
+      console.log('⚠️ Using first visible input as Subject field (fallback)');
+      return visibleInputs[0];
+    }
+
+    console.warn('❌ Subject field not found after trying all strategies');
+    return null;
+  }
+
+  // NEW: Find Message field in task dialog
+  private async findTaskMessageField(): Promise<HTMLTextAreaElement | null> {
+    console.log('🔍 Searching for task Message field...');
+
+    // Strategy 1: Try specific ID, name, and class selectors (highest priority)
+    const specificSelectors = [
+      'textarea#Message',                    // ID selector
+      'textarea[name="Message"]',            // name attribute (exact match)
+      'textarea.conversation-message',       // class selector
+      'textarea.form-control.conversation-message' // full class chain
+    ];
+
+    for (const selector of specificSelectors) {
+      const element = document.querySelector(selector) as HTMLTextAreaElement;
+      if (element && element.offsetParent !== null) {
+        console.log(`✅ Found Message field via specific selector: ${selector}`);
+        return element;
+      }
+    }
+
+    // Strategy 2: Try XPath (user-provided fallback)
+    try {
+      const xpathResult = document.evaluate(
+        '/html/body/div[2]/div[7]/div[1]/div[3]/div/form/div[2]/div[2]/textarea',
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const xpathElement = xpathResult.singleNodeValue as HTMLTextAreaElement;
+      if (xpathElement && xpathElement.offsetParent !== null) {
+        console.log('✅ Found Message field via XPath');
+        return xpathElement;
+      }
+    } catch (error) {
+      console.log('⚠️ XPath search failed:', error);
+    }
+
+    // Strategy 3: Try exact label text match (case-sensitive, exact match only)
+    const labels = Array.from(document.querySelectorAll('label'));
+    for (const label of labels) {
+      const labelText = label.textContent?.trim();
+      // Exact match "Message" only, not "Copy incoming messages to"
+      if (labelText === 'Message') {
+        console.log('✅ Found exact label: "Message"');
+
+        // Try 'for' attribute
+        const forAttr = label.getAttribute('for');
+        if (forAttr) {
+          const textarea = document.getElementById(forAttr) as HTMLTextAreaElement;
+          if (textarea && textarea.tagName === 'TEXTAREA' && textarea.offsetParent !== null) {
+            console.log(`✅ Found Message field via exact label 'for' attribute: #${forAttr}`);
+            return textarea;
+          }
+        }
+
+        // Try next sibling
+        let sibling = label.nextElementSibling;
+        while (sibling) {
+          if (sibling.tagName === 'TEXTAREA' && (sibling as HTMLTextAreaElement).offsetParent !== null) {
+            console.log('✅ Found Message field as label sibling');
+            return sibling as HTMLTextAreaElement;
+          }
+          sibling = sibling.nextElementSibling;
+        }
+
+        // Try parent's next textarea
+        let parent = label.parentElement;
+        while (parent) {
+          const textarea = parent.querySelector('textarea') as HTMLTextAreaElement;
+          if (textarea && textarea.offsetParent !== null) {
+            console.log('✅ Found Message field in label parent');
+            return textarea;
+          }
+          parent = parent.parentElement;
+          if (parent?.tagName === 'FORM') break; // Stop at form boundary
+        }
+      }
+    }
+
+    // Strategy 4: Find first visible textarea, excluding wrong fields (last resort)
+    const allTextareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+    const visibleTextareas = allTextareas.filter(textarea => {
+      // Exclude Notes field
+      if (textarea.name === 'Notes' || textarea.classList.contains('Notes')) {
+        return false;
+      }
+      // Exclude fields with "copy" in nearby labels
+      const nearbyText = textarea.parentElement?.textContent?.toLowerCase() || '';
+      if (nearbyText.includes('copy incoming')) {
+        return false;
+      }
+      return textarea.offsetParent !== null;
+    });
+
+    if (visibleTextareas.length > 0) {
+      console.log('⚠️ Using first visible textarea as Message field (fallback, filtered)');
+      return visibleTextareas[0];
+    }
+
+    console.warn('❌ Message field not found after trying all strategies');
+    return null;
   }
 
   private async appointmentWrapUp(data: any) {
@@ -1540,16 +1810,32 @@ class ContentScriptHandler {
   }
 
   private async xestroAppointmentWrapUp(data: any) {
-    // Find and click appointment wrap-up button
+    // STEP 1: Create task FIRST (if taskMessage exists)
+    if (data.preset?.taskMessage) {
+      console.log('📝 Creating task with follow-up information before opening wrap-up dialog...');
+      try {
+        await this.createTaskWithContent({
+          subject: 'Post Appointment Tasks',
+          message: data.preset.taskMessage
+        });
+        console.log('✅ Task created successfully');
+      } catch (error) {
+        console.error('❌ Task creation failed, but continuing with wrap-up dialog:', error);
+        // Don't throw - allow wrap-up to continue even if task creation fails
+      }
+    }
+
+    // STEP 2: Then open appointment wrap-up dialog
     const wrapUpButton = await this.findElement(
       'button.btn.btn-primary.appt-wrap-up-btn, [data-action="appt-wrap-up"]'
     );
-    
+
     if (wrapUpButton) {
+      console.log('📋 Opening appointment wrap-up dialog...');
       wrapUpButton.click();
       await this.wait(1500); // Wait longer for modal to open
-      
-      // Handle preset data if provided
+
+      // STEP 3: Populate item code and click Notes field
       if (data.preset) {
         await this.populateAppointmentPreset(data.preset);
       }
@@ -2232,6 +2518,58 @@ class ContentScriptHandler {
           // Trigger comprehensive events
           this.triggerAllEvents(itemCodesInput, preset.itemCode);
 
+          // Wait briefly for code to register, then click Appointment Notes to accept
+          await this.wait(200);
+          console.log('📝 Clicking Appointment Notes area to accept billing code...');
+
+          // Try to find "Appointment Notes" textarea (not the wrap-up Notes field)
+          const appointmentNotesSelectors = [
+            'textarea[placeholder*="Appointment"]',
+            'textarea.appointment-notes',
+            'textarea[name*="Appointment"]',
+            '#AppointmentNotes',
+            '.appointment-notes-field textarea'
+          ];
+
+          let appointmentNotes: HTMLTextAreaElement | null = null;
+          for (const selector of appointmentNotesSelectors) {
+            appointmentNotes = document.querySelector(selector) as HTMLTextAreaElement;
+            if (appointmentNotes && appointmentNotes.offsetParent !== null) {
+              console.log(`✅ Found Appointment Notes via selector: ${selector}`);
+              break;
+            }
+          }
+
+          // Fallback: find all textareas and identify by context
+          if (!appointmentNotes) {
+            const allTextareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+            const visibleTextareas = allTextareas.filter(ta => ta.offsetParent !== null);
+            console.log(`Found ${visibleTextareas.length} visible textareas`);
+
+            // Look for textarea NOT named "Notes" (which is wrap-up notes)
+            for (const textarea of visibleTextareas) {
+              const name = textarea.getAttribute('name');
+              const placeholder = textarea.placeholder || '';
+              console.log('Textarea details:', { name, placeholder, classes: textarea.className });
+
+              // Skip wrap-up Notes field, find appointment notes
+              if (name !== 'Notes' && !textarea.classList.contains('Notes')) {
+                appointmentNotes = textarea;
+                console.log('✅ Found Appointment Notes field (by exclusion)');
+                break;
+              }
+            }
+          }
+
+          if (appointmentNotes) {
+            appointmentNotes.focus();
+            appointmentNotes.click();
+            console.log('✅ Clicked Appointment Notes area - billing code should be accepted');
+            await this.wait(300);
+          } else {
+            console.warn('⚠️ Appointment Notes field not found - billing code may not be accepted');
+          }
+
           console.log(`✅ Populated Item Code: ${preset.itemCode}`);
         } else {
           console.warn('⚠️ Item codes input field not found after trying all strategies');
@@ -2245,87 +2583,8 @@ class ContentScriptHandler {
         }
       }
 
-      // Find and populate Appointment Notes field
-      if (preset.notes) {
-        console.log('🔍 Searching for Appointment Notes field...');
-
-        let notesTextarea: HTMLTextAreaElement | null = null;
-
-        // Strategy 0: Try exact XPath first (most reliable for Xestro)
-        const notesXPath = '/html/body/div[2]/div[7]/div/div[3]/div/div/div[2]/textarea';
-        const xpathTextarea = this.findByXPath(notesXPath) as HTMLTextAreaElement;
-        if (xpathTextarea && xpathTextarea instanceof HTMLTextAreaElement) {
-          console.log('✅ Found Appointment Notes field via XPath');
-          notesTextarea = xpathTextarea;
-        }
-
-        // Strategy 1: Try specific selectors
-        if (!notesTextarea) {
-          const notesSelectors = [
-            'textarea.Notes',
-            'textarea.form-control',
-            'textarea[name*="note"]',
-            'textarea[name*="comment"]',
-            'textarea[id*="note"]',
-            'textarea[id*="comment"]',
-            'textarea[placeholder*="Note"]',
-            'textarea[placeholder*="Comment"]'
-          ];
-
-          for (const selector of notesSelectors) {
-            const element = document.querySelector(selector) as HTMLTextAreaElement;
-            if (element && element.offsetParent !== null) { // Check if visible
-              console.log(`✅ Found Appointment Notes field via selector: ${selector}`);
-              notesTextarea = element;
-              break;
-            }
-          }
-        }
-
-        // Strategy 2: Try label-based search
-        if (!notesTextarea) {
-          notesTextarea = this.findFieldByLabelText('appointment note') as HTMLTextAreaElement;
-        }
-        if (!notesTextarea) {
-          notesTextarea = this.findFieldByLabelText('note') as HTMLTextAreaElement;
-        }
-
-        // Strategy 3: Find all visible textareas in the modal
-        if (!notesTextarea) {
-          console.log('🔍 Trying to find visible textareas in modal...');
-          const allTextareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
-          const visibleTextareas = allTextareas.filter(textarea => textarea.offsetParent !== null);
-          console.log(`Found ${visibleTextareas.length} visible textareas`);
-
-          // The first visible textarea in the appointment modal is likely the notes field
-          if (visibleTextareas.length > 0) {
-            notesTextarea = visibleTextareas[0];
-            console.log(`⚠️ Using first visible textarea as Appointment Notes field (fallback strategy)`);
-          }
-        }
-
-        if (notesTextarea) {
-          console.log(`✅ Found Appointment Notes field, setting value to: ${preset.notes}`);
-
-          // Clear and set value
-          notesTextarea.value = '';
-          notesTextarea.focus();
-          notesTextarea.value = preset.notes;
-
-          // Trigger comprehensive events
-          this.triggerAllEvents(notesTextarea, preset.notes);
-
-          console.log(`✅ Populated Appointment Notes: ${preset.notes}`);
-        } else {
-          console.warn('⚠️ Appointment notes textarea not found after trying all strategies');
-          console.log('💡 Available textareas:', Array.from(document.querySelectorAll('textarea')).map(t => ({
-            name: t.getAttribute('name'),
-            id: t.id,
-            class: t.className,
-            placeholder: t.placeholder
-          })));
-        }
-      }
+      // Notes field is left blank - task is created separately before wrap-up dialog
+      console.log('📝 Notes field left blank (task created separately)');
 
       console.log(`✅ Successfully applied preset: ${preset.displayName}`);
     } catch (error) {
@@ -4228,74 +4487,93 @@ class ContentScriptHandler {
     return !!confirmIcon;
   }
 
+  private async autoSearchFromHash(): Promise<void> {
+    const hash = window.location.hash;
+
+    // Check if hash contains filing parameter (#filing=17755)
+    if (!hash.includes('filing=')) {
+      return;
+    }
+
+    // Extract and decode filing number
+    const match = hash.match(/filing=([^&]+)/);
+    if (!match) return;
+
+    const filingNumber = decodeURIComponent(match[1]);
+    console.log(`🔍 Hash-based navigation detected for filing: ${filingNumber}`);
+
+    // Reuse search logic (no code duplication)
+    try {
+      await this.searchPatientByFiling(filingNumber);
+    } catch (error) {
+      console.warn('⚠️ Hash-based search failed:', error);
+    }
+
+    // Clean up hash after triggering (prevents re-triggering on refresh)
+    setTimeout(() => {
+      if (window.location.hash.includes(`filing=${encodeURIComponent(filingNumber)}`)) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }, 2000);
+  }
+
+  private async searchPatientByFiling(filingNumber: string): Promise<void> {
+    console.log(`🔍 Searching for patient by filing: ${filingNumber}`);
+
+    // Wait for DOM to be ready (Xestro SPA may still be loading)
+    await this.wait(800);
+
+    // Find patient search input (confirmed selector: #PatientSelectorInput)
+    const searchInput = document.querySelector('#PatientSelectorInput') as HTMLInputElement;
+    if (!searchInput) {
+      throw new Error('PatientSelectorInput not found - Xestro may not be ready');
+    }
+
+    // Fill search input with filing number
+    searchInput.value = filingNumber;
+    searchInput.focus();
+
+    // Dispatch events to trigger Xestro's search dropdown
+    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    searchInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    console.log(`🔍 Typed filing number, waiting for dropdown...`);
+
+    // Wait for dropdown to appear with search results
+    await this.wait(500);
+
+    // Press Down Arrow to select first result in dropdown
+    searchInput.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      keyCode: 40,
+      code: 'ArrowDown',
+      bubbles: true
+    }));
+
+    console.log(`⬇️ Pressed Down Arrow to select first result`);
+
+    // Small delay before pressing Enter
+    await this.wait(200);
+
+    // Press Enter to confirm selection
+    searchInput.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      keyCode: 13,
+      code: 'Enter',
+      bubbles: true
+    }));
+
+    console.log(`✅ Pressed Enter - patient navigation should complete`);
+  }
+
   private async navigateToPatient(fileNumber: string, patientName: string): Promise<void> {
-    console.log(`🧭 Navigating to patient: ${patientName} (${fileNumber})`);
-    
-    // Implementation will depend on Xestro navigation patterns
-    // This could involve:
-    // 1. Using a search function with file number
-    // 2. Direct URL navigation if there's a pattern
-    // 3. Clicking through UI elements
-    
-    // For now, we'll implement a basic approach
-    // Check if there's a patient search or navigation mechanism
-    const searchInput = document.querySelector('input[placeholder*="search"], input[placeholder*="patient"]') as HTMLInputElement;
-    
-    if (searchInput) {
-      // Use search functionality
-      searchInput.value = fileNumber;
-      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-      searchInput.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Wait for search results and click on the correct patient
-      await this.wait(1000);
-      
-      // Look for patient in search results
-      const searchResults = document.querySelectorAll('[data-patient-id], .patient-result');
-      for (const result of searchResults) {
-        if (result.textContent?.includes(fileNumber) || result.textContent?.includes(patientName)) {
-          (result as HTMLElement).click();
-          console.log(`🧭 Clicked patient in search results`);
-          
-          // Wait for patient page to load, then ensure record is opened
-          await this.wait(2000);
-          await this.ensurePatientRecordOpened();
-          return;
-        }
-      }
-    }
-    
-    // Alternative: Try direct URL navigation if there's a pattern
-    const currentUrl = window.location.href;
-    const baseUrl = currentUrl.split('?')[0].split('#')[0];
-    
-    // Try common Xestro patient URL patterns
-    const possibleUrls = [
-      `${baseUrl}?patient=${fileNumber}`,
-      `${baseUrl}#patient/${fileNumber}`,
-      `${baseUrl}/patient/${fileNumber}`
-    ];
-    
-    for (const url of possibleUrls) {
-      try {
-        console.log(`🧭 Trying navigation to: ${url}`);
-        window.location.href = url;
-        await this.wait(2000); // Wait for navigation
-        
-        // Check if we successfully navigated to patient page
-        if (document.querySelector('.patient-record, #patient-view, .XestroBox')) {
-          console.log(`✅ Successfully navigated to patient page`);
-          
-          // Ensure patient record is opened for data extraction
-          await this.ensurePatientRecordOpened();
-          return;
-        }
-      } catch (error) {
-        console.warn(`🧭 Navigation attempt failed for ${url}:`, error);
-      }
-    }
-    
-    throw new Error(`Unable to navigate to patient ${patientName} (${fileNumber})`);
+    console.log(`🧭 Navigating to patient: ${patientName} (Filing: ${fileNumber})`);
+
+    // Set hash with filing parameter - hashchange listener will auto-trigger search
+    const hashUrl = `#filing=${encodeURIComponent(fileNumber)}`;
+    window.location.hash = hashUrl;
+
+    console.log(`✅ Set hash to ${hashUrl} - auto-search will trigger`);
   }
 
   /**

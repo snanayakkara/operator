@@ -404,6 +404,40 @@ export class RightHeartCathAgent extends MedicalAgent {
   private formatReportOutput(reportContent: string): string {
     let formatted = reportContent;
 
+    // ========== ANTI-HALLUCINATION POST-PROCESSING ==========
+    // Remove example text that may have leaked from system prompts
+
+    // Detect and flag if exact example conclusion appears (highly suspicious)
+    const examplePhrases = [
+      /Moderate pulmonary hypertension,\s+with preserved cardiac output and normal left sided pressures\.\s+Significant an[a|æ]emia noted\./gi,
+      /\[Primary haemodynamic finding from dictated data\]/gi,
+      /\[cardiac output status from measurements\]/gi,
+      /\[other significant abnormalities if dictated\]/gi,
+      /\[Age\] year old \[gender\]/gi,
+      /\[stated diagnosis/gi,
+      /\[actual/gi,
+      /\[explicitly dictated/gi
+    ];
+
+    for (const phrase of examplePhrases) {
+      if (phrase.test(formatted)) {
+        console.warn('⚠️ RHC AGENT: Detected leaked example text or placeholder in output - this should not happen!');
+        console.warn('⚠️ Phrase matched:', phrase);
+        // Remove the problematic text
+        formatted = formatted.replace(phrase, '[REMOVED - PLACEHOLDER TEXT]');
+      }
+    }
+
+    // Remove any remaining bracketed placeholders that shouldn't be in final output
+    formatted = formatted.replace(/\[.*?\]/g, (match) => {
+      // Allow legitimate bracketed content like [site not specified]
+      if (match.includes('site not specified') || match.includes('not stated')) {
+        return match;
+      }
+      console.warn('⚠️ RHC AGENT: Removed placeholder bracket text:', match);
+      return '';
+    });
+
     // Fix unit spacing: "168 cm" → "168cm", "72 kg" → "72kg"
     // Only applies to height/weight/vital signs, NOT to pressure measurements
     formatted = formatted.replace(/(\d+)\s+(cm|kg)\b/g, '$1$2');
@@ -856,8 +890,8 @@ Note: This report was generated with limited AI processing. Clinical review is r
 
     console.log('🔍 RHC: Extracting patient data from input:', input.substring(0, 300));
 
-    // Extract height (cm)
-    const heightMatch = input.match(/height[:\s]+(\d+)\s*(?:cm|centimeters?)?/i);
+    // Extract height (cm) - handles "height: 180", "height. 180", "Patient height 180 centimeters"
+    const heightMatch = input.match(/(?:patient\s+)?height[:\s.]+(\d+)\s*(?:cm|centimeters?)?/i);
     if (heightMatch) {
       patientData.height = parseFloat(heightMatch[1]);
       console.log('✅ RHC: Extracted height:', patientData.height, 'cm from match:', heightMatch[0]);
@@ -865,8 +899,8 @@ Note: This report was generated with limited AI processing. Clinical review is r
       console.log('❌ RHC: No height match found');
     }
 
-    // Extract weight (kg)
-    const weightMatch = input.match(/weight[:\s]+(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)?/i);
+    // Extract weight (kg) - handles "weight: 100", "weight. 100", "Patient weight 100 kilograms"
+    const weightMatch = input.match(/(?:patient\s+)?weight[:\s.]+(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)?/i);
     if (weightMatch) {
       patientData.weight = parseFloat(weightMatch[1]);
       console.log('✅ RHC: Extracted weight:', patientData.weight, 'kg from match:', weightMatch[0]);
@@ -893,8 +927,8 @@ Note: This report was generated with limited AI processing. Clinical review is r
       }
     }
 
-    // Extract heart rate (bpm)
-    const hrMatch = input.match(/heart\s+rate[:\s]+(\d+)|HR[:\s]+(\d+)/i);
+    // Extract heart rate (bpm) - enhanced to handle multiple variations
+    const hrMatch = input.match(/(?:heart\s+rate|HR|pulse|resting\s+heart\s+rate)(?:\s+was|\s+is)?[:\s]+(\d+)|(\d+)\s+(?:beats?\s+per\s+minute|bpm)/i);
     if (hrMatch) {
       patientData.heartRate = parseFloat(hrMatch[1] || hrMatch[2]);
     }

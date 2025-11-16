@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { 
-  GraduationCap, 
-  CheckSquare, 
-  Square, 
-  AlertCircle, 
-  Loader, 
+import {
+  GraduationCap,
+  CheckSquare,
+  Square,
+  AlertCircle,
+  Loader,
   RefreshCw,
   Info,
   X
@@ -13,6 +13,7 @@ import type { PatientEducationInput } from '@/agents/specialized/PatientEducatio
 import type { PatientEducationModule } from '@/agents/specialized/PatientEducationSystemPrompts';
 import type { PatientInfo as _PatientInfo, PipelineProgress } from '@/types/medical.types';
 import { UnifiedPipelineProgress } from './UnifiedPipelineProgress';
+import { Button, IconButton } from './buttons';
 
 // Dynamic import types
 type _PatientEducationAgent = any;
@@ -221,12 +222,14 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
               <GraduationCap className="w-4 h-4" />
               <h3 className="font-semibold text-sm">Patient Education & Lifestyle Advice</h3>
             </div>
-            <button
+            <IconButton
+              icon={<X />}
               onClick={onClose}
-              className="text-emerald-100 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              variant="ghost"
+              size="sm"
+              aria-label="Close"
+              className="text-emerald-100 hover:text-white"
+            />
           </div>
         </div>
         <div className="p-8 flex items-center justify-center">
@@ -247,17 +250,15 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
       <div key={module.id} className="border border-gray-200 rounded-lg">
         {/* Main Module */}
         <div className="flex items-start space-x-3 p-3 hover:border-blue-300 transition-colors">
-          <button
+          <IconButton
+            icon={isChecked ? <CheckSquare className="text-blue-600" /> : <Square className="text-gray-400" />}
             onClick={() => handleModuleToggle(module.id)}
-            className="flex-shrink-0 mt-0.5"
+            variant="ghost"
+            size="sm"
+            aria-label={`Toggle ${module.label}`}
             disabled={isGenerating || isExtracting}
-          >
-            {isChecked ? (
-              <CheckSquare className="w-5 h-5 text-blue-600" />
-            ) : (
-              <Square className="w-5 h-5 text-gray-400" />
-            )}
-          </button>
+            className="flex-shrink-0 mt-0.5"
+          />
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
@@ -286,17 +287,15 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
               const isSubChecked = moduleSubFocus.includes(subFocus.id);
               return (
                 <div key={subFocus.id} className="flex items-start space-x-2 ml-2">
-                  <button
+                  <IconButton
+                    icon={isSubChecked ? <CheckSquare className="text-emerald-600" /> : <Square className="text-gray-400" />}
                     onClick={() => handleSubFocusToggle(module.id, subFocus.id)}
-                    className="flex-shrink-0 mt-0.5"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Toggle ${subFocus.label}`}
                     disabled={isGenerating || isExtracting}
-                  >
-                    {isSubChecked ? (
-                      <CheckSquare className="w-4 h-4 text-emerald-600" />
-                    ) : (
-                      <Square className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
+                    className="flex-shrink-0 mt-0.5"
+                  />
                   <div className="flex-1 min-w-0">
                     <span className={`text-xs ${isSubChecked ? 'text-emerald-800 font-medium' : 'text-gray-600'}`}>
                       {subFocus.label}
@@ -322,13 +321,15 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
               <GraduationCap className="w-4 h-4" />
               <h3 className="font-semibold text-sm">Patient Education & Lifestyle Advice</h3>
             </div>
-            <button
+            <IconButton
+              icon={<X />}
               onClick={onClose}
-              className="text-emerald-100 hover:text-white transition-colors"
+              variant="ghost"
+              size="sm"
+              aria-label="Close"
               disabled={isGenerating || isExtracting}
-            >
-              <X className="w-4 h-4" />
-            </button>
+              className="text-emerald-100 hover:text-white"
+            />
           </div>
         </div>
 
@@ -342,23 +343,17 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
                   <p className="text-sm text-amber-800 font-medium">EMR Extraction Issue</p>
                   <p className="text-xs text-amber-700 mt-1">{emrExtractionError}</p>
                   {onRetryExtraction && (
-                    <button
+                    <Button
                       onClick={handleRetryExtraction}
                       disabled={isExtracting}
-                      className="mt-2 px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs rounded-md font-medium transition-colors disabled:opacity-50"
+                      variant="ghost"
+                      size="sm"
+                      startIcon={isExtracting ? <Loader /> : <RefreshCw />}
+                      isLoading={isExtracting}
+                      className="mt-2 bg-amber-100 hover:bg-amber-200 text-amber-800"
                     >
-                      {isExtracting ? (
-                        <span className="flex items-center space-x-1">
-                          <Loader className="w-3 h-3 animate-spin" />
-                          <span>Retrying...</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center space-x-1">
-                          <RefreshCw className="w-3 h-3" />
-                          <span>Retry Extraction</span>
-                        </span>
-                      )}
-                    </button>
+                      {isExtracting ? 'Retrying...' : 'Retry Extraction'}
+                    </Button>
                   )}
                 </div>
               </div>
@@ -473,23 +468,17 @@ export const PatientEducationConfigCard: React.FC<PatientEducationConfigCardProp
 
           {/* Generate Button */}
           <div className="flex justify-end border-t border-gray-200 pt-4 mt-6">
-            <button
+            <Button
               onClick={handleGenerate}
               disabled={isGenerating || isExtracting || selectedModules.length === 0}
-              className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-lg"
+              variant="success"
+              size="lg"
+              startIcon={<GraduationCap />}
+              isLoading={isGenerating || isExtracting}
+              className="px-8 shadow-lg"
             >
-              {isGenerating || isExtracting ? (
-                <>
-                  <Loader className="w-4 h-4 animate-spin" />
-                  <span>Generating Advice...</span>
-                </>
-              ) : (
-                <>
-                  <GraduationCap className="w-4 h-4" />
-                  <span>Generate Lifestyle Advice</span>
-                </>
-              )}
-            </button>
+              {isGenerating || isExtracting ? 'Generating Advice...' : 'Generate Lifestyle Advice'}
+            </Button>
           </div>
 
           {/* Progress indicator */}

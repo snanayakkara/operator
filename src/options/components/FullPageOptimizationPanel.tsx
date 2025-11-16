@@ -82,6 +82,70 @@ const OPTIMIZATION_SECTIONS: OptimizationSectionConfig[] = [
   }
 ];
 
+// Section card component for full-page layout (extracted to module level to prevent remounting)
+const SectionCard: React.FC<{
+  config: OptimizationSectionConfig;
+  sections: Record<OptimizationSection, SectionState>;
+  toggleSection: (section: OptimizationSection) => void;
+  children: React.ReactNode;
+}> = ({ config, sections, toggleSection, children }) => {
+  const state = sections[config.id];
+  const Icon = config.icon;
+
+  return (
+    <div className="bg-surface-primary border-2 border-line-primary rounded-xl overflow-hidden">
+      <button
+        onClick={() => toggleSection(config.id)}
+        className="w-full p-6 bg-surface-secondary hover:bg-surface-tertiary transition-all duration-200 flex items-center justify-between"
+      >
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-surface-primary rounded-lg border border-line-secondary">
+            <Icon className="w-6 h-6 text-accent-info" />
+          </div>
+          <div className="text-left">
+            <div className="font-semibold text-ink-primary text-lg">{config.title}</div>
+            <div className="text-sm text-ink-secondary mt-1 max-w-2xl">{config.description}</div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          {state.isLoading && (
+            <div className="flex items-center space-x-2 text-blue-600">
+              <Clock className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </div>
+          )}
+          {state.lastError && (
+            <div className="flex items-center space-x-2 text-red-600">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">Error</span>
+            </div>
+          )}
+          {state.isExpanded ? (
+            <ChevronDown className="w-6 h-6 text-ink-tertiary" />
+          ) : (
+            <ChevronRight className="w-6 h-6 text-ink-tertiary" />
+          )}
+        </div>
+      </button>
+
+      {state.isExpanded && (
+        <div className="p-6 border-t-2 border-line-primary">
+          {state.lastError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center space-x-2 text-red-700">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-sm font-medium">Section Error</span>
+              </div>
+              <div className="text-sm text-red-600 mt-1">{state.lastError}</div>
+            </div>
+          )}
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const FullPageOptimizationPanel: React.FC = () => {
   // Service instance
   const optimizationService = useMemo(() => OptimizationService.getInstance(), []);
@@ -137,7 +201,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
       abortController.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sections.review.isExpanded, completedJobs.length]);
+  }, [sections.review.isExpanded, completedJobs.length]); // loadCompletedJobs omitted - it's stable due to useCallback with stable dependencies
 
   const updateSectionState = useCallback((section: OptimizationSection, updates: Partial<SectionState>) => {
     setSections(prev => ({
@@ -225,13 +289,22 @@ export const FullPageOptimizationPanel: React.FC = () => {
   const handleSectionError = useCallback((section: OptimizationSection, error: OptimizationError) => {
     const errorMsg = error.message;
     updateSectionState(section, { isLoading: false, lastError: errorMsg });
-    
+
     logger.error(`Optimization section error: ${section}`, {
       component: 'FullPageOptimizationPanel',
       section,
       error: errorMsg,
       code: error.code
     });
+  }, [updateSectionState]);
+
+  // Create stable callback references for ASR section
+  const handleASRError = useCallback((error: OptimizationError) => {
+    handleSectionError('asr', error);
+  }, [handleSectionError]);
+
+  const handleASRLoadingChange = useCallback((isLoading: boolean) => {
+    updateSectionState('asr', { isLoading });
   }, [updateSectionState]);
 
   const refreshHealth = useCallback(async () => {
@@ -320,68 +393,6 @@ export const FullPageOptimizationPanel: React.FC = () => {
     return null;
   };
 
-  // Section card component for full-page layout
-  const SectionCard: React.FC<{
-    config: OptimizationSectionConfig;
-    children: React.ReactNode;
-  }> = ({ config, children }) => {
-    const state = sections[config.id];
-    const Icon = config.icon;
-    
-    return (
-      <div className="bg-surface-primary border-2 border-line-primary rounded-xl overflow-hidden">
-        <button
-          onClick={() => toggleSection(config.id)}
-          className="w-full p-6 bg-surface-secondary hover:bg-surface-tertiary transition-all duration-200 flex items-center justify-between"
-        >
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-surface-primary rounded-lg border border-line-secondary">
-              <Icon className="w-6 h-6 text-accent-info" />
-            </div>
-            <div className="text-left">
-              <div className="font-semibold text-ink-primary text-lg">{config.title}</div>
-              <div className="text-sm text-ink-secondary mt-1 max-w-2xl">{config.description}</div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {state.isLoading && (
-              <div className="flex items-center space-x-2 text-blue-600">
-                <Clock className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Loading...</span>
-              </div>
-            )}
-            {state.lastError && (
-              <div className="flex items-center space-x-2 text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">Error</span>
-              </div>
-            )}
-            {state.isExpanded ? (
-              <ChevronDown className="w-6 h-6 text-ink-tertiary" />
-            ) : (
-              <ChevronRight className="w-6 h-6 text-ink-tertiary" />
-            )}
-          </div>
-        </button>
-        
-        {state.isExpanded && (
-          <div className="p-6 border-t-2 border-line-primary">
-            {state.lastError && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center space-x-2 text-red-700">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Section Error</span>
-                </div>
-                <div className="text-sm text-red-600 mt-1">{state.lastError}</div>
-              </div>
-            )}
-            {children}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-8">
       {/* Server Status Header */}
@@ -403,15 +414,15 @@ export const FullPageOptimizationPanel: React.FC = () => {
       ) : (
         <div className="space-y-6">
           {/* ASR Optimization Section */}
-          <SectionCard config={OPTIMIZATION_SECTIONS[0]}>
+          <SectionCard config={OPTIMIZATION_SECTIONS[0]} sections={sections} toggleSection={toggleSection}>
             <ASROptimizationSection
-              onError={(error) => handleSectionError('asr', error)}
-              onLoadingChange={(isLoading) => updateSectionState('asr', { isLoading })}
+              onError={handleASRError}
+              onLoadingChange={handleASRLoadingChange}
             />
           </SectionCard>
 
           {/* GEPA Optimization Section */}
-          <SectionCard config={OPTIMIZATION_SECTIONS[1]}>
+          <SectionCard config={OPTIMIZATION_SECTIONS[1]} sections={sections} toggleSection={toggleSection}>
             <GEPAOptimizationSection
               onError={(error) => handleSectionError('gepa', error)}
               onLoadingChange={(isLoading) => updateSectionState('gepa', { isLoading })}
@@ -419,7 +430,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
           </SectionCard>
 
           {/* Overnight Optimization Section */}
-          <SectionCard config={OPTIMIZATION_SECTIONS[2]}>
+          <SectionCard config={OPTIMIZATION_SECTIONS[2]} sections={sections} toggleSection={toggleSection}>
             <OvernightOptimizationCard
               onError={(error) => handleSectionError('overnight', error)}
               onLoadingChange={(isLoading) => updateSectionState('overnight', { isLoading })}
@@ -427,7 +438,7 @@ export const FullPageOptimizationPanel: React.FC = () => {
           </SectionCard>
 
           {/* Morning Review Section */}
-          <SectionCard config={OPTIMIZATION_SECTIONS[3]}>
+          <SectionCard config={OPTIMIZATION_SECTIONS[3]} sections={sections} toggleSection={toggleSection}>
             {selectedReviewJob ? (
               <MorningReviewCard
                 job={selectedReviewJob}
