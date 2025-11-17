@@ -9,6 +9,38 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.34.0] - 2025-11-17
+
+### Changed
+
+- **Design System Phase 4 Complete: Unified Status Badge System**
+  - Migrated 6 components to centralized StatusBadge component system
+    - `PatientSessionHeader.tsx` - Session status badges (recording, transcribing, processing, completed, error, cancelled)
+    - `PatientContextHeader.tsx` - Recording header status with animated pulsing dot indicator
+    - `TranscriptionSection.tsx` - Approval status badges (pending, approved, edited, skipped)
+    - `IndividualFindingCard.tsx` - Medical finding urgency badges (Immediate, Soon, Routine)
+    - `WarningsPanel.tsx` - Warning count badges
+    - `ServerManagementPanel.tsx` - Server health indicators (Running/Offline status)
+  - Eliminated ~150-200 lines of duplicate status badge code across components
+  - Established consistent state-to-color mappings application-wide:
+    - `recording` → Red/Rose gradients
+    - `transcribing` → Blue/Cyan gradients
+    - `processing` / `ai-analysis` → Purple/Violet gradients
+    - `generation` / `completed` → Emerald/Teal gradients
+    - `needs_review` → Amber/Orange gradients
+    - `error` → Rose/Red gradients
+  - All status indicators now use shared `stateColors.ts` design system for visual consistency
+  - Enforced "Same state = Same UI" design principle across entire application
+
+### Technical Improvements
+
+- **Component Consolidation**: StatusBadge component system (`StatusBadge`, `StatusChip`, `StateIndicator`, `ProgressBadge`) now single source of truth for all status visualization
+- **Type Safety**: `ProcessingState` type ensures only valid states can be used across all components, preventing inconsistencies
+- **Visual Consistency**: Unified color system from `stateColors.ts` ensures same state always displays with same colors/gradients
+- **Maintainability**: Centralized badge styling in `src/sidepanel/components/status/StatusBadge.tsx` reduces future maintenance burden
+- **Design System Compliance**: Import conventions standardized across all components (`import { StatusBadge } from './status'`)
+- **Code Quality**: Removed redundant helper functions (`getStatusColor`, `getUrgencyBadgeColor`, etc.) replaced by shared state mapping pattern
+
 ## [3.33.0] - 2025-11-16
 
 ### Added
