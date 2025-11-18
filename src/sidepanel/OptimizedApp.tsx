@@ -43,7 +43,7 @@ import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestr
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { LANYARD_CARD_TEXTURE_KEY, parseLanyardTexturePreference } from '@/config/lanyardPreferences';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport, ValidationResult } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport, ValidationResult, MedicalReport, MedicalContext } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { ModelLoadingError, isModelLoadingError } from '@/types/errors.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
@@ -59,6 +59,11 @@ import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
 import { SessionPersistenceService } from '@/services/SessionPersistenceService';
 import type { StorageStats } from '@/types/persistence.types';
+import { mobileJobsService } from '@/services/MobileJobsService';
+import type { MobileJobSummary } from '@/types/mobileJobs.types';
+import Modal from './components/modals/Modal';
+import Button from './components/buttons/Button';
+import { ChevronDown, Calendar, Brain, Star, Keyboard } from 'lucide-react';
 
 interface CurrentDisplayData {
   transcription: string;
@@ -86,6 +91,83 @@ interface CurrentDisplayData {
   processingStatus: ProcessingStatus;
   isDisplayingSession: boolean;
 }
+
+const MOBILE_DICTATION_AGENT_MAP: Record<string, AgentType> = {
+  'clinic_letter': 'quick-letter',
+  'procedure_report': 'angiogram-pci',
+  'echo_report': 'consultation',
+  'task': 'background',
+  'note': 'transcription',
+  'unknown': 'transcription'
+};
+
+// Helper function to format relative time
+const formatRelativeTime = (timestamp: string): string => {
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  const diffInSeconds = Math.floor((now - then) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  return `${Math.floor(diffInSeconds / 86400)} days ago`;
+};
+
+// Helper function to get dictation type display label
+const getDictationTypeLabel = (type: string): string => {
+  const typeMap: Record<string, string> = {
+    'clinic_letter': 'Clinic Letter',
+    'procedure_note': 'Procedure Note',
+    'consultation': 'Consultation',
+    'background': 'Background',
+    'investigation': 'Investigation',
+    'medication': 'Medication',
+    'unknown': 'General'
+  };
+  return typeMap[type] || type.replace('_', ' ');
+};
+
+const MOBILE_AGENT_OPTIONS_GROUPED = [
+  {
+    category: 'Letters & Correspondence',
+    icon: '✉️',
+    color: 'blue' as const,
+    agents: [
+      { value: 'quick-letter' as AgentType, label: 'Quick Letter', description: 'Clinic correspondence workflow' },
+      { value: 'consultation' as AgentType, label: 'Consultation Summary', description: 'Narrative consult note' }
+    ]
+  },
+  {
+    category: 'Clinical Data',
+    icon: '📋',
+    color: 'emerald' as const,
+    agents: [
+      { value: 'background' as AgentType, label: 'Background', description: 'Structured history / background note' },
+      { value: 'investigation-summary' as AgentType, label: 'Investigations', description: 'Investigation highlights (quick action)' },
+      { value: 'medication' as AgentType, label: 'Medications', description: 'Medication review quick action' }
+    ]
+  },
+  {
+    category: 'Procedures',
+    icon: '🔬',
+    color: 'purple' as const,
+    agents: [
+      { value: 'angiogram-pci' as AgentType, label: 'Angiogram / PCI Report', description: 'Cath lab procedure summary' }
+    ]
+  }
+];
+
+// Flatten for backward compatibility
+const MOBILE_AGENT_OPTIONS = MOBILE_AGENT_OPTIONS_GROUPED.flatMap(group => group.agents);
+
+const MOBILE_AGENT_LABELS = MOBILE_AGENT_OPTIONS.reduce<Record<AgentType, string>>((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {} as Record<AgentType, string>);
+
+const mapDictationTypeToAgent = (dictationType: string): AgentType => {
+  return MOBILE_DICTATION_AGENT_MAP[dictationType] || 'quick-letter';
+};
 
 const OptimizedApp: React.FC = memo(() => {
   return (
@@ -153,8 +235,438 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Storage management state
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [mobileJobs, setMobileJobs] = useState<MobileJobSummary[]>([]);
+  const [mobileJobsLoading, setMobileJobsLoading] = useState(false);
+  const [mobileJobsError, setMobileJobsError] = useState<string | null>(null);
+  const [attachingMobileJobId, setAttachingMobileJobId] = useState<string | null>(null);
+  const [attachedMobileJobIds, setAttachedMobileJobIds] = useState<Set<string>>(new Set());
+  const [pendingMobileJob, setPendingMobileJob] = useState<MobileJobSummary | null>(null);
+  const [pendingMobileAgent, setPendingMobileAgent] = useState<AgentType>('quick-letter');
+  const [deletingMobileJobId, setDeletingMobileJobId] = useState<string | null>(null);
+
+  // Smart default selection: Auto-select recommended agent when modal opens
+  useEffect(() => {
+    if (pendingMobileJob && !pendingMobileAgent) {
+      const defaultAgent = mapDictationTypeToAgent(pendingMobileJob.dictation_type);
+      setPendingMobileAgent(defaultAgent);
+    }
+  }, [pendingMobileJob, pendingMobileAgent]);
+
+  // Keyboard shortcuts for mobile job attachment modal
+  useEffect(() => {
+    if (!pendingMobileJob) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Flatten grouped agents for indexing
+      const allAgents = MOBILE_AGENT_OPTIONS_GROUPED.flatMap(g => g.agents);
+      const num = parseInt(e.key);
+
+      // Number keys 1-6 select agents
+      if (num >= 1 && num <= allAgents.length) {
+        setPendingMobileAgent(allAgents[num - 1].value);
+        e.preventDefault();
+      }
+
+      // Enter key confirms and submits
+      if (e.key === 'Enter' && pendingMobileAgent && !attachingMobileJobId) {
+        handleConfirmAttachMobileJob();
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [pendingMobileJob, pendingMobileAgent, attachingMobileJobId]);
+
+  const normalizePreview = (text: string): string =>
+    text.replace(/\s+/g, ' ').trim().toLowerCase();
+  const pendingMobileJobHeader = pendingMobileJob
+    ? pendingMobileJob.header_text || pendingMobileJob.triage_metadata?.raw_header || 'Mobile dictation'
+    : '';
+  const pendingMobileJobPreview = pendingMobileJob?.transcript_preview?.trim() || '';
+  const showPendingMobilePreview =
+    Boolean(pendingMobileJobPreview) &&
+    normalizePreview(pendingMobileJobPreview) !== normalizePreview(pendingMobileJobHeader) &&
+    !normalizePreview(pendingMobileJobPreview).startsWith(normalizePreview(pendingMobileJobHeader));
+
+  type ProcessMobileJobParams = {
+    agentType: AgentType;
+    transcript: string;
+    patientInfo: PatientInfo;
+    sessionId: string;
+  };
+
+  const processMobileJobAgent = useCallback(async ({
+    agentType,
+    transcript,
+    patientInfo,
+    sessionId
+  }: ProcessMobileJobParams): Promise<MedicalReport> => {
+    const startTime = Date.now();
+
+    const updateProgress = (stage: PipelineProgress['stage'], progress: number, details?: string) => {
+      const normalized = Math.max(0, Math.min(100, Math.round(progress)));
+      const payload = {
+        stage,
+        progress: normalized,
+        stageProgress: normalized,
+        details,
+        modelName: agentType === 'transcription' ? 'Transcription Capture' : 'LM Studio'
+      };
+      actions.setPipelineProgress(payload);
+      actions.updatePatientSession(sessionId, {
+        pipelineProgress: payload
+      });
+    };
+
+    const context: MedicalContext = {
+      sessionId,
+      timestamp: Date.now(),
+      patientId: patientInfo.id,
+      patientInfo,
+      demographics: {
+        name: patientInfo.name,
+        dateOfBirth: patientInfo.dob,
+        age: patientInfo.age
+      },
+      onProgress: (phase: string, progressValue?: number, progressDetails?: string) => {
+        const normalized = typeof progressValue === 'number' ? progressValue : 50;
+        updateProgress('ai-analysis', normalized, progressDetails || phase);
+      }
+    };
+
+    let report: MedicalReport | null = null;
+
+    switch (agentType) {
+      case 'quick-letter': {
+        const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
+        const agent = new QuickLetterAgent();
+        report = await agent.process(transcript, context);
+        break;
+      }
+      case 'angiogram-pci': {
+        const { AngiogramPCIAgent } = await import('@/agents/specialized/AngiogramPCIAgent');
+        const agent = new AngiogramPCIAgent();
+        report = await agent.process(transcript, context);
+        break;
+      }
+      case 'consultation': {
+        const { ConsultationAgent } = await import('@/agents/specialized/ConsultationAgent');
+        const agent = new ConsultationAgent();
+        report = await agent.process(transcript, context);
+        break;
+      }
+      case 'background': {
+        const { BackgroundAgent } = await import('@/agents/specialized/BackgroundAgent');
+        const agent = new BackgroundAgent();
+        report = await agent.process(transcript, context);
+        break;
+      }
+      case 'transcription':
+      default: {
+        report = {
+          id: `transcription-${Date.now()}`,
+          agentName: 'Transcription Capture',
+          content: transcript,
+          sections: [
+            {
+              title: 'Transcript',
+              content: transcript,
+              type: 'narrative',
+              priority: 'high'
+            }
+          ],
+          metadata: {
+            confidence: 0.95,
+            processingTime: Date.now() - startTime,
+            modelUsed: 'operator-ingest'
+          },
+          timestamp: Date.now()
+        };
+        break;
+      }
+    }
+
+    if (!report) {
+      throw new Error(`No agent pipeline available for ${agentType}`);
+    }
+
+    updateProgress('generation', 100, agentType === 'transcription' ? 'Transcription ready' : 'Agent output ready');
+    return report;
+  }, [actions]);
 
   const [lanyardTextureUrl, setLanyardTextureUrl] = useState<string | null>(null);
+
+  const refreshMobileJobs = useCallback(async () => {
+    try {
+      setMobileJobsLoading(true);
+      const jobs = await mobileJobsService.listJobs();
+      setMobileJobs(jobs);
+      setMobileJobsError(null);
+      setAttachedMobileJobIds(new Set(jobs.filter(job => !!job.attached_session_id).map(job => job.id)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to reach Operator Ingest daemon';
+      setMobileJobsError(message);
+    } finally {
+      setMobileJobsLoading(false);
+    }
+  }, []);
+
+  const attachMobileJob = useCallback(
+    async (jobId: string, selectedAgent?: AgentType) => {
+      setAttachingMobileJobId(jobId);
+      let sessionId: string | null = null;
+      let processingActive = false;
+      try {
+        const job = await mobileJobsService.getJob(jobId);
+        if (!job.transcript_text) {
+          throw new Error('Transcript not available yet. Try again in a moment.');
+        }
+
+        let patientInfo = patientCacheService.getCachedData();
+        if (!patientInfo) {
+          console.log('📭 No cached patient data, triggering background extraction');
+          await patientCacheService.extractAndCache();
+          patientInfo = patientCacheService.getCachedData();
+        }
+
+        if (!patientInfo) {
+          console.log('📡 Patient cache still empty – forcing direct extraction via EMR tab');
+          const freshData = await extractPatientData();
+          if (freshData) {
+            patientInfo = {
+              name: freshData.name || 'Patient',
+              id: freshData.id || `Patient-${Date.now()}`,
+              dob: freshData.dob || '',
+              age: freshData.age || '',
+              phone: freshData.phone,
+              email: freshData.email,
+              medicare: freshData.medicare,
+              insurance: freshData.insurance,
+              address: freshData.address,
+              extractedAt: freshData.extractedAt || Date.now()
+            };
+          }
+        }
+
+        if (!patientInfo) {
+          throw new Error('No patient detected. Open a patient chart in Xestro before attaching the dictation.');
+        }
+
+        actions.setCurrentPatientInfo(patientInfo);
+
+        const createdAt = Date.parse(job.created_at) || Date.now();
+        sessionId =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `mobile-${job.id}-${Date.now()}`;
+
+        const agentType = selectedAgent ?? mapDictationTypeToAgent(job.dictation_type);
+        const summary = job.header_text || job.triage_metadata?.raw_header || 'Mobile dictation';
+
+        const sessionTemplate: PatientSession = {
+          id: sessionId,
+          source: 'mobile',
+          mobileJobId: job.id,
+          patient: patientInfo,
+          transcription: job.transcript_text,
+          results: '',
+          summary,
+          agentType,
+          agentName: MOBILE_AGENT_LABELS[agentType] || 'Mobile Dictation',
+          timestamp: createdAt,
+          recordedDate: new Date(createdAt).toLocaleDateString(),
+          status: 'processing',
+          completed: false,
+          processingStartTime: Date.now(),
+          pipelineProgress: {
+            stage: 'ai-analysis',
+            progress: 0,
+            stageProgress: 0,
+            details: 'Queued for agent processing',
+            modelName: 'LM Studio'
+          }
+        };
+
+        actions.addPatientSession(sessionTemplate);
+        actions.setCurrentSessionId(sessionId);
+        actions.setSelectedSessionId(sessionId);
+        actions.setActiveWorkflow(agentType);
+        actions.setUIMode('processing', { sessionId, origin: 'user' });
+        actions.setProcessing(true);
+        actions.setProcessingStatus('processing');
+        processingActive = true;
+        actions.setPipelineProgress({
+          stage: 'ai-analysis',
+          progress: 5,
+          stageProgress: 5,
+          details: 'Preparing mobile dictation',
+          modelName: 'LM Studio'
+        });
+
+        let finalAgentType: AgentType = agentType;
+        let report: MedicalReport;
+        try {
+          report = await processMobileJobAgent({
+            agentType,
+            transcript: job.transcript_text,
+            patientInfo,
+            sessionId
+          });
+        } catch (agentError) {
+          console.error('Mobile workflow failed, falling back to raw transcript', agentError);
+          if (agentType !== 'transcription') {
+            ToastService.getInstance().warning('Workflow failed', 'Keeping raw transcription for review.');
+            finalAgentType = 'transcription';
+            report = await processMobileJobAgent({
+              agentType: 'transcription',
+              transcript: job.transcript_text,
+              patientInfo,
+              sessionId
+            });
+          } else {
+            throw agentError;
+          }
+        }
+
+        const processingTime =
+          report.metadata?.processingTime ??
+          (sessionTemplate.processingStartTime ? Date.now() - sessionTemplate.processingStartTime : 0);
+        const finalStatus = report.status === 'awaiting_validation' ? 'awaiting_validation' : 'completed';
+
+        const completedSession: PatientSession = {
+          ...sessionTemplate,
+          results: report.content,
+          summary: report.summary || summary,
+          status: finalStatus,
+          completed: finalStatus !== 'awaiting_validation',
+          processingTime,
+          modelUsed: report.metadata?.modelUsed,
+          warnings: report.warnings,
+          errors: report.errors,
+          pipelineProgress: {
+            stage: 'generation',
+            progress: 100,
+            stageProgress: 100,
+            details: 'Mobile dictation processed',
+            modelName: report.metadata?.modelUsed || 'LM Studio'
+          }
+        };
+
+        if (finalAgentType === 'angiogram-pci') {
+          completedSession.angiogramValidationResult = report.validationResult || null;
+          completedSession.angiogramValidationStatus = report.status ?? 'complete';
+          completedSession.angiogramExtractedData = report.extractedData;
+        }
+
+        actions.updatePatientSession(sessionId, {
+          results: completedSession.results,
+          summary: completedSession.summary,
+          status: completedSession.status,
+          completed: completedSession.completed,
+          processingTime: completedSession.processingTime,
+          modelUsed: completedSession.modelUsed,
+          warnings: completedSession.warnings,
+          errors: completedSession.errors,
+          pipelineProgress: completedSession.pipelineProgress,
+          angiogramValidationResult: completedSession.angiogramValidationResult,
+          angiogramValidationStatus: completedSession.angiogramValidationStatus,
+          angiogramExtractedData: completedSession.angiogramExtractedData
+        });
+
+        actions.setResults(report.content);
+        if (report.summary) {
+          actions.setAIGeneratedSummary(report.summary);
+        }
+        actions.setMissingInfo(report.metadata?.missingInformation || null);
+
+        await persistenceService.saveSession(completedSession);
+        await mobileJobsService.markAttached(job.id, sessionId, patientInfo.name, finalAgentType);
+        setAttachedMobileJobIds(prev => new Set(prev).add(job.id));
+        ToastService.getInstance().success(
+          `${MOBILE_AGENT_LABELS[agentType] || 'Mobile dictation'} ready`,
+          `Linked to ${patientInfo.name}`
+        );
+        refreshMobileJobs();
+      } catch (error) {
+        console.error('Failed to attach mobile job', error);
+        const message = error instanceof Error ? error.message : 'Unexpected error attaching dictation';
+        if (sessionId) {
+          actions.updatePatientSession(sessionId, {
+            status: 'error',
+            completed: true,
+            errors: [message],
+            pipelineProgress: {
+              stage: 'generation',
+              progress: 100,
+              stageProgress: 100,
+              details: 'Mobile dictation processing failed'
+            }
+          });
+        }
+        ToastService.getInstance().error('Attach failed', message);
+      } finally {
+        if (processingActive) {
+          actions.setProcessing(false);
+          actions.setProcessingStatus('idle');
+          actions.setUIMode('idle', { sessionId, origin: 'auto' });
+        }
+        setAttachingMobileJobId(null);
+      }
+    },
+    [actions, patientCacheService, persistenceService, processMobileJobAgent, refreshMobileJobs]
+  );
+
+  const handleRequestAttachMobileJob = useCallback((job: MobileJobSummary) => {
+    setPendingMobileJob(job);
+    setPendingMobileAgent(mapDictationTypeToAgent(job.dictation_type));
+  }, []);
+
+  useEffect(() => {
+    refreshMobileJobs();
+  }, [refreshMobileJobs]);
+
+  const handleConfirmAttachMobileJob = useCallback(async () => {
+    if (!pendingMobileJob) return;
+    const jobId = pendingMobileJob.id;
+    const agent = pendingMobileAgent;
+    setPendingMobileJob(null);
+    await attachMobileJob(jobId, agent);
+  }, [attachMobileJob, pendingMobileAgent, pendingMobileJob]);
+
+  const handleCancelAttachMobileJob = useCallback(() => {
+    if (attachingMobileJobId) return;
+    setPendingMobileJob(null);
+  }, [attachingMobileJobId]);
+
+  const handleDeleteMobileJob = useCallback(async (job: MobileJobSummary) => {
+    if (deletingMobileJobId && deletingMobileJobId !== job.id) {
+      // Allow one deletion at a time; queue next attempts once current finishes
+      ToastService.getInstance().info('Please wait for the current delete to finish.');
+      return;
+    }
+    setDeletingMobileJobId(job.id);
+    try {
+      await mobileJobsService.deleteJob(job.id);
+      setMobileJobs(prev => prev.filter(existing => existing.id !== job.id));
+      setAttachedMobileJobIds(prev => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      if (pendingMobileJob?.id === job.id) {
+        setPendingMobileJob(null);
+      }
+      ToastService.getInstance().success('Mobile dictation deleted');
+    } catch (error) {
+      console.error('Failed to delete mobile job', error);
+      const message = error instanceof Error ? error.message : 'Unable to delete dictation';
+      ToastService.getInstance().error('Delete failed', message);
+    } finally {
+      setDeletingMobileJobId(null);
+      void refreshMobileJobs();
+    }
+  }, [deletingMobileJobId, pendingMobileJob, refreshMobileJobs]);
 
   // Model loading error state
   const [modelLoadingError, setModelLoadingError] = useState<ModelLoadingError | null>(null);
@@ -4303,6 +4815,22 @@ const OptimizedAppContent: React.FC = memo(() => {
     return merged;
   }, [checkedSessions, autoCheckedSessions]);
 
+  const derivedPatientInfo: PatientInfo | null = state.displaySession.isDisplayingSession
+    ? state.displaySession.displayPatientInfo ?? null
+    : state.currentPatientInfo ?? null;
+
+  const derivedAgent: AgentType | null = state.displaySession.isDisplayingSession
+    ? state.displaySession.displayAgent ?? null
+    : state.ui.activeWorkflow ?? null;
+
+  const shouldShowPatientContextHeader =
+    !!derivedPatientInfo &&
+    !!derivedAgent &&
+    (
+      (state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing')) ||
+      (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent)
+    );
+
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Two-Tier Sidebar Header */}
@@ -4327,6 +4855,15 @@ const OptimizedAppContent: React.FC = memo(() => {
         onDeleteAllChecked={handleDeleteAllChecked}
         onDeleteOldSessions={handleDeleteOldSessions}
         onTitleClick={handleReturnHome}
+        mobileJobs={mobileJobs}
+        mobileJobsLoading={mobileJobsLoading}
+        mobileJobsError={mobileJobsError}
+        onRefreshMobileJobs={refreshMobileJobs}
+        onAttachMobileJob={handleRequestAttachMobileJob}
+        onDeleteMobileJob={handleDeleteMobileJob}
+        attachingMobileJobId={attachingMobileJobId}
+        deletingMobileJobId={deletingMobileJobId}
+        attachedMobileJobIds={attachedMobileJobIds}
       />
 
       {/* Main Content Area - Single Column Layout */}
@@ -4336,19 +4873,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
 
           {/* Patient Context Header - Show during recording/processing AND when viewing completed sessions */}
-          {((state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing')) ||
-            (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent)) && (
+          {shouldShowPatientContextHeader && derivedPatientInfo && derivedAgent && (
             <PatientContextHeader
-              patientInfo={
-                state.displaySession.isDisplayingSession
-                  ? state.displaySession.displayPatientInfo
-                  : state.currentPatientInfo
-              }
-              agentType={
-                state.displaySession.isDisplayingSession
-                  ? state.displaySession.displayAgent
-                  : state.ui.activeWorkflow
-              }
+              patientInfo={derivedPatientInfo}
+              agentType={derivedAgent}
               processingStatus={
                 state.displaySession.isDisplayingSession
                   ? 'complete'
@@ -5279,6 +5807,163 @@ const OptimizedAppContent: React.FC = memo(() => {
             actions.setUIMode('idle', { sessionId: null, origin: 'user' });
           }}
         />
+      )}
+
+      {pendingMobileJob && (
+        <Modal
+          isOpen
+          onClose={handleCancelAttachMobileJob}
+          title="Attach Mobile Dictation"
+          size="md"
+          showCloseButton={!attachingMobileJobId}
+          aria-describedby="mobile-job-description"
+        >
+          <div id="mobile-job-description" className="sr-only">
+            Select an agent workflow to process the mobile dictation
+          </div>
+
+          <div className="space-y-4">
+            {/* Collapsible Transcript Preview */}
+            {showPendingMobilePreview && (
+              <details className="border border-gray-200 rounded-lg">
+                <summary className="px-3 py-2 cursor-pointer flex items-center gap-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-t-lg">
+                  <ChevronDown className="w-4 h-4" />
+                  <span>Preview Transcript</span>
+                  <span className="ml-auto text-xs text-gray-500">
+                    {pendingMobileJobPreview.split(' ').length} words
+                  </span>
+                </summary>
+                <div className="p-3 border-t border-gray-200 bg-gray-50">
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                    {pendingMobileJobPreview}
+                  </p>
+                </div>
+              </details>
+            )}
+
+            {/* Enhanced Metadata Row */}
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1 text-gray-600">
+                <Calendar className="w-3 h-3" />
+                {formatRelativeTime(pendingMobileJob.created_at)}
+              </span>
+              {pendingMobileJob.triage_metadata?.confidence && (
+                <span className="flex items-center gap-1 text-gray-600">
+                  <Brain className="w-3 h-3" />
+                  {Math.round(pendingMobileJob.triage_metadata.confidence * 100)}% confidence
+                </span>
+              )}
+              <span className="ml-auto text-emerald-600 font-medium">
+                {getDictationTypeLabel(pendingMobileJob.dictation_type)}
+              </span>
+            </div>
+
+            {/* Agent Selection with Categories */}
+            <fieldset>
+              <legend className="text-xs font-semibold text-gray-700 mb-2">Choose agent workflow</legend>
+              <div role="radiogroup" aria-label="Agent workflow selection" className="space-y-3">
+                {MOBILE_AGENT_OPTIONS_GROUPED.map((group, groupIndex) => {
+                  const allAgents = MOBILE_AGENT_OPTIONS_GROUPED.flatMap(g => g.agents);
+                  let agentIndex = 0;
+                  for (let i = 0; i < groupIndex; i++) {
+                    agentIndex += MOBILE_AGENT_OPTIONS_GROUPED[i].agents.length;
+                  }
+
+                  return (
+                    <div key={group.category} className="space-y-1.5">
+                      {/* Category Header */}
+                      <div className="flex items-center gap-2 px-2">
+                        <span className="text-base">{group.icon}</span>
+                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          {group.category}
+                        </span>
+                      </div>
+
+                      {/* Agent Options */}
+                      <div className="space-y-1.5">
+                        {group.agents.map((option, optionIndex) => {
+                          const isActive = pendingMobileAgent === option.value;
+                          const isRecommended = option.value === mapDictationTypeToAgent(pendingMobileJob.dictation_type);
+                          const keyboardNumber = agentIndex + optionIndex + 1;
+
+                          return (
+                            <label
+                              key={option.value}
+                              className={`
+                                flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all
+                                ${isActive
+                                  ? 'border-violet-500 bg-violet-50'
+                                  : isRecommended
+                                  ? 'border-blue-300 bg-blue-50/50'
+                                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                                }
+                              `}
+                            >
+                              <input
+                                type="radio"
+                                name="mobile-agent"
+                                value={option.value}
+                                checked={isActive}
+                                onChange={() => setPendingMobileAgent(option.value)}
+                                className="mt-0.5 w-4 h-4 text-violet-600"
+                                aria-label={`${option.label} - ${option.description}`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-semibold ${isActive ? 'text-violet-900' : 'text-gray-900'}`}>
+                                    {option.label}
+                                  </span>
+                                  {isRecommended && !isActive && (
+                                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                                      <Star className="w-3 h-3 fill-current" />
+                                      Recommended
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`text-xs mt-0.5 ${isActive ? 'text-violet-700' : 'text-gray-600'}`}>
+                                  {option.description}
+                                </p>
+                              </div>
+                              <span className="text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                {keyboardNumber}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            {/* Keyboard Hint */}
+            <div className="flex items-center gap-2 text-xs text-gray-500 px-2">
+              <Keyboard className="w-3 h-3" />
+              <span>Press 1-6 to select, ↵ to confirm, Esc to cancel</span>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-200">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelAttachMobileJob}
+                disabled={attachingMobileJobId === pendingMobileJob.id}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleConfirmAttachMobileJob}
+                isLoading={attachingMobileJobId === pendingMobileJob.id}
+              >
+                Attach to EMR
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Patient Mismatch Confirmation Modal */}

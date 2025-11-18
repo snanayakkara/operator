@@ -9,6 +9,39 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.35.0] - 2025-11-18
+
+### Added
+
+- **Mobile Job Quick Letter Dual-Card Display Fix**
+  - Mobile job Quick Letter processing now correctly displays the specialized two-card layout (Summary + Letter sections) instead of generic "Medical Report"
+  - Added `actions.setAIGeneratedSummary(report.summary)` call in mobile job processing to populate active display state
+  - Ensures `OptimizedResultsPanel` receives both `results` and `resultsSummary` for dual-card rendering
+  - Fixes issue where mobile jobs skipped active state population causing empty summary display
+
+- **Complete Mobile Dictation Modal Redesign**
+  - **Collapsible Transcript Preview**: Default collapsed state saves ~150px vertical space; shows word count in summary; expandable `<details>` element
+  - **Enhanced Metadata Row**: Relative time display ("2 hours ago") with Calendar icon; confidence score ("87% confidence") with Brain icon; color-coded dictation type labels
+  - **Category Grouping**: Agents organized into 3 visual categories with emoji icons:
+    - ✉️ Letters & Correspondence (Quick Letter, Consultation)
+    - 📋 Clinical Data (Background, Investigations, Medications)
+    - 🔬 Procedures (Angiogram/PCI)
+  - **Smart Default Selection**: Auto-selects recommended agent based on ML triage; blue "Recommended" badge with star icon; subtle blue border highlight
+  - **Keyboard Shortcuts**: Press 1-6 to select agents, Enter to confirm, Esc to cancel; visual keyboard hint displayed at modal bottom
+  - **Radio Card Design**: Clearer affordance with native radio buttons; tighter padding (12px vs 16px); active state shows purple border + background tint
+  - **Accessibility Enhancements**: Proper `<fieldset>` and `<legend>` structure; `role="radiogroup"` for screen readers; `aria-label` on inputs; `aria-describedby` on modal
+
+### Technical Improvements
+
+- **Helper Functions**: Added `formatRelativeTime()` and `getDictationTypeLabel()` for consistent timestamp and type label formatting
+- **Grouped Agent Structure**: `MOBILE_AGENT_OPTIONS_GROUPED` provides category metadata while maintaining backward compatibility via flattened array
+- **Icon Library**: Added lucide-react icons (ChevronDown, Calendar, Brain, Star, Keyboard) for visual clarity
+- **Smart Defaults**: `useEffect` hook auto-selects agent via `mapDictationTypeToAgent()` when modal opens
+- **Keyboard Navigation**: Event listener with cleanup handles number keys (1-6), Enter for submit, keyboard shortcuts scoped to modal open state
+- **Space Optimization**: Modal height reduced ~25% (from ~600px to ~500px) through collapsible preview and compact card design
+- **Visual Consistency**: Category grouping matches agent category system used in SessionDropdown and MetricsDashboard
+- **Minimal Bundle Impact**: Only +3.4 KB to `dist/sidepanel.js` (1,209 KB vs 1,206 KB)
+
 ## [3.34.0] - 2025-11-17
 
 ### Changed
