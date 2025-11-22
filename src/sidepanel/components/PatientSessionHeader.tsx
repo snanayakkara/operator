@@ -1,6 +1,9 @@
 import React, { memo } from 'react';
-import { User, Clock, FileText, X, Phone, CreditCard, Mic, Loader2, Zap, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Clock, FileText, X, Phone, CreditCard } from 'lucide-react';
 import type { PatientSession } from '@/types/medical.types';
+import { Button, IconButton } from './buttons';
+import { StatusBadge } from './status';
+import type { ProcessingState } from '@/utils/stateColors';
 
 interface PatientSessionHeaderProps {
   session: PatientSession;
@@ -29,88 +32,87 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = memo(({
     return <FileText className="w-4 h-4" />;
   };
 
-  const getStatusIndicator = (status: string) => {
+  const mapStatusToState = (status: string): ProcessingState => {
     switch (status) {
       case 'recording':
-        return {
-          icon: <Mic className="w-3 h-3 text-red-500" />,
-          label: 'Recording',
-          bgColor: 'bg-red-50',
-          textColor: 'text-red-700',
-          borderColor: 'border-red-200'
-        };
+        return 'recording';
       case 'transcribing':
-        return {
-          icon: <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />,
-          label: 'Transcribing',
-          bgColor: 'bg-blue-50',
-          textColor: 'text-blue-700',
-          borderColor: 'border-blue-200'
-        };
+        return 'transcribing';
       case 'processing':
-        return {
-          icon: <Zap className="w-3 h-3 text-purple-500" />,
-          label: 'Processing',
-          bgColor: 'bg-purple-50',
-          textColor: 'text-purple-700',
-          borderColor: 'border-purple-200'
-        };
+        return 'processing';
       case 'completed':
-        return {
-          icon: <CheckCircle className="w-3 h-3 text-green-500" />,
-          label: 'Completed',
-          bgColor: 'bg-green-50',
-          textColor: 'text-green-700',
-          borderColor: 'border-green-200'
-        };
+        return 'completed';
       case 'error':
-        return {
-          icon: <AlertCircle className="w-3 h-3 text-red-500" />,
-          label: 'Error',
-          bgColor: 'bg-red-50',
-          textColor: 'text-red-700',
-          borderColor: 'border-red-200'
-        };
+        return 'error';
       case 'cancelled':
-        return {
-          icon: <X className="w-3 h-3 text-gray-500" />,
-          label: 'Cancelled',
-          bgColor: 'bg-gray-50',
-          textColor: 'text-gray-700',
-          borderColor: 'border-gray-200'
-        };
+        return 'error'; // Use error state for cancelled
       default:
-        return {
-          icon: <Clock className="w-3 h-3 text-gray-500" />,
-          label: 'Unknown',
-          bgColor: 'bg-gray-50',
-          textColor: 'text-gray-700',
-          borderColor: 'border-gray-200'
-        };
+        return 'processing'; // Default fallback
+    }
+  };
+
+  const getStatusBorderColor = (status: string): string => {
+    switch (status) {
+      case 'recording':
+        return 'border-red-200';
+      case 'transcribing':
+        return 'border-blue-200';
+      case 'processing':
+        return 'border-purple-200';
+      case 'completed':
+        return 'border-green-200';
+      case 'error':
+        return 'border-red-200';
+      case 'cancelled':
+        return 'border-gray-200';
+      default:
+        return 'border-gray-200';
+    }
+  };
+
+  const getStatusBgColor = (status: string): string => {
+    switch (status) {
+      case 'recording':
+        return 'bg-red-50';
+      case 'transcribing':
+        return 'bg-blue-50';
+      case 'processing':
+        return 'bg-purple-50';
+      case 'completed':
+        return 'bg-green-50';
+      case 'error':
+        return 'bg-red-50';
+      case 'cancelled':
+        return 'bg-gray-50';
+      default:
+        return 'bg-gray-50';
     }
   };
 
   if (isCompact) {
-    const statusInfo = getStatusIndicator(session.status);
-    
+    const state = mapStatusToState(session.status);
+    const borderColor = getStatusBorderColor(session.status);
+    const bgColor = getStatusBgColor(session.status);
+
     // Compact version for use in lists with enhanced status indicators
     return (
-      <div className={`flex items-center space-x-3 p-2 ${statusInfo.bgColor} rounded-lg border ${statusInfo.borderColor}`}>
+      <div className={`flex items-center space-x-3 p-2 ${bgColor} rounded-lg border ${borderColor}`}>
         <User className="w-4 h-4 text-gray-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div className="flex flex-col flex-1">
-              <span className={`text-sm font-semibold truncate ${statusInfo.textColor}`}>
+              <span className="text-sm font-semibold truncate text-gray-900">
                 {session.patient.name}
               </span>
               <span className="text-xs text-gray-600 font-medium">
                 {session.agentName || session.agentType}
               </span>
             </div>
-            <div className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.bgColor} ${statusInfo.textColor}`}>
-              {statusInfo.icon}
-              <span>{statusInfo.label}</span>
-            </div>
+            <StatusBadge
+              state={state}
+              size="sm"
+              label={session.status === 'cancelled' ? 'Cancelled' : undefined}
+            />
           </div>
           <div className="flex items-center space-x-2 mt-1 text-xs text-gray-600">
             <span>ID: {session.patient.id}</span>
@@ -119,16 +121,18 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = memo(({
           </div>
         </div>
         {showRemoveButton && onRemoveSession && (
-          <button
+          <IconButton
             onClick={(e) => {
               e.stopPropagation(); // Prevent session selection when removing
               onRemoveSession(session.id);
             }}
-            className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+            icon={X}
+            variant="ghost"
+            size="sm"
+            className="text-gray-500 hover:text-red-600 hover:bg-red-50"
             title="Remove session"
-          >
-            <X className="w-4 h-4" />
-          </button>
+            aria-label="Remove session"
+          />
         )}
       </div>
     );
@@ -192,21 +196,25 @@ export const PatientSessionHeader: React.FC<PatientSessionHeaderProps> = memo(({
         {/* Actions */}
         <div className="flex items-center space-x-2">
           {session.completed && (
-            <div className="text-green-600 bg-green-100 px-2 py-1 rounded-full text-xs font-medium">
-              ✓ Complete
-            </div>
+            <StatusBadge
+              state="completed"
+              size="sm"
+              label="Complete"
+            />
           )}
           {showRemoveButton && onRemoveSession && (
-            <button
+            <IconButton
               onClick={(e) => {
                 e.stopPropagation(); // Prevent session selection when removing
                 onRemoveSession(session.id);
               }}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              icon={X}
+              variant="ghost"
+              size="md"
+              className="text-gray-500 hover:text-red-600 hover:bg-red-50"
               title="Remove session"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              aria-label="Remove session"
+            />
           )}
         </div>
       </div>

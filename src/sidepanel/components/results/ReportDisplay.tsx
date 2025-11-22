@@ -9,6 +9,7 @@
 
 import React, { memo, useState, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, FileText, BookOpen, Copy, Download, CheckCircle } from 'lucide-react';
+import { Button, IconButton } from '../buttons';
 import type { AgentType } from '@/types/medical.types';
 
 interface ReportDisplayProps {
@@ -287,22 +288,15 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                 <FileText className="w-4 h-4 text-emerald-600" />
                 <h4 className="text-sm font-semibold text-gray-900">Patient Letter</h4>
               </div>
-              <button
+              <Button
                 onClick={() => handleCopy(letterContent, 'letter')}
-                className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+                variant={copiedContent === 'letter' ? 'success' : 'outline'}
+                size="sm"
+                startIcon={copiedContent === 'letter' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                className="text-xs"
               >
-                {copiedContent === 'letter' ? (
-                  <>
-                    <CheckCircle className="w-3 h-3 text-green-600" />
-                    <span className="text-green-600">Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copy</span>
-                  </>
-                )}
-              </button>
+                {copiedContent === 'letter' ? 'Copied!' : 'Copy'}
+              </Button>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
               <div className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">
@@ -320,29 +314,24 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                   <h4 className="text-sm font-semibold text-gray-900">Action Plan (Structured Data)</h4>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button
+                  <Button
                     onClick={() => handleCopy(JSON.stringify(jsonMetadata, null, 2), 'json')}
-                    className="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+                    variant={copiedContent === 'json' ? 'success' : 'outline'}
+                    size="sm"
+                    startIcon={copiedContent === 'json' ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    className="text-xs"
                   >
-                    {copiedContent === 'json' ? (
-                      <>
-                        <CheckCircle className="w-3 h-3 text-green-600" />
-                        <span className="text-green-600">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy JSON</span>
-                      </>
-                    )}
-                  </button>
-                  <button
+                    {copiedContent === 'json' ? 'Copied!' : 'Copy JSON'}
+                  </Button>
+                  <Button
                     onClick={handlePrintPDF}
-                    className="flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md transition-colors"
+                    variant="primary"
+                    size="sm"
+                    startIcon={<Download className="w-3 h-3" />}
+                    className="text-xs"
                   >
-                    <Download className="w-3 h-3" />
-                    <span>Export PDF</span>
-                  </button>
+                    Export PDF
+                  </Button>
                 </div>
               </div>
               <div ref={jsonBoxRef} className="bg-gray-900 rounded-lg p-4 border border-gray-700 overflow-x-auto">
@@ -364,17 +353,13 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <button
+            <IconButton
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              variant="ghost"
+              size="sm"
+              icon={isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               aria-label={isExpanded ? 'Collapse report' : 'Expand report'}
-            >
-              {isExpanded ? (
-                <ChevronUp className="w-5 h-5 text-gray-600" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-gray-600" />
-              )}
-            </button>
+            />
 
             <div>
               <h3 className="text-gray-900 font-semibold text-sm">
@@ -388,12 +373,14 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
 
           {/* Expand/Collapse indicator */}
           {shouldTruncate && (
-            <button
+            <Button
               onClick={() => setShowFullContent(!showFullContent)}
-              className="text-blue-600 hover:text-blue-700 text-xs font-medium transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-xs font-medium"
             >
               {showFullContent ? 'Show Less' : 'Show More'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -416,28 +403,15 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                     <h4 className="font-semibold text-gray-900 text-sm">
                       {title}
                     </h4>
-                    <button
+                    <Button
                       onClick={() => handleCopy(copyContent, copyKey)}
-                      className={`
-                        flex items-center space-x-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors
-                        ${copiedContent === copyKey
-                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
-                        }
-                      `}
+                      variant={copiedContent === copyKey ? 'success' : 'outline'}
+                      size="sm"
+                      startIcon={copiedContent === copyKey ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      className="text-xs"
                     >
-                      {copiedContent === copyKey ? (
-                        <>
-                          <CheckCircle className="w-3 h-3" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
+                      {copiedContent === copyKey ? 'Copied' : 'Copy'}
+                    </Button>
                   </div>
 
                   <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
@@ -459,13 +433,15 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
           {/* Truncation indicator */}
           {shouldTruncate && !showFullContent && (
             <div className="px-4 pb-4">
-              <button
+              <Button
                 onClick={() => setShowFullContent(true)}
-                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center space-x-1 transition-colors"
+                variant="ghost"
+                size="sm"
+                endIcon={<ChevronDown className="w-4 h-4" />}
+                className="text-sm font-medium"
               >
-                <span>Show complete report ({reportMetrics.charCount} characters)</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
+                Show complete report ({reportMetrics.charCount} characters)
+              </Button>
             </div>
           )}
         </div>

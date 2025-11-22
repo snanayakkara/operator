@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX, Plus, X, Activity, Building2, MapPin, FileText, ClipboardList } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import type {
   AppointmentMatrix,
   AppointmentComplexity,
@@ -179,25 +180,23 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         </label>
         <div className="grid grid-cols-2 gap-2">
           {COMPLEXITY_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => updateMatrix('complexity', option.value as AppointmentComplexity)}
+              variant={matrix.complexity === option.value ? 'primary' : 'outline'}
+              size="md"
+              startIcon={option.icon}
+              endIcon={matrix.complexity === option.value ? Check : undefined}
               className={`
-                flex items-center justify-between px-3 py-1.5 rounded-lg border-2 transition-all
+                flex items-center justify-between
                 ${matrix.complexity === option.value
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                <option.icon className={`w-4 h-4 flex-shrink-0 ${matrix.complexity === option.value ? 'text-blue-600' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-              </div>
-              {matrix.complexity === option.value && (
-                <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              )}
-            </button>
+              {option.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -209,25 +208,23 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         </label>
         <div className="grid grid-cols-3 gap-2">
           {MODALITY_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => updateMatrix('modality', option.value as AppointmentModality)}
+              variant={matrix.modality === option.value ? 'success' : 'outline'}
+              size="md"
+              startIcon={option.icon}
+              endIcon={matrix.modality === option.value ? Check : undefined}
               className={`
-                flex items-center justify-between px-3 py-1.5 rounded-lg border-2 transition-all
+                flex items-center justify-between
                 ${matrix.modality === option.value
                   ? 'border-emerald-500 bg-emerald-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                <option.icon className={`w-4 h-4 flex-shrink-0 ${matrix.modality === option.value ? 'text-emerald-600' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-              </div>
-              {matrix.modality === option.value && (
-                <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              )}
-            </button>
+              {option.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -239,25 +236,23 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         </label>
         <div className="grid grid-cols-2 gap-2">
           {TYPE_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => updateMatrix('type', option.value as AppointmentType)}
+              variant={matrix.type === option.value ? 'primary' : 'outline'}
+              size="md"
+              startIcon={option.icon}
+              endIcon={matrix.type === option.value ? Check : undefined}
               className={`
-                flex items-center justify-between px-3 py-1.5 rounded-lg border-2 transition-all
+                flex items-center justify-between
                 ${matrix.type === option.value
                   ? 'border-purple-500 bg-purple-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                <option.icon className={`w-4 h-4 flex-shrink-0 ${matrix.type === option.value ? 'text-purple-600' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-              </div>
-              {matrix.type === option.value && (
-                <Check className="w-4 h-4 text-purple-600 flex-shrink-0" />
-              )}
-            </button>
+              {option.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -269,25 +264,23 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         </label>
         <div className="grid grid-cols-2 gap-2">
           {FOLLOWUP_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => updateMatrix('followUp', option.value as FollowUpPeriod)}
+              variant={matrix.followUp === option.value ? 'primary' : 'outline'}
+              size="md"
+              startIcon={option.icon}
+              endIcon={matrix.followUp === option.value ? Check : undefined}
               className={`
-                flex items-center justify-between px-3 py-1.5 rounded-lg border-2 transition-all
+                flex items-center justify-between
                 ${matrix.followUp === option.value
                   ? 'border-orange-500 bg-orange-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                <option.icon className={`w-4 h-4 flex-shrink-0 ${matrix.followUp === option.value ? 'text-orange-600' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-              </div>
-              {matrix.followUp === option.value && (
-                <Check className="w-4 h-4 text-orange-600 flex-shrink-0" />
-              )}
-            </button>
+              {option.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -299,25 +292,23 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         </label>
         <div className="grid grid-cols-3 gap-2">
           {MODALITY_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.value}
               onClick={() => updateMatrix('followUpMethod', option.value as AppointmentModality)}
+              variant={matrix.followUpMethod === option.value ? 'success' : 'outline'}
+              size="md"
+              startIcon={option.icon}
+              endIcon={matrix.followUpMethod === option.value ? Check : undefined}
               className={`
-                flex items-center justify-between px-3 py-1.5 rounded-lg border-2 transition-all
+                flex items-center justify-between
                 ${matrix.followUpMethod === option.value
                   ? 'border-teal-500 bg-teal-50'
                   : 'border-gray-200 bg-white hover:border-gray-300'
                 }
               `}
             >
-              <div className="flex items-center gap-2">
-                <option.icon className={`w-4 h-4 flex-shrink-0 ${matrix.followUpMethod === option.value ? 'text-teal-600' : 'text-gray-400'}`} />
-                <span className="text-sm font-medium text-gray-900">{option.label}</span>
-              </div>
-              {matrix.followUpMethod === option.value && (
-                <Check className="w-4 h-4 text-teal-600 flex-shrink-0" />
-              )}
-            </button>
+              {option.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -333,14 +324,16 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
           <div className="text-xs text-gray-600 mb-1">Tests:</div>
           <div className="flex flex-wrap gap-1.5">
             {['TTE', 'CTCA', 'Stress Echo', 'Holter', 'HeartBug', 'Respiratory Function Tests', 'Review Bloods'].map((test) => (
-              <button
+              <Button
                 key={test}
                 onClick={() => addTask(test)}
-                className="flex items-center gap-1 text-xs py-1 px-2 rounded-md bg-white border border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-700 transition-all"
+                variant="outline"
+                size="sm"
+                startIcon={Activity}
+                className="text-xs py-1 px-2 hover:border-blue-400 hover:bg-blue-50"
               >
-                <Activity className="w-3 h-3" />
                 + {test}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -350,7 +343,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
           <div className="text-xs text-gray-600 mb-1">Locations:</div>
           <div className="flex flex-wrap gap-1.5">
             {['The Alfred', 'Capital Radiology Carlton', 'Bayside Heart', 'Vision Radiology Shepparton', 'Cabrini'].map((location) => (
-              <button
+              <Button
                 key={location}
                 onClick={() => {
                   // Add location to last task if it doesn't have one
@@ -367,11 +360,13 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
                     }
                   }
                 }}
-                className="flex items-center gap-1 text-xs py-1 px-2 rounded-md bg-white border border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 text-gray-700 transition-all"
+                variant="outline"
+                size="sm"
+                startIcon={Building2}
+                className="text-xs py-1 px-2 hover:border-emerald-400 hover:bg-emerald-50"
               >
-                <Building2 className="w-3 h-3" />
                 @ {location}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -381,18 +376,20 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
           <div className="text-xs text-gray-600 mb-1">Timeframe:</div>
           <div className="flex flex-wrap gap-1.5">
             {['2 weeks', '4 weeks', '6-8 weeks', 'next available'].map((timeframe) => (
-              <button
+              <Button
                 key={timeframe}
                 onClick={() => {
                   if (matrix.followUpTasks.length > 0) {
                     updateTask(matrix.followUpTasks.length - 1, 'timeframe', timeframe);
                   }
                 }}
-                className="flex items-center gap-1 text-xs py-1 px-2 rounded-md bg-white border border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 text-gray-700 transition-all"
+                variant="outline"
+                size="sm"
+                startIcon={Clock}
+                className="text-xs py-1 px-2 hover:border-indigo-400 hover:bg-indigo-50"
               >
-                <Clock className="w-3 h-3" />
                 {timeframe}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -402,18 +399,20 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
           <div className="text-xs text-gray-600 mb-1">Notes/Indication:</div>
           <div className="flex flex-wrap gap-1.5">
             {['chest discomfort', 'worsening dyspnoea'].map((notes) => (
-              <button
+              <Button
                 key={notes}
                 onClick={() => {
                   if (matrix.followUpTasks.length > 0) {
                     updateTask(matrix.followUpTasks.length - 1, 'notes', notes);
                   }
                 }}
-                className="flex items-center gap-1 text-xs py-1 px-2 rounded-md bg-white border border-gray-300 hover:border-pink-400 hover:bg-pink-50 text-gray-700 transition-all"
+                variant="outline"
+                size="sm"
+                startIcon={ClipboardList}
+                className="text-xs py-1 px-2 hover:border-pink-400 hover:bg-pink-50"
               >
-                <ClipboardList className="w-3 h-3" />
                 {notes}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -429,13 +428,14 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
                   {task.timeframe && <span className="text-indigo-600"> ({task.timeframe})</span>}
                   {task.notes && <span className="text-pink-600">, notes: {task.notes}</span>}
                 </span>
-                <button
+                <IconButton
                   onClick={() => removeTask(index)}
-                  className="text-gray-400 hover:text-red-600 transition-colors ml-2 flex-shrink-0"
+                  icon={X}
+                  variant="ghost"
+                  size="sm"
                   aria-label="Remove task"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+                  className="text-gray-400 hover:text-red-600 ml-2 w-auto h-auto p-0.5"
+                />
               </div>
             ))}
           </div>
@@ -455,14 +455,15 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
             placeholder="Add custom task..."
             className="flex-1 text-xs px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <button
+          <IconButton
             onClick={addCustomTask}
             disabled={!customTaskInput.trim()}
-            className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            icon={Plus}
+            variant="secondary"
+            size="md"
             aria-label="Add custom task"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+            className="disabled:bg-gray-300"
+          />
         </div>
       </div>
 

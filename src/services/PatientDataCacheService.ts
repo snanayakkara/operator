@@ -140,16 +140,8 @@ export class PatientDataCacheService {
 
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
-        const response = await Promise.race([
-          chrome.runtime.sendMessage({
-            type: 'EXECUTE_ACTION',
-            action: 'extract-patient-data',
-            data: {}
-          }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Patient extraction timeout')), 5000) // Reduced from 10s
-          )
-        ]);
+        const targetTabId = await this.getActiveEmrTabId();
+        const response = await this.requestPatientDataViaBackground(targetTabId ?? undefined);
 
         if (response?.success && response?.data) {
           const patientData = response.data;
@@ -241,5 +233,52 @@ export class PatientDataCacheService {
       url: this.cache.url,
       patientName: this.cache.data?.name || 'N/A'
     };
+  }
+
+  private async sendMessageToTab(tabId: number, message: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, message, response => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  private isEmrUrl(url?: string): boolean {
+    if (!url) return false;
+    try {
+      const hostname = new URL(url).hostname;
+      return hostname.includes('my.xestro.com');
+    } catch {
+      return false;
+    }
+  }
+
+  private async getActiveEmrTabId(): Promise<number | null> {
+    const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (activeTab?.id && this.isEmrUrl(activeTab.url)) {
+      return activeTab.id;
+    }
+
+    const emrTabs = await chrome.tabs.query({});
+    const match = emrTabs.find(tab => tab.id && this.isEmrUrl(tab.url));
+    return match?.id ?? null;
+  }
+
+  private async requestPatientDataViaBackground(tabId?: number): Promise<any> {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type: 'EXECUTE_ACTION_ACTIVE_EMR', action: 'extract-patient-data', tabId }, response => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
   }
 }

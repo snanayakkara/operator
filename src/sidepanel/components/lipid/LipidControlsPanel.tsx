@@ -1,6 +1,7 @@
 import React from 'react';
 import type { LipidChartSettings, LipidAnalyte, LipidTimeFilter } from '@/types/LipidTypes';
 import { DEFAULT_LIPID_FRAMEWORK_ID, LIPID_OVERLAY_FRAMEWORKS } from '@/config/lipidOverlays';
+import Button from '../buttons/Button';
 
 interface LipidControlsPanelProps {
   settings: LipidChartSettings;
@@ -101,14 +102,15 @@ export const LipidControlsPanel: React.FC<LipidControlsPanelProps> = ({
         <h4 className="text-sm font-semibold text-gray-800 mb-2">Time filter</h4>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(TIME_FILTER_LABELS) as LipidTimeFilter[]).map(filter => (
-            <button
+            <Button
               key={filter}
               onClick={() => handleTimeFilterChange(filter)}
-              className={`px-3 py-1.5 rounded-lg border text-xs ${settings.timeFilter === filter ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-              type="button"
+              variant={settings.timeFilter === filter ? 'primary' : 'outline'}
+              size="sm"
+              className="text-xs"
             >
               {TIME_FILTER_LABELS[filter]}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -119,14 +121,15 @@ export const LipidControlsPanel: React.FC<LipidControlsPanelProps> = ({
           {availableAnalytes.map(analyte => {
             const active = settings.selectedAnalytes.includes(analyte);
             return (
-              <button
+              <Button
                 key={analyte}
-                type="button"
                 onClick={() => toggleAnalyte(analyte)}
-                className={`px-3 py-1.5 rounded-lg border text-xs ${active ? 'border-gray-900 text-gray-900 bg-gray-100' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                variant={active ? 'secondary' : 'outline'}
+                size="sm"
+                className="text-xs"
               >
                 {analyte.toUpperCase()}
-              </button>
+              </Button>
             );
           })}
         </div>

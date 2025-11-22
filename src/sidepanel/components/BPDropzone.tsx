@@ -9,6 +9,7 @@ import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, ImageIcon, X } from 'lucide-react';
 import { FileToasts } from '@/utils/toastHelpers';
+import { IconButton } from './buttons/Button';
 
 interface BPDropzoneProps {
   onImageSelect: (imageDataUrl: string) => void;
@@ -76,13 +77,15 @@ export const BPDropzone: React.FC<BPDropzoneProps> = ({
             className="w-full h-auto max-h-96 object-contain"
           />
           {onClearImage && !disabled && (
-            <button
+            <IconButton
               onClick={handleClear}
-              className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-colors shadow-lg"
+              icon={<X />}
+              variant="danger"
+              size="md"
+              className="absolute top-2 right-2 rounded-full shadow-lg"
               title="Remove image"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              aria-label="Remove image"
+            />
           )}
         </div>
       </div>

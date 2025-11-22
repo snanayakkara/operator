@@ -20,6 +20,7 @@ import {
 } from '../icons/OptimizedIcons';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
+import { Button, IconButton } from '../buttons';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { useValidationCheckpoint } from '@/hooks/useValidationCheckpoint';
 import type { ValidationResult } from '@/types/medical.types';
@@ -420,9 +421,10 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
         transition={{ duration: 0.3 }}
       >
         {/* Section Header */}
-        <button
+        <Button
           onClick={() => toggleSection(config.key)}
-          className={`w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors ${
+          variant="ghost"
+          className={`w-full p-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors rounded-none ${
             hasContent ? 'border-l-4 border-l-green-500' : hasMissingInfo ? 'border-l-4 border-l-yellow-500' : 'border-l-4 border-l-gray-300'
           }`}
         >
@@ -444,7 +446,7 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
               <ChevronDown className="w-4 h-4 text-gray-500" />
             )}
           </div>
-        </button>
+        </Button>
 
         {/* Section Content */}
         <AnimatePresence>
@@ -496,7 +498,7 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
                             <span className="text-yellow-500 mt-0.5">•</span>
                             <span className="flex-1">{item}</span>
                           </div>
-                          <button
+                          <Button
                             onClick={() => {
                               const input = prompt(`Please provide: ${item}`, '');
                               if (input && input.trim()) {
@@ -505,23 +507,28 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
                                 // TODO: Implement missing data handler
                               }
                             }}
-                            className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                            variant="primary"
+                            size="sm"
+                            className="ml-2 text-xs"
                           >
                             Add
-                          </button>
+                          </Button>
                         </li>
                       )) : null}
                     </ul>
                     <div className="mt-3 pt-3 border-t border-yellow-200">
-                      <button
+                      <Button
                         onClick={() => {
                           console.log('Regenerating TAVI report with missing information...');
                           // TODO: Implement regeneration with missing info
                         }}
-                        className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        variant="primary"
+                        size="md"
+                        fullWidth
+                        className="text-sm"
                       >
                         Regenerate with Missing Information
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -581,52 +588,36 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
         {/* Copy Button */}
-        <button
+        <Button
           onClick={handleCopy}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
-            buttonStates.copied
-              ? 'bg-green-50 border-green-200 text-green-700'
-              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-          }`}
+          variant={buttonStates.copied ? 'success' : 'outline'}
+          size="md"
+          startIcon={buttonStates.copied ? <CheckIcon className="w-4 h-4" /> : <AnimatedCopyIcon className="w-4 h-4" />}
         >
-          {buttonStates.copied ? (
-            <CheckIcon className="w-4 h-4" />
-          ) : (
-            <AnimatedCopyIcon className="w-4 h-4" />
-          )}
-          <span className="text-sm font-medium">
-            {buttonStates.copied ? 'Copied!' : 'Copy Report'}
-          </span>
-        </button>
+          {buttonStates.copied ? 'Copied!' : 'Copy Report'}
+        </Button>
 
         {/* Insert Button */}
-        <button
+        <Button
           onClick={handleInsert}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-all ${
-            buttonStates.inserted
-              ? 'bg-blue-50 border-blue-200 text-blue-700'
-              : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-          }`}
+          variant={buttonStates.inserted ? 'secondary' : 'outline'}
+          size="md"
+          startIcon={buttonStates.inserted ? <CheckIcon className="w-4 h-4" /> : <FileTextIcon className="w-4 h-4" />}
         >
-          {buttonStates.inserted ? (
-            <CheckIcon className="w-4 h-4" />
-          ) : (
-            <FileTextIcon className="w-4 h-4" />
-          )}
-          <span className="text-sm font-medium">
-            {buttonStates.inserted ? 'Inserted!' : 'Insert to EMR'}
-          </span>
-        </button>
+          {buttonStates.inserted ? 'Inserted!' : 'Insert to EMR'}
+        </Button>
 
         {/* Complete Missing Info Button */}
         {completionStatus.totalMissingItems > 0 && (
-          <button
+          <Button
             onClick={() => setShowMissingInfoForm(!showMissingInfoForm)}
-            className="flex items-center space-x-2 px-4 py-2 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg hover:bg-yellow-100 transition-colors"
+            variant="outline"
+            size="md"
+            startIcon={<Plus className="w-4 h-4" />}
+            className="bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100"
           >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">Complete Missing Info</span>
-          </button>
+            Complete Missing Info
+          </Button>
         )}
       </div>
 
@@ -666,19 +657,21 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
                 ))}
               </div>
               <div className="flex justify-end space-x-3 mt-4">
-                <button
+                <Button
                   onClick={() => setShowMissingInfoForm(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  variant="ghost"
+                  size="md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleMissingInfoSubmit}
                   disabled={Object.keys(missingInfoAnswers).length === 0}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  variant="primary"
+                  size="md"
                 >
                   Reprocess with Answers
-                </button>
+                </Button>
               </div>
             </div>
           </motion.div>
@@ -690,8 +683,9 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
         {groupedSections.map(group => (
           <div key={group.key} className="space-y-3">
             {/* Group Header */}
-            <button
+            <Button
               onClick={() => toggleGroup(group.key)}
+              variant="ghost"
               className="w-full p-4 flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 border border-gray-200 rounded-lg transition-all duration-200"
             >
               <div className="flex items-center space-x-4">
@@ -736,7 +730,7 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
                   <ChevronDown className="w-5 h-5 text-gray-500" />
                 )}
               </div>
-            </button>
+            </Button>
 
             {/* Group Sections */}
             <AnimatePresence>

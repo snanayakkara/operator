@@ -284,7 +284,10 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     const rawOutput = await this.lmStudioService.processWithAgent(
       contextualPrompt,
       input,
-      this.agentType
+      this.agentType,
+      undefined,
+      undefined,
+      _context
     );
 
     console.log('📤 Raw LMStudio output length:', rawOutput.length);
@@ -330,7 +333,7 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
 
     // Detect missing information (separate analysis call)
     console.log(`🔍 QuickLetter [${processingType}]: Starting missing information analysis (separate from main letter)`);
-    const missingInfo = await this.detectMissingInformation(input, extractedData.letterType);
+    const missingInfo = await this.detectMissingInformation(input, extractedData.letterType, _context);
     console.log(`📊 [${processingType}] Missing info analysis complete:`, missingInfo ? JSON.stringify(missingInfo).substring(0, 200) + '...' : 'null');
     if (missingInfo) {
       const totalMissing = (missingInfo.missing_purpose?.length || 0) + 
@@ -1343,7 +1346,11 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
   /**
    * Detect missing information in letter dictation for comprehensive medical correspondence
    */
-  private async detectMissingInformation(input: string, letterType: string): Promise<any> {
+  private async detectMissingInformation(
+    input: string,
+    letterType: string,
+    _context?: MedicalContext
+  ): Promise<any> {
     try {
       console.log('🕵️ QuickLetter Missing Info: Using analysis prompt (NOT letter generation)');
 
@@ -1355,7 +1362,14 @@ DICTATION TO ANALYZE:
 ${input}`;
 
       console.log('🕵️ Missing info prompt preview:', missingInfoPrompt.substring(0, 100) + '...');
-      const response = await this.lmStudioService.processWithAgent(missingInfoPrompt, input);
+      const response = await this.lmStudioService.processWithAgent(
+        missingInfoPrompt,
+        input,
+        this.agentType,
+        undefined,
+        undefined,
+        _context
+      );
       console.log('🕵️ Missing info response length:', response.length);
       console.log('🕵️ Missing info response preview:', response.substring(0, 200) + '...');
       
@@ -1444,7 +1458,7 @@ ${input}`;
    * Generate a patient-friendly version of a medical letter
    * Converts medical jargon into accessible language for patients
    */
-  async generatePatientVersion(medicalLetter: string): Promise<string> {
+  async generatePatientVersion(medicalLetter: string, _context?: MedicalContext): Promise<string> {
     try {
       const startTime = Date.now();
       
@@ -1462,7 +1476,10 @@ Please rewrite this medical letter in a clear, patient-friendly format that pati
       const patientFriendlyContent = await this.lmStudioService.processWithAgent(
         conversionPrompt,
         medicalLetter,
-        'quick-letter' // Use same agent type for consistency
+        'quick-letter-patient',
+        undefined,
+        undefined,
+        _context
       );
 
       // Clean up the patient version content
@@ -1781,12 +1798,45 @@ If you have any questions about this information, please don't hesitate to call 
 
     console.log(`📝 QuickLetter [${processingType}]: Starting enhanced letter generation`);
 
-    // Get raw model output
-    const rawOutput = await this.lmStudioService.processWithAgent(
-      enhancedPrompt,
-      normalizedInput,
-      this.agentType
-    );
+    // Check if streaming is requested via context callback
+    const useStreaming = !!_context?.onStream;
+    let rawOutput: string;
+
+    if (useStreaming && _context?.onStream) {
+      console.log('🚀 Using streaming mode for real-time generation');
+
+      // Use streaming mode with token callback
+      let fullText = '';
+      const messages = [
+        { role: 'system' as const, content: enhancedPrompt },
+        { role: 'user' as const, content: normalizedInput }
+      ];
+
+      rawOutput = await this.lmStudioService.generateStream(
+        messages,
+        (delta: string) => {
+          fullText += delta;
+          // Call the streaming callback with delta and accumulated text
+          _context.onStream!(delta, fullText);
+        },
+        undefined, // no abort signal
+        undefined  // use default model for agent type
+      );
+
+      console.log('✅ Streaming complete, total length:', rawOutput.length);
+    } else {
+      console.log('📝 Using standard non-streaming mode');
+
+      // Standard non-streaming mode
+      rawOutput = await this.lmStudioService.processWithAgent(
+        enhancedPrompt,
+        normalizedInput,
+        this.agentType,
+        undefined,
+        undefined,
+        _context
+      );
+    }
 
     console.log('📤 Enhanced raw LMStudio output length:', rawOutput.length);
 
@@ -1808,7 +1858,11 @@ If you have any questions about this information, please don't hesitate to call 
 
     // Detect missing information
     console.log(`🔍 QuickLetter [${processingType}]: Starting enhanced missing information analysis`);
-    const missingInfo = await this.detectMissingInformation(normalizedInput, extractedData.letterType);
+    const missingInfo = await this.detectMissingInformation(
+      normalizedInput,
+      extractedData.letterType,
+      _context
+    );
 
     // Validate content
     const validation = this.validateAndFormatContent(finalLetter, normalizedInput, confidence);
@@ -2137,7 +2191,7 @@ If you have any questions about this information, please don't hesitate to call 
           // Borderline - escalate to LLM-based analysis
           callbacks?.onProgress?.('Analyzing completeness with AI...');
 
-          const missingInfo = await this.detectMissingInformation(notes, 'general');
+          const missingInfo = await this.detectMissingInformation(notes, 'general', undefined);
 
           if (missingInfo && (
             parseInt(missingInfo.completeness_score.replace('%', '')) < 85 ||

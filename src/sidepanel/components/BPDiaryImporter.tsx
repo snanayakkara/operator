@@ -11,6 +11,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, FileJson, FileText, Clipboard, RefreshCw, Trash2, CheckCircle, Settings, Info } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import { BPDropzone } from './BPDropzone';
 import { BPReviewGrid } from './BPReviewGrid';
 import { BPChart, BPChartHandle } from './BPChart';
@@ -558,12 +559,13 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
               Upload a photo of your BP diary for automatic extraction, then review, edit, add, or delete readings
             </p>
           </div>
-          <button
+          <IconButton
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
+            icon={<X />}
+            variant="ghost"
+            size="md"
+            aria-label="Close BP Diary Importer"
+          />
         </div>
 
         {/* Content */}
@@ -579,12 +581,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                     <h3 className="text-sm font-semibold text-blue-900">Vision Model</h3>
                   </div>
                   {!showModelPicker && (
-                    <button
+                    <Button
                       onClick={() => setShowModelPicker(true)}
-                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-blue-600 hover:text-blue-800 underline h-auto px-2 py-0"
                     >
                       Change
-                    </button>
+                    </Button>
                   )}
                 </div>
 
@@ -613,12 +617,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                         </p>
                       </div>
                     )}
-                    <button
+                    <Button
                       onClick={() => setShowModelPicker(false)}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-blue-600 hover:text-blue-800 h-auto px-2 py-1"
                     >
                       Done
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="text-sm text-gray-700">
@@ -635,13 +641,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
 
               {/* Load Last Button */}
               <div className="flex justify-center">
-                <button
+                <Button
                   onClick={() => setShowLoadConfirm(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="md"
+                  startIcon={<RefreshCw className="w-4 h-4" />}
                 >
-                  <RefreshCw className="w-4 h-4" />
                   Load Last Session
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -675,13 +682,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
               </div>
 
               <div className="flex gap-3 justify-center">
-                <button
+                <Button
                   onClick={handleClear}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  variant="outline"
+                  size="md"
                 >
                   Clear & Start Over
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => {
                     // Add 12 sample readings for comprehensive testing with timestamps
                     const sampleReadings: BPReading[] = [
@@ -702,10 +710,11 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                     setProcessingState('ready');
                     ToastService.getInstance().info('Sample data loaded', '12 readings - test UI layout');
                   }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  variant="secondary"
+                  size="md"
                 >
                   Load Sample Data (12 readings)
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -768,12 +777,14 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                       {insightsError}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
                         onClick={handleRetryInsights}
-                        className="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs font-medium text-blue-700 border-blue-200 hover:bg-blue-100"
                       >
                         Retry insights
-                      </button>
+                      </Button>
                       <span className="text-xs text-gray-500">
                         Readings remain available for review.
                       </span>
@@ -966,18 +977,22 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
                   This will replace your current work with the last saved BP diary session.
                 </p>
                 <div className="flex gap-3">
-                  <button
+                  <Button
                     onClick={() => setShowLoadConfirm(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    variant="outline"
+                    size="md"
+                    fullWidth
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleLoadLast}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    variant="secondary"
+                    size="md"
+                    fullWidth
                   >
                     Load
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -988,59 +1003,66 @@ export const BPDiaryImporter: React.FC<BPDiaryImporterProps> = ({
         <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             {processingState === 'ready' && (
-              <button
+              <Button
                 onClick={handleClear}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                variant="ghost"
+                size="sm"
+                startIcon={<Trash2 className="w-3.5 h-3.5" />}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="text-xs">Clear</span>
-              </button>
+                Clear
+              </Button>
             )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             {processingState === 'ready' && readings.length > 0 && (
               <>
-                <button
+                <Button
                   onClick={handleExportJSON}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<FileJson className="w-3.5 h-3.5" />}
                 >
-                  <FileJson className="w-3.5 h-3.5" />
-                  <span className="text-xs">Export JSON</span>
-                </button>
+                  Export JSON
+                </Button>
 
-                <button
+                <Button
                   onClick={handleExportCSV}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<FileText className="w-3.5 h-3.5" />}
                 >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span className="text-xs">Export CSV</span>
-                </button>
+                  Export CSV
+                </Button>
 
-                <button
+                <Button
                   onClick={handleCopyChart}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<Clipboard className="w-3.5 h-3.5" />}
                 >
-                  <Clipboard className="w-3.5 h-3.5" />
-                  <span className="text-xs">Copy Chart</span>
-                </button>
+                  Copy Chart
+                </Button>
 
-                <button
+                <Button
                   onClick={handleAcceptAll}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  variant="success"
+                  size="sm"
+                  startIcon={<CheckCircle className="w-3.5 h-3.5" />}
                 >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">Accept & Save</span>
-                </button>
+                  Accept & Save
+                </Button>
               </>
             )}
 
-            <button
+            <Button
               onClick={onClose}
-              className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+              variant="ghost"
+              size="sm"
             >
               Close
-            </button>
+            </Button>
           </div>
         </div>
       </div>

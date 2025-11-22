@@ -3,7 +3,8 @@ import type {
   LMStudioResponse,
   ChatMessage,
   ChatMessageContentBlock,
-  ModelStatus
+  ModelStatus,
+  MedicalContext
 } from '@/types/medical.types';
 import { WhisperServerService } from './WhisperServerService';
 import { AudioOptimizationService } from './AudioOptimizationService';
@@ -608,34 +609,44 @@ export class LMStudioService {
     userInput: string,
     agentType?: string,
     signal?: AbortSignal,
-    modelOverride?: string
+    modelOverride?: string,
+    context?: MedicalContext
   ): Promise<string> {
-    // DSPy integration with feature flag
-    if (agentType) {
+    // DSPy SDK streaming integration (enabled by default)
+    if (agentType && context) {
       const dspyService = DSPyService.getInstance();
 
       try {
         const isDSPyEnabled = await dspyService.isDSPyEnabled(agentType);
 
         if (isDSPyEnabled) {
-          logger.info('Routing through DSPy layer', {
+          logger.info('Routing through DSPy SDK streaming layer', {
             component: 'LMStudioService',
             agent_type: agentType,
+            sdk_streaming: true,
             fallback_available: true
           });
 
-          const dspyResult = await dspyService.processWithDSPy(agentType, userInput, { signal });
+          // Use SDK streaming endpoint with progress callbacks
+          const dspyResult = await dspyService.processWithDSpyStreaming(
+            agentType,
+            userInput,
+            {
+              signal,
+              onProgress: context.onProgress,  // Pass through progress callback
+              onToken: context.onStream  // Pass through streaming token callback
+            }
+          );
 
           if (dspyResult.success && dspyResult.result) {
-            logger.info('DSPy processing successful', {
+            logger.info('DSPy SDK streaming successful', {
               component: 'LMStudioService',
               agent_type: agentType,
-              processing_time: dspyResult.processing_time,
-              cached: dspyResult.cached
+              processing_time: dspyResult.processing_time
             });
             return dspyResult.result;
           } else {
-            logger.warn('DSPy processing failed, falling back to direct LLM', {
+            logger.warn('DSPy SDK streaming failed, falling back to direct LLM', {
               component: 'LMStudioService',
               agent_type: agentType,
               error: dspyResult.error
@@ -644,7 +655,7 @@ export class LMStudioService {
           }
         }
       } catch (error) {
-        logger.warn('DSPy integration error, falling back to direct LLM', {
+        logger.warn('DSPy SDK integration error, falling back to direct LLM', {
           component: 'LMStudioService',
           agent_type: agentType,
           error: error instanceof Error ? error.message : 'Unknown error'

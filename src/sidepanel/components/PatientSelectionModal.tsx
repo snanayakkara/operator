@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
+import {
+  X,
   Calendar,
   Clock,
   CheckCircle,
@@ -24,6 +24,8 @@ import {
   STAGGER_CONFIGS as _STAGGER_CONFIGS,
   ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
+import Button from './buttons/Button';
+import { IconButton } from './buttons/Button';
 
 interface PatientSelectionModalProps {
   isOpen: boolean;
@@ -181,13 +183,15 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
                 </p>
               </div>
             </div>
-            <button
+            <IconButton
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              icon={<X />}
+              variant="ghost"
+              size="md"
+              className="text-gray-500"
               disabled={isProcessing}
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+              aria-label="Close modal"
+            />
           </div>
 
           {/* Calendar Info */}
@@ -267,13 +271,15 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
                     </select>
                   </div>
 
-                  <button
+                  <Button
                     onClick={handleSelectAll}
-                    className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                    variant="ghost"
+                    size="sm"
+                    className="text-purple-600 hover:text-purple-700 !h-auto !px-0"
                     disabled={isProcessing}
                   >
                     {filteredPatients.every(p => selectedPatients.has(p.fileNumber)) ? 'Deselect All' : 'Select All'}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -352,30 +358,25 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
               </div>
 
               <div className="flex space-x-3">
-                <button
+                <Button
                   onClick={onClose}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  variant="outline"
+                  size="md"
                   disabled={isProcessing}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleStartReview}
                   disabled={selectedCount === 0 || isProcessing}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+                  variant="primary"
+                  size="md"
+                  startIcon={<Play />}
+                  isLoading={isProcessing}
+                  className="bg-purple-600 hover:bg-purple-700"
                 >
-                  {isProcessing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Starting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      <span>Start AI Review</span>
-                    </>
-                  )}
-                </button>
+                  {isProcessing ? 'Starting...' : 'Start AI Review'}
+                </Button>
               </div>
             </div>
           </div>

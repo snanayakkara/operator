@@ -12,6 +12,7 @@ import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
 import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag, RefreshCw } from 'lucide-react';
+import Button, { IconButton } from '../buttons/Button';
 import { calculateWordCount, calculateReadTime, formatReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
   staggerContainer, 
@@ -127,6 +128,7 @@ interface OptimizedResultsPanelProps {
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
+  sessionSource?: 'recording' | 'live' | 'mobile' | 'paste'; // Session source for progress filtering
   revisionPanel?: {
     key: string;
     original: string;
@@ -226,6 +228,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
+  sessionSource = 'recording', // Default to recording if not specified
   revisionPanel,
   revisionContext,
   onRevisionToggle,
@@ -516,6 +519,22 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Always use dual cards for QuickLetter, even with empty/short summary
   const isQuickLetterDualCards = agentType === 'quick-letter' && results;
 
+  // Debug Quick Letter display detection
+  if (agentType === 'quick-letter' || results?.includes('I had the pleasure')) {
+    console.log('🔍 Quick Letter Display Debug:', {
+      agentType,
+      hasResults: !!results,
+      resultsLength: results?.length || 0,
+      resultsPreview: results?.substring(0, 100),
+      hasResultsSummary: !!resultsSummary,
+      summaryLength: resultsSummary?.length || 0,
+      summaryPreview: resultsSummary?.substring(0, 100),
+      isQuickLetterDualCards,
+      sessionSource: sessionSource || 'unknown',
+      isViewingSession
+    });
+  }
+
   // Check if this is a TAVI Workup with structured display
   const isTAVIWorkup = agentType === 'tavi-workup' && results;
 
@@ -612,17 +631,15 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           )}
         </div>
         
-        <button
+        <IconButton
           onClick={() => setIsExpanded(!isExpanded)}
-          className="bg-white/60 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-50/60 transition-colors"
+          icon={isExpanded ? <EyeOff /> : <Eye />}
+          variant="outline"
+          size="sm"
+          className="bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-emerald-600"
+          aria-label={isExpanded ? 'Collapse' : 'Expand'}
           title={isExpanded ? 'Collapse' : 'Expand'}
-        >
-          {isExpanded ? (
-            <EyeOff className="w-4 h-4 text-emerald-600" />
-          ) : (
-            <Eye className="w-4 h-4 text-emerald-600" />
-          )}
-        </button>
+        />
       </motion.div>
       
       {/* Stats */}
@@ -703,6 +720,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               agentType={agentType}
               audioDuration={audioDuration}
               showTimeEstimate={true}
+              skipStages={sessionSource === 'mobile' ? ['audio-processing', 'transcribing'] : []}
             />
           </motion.div>
         )}
@@ -725,6 +743,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               transcriptionLength={originalTranscription?.length}
               audioDuration={audioDuration}
               showTimeEstimate={true}
+              skipStages={sessionSource === 'mobile' ? ['audio-processing', 'transcribing'] : []}
             />
           </motion.div>
         )}
@@ -809,12 +828,14 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       <span className="text-xs text-emerald-700">TTFT: {ttftMs} ms</span>
                     )}
                   </div>
-                  <button
+                  <Button
                     onClick={onStopStreaming}
-                    className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 bg-red-50 hover:bg-red-100"
+                    variant="danger"
+                    size="sm"
+                    className="text-xs px-2 py-1"
                   >
                     Stop
-                  </button>
+                  </Button>
                 </div>
                 <div className="p-3 max-h-64 overflow-y-auto">
                   <pre className="whitespace-pre-wrap text-sm text-gray-900">{streamBuffer}</pre>
@@ -864,13 +885,15 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   <h4 className="text-blue-800 font-semibold text-sm">Generating Response...</h4>
                 </div>
                 {onCancelStreaming && (
-                  <button
+                  <Button
                     onClick={onCancelStreaming}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800"
                     aria-label="Cancel streaming"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 )}
               </div>
               <div className="p-4">
@@ -934,55 +957,51 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 <div className="p-3 border-t border-emerald-200 bg-emerald-50">
                   <div className="grid grid-cols-3 gap-2">
                     {/* Copy Summary Button */}
-                    <button
+                    <Button
                       onClick={handleSummaryCopy}
-                      className={`
-                        p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                        ${summaryButtonStates.copied 
-                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 btn-success-animation completion-celebration' 
+                      variant={summaryButtonStates.copied ? 'success' : 'outline'}
+                      size="md"
+                      icon={summaryButtonStates.copied ? <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                      isSuccess={summaryButtonStates.copied}
+                      className={`p-3 flex flex-col items-center space-y-1 ${
+                        summaryButtonStates.copied
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 completion-celebration'
                           : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-                        }
-                      `}
+                      }`}
                     >
-                      {summaryButtonStates.copied ? (
-                        <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" />
-                      ) : (
-                        <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
-                      )}
                       <span className={`text-xs ${summaryButtonStates.copied ? 'text-emerald-700' : 'text-gray-700'}`}>
                         {summaryButtonStates.copied ? 'Copied!' : 'Copy'}
                       </span>
-                    </button>
+                    </Button>
 
                     {/* Insert Summary Button */}
-                    <button
+                    <Button
                       onClick={handleSummaryInsert}
-                      className={`
-                        p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                        ${summaryButtonStates.inserted 
-                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 btn-success-animation completion-celebration' 
+                      variant={summaryButtonStates.inserted ? 'success' : 'outline'}
+                      size="md"
+                      icon={summaryButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                      isSuccess={summaryButtonStates.inserted}
+                      className={`p-3 flex flex-col items-center space-y-1 ${
+                        summaryButtonStates.inserted
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 completion-celebration'
                           : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-                        }
-                      `}
+                      }`}
                     >
-                      {summaryButtonStates.inserted ? (
-                        <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" />
-                      ) : (
-                        <SquareIcon className="w-4 h-4" />
-                      )}
                       <span className={`text-xs ${summaryButtonStates.inserted ? 'text-emerald-700' : 'text-gray-700'}`}>
                         {summaryButtonStates.inserted ? 'Inserted!' : 'Insert'}
                       </span>
-                    </button>
+                    </Button>
 
                     {/* Download Summary Button */}
-                    <button
+                    <Button
                       onClick={handleSummaryDownload}
-                      className="bg-white/60 border border-emerald-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-emerald-50/60 transition-colors btn-micro-press btn-micro-hover"
+                      variant="outline"
+                      size="md"
+                      icon={<Download className="w-4 h-4" />}
+                      className="bg-white/60 border-emerald-200 p-3 flex flex-col items-center space-y-1 hover:bg-emerald-50/60 text-gray-700"
                     >
-                      <Download className="w-4 h-4 text-gray-700" />
                       <span className="text-xs text-gray-700">Download</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </motion.div>
@@ -1013,116 +1032,99 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 <div className="p-3 border-t border-blue-200 bg-blue-50">
                   <div className={`grid gap-2 ${letterActionGridClass}`}>
                     {/* Copy Letter Button */}
-                    <button
+                    <Button
                       onClick={handleLetterCopy}
-                      className={`
-                        p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                        ${letterButtonStates.copied 
-                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration' 
+                      variant={letterButtonStates.copied ? 'success' : 'outline'}
+                      size="md"
+                      icon={letterButtonStates.copied ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                      isSuccess={letterButtonStates.copied}
+                      className={`p-3 flex flex-col items-center space-y-1 ${
+                        letterButtonStates.copied
+                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                        }
-                      `}
+                      }`}
                     >
-                      {letterButtonStates.copied ? (
-                        <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
-                      ) : (
-                        <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
-                      )}
                       <span className={`text-xs ${letterButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
                         {letterButtonStates.copied ? 'Copied!' : 'Copy'}
                       </span>
-                    </button>
+                    </Button>
 
                     {/* Insert Letter Button */}
-                    <button
+                    <Button
                       onClick={handleLetterInsert}
-                      className={`
-                        p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                        ${letterButtonStates.inserted 
-                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration' 
+                      variant={letterButtonStates.inserted ? 'success' : 'outline'}
+                      size="md"
+                      icon={letterButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                      isSuccess={letterButtonStates.inserted}
+                      className={`p-3 flex flex-col items-center space-y-1 ${
+                        letterButtonStates.inserted
+                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                        }
-                      `}
+                      }`}
                     >
-                      {letterButtonStates.inserted ? (
-                        <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
-                      ) : (
-                        <SquareIcon className="w-4 h-4" />
-                      )}
                       <span className={`text-xs ${letterButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
                         {letterButtonStates.inserted ? 'Inserted!' : 'Insert'}
                       </span>
-                    </button>
+                    </Button>
 
                     {/* Edit & Train Button */}
                     {canEditAndTrain && (
-                      <button
+                      <Button
                         onClick={() => onRevisionToggle?.(!isRevisionOpen)}
-                        className={`
-                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                          ${isRevisionOpen
+                        variant={isRevisionOpen ? 'primary' : 'outline'}
+                        size="md"
+                        icon={<Sparkles className={`w-4 h-4 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />}
+                        className={`p-3 flex flex-col items-center space-y-1 ${
+                          isRevisionOpen
                             ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                             : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
-                          }
-                        `}
+                        }`}
                         title="Revise output and capture training example"
                       >
-                        <Sparkles className={`w-4 h-4 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />
                         <span className={`text-xs ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
                           {isRevisionOpen ? 'Editing…' : 'Edit & Train'}
                         </span>
-                      </button>
+                      </Button>
                     )}
 
                     {/* Reprocess Quick Letter */}
                     {canReprocessQuickLetter && (
-                      <button
+                      <Button
                         onClick={handleQuickLetterReprocess}
                         disabled={isProcessing}
-                        className={`
-                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                          ${isProcessing
-                            ? 'bg-blue-100/60 border-blue-200 text-blue-400 cursor-not-allowed'
+                        variant="outline"
+                        size="md"
+                        isLoading={isProcessing}
+                        icon={isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        className={`p-3 flex flex-col items-center space-y-1 ${
+                          isProcessing
+                            ? 'bg-blue-100/60 border-blue-200 text-blue-400'
                             : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-blue-700'
-                          }
-                        `}
+                        }`}
                         title="Reprocess this transcription with the Quick Letter agent"
                       >
-                        {isProcessing ? (
-                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-4 h-4 text-blue-700" />
-                        )}
                         <span className={`text-xs ${isProcessing ? 'text-blue-400' : 'text-blue-700'}`}>
                           Reprocess
                         </span>
-                      </button>
+                      </Button>
                     )}
 
                     {/* Generate Patient Version Button */}
-                    <button
+                    <Button
                       onClick={onGeneratePatientVersion}
                       disabled={isGeneratingPatientVersion}
-                      className={`
-                        p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                        ${isGeneratingPatientVersion 
-                          ? 'bg-blue-100/60 border-blue-300 text-blue-500 cursor-not-allowed' 
+                      variant="outline"
+                      size="md"
+                      isLoading={isGeneratingPatientVersion}
+                      icon={isGeneratingPatientVersion ? undefined : <Users className="w-4 h-4" />}
+                      className={`p-3 flex flex-col items-center space-y-1 ${
+                        isGeneratingPatientVersion
+                          ? 'bg-blue-100/60 border-blue-300 text-blue-500'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                        }
-                      `}
+                      }`}
                     >
-                      {isGeneratingPatientVersion ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
-                          <span className="text-xs text-blue-500">Generating</span>
-                        </>
-                      ) : (
-                        <>
-                          <Users className="w-4 h-4 text-gray-700" />
-                          <span className="text-xs text-gray-700">Patient Version</span>
-                        </>
-                      )}
-                    </button>
+                      <span className="text-xs">{isGeneratingPatientVersion ? 'Generating' : 'Patient Version'}</span>
+                    </Button>
                   </div>
                 </div>
               </motion.div>
@@ -1149,55 +1151,51 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   <div className="p-3 border-t border-purple-200 bg-purple-50">
                     <div className="grid grid-cols-3 gap-2">
                       {/* Copy Patient Version Button */}
-                      <button
+                      <Button
                         onClick={handlePatientVersionCopy}
-                        className={`
-                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                          ${patientVersionButtonStates.copied 
-                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 btn-success-animation completion-celebration' 
+                        variant={patientVersionButtonStates.copied ? 'success' : 'outline'}
+                        size="md"
+                        icon={patientVersionButtonStates.copied ? <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                        isSuccess={patientVersionButtonStates.copied}
+                        className={`p-3 flex flex-col items-center space-y-1 ${
+                          patientVersionButtonStates.copied
+                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
                             : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
-                          }
-                        `}
+                        }`}
                       >
-                        {patientVersionButtonStates.copied ? (
-                          <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" />
-                        ) : (
-                          <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
-                        )}
                         <span className={`text-xs ${patientVersionButtonStates.copied ? 'text-purple-700' : 'text-gray-700'}`}>
                           {patientVersionButtonStates.copied ? 'Copied!' : 'Copy'}
                         </span>
-                      </button>
+                      </Button>
 
                       {/* Insert Patient Version Button */}
-                      <button
+                      <Button
                         onClick={handlePatientVersionInsert}
-                        className={`
-                          p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                          ${patientVersionButtonStates.inserted 
-                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 btn-success-animation completion-celebration' 
+                        variant={patientVersionButtonStates.inserted ? 'success' : 'outline'}
+                        size="md"
+                        icon={patientVersionButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                        isSuccess={patientVersionButtonStates.inserted}
+                        className={`p-3 flex flex-col items-center space-y-1 ${
+                          patientVersionButtonStates.inserted
+                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
                             : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
-                          }
-                        `}
+                        }`}
                       >
-                        {patientVersionButtonStates.inserted ? (
-                          <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" />
-                        ) : (
-                          <SquareIcon className="w-4 h-4" />
-                        )}
                         <span className={`text-xs ${patientVersionButtonStates.inserted ? 'text-purple-700' : 'text-gray-700'}`}>
                           {patientVersionButtonStates.inserted ? 'Inserted!' : 'Insert'}
                         </span>
-                      </button>
+                      </Button>
 
                       {/* Download Patient Version Button */}
-                      <button
+                      <Button
                         onClick={handlePatientVersionDownload}
-                        className="bg-white/60 border border-purple-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-purple-50/60 transition-colors btn-micro-press btn-micro-hover"
+                        variant="outline"
+                        size="md"
+                        icon={<Download className="w-4 h-4" />}
+                        className="bg-white/60 border-purple-200 p-3 flex flex-col items-center space-y-1 hover:bg-purple-50/60 text-gray-700"
                       >
-                        <Download className="w-4 h-4 text-gray-700" />
                         <span className="text-xs text-gray-700">Download</span>
-                      </button>
+                      </Button>
                     </div>
                     </div>
                   </motion.div>
@@ -1397,55 +1395,51 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               <div className="p-3 border-t border-blue-200 bg-blue-50">
                 <div className="grid grid-cols-3 gap-2">
                   {/* Copy Patient Version Button */}
-                  <button
+                  <Button
                     onClick={handlePatientVersionCopy}
-                    className={`
-                      p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                      ${patientVersionButtonStates.copied
-                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration'
+                    variant={patientVersionButtonStates.copied ? 'success' : 'outline'}
+                    size="md"
+                    icon={patientVersionButtonStates.copied ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                    isSuccess={patientVersionButtonStates.copied}
+                    className={`p-3 flex flex-col items-center space-y-1 ${
+                      patientVersionButtonStates.copied
+                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                         : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                      }
-                    `}
+                    }`}
                   >
-                    {patientVersionButtonStates.copied ? (
-                      <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
-                    ) : (
-                      <AnimatedCopyIcon className="w-4 h-4" title="Copy" />
-                    )}
                     <span className={`text-xs ${patientVersionButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
                       {patientVersionButtonStates.copied ? 'Copied!' : 'Copy'}
                     </span>
-                  </button>
+                  </Button>
 
                   {/* Insert Patient Version Button */}
-                  <button
+                  <Button
                     onClick={handlePatientVersionInsert}
-                    className={`
-                      p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border btn-micro-press btn-micro-hover
-                      ${patientVersionButtonStates.inserted
-                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 btn-success-animation completion-celebration'
+                    variant={patientVersionButtonStates.inserted ? 'success' : 'outline'}
+                    size="md"
+                    icon={patientVersionButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                    isSuccess={patientVersionButtonStates.inserted}
+                    className={`p-3 flex flex-col items-center space-y-1 ${
+                      patientVersionButtonStates.inserted
+                        ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                         : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                      }
-                    `}
+                    }`}
                   >
-                    {patientVersionButtonStates.inserted ? (
-                      <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" />
-                    ) : (
-                      <SquareIcon className="w-4 h-4" />
-                    )}
                     <span className={`text-xs ${patientVersionButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
                       {patientVersionButtonStates.inserted ? 'Inserted!' : 'Insert'}
                     </span>
-                  </button>
+                  </Button>
 
                   {/* Download Patient Version Button */}
-                  <button
+                  <Button
                     onClick={handlePatientVersionDownload}
-                    className="bg-white/60 border border-blue-200 p-3 rounded-lg flex flex-col items-center space-y-1 hover:bg-blue-50/60 transition-colors btn-micro-press btn-micro-hover"
+                    variant="outline"
+                    size="md"
+                    icon={<Download className="w-4 h-4" />}
+                    className="bg-white/60 border-blue-200 p-3 flex flex-col items-center space-y-1 hover:bg-blue-50/60 text-gray-700"
                   >
-                    <Download className="w-4 h-4 text-gray-700" />
                     <span className="text-xs text-gray-700">Download</span>
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1524,14 +1518,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     ))
                   )}
                 </div>
-                <button
+                <Button
                   type="button"
                   onClick={() => onRevisionToggle?.(false)}
-                  className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900"
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<X className="w-3 h-3" />}
+                  className="text-xs text-blue-700 hover:text-blue-900"
                 >
-                  <X className="w-3 h-3" />
                   Close
-                </button>
+                </Button>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
@@ -1622,43 +1618,48 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               </div>
 
               <div className="flex flex-wrap justify-end gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={onRevisionDiscard}
                   disabled={!revisionPanel.hasUnsavedChanges || isSavingRevision}
-                  className={`inline-flex items-center gap-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
-                    ${revisionPanel.hasUnsavedChanges && !isSavingRevision
-                      ? 'border-blue-300 text-blue-700 hover:bg-blue-100'
-                      : 'border-blue-100 text-blue-400 cursor-not-allowed'}`}
+                  variant="outline"
+                  size="md"
+                  className={revisionPanel.hasUnsavedChanges && !isSavingRevision
+                    ? 'border-blue-300 text-blue-700 hover:bg-blue-100'
+                    : 'border-blue-100 text-blue-400'}
                 >
                   Reset
-                </button>
-                <button
+                </Button>
+                <Button
                   data-testid="save-revision-btn"
                   type="button"
                   onClick={onRevisionSave}
                   disabled={isRevisionSaveDisabled}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
-                    ${isRevisionSaveDisabled
-                      ? 'bg-blue-200 border-blue-200 text-white cursor-not-allowed'
-                      : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'}`}
+                  variant="primary"
+                  size="md"
+                  isLoading={isSavingRevision}
+                  startIcon={isSavingRevision ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
+                  className={isRevisionSaveDisabled
+                    ? 'bg-blue-200 border-blue-200 text-white'
+                    : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'}
                 >
-                  {isSavingRevision && <Loader2 className="w-4 h-4 animate-spin" />}
                   Save Revision
-                </button>
-                <button
+                </Button>
+                <Button
                   data-testid="mark-golden-pair-btn"
                   type="button"
                   onClick={onRevisionMarkGoldenPair}
                   disabled={isGoldenPairDisabled}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors
-                    ${isGoldenPairDisabled
-                      ? 'bg-emerald-200 border-emerald-200 text-white cursor-not-allowed'
-                      : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'}`}
+                  variant="success"
+                  size="md"
+                  isLoading={isSavingGoldenPair}
+                  startIcon={isSavingGoldenPair ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  className={isGoldenPairDisabled
+                    ? 'bg-emerald-200 border-emerald-200 text-white'
+                    : 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'}
                 >
-                  {isSavingGoldenPair ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   Mark as Golden Pair
-                </button>
+                </Button>
               </div>
             </div>
           </motion.div>

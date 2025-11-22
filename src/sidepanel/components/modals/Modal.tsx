@@ -9,6 +9,7 @@ import React, { useEffect, useRef, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { tokens } from '@/utils/design-tokens';
+import Button, { IconButton } from '../buttons/Button';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -200,18 +201,14 @@ const Modal: React.FC<ModalProps> = ({
             )}
 
             {showCloseButton && (
-              <button
+              <IconButton
                 onClick={onClose}
-                className="
-                  ml-4 p-1.5 rounded-lg
-                  text-gray-400 hover:text-gray-600 hover:bg-gray-100
-                  transition-colors
-                  focus:outline-none focus:ring-2 focus:ring-violet-500
-                "
+                icon={X}
+                variant="ghost"
+                size="sm"
                 aria-label="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                className="ml-4 text-gray-400 hover:text-gray-600"
+              />
             )}
           </div>
         )}
@@ -280,33 +277,23 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       title={title}
       footer={
         <>
-          <button
+          <Button
             onClick={onClose}
             disabled={isLoading}
-            className="
-              px-4 py-2 rounded-lg
-              bg-white border border-gray-300
-              text-gray-700 font-medium
-              hover:bg-gray-50
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all
-            "
+            variant="outline"
+            size="md"
           >
             {cancelText}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onConfirm}
             disabled={isLoading}
-            className={`
-              px-4 py-2 rounded-lg
-              ${confirmButtonClass}
-              text-white font-medium
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all shadow-sm hover:shadow-md
-            `}
+            variant={confirmVariant === 'danger' ? 'danger' : 'primary'}
+            size="md"
+            isLoading={isLoading}
           >
             {isLoading ? 'Processing...' : confirmText}
-          </button>
+          </Button>
         </>
       }
     >
@@ -372,17 +359,18 @@ export const AlertModal: React.FC<AlertModalProps> = ({
         </div>
       }
       footer={
-        <button
+        <Button
           onClick={onClose}
-          className={`
-            px-6 py-2 rounded-lg
-            ${config.buttonClass}
-            text-white font-medium
-            transition-all shadow-sm hover:shadow-md
-          `}
+          variant={
+            variant === 'success' ? 'success' :
+            variant === 'error' ? 'danger' :
+            variant === 'warning' ? 'primary' :
+            'primary'
+          }
+          size="md"
         >
           {buttonText}
-        </button>
+        </Button>
       }
     >
       <p className="text-gray-700">{message}</p>

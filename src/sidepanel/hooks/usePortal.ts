@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export const usePortal = (id: string = 'portal-root') => {
   const portalRef = useRef<HTMLDivElement | null>(null);
-  const [, setForceUpdate] = useState(0);
+  const [portalNode, setPortalNode] = useState<HTMLDivElement | null>(null);
   const observerRef = useRef<MutationObserver | null>(null);
 
   useEffect(() => {
@@ -28,6 +28,7 @@ export const usePortal = (id: string = 'portal-root') => {
       }
 
       portalRef.current = portalContainer;
+      setPortalNode(portalContainer);
       return portalContainer;
     };
 
@@ -46,7 +47,6 @@ export const usePortal = (id: string = 'portal-root') => {
           if (removed) {
             console.warn(`🚨 Portal container "${id}" was removed from DOM - recreating`);
             ensurePortalExists();
-            setForceUpdate(prev => prev + 1); // Force components using this portal to re-render
           }
         }
       }
@@ -63,7 +63,6 @@ export const usePortal = (id: string = 'portal-root') => {
       if (portalRef.current && !document.body.contains(portalRef.current)) {
         console.warn(`🚨 Portal container "${id}" missing during validation - recreating`);
         ensurePortalExists();
-        setForceUpdate(prev => prev + 1);
       }
     }, 3000);
 
@@ -87,5 +86,5 @@ export const usePortal = (id: string = 'portal-root') => {
     };
   }, [id]);
 
-  return portalRef.current;
+  return portalNode;
 };

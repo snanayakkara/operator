@@ -11,6 +11,7 @@ import { X, AlertTriangle, Check, Info, FileText, Pill, Activity } from 'lucide-
 import { motion } from 'framer-motion';
 import type { ReviewTriggerResult, ParsedNotes, EMRContext } from '@/types/pasteNotes.types';
 import { getTriggerDescription } from '@/utils/pasteNotes/ReviewTriggers';
+import Button, { IconButton } from './buttons/Button';
 
 interface PasteReviewPanelProps {
   isVisible: boolean;
@@ -90,13 +91,13 @@ export const PasteReviewPanel: React.FC<PasteReviewPanelProps> = ({
                 </p>
               </div>
             </div>
-            <button
+            <IconButton
               onClick={onCancel}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
+              icon={<X />}
+              variant="ghost"
+              size="sm"
               aria-label="Close review panel"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            />
           </div>
         </div>
 
@@ -292,12 +293,13 @@ export const PasteReviewPanel: React.FC<PasteReviewPanelProps> = ({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
           <div className="flex items-center justify-between">
-            <button
+            <Button
               onClick={onCancel}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              variant="outline"
+              size="md"
             >
               Cancel
-            </button>
+            </Button>
 
             <div className="flex items-center space-x-3">
               {isHighRisk && (
@@ -307,17 +309,14 @@ export const PasteReviewPanel: React.FC<PasteReviewPanelProps> = ({
                 </div>
               )}
 
-              <button
+              <Button
                 onClick={onConfirm}
-                className={`px-4 py-2 text-white rounded-lg font-medium text-sm transition-colors flex items-center space-x-2 ${
-                  isHighRisk
-                    ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
+                variant={isHighRisk ? 'danger' : 'primary'}
+                size="md"
+                startIcon={<Check />}
               >
-                <Check className="w-4 h-4" />
-                <span>{mode === 'preflight' ? 'Confirm & Generate' : 'Confirm & Enable Actions'}</span>
-              </button>
+                {mode === 'preflight' ? 'Confirm & Generate' : 'Confirm & Enable Actions'}
+              </Button>
             </div>
           </div>
         </div>

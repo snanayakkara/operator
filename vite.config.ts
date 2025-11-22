@@ -129,6 +129,7 @@ export default defineConfig({
         sidepanel: resolve(__dirname, 'src/sidepanel/index.html'),
         options: resolve(__dirname, 'src/options/index.html'),
         popup: resolve(__dirname, 'src/popup/index.html'),
+        canvas: resolve(__dirname, 'src/canvas/index.html'),
         background: resolve(__dirname, 'src/background/service-worker.ts'),
         content: resolve(__dirname, 'src/content/content-script.ts'),
       },

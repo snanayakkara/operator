@@ -496,6 +496,17 @@ body {
   color: theme('colors.ink.primary');
 }
 
+body.canvas-page {
+  width: 100% !important;
+  min-height: 100vh;
+  background: theme('colors.gray.100');
+  color: theme('colors.ink.primary');
+}
+
+body.canvas-page #root {
+  width: 100%;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

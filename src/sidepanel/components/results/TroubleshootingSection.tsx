@@ -9,14 +9,15 @@
  */
 
 import React, { memo, useState } from 'react';
-import { 
-  Volume2Icon, 
-  AlertCircleIcon, 
-  ChevronUpIcon, 
-  ChevronDownIcon 
+import {
+  Volume2Icon,
+  AlertCircleIcon,
+  ChevronUpIcon,
+  ChevronDownIcon
 } from '../icons/OptimizedIcons';
 import { Trash2 } from 'lucide-react';
 import { AudioPlayback } from '../AudioPlayback';
+import Button, { IconButton } from '../buttons/Button';
 import type { FailedAudioRecording } from '@/types/medical.types';
 
 interface TroubleshootingSectionProps {
@@ -47,9 +48,10 @@ const TroubleshootingSection: React.FC<TroubleshootingSectionProps> = memo(({
 
   return (
     <div className={`border-t border-red-200/50 bg-red-50/30 ${className}`}>
-      <button
+      <Button
         onClick={() => setTroubleshootingExpanded(!troubleshootingExpanded)}
-        className="w-full p-4 text-left hover:bg-red-50/50 transition-colors flex items-center justify-between"
+        variant="ghost"
+        className="w-full p-4 text-left hover:bg-red-50/50 rounded-none justify-between"
       >
         <div className="flex items-center space-x-2">
           <Volume2Icon className="w-4 h-4 text-red-600" />
@@ -60,16 +62,18 @@ const TroubleshootingSection: React.FC<TroubleshootingSectionProps> = memo(({
         </div>
         <div className="flex items-center space-x-2">
           {onClearFailedRecordings && (
-            <button
+            <IconButton
               onClick={(e) => {
                 e.stopPropagation();
                 onClearFailedRecordings();
               }}
-              className="p-1.5 rounded hover:bg-red-100 transition-colors"
+              icon={<Trash2 />}
+              variant="ghost"
+              size="sm"
+              aria-label="Clear all failed recordings"
               title="Clear all failed recordings"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-red-500" />
-            </button>
+              className="hover:bg-red-100"
+            />
           )}
           {troubleshootingExpanded ? (
             <ChevronUpIcon className="w-4 h-4 text-red-400" />
@@ -77,7 +81,7 @@ const TroubleshootingSection: React.FC<TroubleshootingSectionProps> = memo(({
             <ChevronDownIcon className="w-4 h-4 text-red-400" />
           )}
         </div>
-      </button>
+      </Button>
 
       {troubleshootingExpanded && (
         <div className="px-4 pb-4">
@@ -109,23 +113,24 @@ const TroubleshootingSection: React.FC<TroubleshootingSectionProps> = memo(({
                 </label>
                 <div className="grid grid-cols-1 gap-2">
                   {failedAudioRecordings.map((recording, index) => (
-                    <button
+                    <Button
                       key={recording.id}
                       onClick={() => setSelectedFailedRecording(recording)}
-                      className={`p-3 rounded-lg border text-left transition-colors ${
+                      variant="ghost"
+                      className={`p-3 rounded-lg border text-left justify-start ${
                         selectedFailedRecording?.id === recording.id
                           ? 'bg-red-100 border-red-300 text-red-800'
                           : 'bg-white border-red-200 hover:bg-red-50 text-red-700'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between w-full">
                         <div>
                           <div className="font-medium text-sm">
                             Recording #{failedAudioRecordings.length - index}
                           </div>
                           <div className="text-xs opacity-75 mt-1">
-                            {new Date(recording.timestamp).toLocaleString()} • 
-                            {recording.metadata.recordingTime}s • 
+                            {new Date(recording.timestamp).toLocaleString()} •
+                            {recording.metadata.recordingTime}s •
                             {(recording.metadata.fileSize / 1024).toFixed(1)}KB
                           </div>
                         </div>
@@ -133,7 +138,7 @@ const TroubleshootingSection: React.FC<TroubleshootingSectionProps> = memo(({
                           <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                         )}
                       </div>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>

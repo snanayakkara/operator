@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { Bot, Users, Shield } from 'lucide-react';
 import { SmallTrophySpin } from './TrophySpinLoader';
+import Button from './buttons/Button';
 
 interface AIReviewAction {
   id: string;
@@ -170,29 +171,20 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
         {/* Compact Grid */}
         <div className="grid grid-cols-2 gap-2">
           {AI_REVIEW_ACTIONS.map((action) => (
-            <button
+            <Button
               key={action.id}
               onClick={() => handleAction(action.id)}
               disabled={isProcessing(action.id)}
-              className={`
-                bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 relative p-2 rounded-lg transition-all text-center btn-micro-press btn-micro-hover shadow-none
-                hover:bg-indigo-50 border border-indigo-200 bg-indigo-50
-                ${isProcessing(action.id) ? 'opacity-50 cursor-not-allowed' : ''}
-              `}
+              variant="secondary"
+              size="md"
+              className="relative !h-auto p-2 flex-col bg-indigo-50 border-indigo-200 hover:bg-indigo-100"
+              isLoading={isProcessing(action.id)}
             >
-              <div className="flex flex-col items-center space-y-1">
-                <action.icon className="w-3 h-3 text-indigo-600 flex-shrink-0" />
-                <div className="text-gray-900 text-xs font-medium leading-tight">
-                  {action.label}
-                </div>
+              <action.icon className="w-3 h-3 text-indigo-600 flex-shrink-0 mb-1" />
+              <div className="text-gray-900 text-xs font-medium leading-tight">
+                {action.label}
               </div>
-              
-              {isProcessing(action.id) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-indigo-100 rounded-lg">
-                  <SmallTrophySpin />
-                </div>
-              )}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -217,34 +209,25 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
       <div className="p-4">
         <div className="grid grid-cols-1 gap-3">
           {AI_REVIEW_ACTIONS.map((action) => (
-            <button
+            <Button
               key={action.id}
               onClick={() => handleAction(action.id)}
               disabled={isProcessing(action.id)}
-              className={`
-                bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 p-3 rounded-lg text-left transition-all btn-micro-press btn-micro-hover shadow-none
-                hover:bg-indigo-50 border border-indigo-200 bg-indigo-50
-                ${isProcessing(action.id) ? 'opacity-50 cursor-not-allowed' : ''}
-              `}
+              variant="secondary"
+              size="md"
+              className="relative !justify-start !h-auto p-3 bg-indigo-50 border-indigo-200 hover:bg-indigo-100"
+              isLoading={isProcessing(action.id)}
+              startIcon={<action.icon className="w-4 h-4" />}
             >
-              <div className="flex items-start space-x-2">
-                <action.icon className="w-4 h-4 mt-0.5 flex-shrink-0 text-indigo-600" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-gray-900 text-xs font-medium truncate">
-                    {action.label}
-                  </div>
-                  <div className="text-gray-600 text-xs mt-1 leading-tight">
-                    {action.description}
-                  </div>
+              <div className="min-w-0 flex-1 text-left ml-2">
+                <div className="text-gray-900 text-xs font-medium truncate">
+                  {action.label}
+                </div>
+                <div className="text-gray-600 text-xs mt-1 leading-tight">
+                  {action.description}
                 </div>
               </div>
-              
-              {isProcessing(action.id) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-indigo-100 rounded-lg">
-                  <SmallTrophySpin />
-                </div>
-              )}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

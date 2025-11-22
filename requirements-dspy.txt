@@ -13,6 +13,12 @@ dspy-ai>=2.4.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# LM Studio Python SDK for streaming with prompt processing progress callbacks
+lmstudio>=1.4.0
+
+# HTTP client for fallback REST API calls
+requests>=2.31.0
+
 # Configuration and data handling
 pyyaml>=6.0
 jsonlines>=4.0.0

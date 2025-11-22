@@ -4,8 +4,11 @@
  */
 
 import React, { memo } from 'react';
-import { User, FileText, Mic, Loader2, Zap, CheckCircle } from 'lucide-react';
+import { User, FileText } from 'lucide-react';
 import type { PatientInfo, AgentType, ProcessingStatus } from '@/types/medical.types';
+import { Button } from './buttons';
+import { StatusBadge, StateIndicator } from './status';
+import type { ProcessingState } from '@/utils/stateColors';
 
 interface PatientContextHeaderProps {
   patientInfo: PatientInfo;
@@ -44,50 +47,37 @@ const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
   'generation': 'Generation'
 };
 
-const getStatusInfo = (processingStatus?: ProcessingStatus, isRecording?: boolean) => {
+const mapToProcessingState = (processingStatus?: ProcessingStatus, isRecording?: boolean): ProcessingState => {
   if (isRecording) {
-    return {
-      icon: <Mic className="w-4 h-4" />,
-      label: 'Recording',
-      bgColor: 'bg-gradient-to-r from-red-500 to-rose-600',
-      textColor: 'text-white',
-      dotColor: 'bg-red-400'
-    };
+    return 'recording';
   }
 
   switch (processingStatus) {
     case 'transcribing':
-      return {
-        icon: <Loader2 className="w-4 h-4 animate-spin" />,
-        label: 'Transcribing',
-        bgColor: 'bg-gradient-to-r from-blue-500 to-cyan-600',
-        textColor: 'text-white',
-        dotColor: 'bg-blue-400'
-      };
+      return 'transcribing';
     case 'processing':
-      return {
-        icon: <Zap className="w-4 h-4" />,
-        label: 'AI Processing',
-        bgColor: 'bg-gradient-to-r from-purple-500 to-violet-600',
-        textColor: 'text-white',
-        dotColor: 'bg-purple-400'
-      };
+      return 'processing';
     case 'complete':
-      return {
-        icon: <CheckCircle className="w-4 h-4" />,
-        label: 'Complete',
-        bgColor: 'bg-gradient-to-r from-emerald-500 to-teal-600',
-        textColor: 'text-white',
-        dotColor: 'bg-emerald-400'
-      };
+      return 'completed';
     default:
-      return {
-        icon: <FileText className="w-4 h-4" />,
-        label: 'Ready',
-        bgColor: 'bg-gradient-to-r from-blue-500 to-cyan-600',
-        textColor: 'text-white',
-        dotColor: 'bg-blue-400'
-      };
+      return 'processing';
+  }
+};
+
+const getStatusBgColor = (processingStatus?: ProcessingStatus, isRecording?: boolean): string => {
+  if (isRecording) {
+    return 'bg-gradient-to-r from-red-500 to-rose-600';
+  }
+
+  switch (processingStatus) {
+    case 'transcribing':
+      return 'bg-gradient-to-r from-blue-500 to-cyan-600';
+    case 'processing':
+      return 'bg-gradient-to-r from-purple-500 to-violet-600';
+    case 'complete':
+      return 'bg-gradient-to-r from-emerald-500 to-teal-600';
+    default:
+      return 'bg-gradient-to-r from-blue-500 to-cyan-600';
   }
 };
 
@@ -98,7 +88,8 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   isRecording = false,
   isViewingCompletedSession = false
 }) => {
-  const statusInfo = getStatusInfo(processingStatus, isRecording);
+  const state = mapToProcessingState(processingStatus, isRecording);
+  const bgColor = getStatusBgColor(processingStatus, isRecording);
   const agentDisplayName = AGENT_DISPLAY_NAMES[agentType] || agentType;
 
   // Format age from DOB if available
@@ -121,7 +112,7 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   const ageDisplay = patientInfo.age || calculateAge(patientInfo.dob);
 
   return (
-    <div className={`${statusInfo.bgColor} ${statusInfo.textColor} px-4 py-3 shadow-sm`}>
+    <div className={`${bgColor} text-white px-4 py-3 shadow-sm`}>
       <div className="flex items-center justify-between">
         {/* Left: Patient Info */}
         <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -160,7 +151,7 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
 
           {/* Status Badge or Go To Patient Button */}
           {isViewingCompletedSession && processingStatus === 'complete' ? (
-            <button
+            <Button
               onClick={async () => {
                 try {
                   await chrome.runtime.sendMessage({
@@ -173,21 +164,26 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
                   console.error('❌ Failed to navigate to patient:', error);
                 }
               }}
-              className="flex items-center space-x-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-4 py-2 rounded-full font-semibold transition-all shadow-sm hover:shadow-md"
+              variant="primary"
+              size="md"
+              startIcon={User}
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-full shadow-sm hover:shadow-md"
             >
-              <User className="w-4 h-4" />
-              <span className="text-sm whitespace-nowrap">Go To Patient</span>
-            </button>
+              Go To Patient
+            </Button>
           ) : (
             <div className="flex items-center space-x-2 bg-white/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
               {/* Animated pulsing dot */}
               {(isRecording || processingStatus === 'transcribing' || processingStatus === 'processing') && (
-                <div className="relative">
-                  <div className={`w-2 h-2 rounded-full ${statusInfo.dotColor} animate-pulse`}></div>
-                </div>
+                <StateIndicator state={state} size="sm" withTooltip={false} />
               )}
-              {statusInfo.icon}
-              <span className="text-sm font-semibold whitespace-nowrap">{statusInfo.label}</span>
+              <StatusBadge
+                state={state}
+                size="sm"
+                showIcon={!(isRecording || processingStatus === 'transcribing' || processingStatus === 'processing')}
+                label={processingStatus === 'processing' ? 'AI Processing' : undefined}
+                className="bg-transparent border-0"
+              />
             </div>
           )}
         </div>

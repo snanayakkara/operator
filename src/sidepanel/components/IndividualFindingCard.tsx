@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { 
-  Shield, 
-  AlertTriangle, 
-  Clock, 
-  CheckCircle, 
-  ExternalLink, 
+import {
+  Shield,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  ExternalLink,
   Heart,
   Check,
   Square
 } from 'lucide-react';
 import type { BatchPatientReviewFinding } from '@/types/medical.types';
+import { Button, IconButton } from './buttons';
+import { StatusBadge } from './status';
+import type { ProcessingState } from '@/utils/stateColors';
 
 interface IndividualFindingCardProps {
   finding: BatchPatientReviewFinding;
@@ -77,19 +80,20 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
     }
   };
 
-  const getUrgencyBadgeColor = (urgency: string) => {
+  // Map urgency to ProcessingState for StatusBadge
+  const mapUrgencyToState = (urgency: string): ProcessingState => {
     if (isCompleted) {
-      return 'bg-gray-100 text-gray-600';
+      return 'completed';
     }
     switch (urgency) {
       case 'Immediate':
-        return 'bg-red-100 text-red-800';
+        return 'error';
       case 'Soon':
-        return 'bg-orange-100 text-orange-800';
+        return 'needs_review';
       case 'Routine':
-        return 'bg-green-100 text-green-800';
+        return 'completed';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'processing';
     }
   };
 
@@ -110,17 +114,15 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center space-x-3">
             {/* Completion Checkbox */}
-            <button
+            <IconButton
               onClick={handleToggleComplete}
-              className="flex-shrink-0 p-1 rounded-md hover:bg-white/50 transition-colors"
+              icon={isCompleted ? <CheckCircle /> : <Square />}
+              variant="ghost"
+              size="sm"
+              className={isCompleted ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}
               title={isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
-            >
-              {isCompleted ? (
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              ) : (
-                <Square className="w-5 h-5 text-gray-400 hover:text-gray-600" />
-              )}
-            </button>
+              aria-label={isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
+            />
             
             <div className="flex items-center space-x-2">
               {getUrgencyIcon(finding.urgency)}
@@ -131,17 +133,21 @@ export const IndividualFindingCard: React.FC<IndividualFindingCardProps> = ({
           </div>
           
           <div className="flex items-center space-x-2">
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getUrgencyBadgeColor(finding.urgency)}`}>
-              {finding.urgency}
-            </span>
-            
+            <StatusBadge
+              state={mapUrgencyToState(finding.urgency)}
+              size="sm"
+              label={finding.urgency}
+            />
+
             {/* Expand/Collapse Button */}
-            <button
+            <Button
               onClick={() => setIsExpanded(!isExpanded)}
+              variant="ghost"
+              size="sm"
               className="text-xs text-blue-600 hover:text-blue-800 font-medium"
             >
               {isExpanded ? 'Collapse' : 'Details'}
-            </button>
+            </Button>
           </div>
         </div>
 

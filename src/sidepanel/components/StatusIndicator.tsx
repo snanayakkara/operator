@@ -24,6 +24,7 @@ import {
   Target as _Target,
   TrendingUp as _TrendingUp
 } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import type { ProcessingStatus, AgentType, ModelStatus, WhisperServerStatus as _WhisperServerStatus, PatientSession } from '@/types/medical.types';
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
@@ -412,27 +413,26 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             {/* Cancel Button - Compact version, positioned to avoid overlap */}
             {(status === 'transcribing' || status === 'processing' || status === 'cancelling') && onCancelProcessing && (
               <div className="flex-shrink-0 ml-2">
-                <button
+                <Button
                   onClick={onCancelProcessing}
                   disabled={status === 'cancelling'}
-                  className={`px-2 py-1 text-xs font-medium rounded-md transition-all duration-200 flex items-center space-x-1 ${
-                    status === 'cancelling' 
-                      ? 'bg-orange-500/10 border border-orange-300 text-orange-600 cursor-not-allowed' 
-                      : 'bg-red-500/10 border border-red-300 text-red-600 hover:bg-red-500/20 hover:border-red-400'
+                  variant="outline"
+                  size="sm"
+                  isLoading={status === 'cancelling'}
+                  startIcon={status === 'cancelling' ? undefined : <X />}
+                  className={`px-2 py-1 text-xs ${
+                    status === 'cancelling'
+                      ? 'bg-orange-500/10 border-orange-300 text-orange-600'
+                      : 'bg-red-500/10 border-red-300 text-red-600 hover:bg-red-500/20 hover:border-red-400'
                   }`}
                   title={
-                    status === 'transcribing' 
+                    status === 'transcribing'
                       ? "Cancel audio transcription"
                       : "Cancel AI report generation"
                   }
                 >
-                  {status === 'cancelling' ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <X className="w-3 h-3" />
-                  )}
-                  <span>{status === 'cancelling' ? 'Cancelling...' : 'Cancel'}</span>
-                </button>
+                  {status === 'cancelling' ? 'Cancelling...' : 'Cancel'}
+                </Button>
               </div>
             )}
           </div>
@@ -448,28 +448,26 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
             {/* New Recording Button - Compact Icon */}
             {showNewRecording && onNewRecording && (
-              <button
+              <IconButton
                 onClick={onNewRecording}
                 disabled={isRecording || ['recording', 'transcribing', 'processing', 'enhancing', 'cancelling'].includes(status)}
-                className={`bg-white border border-gray-200 transition-all duration-200 ease-out rounded-lg p-2 ${
+                icon={<ListRestart />}
+                variant="outline"
+                size="md"
+                aria-label="Clear previous recording and start fresh"
+                className={`bg-white border-gray-200 ${
                   isRecording || ['recording', 'transcribing', 'processing', 'enhancing', 'cancelling'].includes(status)
-                    ? 'opacity-50 cursor-not-allowed' 
-                    : 'hover:bg-gray-50 hover:border-gray-300 cursor-pointer'
+                    ? 'text-ink-secondary'
+                    : 'text-green-600 hover:bg-gray-50 hover:border-gray-300'
                 }`}
                 title="Clear previous recording and start fresh"
-              >
-                <ListRestart className={`w-4 h-4 ${
-                  isRecording || ['recording', 'transcribing', 'processing', 'enhancing', 'cancelling'].includes(status)
-                    ? 'text-ink-secondary' 
-                    : 'text-green-600'
-                }`} />
-              </button>
+              />
             )}
 
             {/* Session Notification Button - Minimize during recording */}
             {patientSessions.length > 0 && (
               <div className="relative">
-                <button
+                <IconButton
                   ref={bellButtonRef}
                   onClick={() => {
                     console.time('🔔 Notification Bell Click Performance');
@@ -492,19 +490,22 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                       });
                     }, 180);
                   }}
-                  className={`bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded-lg p-2 relative ${
-                    isRecording ? 'scale-90' : ''
-                  }`}
-                  title={`${patientSessions.length} recent session${patientSessions.length !== 1 ? 's' : ''}`}
-                  data-dropdown-trigger
-                >
-                  <Bell className="w-4 h-4 text-accent-violet" />
+                icon={<Bell />}
+                variant="outline"
+                size="md"
+                className={`bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 text-accent-violet ${
+                  isRecording ? 'scale-90' : ''
+                }`}
+                title={`${patientSessions.length} recent session${patientSessions.length !== 1 ? 's' : ''}`}
+                aria-label={`${patientSessions.length} session${patientSessions.length !== 1 ? 's' : ''} available`}
+                data-dropdown-trigger
+              >
                   {isOpeningSessions && (
                     <span className="absolute -top-1 -left-1">
                       <Loader2 className="w-3 h-3 text-accent-violet animate-spin" />
                     </span>
                   )}
-                  
+
                   {/* Red notification badge - smaller during recording */}
                   <div className={`absolute -top-1 -right-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-white ${
                     isRecording ? 'w-4 h-4' : 'w-5 h-5'
@@ -515,7 +516,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                       {patientSessions.length > 9 ? '9+' : patientSessions.length}
                     </span>
                   </div>
-                </button>
+                </IconButton>
                 
                 {/* Session Dropdown */}
                 <SessionDropdown
@@ -536,16 +537,17 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
 
             {/* Settings quick view trigger */}
-            <button
+            <IconButton
               ref={triggerRef}
               data-dropdown-trigger
               onClick={() => setShowServicesDetails(!showServicesDetails)}
-              className="inline-flex items-center justify-center w-11 h-11 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              icon={<Settings />}
+              variant="ghost"
+              size="lg"
               aria-label="Settings quick view"
               title="Settings Quick View"
-            >
-              <Settings className="w-5 h-5 text-ink-secondary" />
-            </button>
+              className="text-ink-secondary"
+            />
           </div>
         </div>
 
@@ -594,22 +596,26 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               </h4>
               
               <div className="flex items-center space-x-2">
-                <button
+                <IconButton
                   onClick={handleRefreshServices}
                   disabled={isRefreshing}
-                  className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded p-1.5"
+                  icon={<RefreshCw className={isRefreshing ? 'motion-safe:animate-spin' : ''} />}
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Refresh all services"
+                  className="text-accent-violet w-auto h-auto p-1.5"
                   title="Refresh all services"
-                >
-                  <RefreshCw className={`w-3 h-3 text-accent-violet ${isRefreshing ? 'motion-safe:animate-spin' : ''}`} />
-                </button>
-                
-                <button
+                />
+
+                <IconButton
                   onClick={() => setShowServicesDetails(false)}
-                  className="bg-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all duration-200 ease-out rounded p-1.5"
+                  icon={<X />}
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Close"
+                  className="text-ink-secondary w-auto h-auto p-1.5"
                   title="Close"
-                >
-                  <X className="w-3 h-3 text-ink-secondary" />
-                </button>
+                />
               </div>
             </div>
 
@@ -768,7 +774,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
             {/* Metrics Dashboard */}
             {onShowMetrics && (
               <div className="border-t border-gray-200 pt-3">
-                <button 
+                <Button
                   onClick={() => {
                     try {
                       const targetUrl = chrome?.runtime?.getURL
@@ -785,17 +791,20 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                       onShowMetrics?.();
                     }
                   }}
-                  className="w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded p-2 flex items-center justify-center space-x-2"
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  startIcon={<BarChart3 />}
+                  className="bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 text-xs"
                 >
-                  <BarChart3 className="w-3 h-3 text-accent-violet" />
-                  <span className="text-ink-primary text-xs">Performance Metrics</span>
-                </button>
+                  Performance Metrics
+                </Button>
               </div>
             )}
-            
+
             {/* Settings Link */}
             <div className="border-t border-gray-200 pt-3">
-              <button 
+              <Button
                 onClick={() => {
                   // Open options page in new tab
                   if (chrome?.runtime?.openOptionsPage) {
@@ -805,12 +814,15 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                     window.open(chrome.runtime.getURL('src/options/index.html'), '_blank');
                   }
                 }}
-                className="w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 ease-out rounded p-2 flex items-center justify-center space-x-2"
+                variant="outline"
+                size="sm"
+                fullWidth
+                startIcon={<Settings />}
+                className="bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 text-xs"
                 title="Open settings page in new tab"
               >
-                <Settings className="w-3 h-3 text-ink-secondary" />
-                <span className="text-ink-primary text-xs">Open Full Settings</span>
-              </button>
+                Open Full Settings
+              </Button>
             </div>
           </div>
         </div>

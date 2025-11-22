@@ -10,6 +10,8 @@
 
 import React, { memo, useState } from 'react';
 import { AlertCircleIcon } from '../icons/OptimizedIcons';
+import Button from '../buttons/Button';
+import { StatusBadge } from '../status';
 
 interface WarningsPanelProps {
   warnings?: string[];
@@ -33,11 +35,14 @@ const WarningsPanel: React.FC<WarningsPanelProps> = memo(({
       {/* Warning Badge - for header stats */}
       <button
         onClick={() => setWarningsExpanded(!warningsExpanded)}
-        className="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 hover:bg-orange-200 transition-colors"
+        className="inline-flex items-center space-x-1 cursor-pointer hover:opacity-80 transition-opacity"
         title={`${warnings.length} warning${warnings.length !== 1 ? 's' : ''} - click to ${warningsExpanded ? 'hide' : 'view'}`}
       >
-        <AlertCircleIcon className="w-3 h-3" />
-        <span>{warnings.length}</span>
+        <StatusBadge
+          state="needs_review"
+          size="sm"
+          label={`${warnings.length}`}
+        />
       </button>
 
       {/* Expandable Warnings Section */}
@@ -55,15 +60,17 @@ const WarningsPanel: React.FC<WarningsPanelProps> = memo(({
                 ))}
               </ul>
               {onDismissWarnings && (
-                <button
+                <Button
                   onClick={() => {
                     onDismissWarnings();
                     setWarningsExpanded(false);
                   }}
-                  className="mt-3 text-orange-600 hover:text-orange-700 text-xs font-medium transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3 text-orange-600 hover:text-orange-700"
                 >
                   Dismiss warnings
-                </button>
+                </Button>
               )}
             </div>
           </div>

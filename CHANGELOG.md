@@ -9,6 +9,24 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.36.0] - 2025-11-22
+
+### Added
+
+- **Rounds (Cabrini ward list)**
+  - Persistent local ward list with patient issues, investigations, tasks, intake notes, ward entries, HUD pins, and discharge/archive flow.
+  - Global Quick Add (name + scratchpad) stores intake notes, auto-runs intake parser, and merges seeded issues/investigations/tasks with status hints on cards.
+  - Patient detail view for editable demographics/one-liner, issues with subpoints and pinning, lab trend rendering, imaging summaries, tasks with status and pinning, and intake note capture.
+  - Global tasks board showing open tasks across active patients with search/category filters and per-patient grouping.
+  - Handover generator modal with per-patient include toggles and copy-to-clipboard output.
+  - GP discharge letter generator using existing Operator tone with inpatient-focused prompt.
+  - HUD JSON export stored at `rounds_hud_state` honoring pinned/open issues, investigations, and tasks.
+
+### Changed
+
+- **Ward update dictation**
+  - “Dictate ward update” now uses the shared `useRecorder` + Whisper transcription pipeline, feeds transcripts to the ward update parser, previews diffs, and applies them as WardEntries with undo support.
+
 ## [3.35.0] - 2025-11-18
 
 ### Added

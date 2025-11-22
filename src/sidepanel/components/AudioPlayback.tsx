@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Download, RotateCcw, Volume2, ChevronDown, ChevronUp } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 
 interface AudioPlaybackProps {
   audioBlob: Blob;
@@ -508,9 +509,13 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
 
       {/* Audio Quality Summary Bar - Collapsible (optional, controlled by parent) */}
       {showQualityBar && analysis && (
-        <button
+        <Button
           onClick={() => setPlaybackExpanded(!playbackExpanded)}
-          className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          variant="ghost"
+          size="md"
+          fullWidth
+          endIcon={playbackExpanded ? ChevronUp : ChevronDown}
+          className="justify-between px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50"
         >
           <div className="flex items-center space-x-3 text-sm">
             <span className="text-gray-600">Quality:</span>
@@ -521,12 +526,7 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
             <span className="text-gray-600">Duration:</span>
             <span className="text-gray-900">{formatTime(analysis.duration)}</span>
           </div>
-          {playbackExpanded ? (
-            <ChevronUp className="w-4 h-4 text-gray-400" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-gray-400" />
-          )}
-        </button>
+        </Button>
       )}
 
       {/* Expandable Waveform and Playback Controls */}
@@ -652,25 +652,25 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
           {/* Playback Controls */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <button
+              <IconButton
                 onClick={togglePlayback}
-                className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
+                icon={isPlaying ? Pause : Play}
+                variant="primary"
+                size="lg"
                 disabled={!audioUrl}
-                title={isPlaying ? "Pause audio" : "Play audio"}
-                type="button"
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
-              </button>
+                aria-label={isPlaying ? "Pause audio" : "Play audio"}
+                className="rounded-full w-10 h-10"
+              />
 
-              <button
+              <IconButton
                 onClick={resetPlayback}
-                className="flex items-center justify-center w-8 h-8 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-full transition-colors"
+                icon={RotateCcw}
+                variant="secondary"
+                size="sm"
                 disabled={!audioUrl}
-                title="Reset to beginning"
-                type="button"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+                aria-label="Reset to beginning"
+                className="rounded-full w-8 h-8"
+              />
 
               <div className="flex items-center space-x-2">
                 <Volume2 className="w-4 h-4 text-gray-600" />
@@ -716,15 +716,15 @@ export const AudioPlayback: React.FC<AudioPlaybackProps> = ({
               </select>
 
               {/* Download Button - More subtle, inside panel */}
-              <button
+              <Button
                 onClick={downloadAudio}
-                className="flex items-center space-x-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded border border-gray-300 transition-colors"
-                title="Download audio file"
-                type="button"
+                variant="outline"
+                size="sm"
+                startIcon={Download}
+                className="text-xs px-2 py-1"
               >
-                <Download className="w-3 h-3" />
-                <span>Save</span>
-              </button>
+                Save
+              </Button>
             </div>
           </div>
 

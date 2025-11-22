@@ -19,6 +19,7 @@ import {
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
 import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, User as UserIcon, Image, Loader2, Edit3, X } from 'lucide-react';
+import Button, { IconButton } from '../buttons/Button';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
 import { MissingInfoPanel } from './MissingInfoPanel';
@@ -129,6 +130,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const [buttonStates, setButtonStates] = useState({ exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
+  const [isInlineEditing, setIsInlineEditing] = useState(false);
+  const [inlineReportDraft, setInlineReportDraft] = useState<RightHeartCathReport | null>(null);
 
   // Validation hook
   const rhcValidation = useRHCValidation();
@@ -244,13 +247,21 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     return null;
   }, [effectiveRHCData, results]);
 
+  const isMissingNumericValue = (value: string | number | null | undefined): boolean => {
+    if (value === null || value === undefined || value === '') {
+      return true;
+    }
+    const numeric = Number(value);
+    return !Number.isNaN(numeric) && numeric === 0;
+  };
+
   // Helper function: Count missing optional fields for badge notification
   const countMissingOptionalFields = useCallback((rhcData: RightHeartCathReport | null): number => {
     if (!rhcData?.rhcData) return 0;
 
     let count = 0;
     const data = rhcData.rhcData;
-    const patientData = rhcData.rhcData.patientData;
+    const patientData = rhcData.patientData;
 
     const optionalFields = [
       { path: 'fluoroscopyTime', value: data.fluoroscopyTime },
@@ -261,7 +272,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
     ];
 
     for (const field of optionalFields) {
-      if (!field.value || field.value === '' || field.value === 0) {
+      if (isMissingNumericValue(field.value)) {
         count++;
       }
     }
@@ -275,13 +286,13 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
     const missing: string[] = [];
     const data = rhcData.rhcData;
-    const patientData = rhcData.rhcData.patientData;
+    const patientData = rhcData.patientData;
 
-    if (!data.fluoroscopyTime || data.fluoroscopyTime === 0) missing.push('Fluoroscopy time');
-    if (!data.fluoroscopyDose || data.fluoroscopyDose === 0) missing.push('Fluoroscopy dose');
-    if (!data.doseAreaProduct || data.doseAreaProduct === 0) missing.push('Dose area product (DAP)');
-    if (!data.contrastVolume || data.contrastVolume === 0) missing.push('Contrast volume');
-    if (!patientData?.heartRate || patientData.heartRate === 0) missing.push('Heart rate');
+    if (isMissingNumericValue(data.fluoroscopyTime)) missing.push('Fluoroscopy time');
+    if (isMissingNumericValue(data.fluoroscopyDose)) missing.push('Fluoroscopy dose');
+    if (isMissingNumericValue(data.doseAreaProduct)) missing.push('Dose area product (DAP)');
+    if (isMissingNumericValue(data.contrastVolume)) missing.push('Contrast volume');
+    if (isMissingNumericValue(patientData?.heartRate)) missing.push('Heart rate');
 
     return missing;
   }, []);
@@ -791,30 +802,25 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       {/* Report Image Button - Inline after prose sections */}
       {effectiveRHCData && (
         <div className="mb-6">
-          <button
+          <Button
             type="button"
             onClick={handleExportCard}
             disabled={buttonStates.exporting || !effectiveRHCData}
-            className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-lg border-2 border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+            variant="outline"
+            size="md"
+            fullWidth
+            isLoading={buttonStates.exporting}
+            isSuccess={buttonStates.exported}
+            startIcon={<Image />}
+            className="border-2 border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-400"
             title="Export 18×10cm PNG card (300 DPI) - serves as the FINDINGS section"
           >
-            {buttonStates.exporting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating Report Image...
-              </>
-            ) : buttonStates.exported ? (
-              <>
-                <Image className="w-4 h-4 mr-2" />
-                Report Image Downloaded!
-              </>
-            ) : (
-              <>
-                <Image className="w-4 h-4 mr-2" />
-                Generate Report Image (Findings)
-              </>
-            )}
-          </button>
+            {buttonStates.exporting
+              ? 'Generating Report Image...'
+              : buttonStates.exported
+              ? 'Report Image Downloaded!'
+              : 'Generate Report Image (Findings)'}
+          </Button>
         </div>
       )}
 
@@ -852,12 +858,14 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-lg p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900">Custom Fields</h3>
-              <button
+              <Button
                 onClick={() => setShowAddField(!showAddField)}
+                variant="ghost"
+                size="sm"
                 className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
               >
                 {showAddField ? 'Cancel' : '+ Add Field'}
-              </button>
+              </Button>
             </div>
 
             {/* Add Field Form */}
@@ -891,12 +899,15 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                     }}
                   />
                 </div>
-                <button
+                <Button
                   onClick={handleAddCustomField}
-                  className="w-full px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                  variant="success"
+                  size="sm"
+                  fullWidth
+                  className="text-xs"
                 >
                   Add Field
-                </button>
+                </Button>
               </div>
             )}
 
@@ -912,13 +923,15 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                       <span className="text-sm font-medium text-gray-700">{name}:</span>
                       <span className="text-sm text-gray-900 ml-2">{value}</span>
                     </div>
-                    <button
+                    <IconButton
                       onClick={() => handleRemoveCustomField(name)}
+                      icon={<X />}
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Remove field"
                       className="text-red-500 hover:text-red-700 ml-2"
                       title="Remove field"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    />
                   </div>
                 ))}
               </div>
@@ -934,10 +947,12 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
             return (
               <div key={key}>
-                <button
+                <Button
                   type="button"
                   onClick={() => toggleSection(key)}
-                  className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 max-w-full overflow-hidden"
+                  variant="ghost"
+                  fullWidth
+                  className="px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 max-w-full overflow-hidden rounded-none"
                 >
                   <div className="flex items-center space-x-2 min-w-0 flex-1">
                     <IconComponent className={`w-4 h-4 text-${color}-600 flex-shrink-0`} />
@@ -949,7 +964,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                   ) : (
                     <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
                   )}
-                </button>
+                </Button>
 
                 <AnimatePresence>
                   {isExpanded && (
@@ -979,18 +994,23 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-white via-white/95 to-transparent pt-8 pb-4 px-4 pointer-events-none shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
         <div className="max-w-full pointer-events-auto">
           <div className="bg-white/95 backdrop-blur-sm shadow-lg border border-gray-200 rounded-lg p-3">
-            <button
-              type="button"
-              onClick={() => setIsEditingFields(true)}
-              disabled={!effectiveRHCData}
-              className="relative w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
-              title={missingOptionalCount > 0
-                ? `Edit all fields - ${missingOptionalCount} optional field${missingOptionalCount > 1 ? 's' : ''} available: ${missingFieldNames.join(', ')}`
-                : "Edit all fields including patient data, haemodynamics, access, catheter details, and add custom fields"
-              }
-            >
-              <Edit3 className="w-4 h-4 mr-2" />
-              Edit All Fields
+            <div className="relative">
+              <Button
+                type="button"
+                onClick={() => setIsEditingFields(true)}
+                disabled={!effectiveRHCData}
+                variant="outline"
+                size="md"
+                fullWidth
+                startIcon={<Edit3 />}
+                className="border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400"
+                title={missingOptionalCount > 0
+                  ? `Edit all fields - ${missingOptionalCount} optional field${missingOptionalCount > 1 ? 's' : ''} available: ${missingFieldNames.join(', ')}`
+                  : "Edit all fields including patient data, haemodynamics, access, catheter details, and add custom fields"
+                }
+              >
+                Edit All Fields
+              </Button>
 
               {/* Badge for missing optional fields */}
               {missingOptionalCount > 0 && (
@@ -1001,7 +1021,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                   {missingOptionalCount}
                 </span>
               )}
-            </button>
+            </div>
           </div>
         </div>
       </div>

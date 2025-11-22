@@ -440,6 +440,8 @@ export class SessionPersistenceService {
 
     return {
       id: session.id,
+      source: session.source,
+      mobileJobId: session.mobileJobId,
       patient: session.patient,
       transcription: session.transcription,
       results: session.results,
@@ -467,6 +469,8 @@ export class SessionPersistenceService {
   private decompressSession(persisted: PersistedSession): PatientSession {
     return {
       id: persisted.id,
+      source: persisted.source,
+      mobileJobId: persisted.mobileJobId,
       patient: persisted.patient,
       transcription: persisted.transcription,
       results: persisted.results,

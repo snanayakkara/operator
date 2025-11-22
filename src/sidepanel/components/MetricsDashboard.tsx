@@ -6,11 +6,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  BarChart3, 
-  Clock, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  BarChart3,
+  Clock,
+  TrendingUp,
+  TrendingDown,
   Activity,
   Zap,
   Brain,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { MetricsService, type MetricsAnalytics, type RecordingMetric } from '@/services/MetricsService';
 import type { AgentType } from '@/types/medical.types';
+import { IconButton } from './buttons/Button';
 
 interface MetricsDashboardProps {
   isOpen: boolean;
@@ -144,34 +145,38 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ isOpen, onCl
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <button
+              <IconButton
                 onClick={handleExportMetrics}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Export Metrics"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-              <button
+                icon={Download}
+                variant="ghost"
+                size="sm"
+                aria-label="Export Metrics"
+                className="text-gray-600"
+              />
+              <IconButton
                 onClick={loadMetrics}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
+                icon={RefreshCw}
+                variant="ghost"
+                size="sm"
+                aria-label="Refresh"
+                className="text-gray-600"
+              />
+              <IconButton
                 onClick={handleClearMetrics}
-                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                title="Clear All Metrics"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
+                icon={Trash2}
+                variant="ghost"
+                size="sm"
+                aria-label="Clear All Metrics"
+                className="text-red-600 hover:bg-red-50"
+              />
+              <IconButton
                 onClick={onClose}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
+                icon={X}
+                variant="ghost"
+                size="sm"
+                aria-label="Close"
+                className="text-gray-600"
+              />
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { ChevronDown, Brain, Heart, Eye, FileText, Stethoscope, Activity, Clipbo
 import { useDropdownPosition } from '../hooks/useDropdownPosition';
 import { DropdownPortal } from './DropdownPortal';
 import type { AgentType } from '@/types/medical.types';
+import Button from './buttons/Button';
 
 interface AgentSelectorProps {
   selectedAgent: AgentType | null;
@@ -85,7 +86,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
       
       <div className="relative dropdown-reset-context">
         {/* Selected Agent Display / Dropdown Trigger */}
-        <button
+        <Button
           ref={triggerRef}
           data-dropdown-trigger
           onClick={() => {
@@ -95,10 +96,10 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
             }
           }}
           disabled={disabled}
-          className={`
-            w-full bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 p-3 rounded-lg flex items-center justify-between transition-all
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}
-          `}
+          variant="outline"
+          size="md"
+          fullWidth
+          className="!justify-between p-3"
         >
           {selectedConfig ? (
             <div className="flex items-center space-x-3">
@@ -126,12 +127,12 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
             </div>
           )}
           
-          <ChevronDown 
+          <ChevronDown
             className={`w-4 h-4 text-gray-500 transition-transform ${
               isOpen ? 'transform rotate-180' : ''
-            }`} 
+            }`}
           />
-        </button>
+        </Button>
 
         {/* Dropdown Menu - Portal Based */}
         <DropdownPortal
@@ -152,12 +153,13 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
             }}
           >
             {/* Auto Detection Option */}
-            <button
+            <Button
               onClick={() => handleAgentSelect(null as any)}
-              className="w-full p-3 hover:bg-gray-50 flex items-center space-x-3 transition-colors border-b border-gray-100"
+              variant="ghost"
+              className="!w-full !justify-start border-b border-gray-100 rounded-none"
+              startIcon={<Brain />}
             >
-              <Brain className="w-5 h-5 text-gray-500" />
-              <div className="text-left">
+              <div className="text-left flex-1">
                 <div className="text-gray-900 font-medium text-sm">
                   Auto-detect
                 </div>
@@ -165,20 +167,21 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                   Let AI choose the best agent
                 </div>
               </div>
-            </button>
+            </Button>
 
             {/* Agent Options */}
             {agents.map(([agentType, config]) => (
-              <button
+              <Button
                 key={agentType}
                 onClick={() => handleAgentSelect(agentType)}
-                className={`
-                  w-full p-3 hover:bg-gray-50 flex items-center space-x-3 transition-colors
-                  ${selectedAgent === agentType ? 'bg-gray-50' : ''}
-                `}
+                variant="ghost"
+                fullWidth
+                startIcon={<config.icon className={`w-5 h-5 ${config.color}`} />}
+                className={`!justify-start rounded-none ${
+                  selectedAgent === agentType ? 'bg-gray-50' : ''
+                }`}
               >
-                <config.icon className={`w-5 h-5 ${config.color}`} />
-                <div className="text-left">
+                <div className="text-left flex-1">
                   <div className="text-gray-900 font-medium text-sm">
                     {config.name}
                   </div>
@@ -186,7 +189,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
                     {config.description}
                   </div>
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         </DropdownPortal>

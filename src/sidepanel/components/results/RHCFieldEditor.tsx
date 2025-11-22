@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Edit3, RefreshCw } from 'lucide-react';
+import Button, { IconButton } from '../buttons/Button';
 import * as RHCCalc from '@/services/RHCCalculationService';
 import type {
   RightHeartCathReport,
@@ -377,12 +378,14 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
               <Edit3 className="w-5 h-5 text-blue-600" />
               <h2 className="text-xl font-semibold text-gray-900">Edit Haemodynamic Data</h2>
             </div>
-            <button
+            <IconButton
               onClick={onCancel}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+              icon={<X />}
+              variant="ghost"
+              size="md"
+              aria-label="Close"
+              className="rounded-full"
+            />
           </div>
 
           {/* Content */}
@@ -1161,23 +1164,27 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                   />
                 </div>
                 <div className="flex items-center justify-end space-x-2">
-                  <button
+                  <Button
                     onClick={() => {
                       setShowAddCustomField(false);
                       setNewCustomFieldName('');
                       setNewCustomFieldValue('');
                     }}
-                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleAddCustomField}
                     disabled={!newCustomFieldName.trim() || !newCustomFieldValue.trim()}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 border border-transparent rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    variant="success"
+                    size="sm"
+                    className="text-xs"
                   >
                     Add Field
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1189,28 +1196,32 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                   Changes will be applied to the card export. Original data is preserved.
                 </p>
                 {!showAddCustomField && (
-                  <button
+                  <Button
                     onClick={() => setShowAddCustomField(true)}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                   >
                     + Add Custom Field
-                  </button>
+                  </Button>
                 )}
               </div>
               <div className="flex items-center space-x-3">
-                <button
+                <Button
                   onClick={onCancel}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  variant="outline"
+                  size="md"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleSave}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2"
+                  variant="secondary"
+                  size="md"
+                  startIcon={<Check />}
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Apply Changes</span>
-                </button>
+                  Apply Changes
+                </Button>
               </div>
             </div>
           </div>

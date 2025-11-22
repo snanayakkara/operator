@@ -11,6 +11,9 @@ interface ExtensionMessage {
   action?: string;
   data?: any;
   tabId?: number;
+  fileNumber?: string;
+  patientName?: string;
+  [key: string]: any;
 }
 
 class BackgroundService {
@@ -321,6 +324,16 @@ class BackgroundService {
         case 'EXECUTE_ACTION':
           await this.executeAction(action!, data, tabId || sender.tab?.id, sendResponse);
           break;
+
+        case 'EXECUTE_ACTION_ACTIVE_EMR': {
+          const targetTabId = tabId || this.getActiveEmrTabIdFromSet();
+          if (!targetTabId) {
+            sendResponse({ success: false, error: 'No active EMR tab available' });
+            break;
+          }
+          await this.executeAction(action!, data, targetTabId, sendResponse);
+          break;
+        }
 
         case 'PAGE_DROP_GUARD_INSTALLED':
           console.log('✅ Page drop guard installed for tab', sender.tab?.id);
@@ -805,6 +818,15 @@ class BackgroundService {
       console.log('❌ Invalid URL format:', error);
       return false;
     }
+  }
+
+  private getActiveEmrTabIdFromSet(): number | null {
+    const iterator = this.activeTabs.values();
+    const first = iterator.next();
+    if (!first.done) {
+      return first.value;
+    }
+    return null;
   }
 
   private async getTabInfo(tabId?: number) {

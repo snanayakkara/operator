@@ -8,6 +8,8 @@
 import React, { useState, useCallback } from 'react';
 import { AlertCircle, Info, AlertTriangle, Plus, Trash2, X, Check } from 'lucide-react';
 import type { BPReading, BPWarning } from '@/types/BPTypes';
+import Button from './buttons/Button';
+import { IconButton } from './buttons/Button';
 
 interface BPReviewGridProps {
   readings: BPReading[];
@@ -220,13 +222,15 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
     <div className="space-y-3">
       {/* Add Reading Button */}
       {editable && !showAddForm && (
-        <button
+        <Button
           onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors border border-blue-200"
+          variant="outline"
+          size="sm"
+          startIcon={<Plus />}
+          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
         >
-          <Plus className="w-4 h-4" />
           Add New Reading
-        </button>
+        </Button>
       )}
 
       {/* Add Reading Form */}
@@ -234,12 +238,14 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-blue-900">Add New Reading</h4>
-            <button
+            <IconButton
               onClick={handleCancelAdd}
-              className="text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+              icon={<X />}
+              variant="ghost"
+              size="sm"
+              className="text-blue-600 hover:text-blue-800"
+              aria-label="Cancel add reading"
+            />
           </div>
 
           <div className="grid grid-cols-5 gap-3">
@@ -304,19 +310,22 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={handleAddReading}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              variant="secondary"
+              size="sm"
+              startIcon={<Check />}
             >
-              <Check className="w-4 h-4" />
               Add Reading
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleCancelAdd}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-gray-600 hover:text-gray-800"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -405,13 +414,14 @@ export const BPReviewGrid: React.FC<BPReviewGridProps> = ({
                   </td>
                   {editable && (
                     <td className="px-2 py-2 text-center">
-                      <button
+                      <IconButton
                         onClick={() => handleDeleteReading(reading.id)}
-                        className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
-                        title="Delete this reading"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        icon={<Trash2 />}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                        aria-label="Delete this reading"
+                      />
                     </td>
                   )}
                 </tr>

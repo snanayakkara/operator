@@ -14,6 +14,7 @@ import { PreOpCardLayout } from './PreOpCardLayout';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { Printer, Download, ChevronDown, ChevronRight, ClipboardList, Clipboard, Check, Loader2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Button, IconButton } from '../buttons';
 import type { PatientSession, PreOpProcedureType } from '@/types/medical.types';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
 import { copyPreOpCardToClipboard, downloadPreOpCard, validatePreOpDataForExport } from '@/utils/preOpCardExport';
@@ -394,113 +395,97 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
         {/* Custom Action Buttons */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* Copy A5 Card to Clipboard */}
-          <button
+          <Button
             onClick={handleCopyCard}
             disabled={copyCardState === 'copying'}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              copyCardState === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : copyCardState === 'error'
-                ? 'bg-red-50 border-red-200 text-red-700'
-                : copyCardState === 'copying'
-                ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
-                : 'bg-teal-50 hover:bg-teal-100 border-teal-200 text-teal-700'
-            } border`}
+            variant={
+              copyCardState === 'success' ? 'success' :
+              copyCardState === 'error' ? 'danger' : 'outline'
+            }
+            size="md"
+            isLoading={copyCardState === 'copying'}
+            isSuccess={copyCardState === 'success'}
+            startIcon={
+              copyCardState === 'error' ? <AlertCircle className="w-4 h-4" /> :
+              copyCardState === 'copying' || copyCardState === 'success' ? undefined :
+              <Clipboard className="w-4 h-4" />
+            }
+            className={
+              copyCardState === 'copying' ? 'bg-gray-50 border-gray-200 text-gray-500' :
+              copyCardState === 'success' || copyCardState === 'error' ? '' :
+              'bg-teal-50 hover:bg-teal-100 border-teal-200 text-teal-700'
+            }
           >
-            {copyCardState === 'copying' ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Copying...
-              </>
-            ) : copyCardState === 'success' ? (
-              <>
-                <Check className="w-4 h-4" />
-                Copied!
-              </>
-            ) : copyCardState === 'error' ? (
-              <>
-                <AlertCircle className="w-4 h-4" />
-                Failed
-              </>
-            ) : (
-              <>
-                <Clipboard className="w-4 h-4" />
-                Copy A5 Card
-              </>
-            )}
-          </button>
+            {copyCardState === 'copying' ? 'Copying...' :
+             copyCardState === 'success' ? 'Copied!' :
+             copyCardState === 'error' ? 'Failed' :
+             'Copy A5 Card'}
+          </Button>
 
           {/* Download A5 Card */}
-          <button
+          <Button
             onClick={handleDownloadCard}
             disabled={downloadCardState === 'downloading'}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              downloadCardState === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : downloadCardState === 'error'
-                ? 'bg-red-50 border-red-200 text-red-700'
-                : downloadCardState === 'downloading'
-                ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
-                : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
-            } border`}
+            variant={
+              downloadCardState === 'success' ? 'success' :
+              downloadCardState === 'error' ? 'danger' : 'outline'
+            }
+            size="md"
+            isLoading={downloadCardState === 'downloading'}
+            isSuccess={downloadCardState === 'success'}
+            startIcon={
+              downloadCardState === 'error' ? <AlertCircle className="w-4 h-4" /> :
+              downloadCardState === 'downloading' || downloadCardState === 'success' ? undefined :
+              <Download className="w-4 h-4" />
+            }
+            className={
+              downloadCardState === 'downloading' ? 'bg-gray-50 border-gray-200 text-gray-500' :
+              downloadCardState === 'success' || downloadCardState === 'error' ? '' :
+              'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
+            }
           >
-            {downloadCardState === 'downloading' ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : downloadCardState === 'success' ? (
-              <>
-                <Check className="w-4 h-4" />
-                Downloaded!
-              </>
-            ) : downloadCardState === 'error' ? (
-              <>
-                <AlertCircle className="w-4 h-4" />
-                Failed
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                Download A5 Card
-              </>
-            )}
-          </button>
+            {downloadCardState === 'downloading' ? 'Generating...' :
+             downloadCardState === 'success' ? 'Downloaded!' :
+             downloadCardState === 'error' ? 'Failed' :
+             'Download A5 Card'}
+          </Button>
 
           {/* Print A5 Card */}
-          <button
+          <Button
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-all"
+            variant="outline"
+            size="md"
+            startIcon={<Printer className="w-4 h-4" />}
+            className="bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
           >
-            <Printer className="w-4 h-4" />
             Print
-          </button>
+          </Button>
 
           {/* Export JSON */}
-          <button
+          <Button
             onClick={handleExportJSON}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-all"
+            variant="outline"
+            size="md"
+            startIcon={<Download className="w-4 h-4" />}
           >
-            <Download className="w-4 h-4" />
             Export JSON
-          </button>
+          </Button>
         </div>
 
         {/* Collapsible JSON Metadata */}
         <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <button
+          <Button
             onClick={() => setShowJSON(!showJSON)}
-            className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+            variant="ghost"
+            size="md"
+            fullWidth
+            className="justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-none"
+            endIcon={showJSON ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
           >
             <span className="text-sm font-medium text-gray-700">
               Structured JSON Metadata
             </span>
-            {showJSON ? (
-              <ChevronDown className="w-4 h-4 text-gray-500" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-gray-500" />
-            )}
-          </button>
+          </Button>
           <AnimatePresence>
             {showJSON && (
               <motion.div

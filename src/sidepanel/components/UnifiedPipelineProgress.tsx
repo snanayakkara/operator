@@ -28,6 +28,7 @@ interface UnifiedPipelineProgressProps {
   audioDuration?: number; // Audio duration in seconds for improved prediction
   showTimeEstimate?: boolean;
   showCircularTimer?: boolean; // Show circular countdown timer (default true)
+  skipStages?: PipelineStage[]; // Stages to skip (e.g., for mobile jobs skip audio-processing and transcribing)
   className?: string;
 }
 
@@ -83,12 +84,19 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
   audioDuration,
   showTimeEstimate = true,
   showCircularTimer = true,
+  skipStages = [],
   className = ''
 }) => {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [prediction, setPrediction] = useState<ProcessingTimeEstimate | null>(null);
   const [velocity, setVelocity] = useState<number>(0); // Progress per millisecond
   const [predictor] = useState(() => ProcessingTimePredictor.getInstance());
+
+  // Filter segments based on skipStages prop (e.g., mobile jobs skip audio/transcription)
+  const visibleSegments = useMemo(() =>
+    PIPELINE_SEGMENTS.filter(segment => !skipStages.includes(segment.id)),
+    [skipStages]
+  );
 
   // Early exit: Don't show countdown for old/completed sessions
   // If no start time or start time is > 5 minutes ago, this is a historical session
@@ -271,7 +279,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
       {/* Segmented Progress Bar */}
       <div className="mb-3">
         <div className="flex gap-1">
-          {PIPELINE_SEGMENTS.map((segment) => {
+          {visibleSegments.map((segment) => {
             const status = getSegmentStatus(segment);
             const fill = getSegmentFill(segment);
             const segmentWidth = segment.range[1] - segment.range[0]; // Relative width
@@ -313,7 +321,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
 
       {/* Stage Labels */}
       <div className="flex justify-between text-[10px] mb-3">
-        {PIPELINE_SEGMENTS.map((segment) => {
+        {visibleSegments.map((segment) => {
           const status = getSegmentStatus(segment);
           const Icon = segment.icon;
 

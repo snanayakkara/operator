@@ -8,6 +8,7 @@
 import React, { useState, useCallback } from 'react';
 import { X, ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Button, { IconButton } from './buttons/Button';
 import type { StepperResult } from '@/types/pasteNotes.types';
 
 interface SparsityStepperModalProps {
@@ -170,13 +171,14 @@ export const SparsityStepperModal: React.FC<SparsityStepperModalProps> = ({
                   </p>
                 </div>
               </div>
-              <button
+              <IconButton
                 onClick={onCancel}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                icon={<X />}
+                variant="ghost"
+                size="md"
                 aria-label="Close stepper"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                className="text-gray-500 hover:text-gray-700"
+              />
             </div>
 
             {/* Progress bar */}
@@ -278,26 +280,30 @@ export const SparsityStepperModal: React.FC<SparsityStepperModalProps> = ({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
             <div className="flex items-center justify-between">
-              <button
+              <Button
                 onClick={handleBack}
                 disabled={currentStep === 0}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                variant="outline"
+                size="sm"
+                startIcon={<ChevronLeft />}
+                className="bg-white"
               >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Back</span>
-              </button>
+                Back
+              </Button>
 
               <div className="text-xs text-gray-500">
                 Press Enter to continue • Esc to cancel
               </div>
 
-              <button
+              <Button
                 onClick={handleNext}
-                className="px-4 py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg font-medium text-sm transition-colors flex items-center space-x-2"
+                variant="primary"
+                size="sm"
+                endIcon={<ChevronRight />}
+                className="bg-amber-600 hover:bg-amber-700"
               >
-                <span>{currentStep === STEPS.length - 1 ? 'Complete' : 'Next'}</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                {currentStep === STEPS.length - 1 ? 'Complete' : 'Next'}
+              </Button>
             </div>
           </div>
         </motion.div>

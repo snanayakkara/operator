@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, Send, Check, FileText, Info } from 'lucide-react';
 import type { AgentType } from '@/types/medical.types';
+import Button from './buttons/Button';
 
 interface SummaryPanelProps {
   summary: string;
@@ -79,46 +80,38 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
       <div className="p-4 pt-0">
         <div className="grid grid-cols-2 gap-2">
           {/* Copy Summary Button */}
-          <button
+          <Button
             onClick={handleCopy}
-            className={`
-              p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border
-              ${copiedRecently 
-                ? 'bg-blue-500/20 border-blue-400 text-blue-700' 
-                : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-              }
-            `}
+            variant={copiedRecently ? 'primary' : 'outline'}
+            size="md"
+            className="flex-col !h-auto p-3"
           >
             {copiedRecently ? (
-              <Check className="w-4 h-4 text-blue-600" />
+              <Check className="w-4 h-4 text-blue-600 mb-1" />
             ) : (
-              <Copy className="w-4 h-4" />
+              <Copy className="w-4 h-4 mb-1" />
             )}
-            <span className={`text-xs ${copiedRecently ? 'text-blue-700' : 'text-gray-700'}`}>
+            <span className="text-xs">
               {copiedRecently ? 'Copied!' : 'Copy'}
             </span>
-          </button>
+          </Button>
 
           {/* Insert Summary Button */}
-          <button
+          <Button
             onClick={handleInsertToEMR}
-            className={`
-              p-3 rounded-lg flex flex-col items-center space-y-1 transition-all border
-              ${insertedRecently 
-                ? 'bg-blue-500/20 border-blue-400 text-blue-700' 
-                : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-              }
-            `}
+            variant={insertedRecently ? 'primary' : 'outline'}
+            size="md"
+            className="flex-col !h-auto p-3"
           >
             {insertedRecently ? (
-              <Check className="w-4 h-4 text-blue-600" />
+              <Check className="w-4 h-4 text-blue-600 mb-1" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 mb-1" />
             )}
-            <span className={`text-xs ${insertedRecently ? 'text-blue-700' : 'text-gray-700'}`}>
+            <span className="text-xs">
               {insertedRecently ? 'Inserted!' : 'Insert'}
             </span>
-          </button>
+          </Button>
         </div>
 
         {/* Usage Tip */}

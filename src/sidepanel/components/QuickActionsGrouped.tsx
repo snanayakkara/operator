@@ -162,7 +162,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
               onClick={handleBackToActions}
               variant="ghost"
               size="sm"
-              icon={<ArrowLeft className="w-4 h-4" />}
+              icon={ArrowLeft}
               aria-label="Back to actions"
               className="text-blue-600 hover:text-blue-700"
             />
@@ -237,7 +237,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
               onClick={handleBackToActions}
               variant="ghost"
               size="sm"
-              icon={<ArrowLeft className="w-4 h-4" />}
+              icon={ArrowLeft}
               aria-label="Back to actions"
               className="text-blue-600 hover:text-blue-700"
             />
@@ -303,7 +303,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
             onClick={() => setIsCollapsed(!isCollapsed)}
             variant="ghost"
             size="sm"
-            icon={isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            icon={isCollapsed ? ChevronRight : ChevronDown}
             aria-label={isCollapsed ? "Expand quick actions" : "Collapse quick actions"}
             className="text-gray-600 hover:text-gray-900"
           />

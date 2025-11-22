@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, RefreshCw, Clipboard, Edit3, X, AlertTriangle, Loader2 } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import { parseTTETrends } from '@/utils/tte/TTETrendParser';
 import { buildTTEInsightsSummary } from '@/utils/tte/TTETrendInsights';
 import type {
@@ -479,38 +480,41 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
               Import & visualize TTE metrics
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
             onClick={onClose}
-            className="rounded-full border border-transparent p-1 text-slate-400 transition hover:border-slate-200 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
+            icon={<X />}
+            variant="ghost"
+            size="md"
+            aria-label="Close TTE Trend Importer"
+          />
         </header>
 
         <main className="flex-1 overflow-y-auto bg-surface-secondary p-2">
           <section className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+                <Button
                   onClick={handleCaptureFromEMR}
                   disabled={processingState === 'capturing'}
+                  isLoading={processingState === 'capturing'}
+                  variant="primary"
+                  size="sm"
+                  startIcon={<Upload className="h-3.5 w-3.5" />}
+                  className="bg-slate-900 hover:bg-slate-800 shadow-sm"
                 >
-                  {processingState === 'capturing' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                   Import
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:border-slate-400"
+                </Button>
+                <Button
                   onClick={handleLoadLast}
                   disabled={isLoadingLast}
+                  isLoading={isLoadingLast}
+                  variant="outline"
+                  size="sm"
+                  startIcon={<RefreshCw className="h-3.5 w-3.5" />}
+                  className="border-slate-300 text-slate-700 hover:border-slate-400"
                 >
-                  {isLoadingLast ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Load last
-                </button>
+                </Button>
               </div>
               {processingState === 'capturing' && (
                 <div className="inline-flex items-center gap-2 text-xs text-slate-500">
@@ -526,15 +530,15 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
                   Source: Inv. summary ·{' '}
                   {capturedAt ? new Date(capturedAt).toLocaleDateString() : sourceType === 'paste' ? 'manual' : 'unknown'}
                 </span>
-                <button type="button" className="text-slate-700 underline underline-offset-2" onClick={handleCaptureFromEMR}>
+                <Button variant="ghost" size="sm" className="text-slate-700 underline underline-offset-2 h-auto px-1 py-0" onClick={handleCaptureFromEMR}>
                   Refetch
-                </button>
-                <button type="button" className="text-slate-700 underline underline-offset-2" onClick={() => setShowRawEditor(prev => !prev)}>
+                </Button>
+                <Button variant="ghost" size="sm" className="text-slate-700 underline underline-offset-2 h-auto px-1 py-0" onClick={() => setShowRawEditor(prev => !prev)}>
                   {showRawEditor ? 'Hide raw' : 'Edit raw'}
-                </button>
-                <button type="button" className="text-slate-700 underline underline-offset-2" onClick={() => setShowPasteFallback(true)}>
+                </Button>
+                <Button variant="ghost" size="sm" className="text-slate-700 underline underline-offset-2 h-auto px-1 py-0" onClick={() => setShowPasteFallback(true)}>
                   Change source → Paste text
-                </button>
+                </Button>
               </div>
             )}
 
@@ -551,20 +555,23 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
                   placeholder="TTE (15 Jan 2023): LVEDD 66, EF 45%..."
                 />
                 <div className="flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setShowPasteFallback(false)}
-                    className="rounded-lg px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
+                    variant="ghost"
+                    size="sm"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+                    variant="primary"
+                    size="sm"
+                    startIcon={<Clipboard className="h-3.5 w-3.5" />}
+                    className="bg-slate-900 hover:bg-slate-800"
                   >
-                    <Clipboard className="h-3.5 w-3.5" />
                     Parse pasted text
-                  </button>
+                  </Button>
                 </div>
               </form>
             )}
@@ -580,14 +587,15 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
                   value={rawSourceText}
                   onChange={event => setRawSourceText(event.target.value)}
                 />
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:border-slate-400"
+                <Button
                   onClick={() => updateStateFromText(rawSourceText, sourceType)}
+                  variant="outline"
+                  size="sm"
+                  startIcon={<Edit3 className="h-3.5 w-3.5" />}
+                  className="border-slate-300 text-slate-700 hover:border-slate-400"
                 >
-                  <Edit3 className="h-3.5 w-3.5" />
                   Re-parse raw text
-                </button>
+                </Button>
               </div>
             )}
 
@@ -632,13 +640,14 @@ export const TTETrendImporter: React.FC<TTETrendImporterProps> = ({ isOpen, onCl
                     </div>
                     <p className="mt-1 text-sm text-slate-700">{selectedPointDetails.value.sourceText}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="text-xs text-slate-500 hover:text-slate-700"
+                  <Button
                     onClick={() => setSelectedPoint(null)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-slate-500 hover:text-slate-700 h-auto px-2 py-1"
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

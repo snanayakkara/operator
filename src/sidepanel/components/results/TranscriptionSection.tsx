@@ -9,18 +9,21 @@
  */
 
 import React, { memo, useState } from 'react';
-import { 
-  FileTextIcon, 
-  CheckIcon, 
-  SquareIcon, 
-  ChevronDownIcon, 
-  ChevronUpIcon 
+import {
+  FileTextIcon,
+  CheckIcon,
+  SquareIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '../icons/OptimizedIcons';
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { RefreshCw, ThumbsUp, Edit3, SkipForward } from 'lucide-react';
 import { AudioPlayback } from '../AudioPlayback';
+import { Button, IconButton } from '../buttons';
+import { StatusBadge } from '../status';
 import type { AgentType } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus, TranscriptionApprovalState } from '@/types/optimization';
+import type { ProcessingState } from '@/utils/stateColors';
 
 interface TranscriptionSectionProps {
   originalTranscription: string;
@@ -49,6 +52,36 @@ interface TranscriptionSectionProps {
   approvalState?: TranscriptionApprovalState;
   onTranscriptionApprove?: (status: TranscriptionApprovalStatus) => void;
 }
+
+// Helper to map approval status to processing state
+const mapApprovalToState = (status: TranscriptionApprovalStatus): ProcessingState => {
+  switch (status) {
+    case 'approved':
+      return 'completed';
+    case 'edited':
+      return 'needs_review';
+    case 'skipped':
+      return 'error';
+    case 'pending':
+    default:
+      return 'processing';
+  }
+};
+
+const getApprovalLabel = (status: TranscriptionApprovalStatus): string => {
+  switch (status) {
+    case 'pending':
+      return '⏳ Not Reviewed';
+    case 'approved':
+      return '✅ Approved';
+    case 'edited':
+      return '✏️ Edited';
+    case 'skipped':
+      return '⏭️ Skipped';
+    default:
+      return 'Unknown';
+  }
+};
 
 const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   originalTranscription,
@@ -137,9 +170,10 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
     <div className={`border-b border-gray-200/50 ${className} ${
       isProcessing ? 'bg-blue-50/30 border-b-blue-200/50' : ''
     }`}>
-      <button
+      <Button
         onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
-        className={`w-full p-4 text-left transition-colors flex items-center justify-between ${
+        variant="ghost"
+        className={`w-full p-4 text-left transition-colors flex items-center justify-between rounded-none ${
           isProcessing
             ? 'hover:bg-blue-50/60'
             : 'hover:bg-gray-50/50'
@@ -161,44 +195,39 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Transcription Actions - Enhanced during processing */}
           {onTranscriptionCopy && (
-            <button
+            <Button
               onClick={(e) => {
                 e.stopPropagation();
                 handleTranscriptionCopy();
               }}
-              className={`inline-flex items-center gap-1.5 h-6 rounded transition-all duration-200 ${
+              variant="ghost"
+              size="sm"
+              className={`h-6 ${
                 isProcessing
                   ? 'px-2 py-1 bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-sm'
-                  : 'px-1.5 py-1 hover:bg-gray-100'
+                  : 'px-1.5 py-1'
               }`}
               title={isProcessing ? "Copy raw transcription" : "Copy transcription"}
+              startIcon={transcriptionCopied ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />}
             >
-              {transcriptionCopied ? (
-                <CheckIcon className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-              ) : (
-                <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" title="Copy transcription" />
-              )}
               {isProcessing && (
                 <span className="text-xs text-blue-700 font-medium leading-none whitespace-nowrap">Copy Raw</span>
               )}
-            </button>
+            </Button>
           )}
           
           {onTranscriptionInsert && (
-            <button
+            <IconButton
               onClick={(e) => {
                 e.stopPropagation();
                 handleTranscriptionInsert();
               }}
-              className="p-1.5 rounded hover:bg-gray-100 transition-colors"
+              variant="ghost"
+              size="sm"
+              icon={transcriptionInserted ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <SquareIcon className="w-3.5 h-3.5 text-blue-500" />}
+              aria-label="Insert transcription to EMR"
               title="Insert transcription to EMR"
-            >
-              {transcriptionInserted ? (
-                <CheckIcon className="w-3.5 h-3.5 text-green-600" />
-              ) : (
-                <SquareIcon className="w-3.5 h-3.5 text-blue-500" />
-              )}
-            </button>
+            />
           )}
 
           {/* Reprocess indicator */}
@@ -214,7 +243,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             <ChevronDownIcon className="w-4 h-4 text-gray-400" />
           )}
         </div>
-      </button>
+      </Button>
 
       {/* Expanded Transcription Content */}
       {transcriptionExpanded && (
@@ -246,83 +275,86 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
               <div className="mb-3 p-3 bg-white border rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-medium text-gray-800">Transcription</h4>
-                  <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    approvalState.status === 'pending' ? 'bg-gray-100 text-gray-700' :
-                    approvalState.status === 'approved' ? 'bg-green-100 text-green-700' :
-                    approvalState.status === 'edited' ? 'bg-orange-100 text-orange-700' :
-                    'bg-gray-100 text-gray-500'
-                  }`}>
-                    {approvalState.status === 'pending' && '⏳ Not Reviewed'}
-                    {approvalState.status === 'approved' && '✅ Approved'}
-                    {approvalState.status === 'edited' && '✏️ Edited'}
-                    {approvalState.status === 'skipped' && '⏭️ Skipped'}
-                  </div>
+                  <StatusBadge
+                    state={mapApprovalToState(approvalState.status)}
+                    size="sm"
+                    label={getApprovalLabel(approvalState.status)}
+                  />
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onTranscriptionApprove('approved')}
                     disabled={approvalState.status === 'approved'}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                    variant="outline"
+                    size="md"
+                    startIcon={<ThumbsUp className="w-4 h-4" />}
+                    className={`${
                       approvalState.status === 'approved'
-                        ? 'bg-green-100 text-green-700 border border-green-200'
-                        : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-green-400 hover:bg-green-50'
+                        ? 'bg-green-100 text-green-700 border-green-200'
+                        : 'border-2 hover:border-green-400 hover:bg-green-50'
                     }`}
                     title="Mark this transcription as perfect for training"
                   >
-                    <ThumbsUp className="w-4 h-4" />
-                    <span>Perfect</span>
-                  </button>
+                    Perfect
+                  </Button>
 
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       if (approvalState.status !== 'edited') {
                         onTranscriptionApprove('edited');
                       }
                     }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                    variant="outline"
+                    size="md"
+                    startIcon={<Edit3 className="w-4 h-4" />}
+                    className={`${
                       approvalState.status === 'edited'
-                        ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                        : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-orange-400 hover:bg-orange-50'
+                        ? 'bg-orange-100 text-orange-700 border-orange-200'
+                        : 'border-2 hover:border-orange-400 hover:bg-orange-50'
                     }`}
                     title="Edit this transcription to improve accuracy"
                   >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Edit</span>
-                  </button>
+                    Edit
+                  </Button>
 
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onTranscriptionApprove('skipped')}
                     disabled={approvalState.status === 'skipped'}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center space-x-2 ${
+                    variant="outline"
+                    size="md"
+                    startIcon={<SkipForward className="w-4 h-4" />}
+                    className={`${
                       approvalState.status === 'skipped'
-                        ? 'bg-gray-100 text-gray-700 border border-gray-200'
-                        : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                        ? 'bg-gray-100 text-gray-700 border-gray-200'
+                        : 'border-2 hover:border-gray-400 hover:bg-gray-50'
                     }`}
                     title="Skip this transcription for training"
                   >
-                    <SkipForward className="w-4 h-4" />
-                    <span>Skip</span>
-                  </button>
+                    Skip
+                  </Button>
                 </div>
 
                 {/* Send for Corrections button - only show when edited */}
                 {approvalState.status === 'edited' && (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       // Submit edited transcription for training by marking as approved
                       console.log('✅ Submitting edited transcription for training');
                       onTranscriptionApprove('approved');
                     }}
-                    className="mt-2 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all bg-blue-600 hover:bg-blue-700 text-white border border-blue-700"
+                    variant="primary"
+                    size="md"
+                    fullWidth
+                    className="mt-2"
                     title="Submit your corrections to improve AI training"
                   >
                     Send for Corrections
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -364,37 +396,38 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
           {/* Reprocess agents - Collapsible */}
           {onAgentReprocess && (
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <button
+              <Button
                 onClick={() => setReprocessExpanded(!reprocessExpanded)}
-                className="w-full flex items-center justify-between px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                variant="ghost"
+                size="sm"
+                fullWidth
+                className="justify-between px-2 py-1"
+                endIcon={reprocessExpanded ? <ChevronUpIcon className="w-3 h-3 text-gray-400" /> : <ChevronDownIcon className="w-3 h-3 text-gray-400" />}
               >
                 <p className="text-xs text-gray-600">Reprocess ({availableAgents.length} agents)</p>
-                {reprocessExpanded ? (
-                  <ChevronUpIcon className="w-3 h-3 text-gray-400" />
-                ) : (
-                  <ChevronDownIcon className="w-3 h-3 text-gray-400" />
-                )}
-              </button>
+              </Button>
 
               {reprocessExpanded && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {availableAgents.map((agent) => (
-                    <button
+                    <Button
                       key={agent.id}
                       onClick={() => handleReprocess(agent.id as AgentType)}
                       disabled={isProcessing}
-                      className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center space-x-1 ${
+                      variant={currentAgent === agent.id ? 'outline' : 'ghost'}
+                      size="sm"
+                      className={`text-xs ${
                         currentAgent === agent.id
                           ? 'bg-blue-50 border-blue-200 text-blue-700'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          : 'bg-white border-gray-200 text-gray-700'
+                      }`}
                     >
                       <span>{agent.icon}</span>
-                      <span>{agent.label}</span>
+                      <span className="ml-1">{agent.label}</span>
                       {currentAgent === agent.id && (
-                        <span className="text-xs text-blue-500">•</span>
+                        <span className="ml-1 text-xs text-blue-500">•</span>
                       )}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}

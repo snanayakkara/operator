@@ -63,6 +63,10 @@ success() {
     echo -e "${PURPLE}[Dev Environment] SUCCESS:${NC} $1"
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OPERATOR_INGEST_VENV="$SCRIPT_DIR/mac_daemon/.venv-ingest"
+OPERATOR_INGEST_REQ="$SCRIPT_DIR/mac_daemon/requirements.txt"
+
 # Check if service is running on a port
 check_port() {
     local port=$1
@@ -689,6 +693,89 @@ ensure_dspy_server() {
     fi
 }
 
+# Prepare Python environment for Operator Ingest
+ensure_operator_ingest_env() {
+    if [ ! -f "$OPERATOR_INGEST_REQ" ]; then
+        warn "Operator Ingest requirements not found; skipping autostart"
+        return 1
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        warn "Cannot prepare Operator Ingest environment: python3 missing"
+        return 1
+    fi
+
+    if [ ! -d "$OPERATOR_INGEST_VENV" ]; then
+        info "Creating Operator Ingest virtual environment..."
+        if ! python3 -m venv "$OPERATOR_INGEST_VENV" >/dev/null 2>&1; then
+            warn "Failed to create Operator Ingest virtual environment"
+            return 1
+        fi
+    fi
+
+    local venv_pip="$OPERATOR_INGEST_VENV/bin/pip"
+    local venv_python="$OPERATOR_INGEST_VENV/bin/python"
+    if [ ! -x "$venv_pip" ] || [ ! -x "$venv_python" ]; then
+        warn "Operator Ingest virtual environment missing pip/python"
+        return 1
+    fi
+
+    local hash_file="$OPERATOR_INGEST_VENV/.requirements-hash"
+    local req_hash current_hash
+    req_hash=$(shasum "$OPERATOR_INGEST_REQ" | awk '{print $1}')
+    [ -f "$hash_file" ] && current_hash=$(cat "$hash_file") || current_hash=""
+
+    if [ "$req_hash" != "$current_hash" ]; then
+        info "Installing/updating Operator Ingest dependencies..."
+        if ! "$venv_pip" install -r "$OPERATOR_INGEST_REQ" >/dev/null 2>&1; then
+            warn "Failed to install Operator Ingest dependencies"
+            return 1
+        fi
+        echo "$req_hash" > "$hash_file"
+    fi
+
+    return 0
+}
+
+# Start Operator Ingest menubar app if not already running
+start_operator_ingest_app() {
+    info "Checking Operator Ingest menubar app (mac_daemon)..."
+
+    if pgrep -f "mac_daemon.main" >/dev/null 2>&1; then
+        log "Operator Ingest already running"
+        return 0
+    fi
+
+    if ! ensure_operator_ingest_env; then
+        warn "Skipping Operator Ingest autostart (environment not ready)"
+        return 1
+    fi
+
+    local log_file="/tmp/operator-ingest-$(date +%s).log"
+    local venv_python="$OPERATOR_INGEST_VENV/bin/python"
+
+    if [ ! -x "$venv_python" ]; then
+        warn "Operator Ingest python missing; skipping autostart"
+        return 1
+    fi
+
+    info "Launching Operator Ingest menubar app (logs: $log_file)"
+
+    local app_pid
+    app_pid=$(
+        cd "$SCRIPT_DIR" || exit 1
+        nohup "$venv_python" -m mac_daemon.main >>"$log_file" 2>&1 &
+        echo $!
+    )
+
+    if [ -n "$app_pid" ]; then
+        echo "$app_pid" > /tmp/operator-ingest.pid
+        log "Operator Ingest started (pid $app_pid)"
+    else
+        warn "Failed to start Operator Ingest (see $log_file)"
+    fi
+}
+
 # Display comprehensive service status with model information
 show_service_status() {
     echo
@@ -734,11 +821,11 @@ show_service_status() {
         warn "❌ MLX Whisper: http://localhost:8001 - NOT ACCESSIBLE"
     fi
     
-    # DSPy Server (Optimization)
+    # DSPy Server (Optimization + SDK Streaming)
     if check_service_health "http://localhost:8002/v1/health"; then
         log "✅ DSPy Server: http://localhost:8002"
-        
-        # Get DSPy server details
+
+        # Get DSPy server details including SDK status
         local dspy_status=$(curl -s "http://localhost:8002/v1/health" 2>/dev/null || echo "")
         if [ ! -z "$dspy_status" ]; then
             local stats_info=$(echo "$dspy_status" | python3 -c "
@@ -747,8 +834,18 @@ try:
     data = json.load(sys.stdin)
     agents = data.get('dspy', {}).get('enabled_agents', [])
     requests = data.get('stats', {}).get('requests_processed', 0)
+    sdk_info = data.get('lmstudio_sdk', {})
+    sdk_enabled = sdk_info.get('enabled', False)
+    sdk_connected = sdk_info.get('connected', False)
+
     print(f'   ├── Enabled agents: {len(agents)}')
-    print(f'   └── Requests processed: {requests}')
+    print(f'   ├── Requests processed: {requests}')
+    if sdk_enabled and sdk_connected:
+        print(f'   └── LM Studio SDK: ✅ Connected (streaming enabled)')
+    elif sdk_enabled:
+        print(f'   └── LM Studio SDK: ⚠️  Enabled but not connected')
+    else:
+        print(f'   └── LM Studio SDK: ❌ Disabled')
 except:
     pass
 " 2>/dev/null || echo "   └── Status details unavailable")
@@ -784,22 +881,14 @@ main() {
     local whisper_ok=0
     local dspy_ok=0
 
-    # Start all services in parallel (saves 13-70 seconds depending on startup states)
-    info "Starting services in parallel..."
-
     local interactive_shell=0
     if [ -t 0 ] && [ -t 1 ]; then
         interactive_shell=1
     fi
 
-    (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
-    local whisper_pid=$!
-
-    (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
-    local dspy_pid=$!
-
-    local lms_pid=""
+    # IMPORTANT: Complete LMStudio setup FIRST in interactive mode to avoid output conflicts
     if [ $interactive_shell -eq 1 ]; then
+        # LMStudio with model selection (interactive - must complete first)
         if ensure_lmstudio_server; then
             echo "1" > /tmp/lmstudio-ok.$$
             lmstudio_ok=1
@@ -807,18 +896,37 @@ main() {
             echo "0" > /tmp/lmstudio-ok.$$
             lmstudio_ok=0
         fi
-    else
-        # Start LMStudio in background when no interactive terminal is present
-        (ensure_lmstudio_server && echo "1" > /tmp/lmstudio-ok.$$ || echo "0" > /tmp/lmstudio-ok.$$) &
-        lms_pid=$!
-    fi
 
-    # Wait for all services to complete
-    if [ -n "$lms_pid" ]; then
+        # Now start Whisper and DSPy in parallel (no user input needed)
+        info "Starting Whisper and DSPy servers in parallel..."
+
+        (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
+        local whisper_pid=$!
+
+        (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
+        local dspy_pid=$!
+
+        # Wait for both services
+        wait $whisper_pid 2>/dev/null
+        wait $dspy_pid 2>/dev/null
+    else
+        # Non-interactive: start all services in parallel (saves 13-70 seconds)
+        info "Starting services in parallel..."
+
+        (ensure_lmstudio_server && echo "1" > /tmp/lmstudio-ok.$$ || echo "0" > /tmp/lmstudio-ok.$$) &
+        local lms_pid=$!
+
+        (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
+        local whisper_pid=$!
+
+        (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
+        local dspy_pid=$!
+
+        # Wait for all services to complete
         wait $lms_pid 2>/dev/null
+        wait $whisper_pid 2>/dev/null
+        wait $dspy_pid 2>/dev/null
     fi
-    wait $whisper_pid 2>/dev/null
-    wait $dspy_pid 2>/dev/null
 
     # Read status from temp files
     [ -f /tmp/lmstudio-ok.$$ ] && lmstudio_ok=$(cat /tmp/lmstudio-ok.$$) || lmstudio_ok=0
@@ -837,7 +945,7 @@ main() {
     
     if [ $running_services -eq $total_services ]; then
         success "🎉 Complete environment ready! All services running with dual models."
-        success "Chrome extension can now use full Medical AI + DSPy capabilities."
+        success "Chrome extension can now use full Medical AI + DSPy SDK streaming capabilities."
     elif [ $running_services -gt 0 ]; then
         warn "⚠️  $running_services/$total_services services running. Some functionality may be limited."
         warn "Check the status above and restart failed services manually."
@@ -846,6 +954,8 @@ main() {
         error "Ensure LMStudio CLI is installed and models are available."
         exit 1
     fi
+
+    start_operator_ingest_app
 }
 
 # Handle command line arguments

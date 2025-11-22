@@ -10,7 +10,11 @@ import { Loader2, Check } from 'lucide-react';
 import { tokens } from '@/utils/design-tokens';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
+type IconRenderable =
+  | React.ReactNode
+  | React.ComponentType<{ className?: string }>
+  | React.ElementType<{ className?: string }>;
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /**
@@ -36,18 +40,52 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /**
    * Icon to display before text
    */
-  startIcon?: React.ReactNode;
+  startIcon?: IconRenderable;
+
+  /**
+   * Legacy icon prop (alias for startIcon)
+   */
+  icon?: IconRenderable;
 
   /**
    * Icon to display after text
    */
-  endIcon?: React.ReactNode;
+  endIcon?: IconRenderable;
 
   /**
    * Full width button
    */
   fullWidth?: boolean;
 }
+
+const renderIcon = (icon: IconRenderable | undefined, sizeClass: string) => {
+  if (!icon) {
+    return null;
+  }
+
+  if (React.isValidElement(icon)) {
+    const existing = (icon.props as { className?: string }).className || '';
+    return React.cloneElement(icon, {
+      className: [sizeClass, existing].filter(Boolean).join(' ')
+    });
+  }
+
+  if (typeof icon === 'function') {
+    const IconComponent = icon as React.ComponentType<{ className?: string }>;
+    return <IconComponent className={sizeClass} />;
+  }
+
+  if (typeof icon === 'object' && icon !== null) {
+    const ElementType = icon as React.ElementType<{ className?: string }>;
+    try {
+      return React.createElement(ElementType, { className: sizeClass });
+    } catch {
+      // Fall through to render as-is if createElement fails
+    }
+  }
+
+  return <span className={sizeClass}>{icon}</span>;
+};
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -62,16 +100,18 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled,
       className = '',
       children,
+      icon,
       ...buttonProps
     },
     ref
   ) => {
     // Size classes
     const sizeClasses = {
+      xs: 'h-7 px-2 text-xs gap-1',
       sm: 'h-8 px-3 text-sm gap-1.5',
       md: 'h-10 px-4 text-base gap-2',
       lg: 'h-12 px-6 text-lg gap-2.5',
-    };
+    } as const;
 
     // Variant classes
     const variantClasses = {
@@ -138,6 +178,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Icon size based on button size
     const iconSize = {
+      xs: 'w-3 h-3',
       sm: 'w-3.5 h-3.5',
       md: 'w-4 h-4',
       lg: 'w-5 h-5',
@@ -161,17 +202,13 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
 
         {/* Start Icon */}
-        {!isLoading && !isSuccess && startIcon && (
-          <span className={iconSize}>{startIcon}</span>
-        )}
+        {!isLoading && !isSuccess && renderIcon(startIcon ?? icon, iconSize)}
 
         {/* Button Text */}
         {children && <span>{children}</span>}
 
         {/* End Icon */}
-        {!isLoading && !isSuccess && endIcon && (
-          <span className={iconSize}>{endIcon}</span>
-        )}
+        {!isLoading && !isSuccess && renderIcon(endIcon, iconSize)}
       </button>
     );
   }
@@ -187,7 +224,7 @@ interface IconButtonProps extends Omit<ButtonProps, 'startIcon' | 'endIcon'> {
   /**
    * Icon to display
    */
-  icon: React.ReactNode;
+  icon: IconRenderable;
 
   /**
    * Accessible label
@@ -204,12 +241,14 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       isLoading = false,
       disabled,
       className = '',
+      children,
       ...buttonProps
     },
     ref
   ) => {
     // Size classes (square buttons)
     const sizeClasses = {
+      xs: 'w-7 h-7',
       sm: 'w-8 h-8',
       md: 'w-10 h-10',
       lg: 'w-12 h-12',
@@ -271,6 +310,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     `.trim();
 
     const iconSize = {
+      xs: 'w-3.5 h-3.5',
       sm: 'w-4 h-4',
       md: 'w-5 h-5',
       lg: 'w-6 h-6',
@@ -286,8 +326,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         {isLoading ? (
           <Loader2 className={`${iconSize} animate-spin`} />
         ) : (
-          <span className={iconSize}>{icon}</span>
+          renderIcon(icon, iconSize)
         )}
+        {children}
       </button>
     );
   }

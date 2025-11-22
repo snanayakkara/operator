@@ -21,6 +21,7 @@ import {
   Archive,
   RefreshCw
 } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import { SessionProgressIndicator } from './SessionProgressIndicator';
 import { DropdownPortal } from './DropdownPortal';
 import type { PatientSession, SessionStatus, AgentType } from '@/types/medical.types';
@@ -391,13 +392,15 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
           </div>
 
           {/* Minimal actions */}
-          <button
+          <IconButton
             onClick={(e) => { e.stopPropagation(); onRemoveSession(session.id); }}
-            className="flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+            icon={<Trash2 />}
+            variant="ghost"
+            size="sm"
+            aria-label="Remove"
+            className="flex-shrink-0 text-slate-400 hover:text-rose-600 w-auto h-auto p-1"
             title="Remove"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
+          />
         </div>
       </div>
     );
@@ -522,18 +525,20 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
                     💡 Try: Check LM Studio is running → Click "Retry"
                   </div>
                   {onAgentReprocess && onSessionSelect && (
-                    <button
+                    <Button
                       onClick={(e) => {
                         e.stopPropagation();
                         onSessionSelect(session); // Open session first
                         setTimeout(() => onAgentReprocess(session.agentType), 100); // Then reprocess
                       }}
-                      className="inline-flex items-center gap-1 rounded border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 hover:bg-amber-100 transition-colors"
+                      variant="outline"
+                      size="sm"
+                      startIcon={<RefreshCw />}
+                      className="border-amber-200/80 bg-amber-50 text-amber-700 hover:bg-amber-100 text-[10px] font-semibold uppercase w-auto h-auto px-1.5 py-0.5"
                       title="Retry processing this session"
                     >
-                      <RefreshCw className="w-3 h-3" />
                       Retry
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -550,47 +555,55 @@ const EnhancedSessionItem: React.FC<EnhancedSessionItemProps> = ({
 
           <div className="flex flex-col gap-1.5">
             {state === 'recording' && isActiveRecording && onStopRecording && (
-              <button
+              <IconButton
                 onClick={(e) => { e.stopPropagation(); onStopRecording(); }}
-                className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-white px-2 py-1 text-[11px] font-semibold uppercase text-red-600 hover:bg-red-50"
+                icon={<XCircle />}
+                variant="outline"
+                size="sm"
+                aria-label="Stop recording"
+                className="border-red-200/80 bg-white text-red-600 hover:bg-red-50 w-auto h-auto px-2 py-1"
                 title="Stop recording"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-              </button>
+              />
             )}
 
             {state === 'recording' && !isActiveRecording && onResumeRecording && (
-              <button
+              <IconButton
                 onClick={(e) => { e.stopPropagation(); onResumeRecording(session); }}
-                className="inline-flex items-center gap-1 rounded border border-red-200/80 bg-red-50/80 px-2 py-1 text-[11px] font-semibold uppercase text-red-600 hover:bg-red-100"
+                icon={<Play />}
+                variant="outline"
+                size="sm"
+                aria-label="Resume recording"
+                className="border-red-200/80 bg-red-50/80 text-red-600 hover:bg-red-100 w-auto h-auto px-2 py-1"
                 title="Resume recording"
-              >
-                <Play className="w-3.5 h-3.5" />
-              </button>
+              />
             )}
 
             {(state === 'needs_review' || state === 'completed') && (
-              <button
+              <IconButton
                 onClick={(e) => { e.stopPropagation(); onCopyResults(session); }}
                 disabled={!hasResults}
-                className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-semibold uppercase ${
+                icon={isCopying ? <Check /> : <Copy />}
+                variant="outline"
+                size="sm"
+                aria-label="Copy letter"
+                className={`w-auto h-auto px-2 py-1 ${
                   hasResults
                     ? 'border-emerald-200/80 bg-white text-emerald-600 hover:bg-emerald-50'
-                    : 'border-slate-200/80 bg-white text-slate-400 cursor-not-allowed'
+                    : 'border-slate-200/80 bg-white text-slate-400'
                 }`}
                 title="Copy letter"
-              >
-                {isCopying ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
+              />
             )}
 
-            <button
+            <IconButton
               onClick={(e) => { e.stopPropagation(); onRemoveSession(session.id); }}
-              className="inline-flex items-center gap-1 rounded border border-slate-200/80 bg-white px-2 py-1 text-[11px] font-semibold uppercase text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+              icon={<Trash2 />}
+              variant="outline"
+              size="sm"
+              aria-label="Remove"
+              className="border-slate-200/80 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600 w-auto h-auto px-2 py-1"
               title="Remove"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            />
           </div>
         </div>
       </div>
@@ -844,13 +857,16 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     hiddenCount: number;
     category: string
   }> = ({ onClick, hiddenCount, category }) => (
-    <button
+    <Button
       onClick={onClick}
-      className="w-full px-3 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors flex items-center justify-center space-x-1"
+      variant="ghost"
+      size="sm"
+      fullWidth
+      startIcon={<ChevronDown />}
+      className="px-3 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50"
     >
-      <ChevronDown className="w-3 h-3" />
-      <span>Show {hiddenCount} more {category}</span>
-    </button>
+      Show {hiddenCount} more {category}
+    </Button>
   );
 
   useEffect(() => {
@@ -931,13 +947,15 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
           </div>
 
           {sessions.length > 0 && (
-            <button
+            <IconButton
               onClick={handleClearAll}
-              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              icon={<Trash2 />}
+              variant="ghost"
+              size="sm"
+              aria-label="Clear all sessions"
+              className="text-gray-500 hover:text-red-600 hover:bg-red-50"
               title="Clear all sessions"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            />
           )}
         </div>
       </div>
@@ -954,13 +972,14 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
             autoFocus={sessions.length > 10}
           />
           {searchTerm && (
-            <button
+            <IconButton
               onClick={() => setSearchTerm('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:text-gray-600"
+              icon={<XCircle className="h-3.5 w-3.5" />}
+              variant="ghost"
+              size="sm"
               aria-label="Clear session search"
-            >
-              <XCircle className="h-3.5 w-3.5" />
-            </button>
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full w-auto h-auto p-1 text-gray-400 hover:text-gray-600"
+            />
           )}
         </div>
       </div>
@@ -1137,33 +1156,39 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {checkedSessionIds.size > 0 && onDeleteAllChecked && (
-                  <button
+                  <Button
                     onClick={handleDeleteAllChecked}
                     disabled={isDeletingBulk}
-                    className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    variant="danger"
+                    size="sm"
+                    className="px-2 py-1 text-xs bg-red-100 text-red-700 hover:bg-red-200"
                     title="Delete all checked sessions from storage"
                   >
                     Delete Checked ({checkedSessionIds.size})
-                  </button>
+                  </Button>
                 )}
                 {persistedSessionIds.size > 3 && onDeleteOldSessions && (
                   <>
-                    <button
+                    <Button
                       onClick={() => handleDeleteOldSessions(7)}
                       disabled={isDeletingBulk}
-                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      variant="outline"
+                      size="sm"
+                      className="px-2 py-1 text-xs text-amber-700 bg-amber-100 hover:bg-amber-200"
                       title="Delete sessions older than 7 days"
                     >
                       Delete &gt;7d
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => handleDeleteOldSessions(30)}
                       disabled={isDeletingBulk}
-                      className="px-2 py-1 text-xs font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      variant="outline"
+                      size="sm"
+                      className="px-2 py-1 text-xs text-amber-700 bg-amber-100 hover:bg-amber-200"
                       title="Delete sessions older than 30 days"
                     >
                       Delete &gt;30d
-                    </button>
+                    </Button>
                   </>
                 )}
               </div>

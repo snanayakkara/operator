@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mic, Speaker, ChevronDown, Settings, Headphones as _Headphones } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
 import { useAudioDevices, type AudioDevice } from '@/hooks/useAudioDevices';
 
 interface AudioDeviceSelectorProps {
@@ -66,14 +67,16 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
 
   if (!hasPermission && microphones.length === 0) {
     return (
-      <button
+      <Button
         onClick={requestPermission}
-        className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 text-sm transition-colors"
         disabled={disabled}
+        variant="ghost"
+        size="sm"
+        startIcon={<Settings />}
+        className="text-gray-600 hover:text-gray-800"
       >
-        <Settings className="w-4 h-4" />
-        <span>Enable audio access</span>
-      </button>
+        Enable audio access
+      </Button>
     );
   }
 
@@ -88,20 +91,18 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
 
   return (
     <div className="relative">
-      <button
+      <Button
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        data-audio-selector
+        variant="ghost"
+        size="sm"
         className={`
-          flex items-center justify-between space-x-2 px-3 py-2 bg-white/50 
-          border border-gray-200 rounded-lg text-sm transition-colors
+          flex items-center justify-between space-x-2 px-3 py-2 bg-white/50
+          border border-gray-200 text-sm
           ${compact ? 'min-w-32' : 'min-w-48'}
-          ${disabled 
-            ? 'opacity-50 cursor-not-allowed' 
-            : 'hover:bg-white/70 cursor-pointer'
-          }
         `}
         title={`Microphone: ${getCurrentMicrophoneLabel()}\nSpeaker: ${getCurrentSpeakerLabel()}`}
+        data-audio-selector
       >
         <div className="flex items-center space-x-2 truncate">
           <div className="flex items-center space-x-1">
@@ -114,12 +115,12 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
             </span>
           )}
         </div>
-        <ChevronDown 
+        <ChevronDown
           className={`w-4 h-4 text-gray-400 transition-transform ${
             isOpen ? 'transform rotate-180' : ''
-          }`} 
+          }`}
         />
-      </button>
+      </Button>
 
       {isOpen && !disabled && (
         <>
@@ -133,13 +134,15 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
           <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden min-w-64">
             {/* Tab Headers */}
             <div className="flex border-b border-gray-200">
-              <button
+              <Button
                 onClick={() => setActiveTab('microphone')}
+                variant="ghost"
+                size="sm"
                 className={`
-                  flex-1 px-3 py-2 text-sm font-medium transition-colors
-                  ${activeTab === 'microphone' 
-                    ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-500' 
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                  flex-1 rounded-none
+                  ${activeTab === 'microphone'
+                    ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-500'
+                    : 'text-gray-600'
                   }
                 `}
               >
@@ -147,14 +150,16 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
                   <Mic className="w-4 h-4" />
                   <span>Microphones</span>
                 </div>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setActiveTab('speaker')}
+                variant="ghost"
+                size="sm"
                 className={`
-                  flex-1 px-3 py-2 text-sm font-medium transition-colors
-                  ${activeTab === 'speaker' 
-                    ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-500' 
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                  flex-1 rounded-none
+                  ${activeTab === 'speaker'
+                    ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-500'
+                    : 'text-gray-600'
                   }
                 `}
               >
@@ -162,7 +167,7 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
                   <Speaker className="w-4 h-4" />
                   <span>Speakers</span>
                 </div>
-              </button>
+              </Button>
             </div>
 
             {/* Device Lists */}
@@ -170,30 +175,31 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
               {activeTab === 'microphone' && (
                 <div>
                   {microphones.map((device) => (
-                    <button
+                    <Button
                       key={device.deviceId}
                       onClick={() => handleDeviceSelect(device)}
+                      variant="ghost"
+                      size="sm"
                       className={`
-                        w-full px-3 py-2 text-left text-sm hover:bg-gray-50 
-                        transition-colors flex items-center space-x-2
-                        ${selectedMicrophoneId === device.deviceId 
-                          ? 'bg-blue-50 text-blue-900' 
+                        w-full rounded-none text-left justify-start
+                        ${selectedMicrophoneId === device.deviceId
+                          ? 'bg-blue-50 text-blue-900'
                           : 'text-gray-800'
                         }
                       `}
                     >
-                      <Mic 
+                      <Mic
                         className={`w-4 h-4 ${
-                          selectedMicrophoneId === device.deviceId 
-                            ? 'text-blue-600' 
+                          selectedMicrophoneId === device.deviceId
+                            ? 'text-blue-600'
                             : 'text-gray-400'
-                        }`} 
+                        }`}
                       />
                       <span className="truncate">{device.label}</span>
                       {selectedMicrophoneId === device.deviceId && (
                         <div className="w-2 h-2 bg-blue-500 rounded-full ml-auto flex-shrink-0" />
                       )}
-                    </button>
+                    </Button>
                   ))}
                   {microphones.length === 0 && (
                     <div className="px-3 py-4 text-center text-gray-500 text-sm">
@@ -206,30 +212,31 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
               {activeTab === 'speaker' && (
                 <div>
                   {speakers.map((device) => (
-                    <button
+                    <Button
                       key={device.deviceId}
                       onClick={() => handleDeviceSelect(device)}
+                      variant="ghost"
+                      size="sm"
                       className={`
-                        w-full px-3 py-2 text-left text-sm hover:bg-gray-50 
-                        transition-colors flex items-center space-x-2
-                        ${selectedSpeakerId === device.deviceId 
-                          ? 'bg-blue-50 text-blue-900' 
+                        w-full rounded-none text-left justify-start
+                        ${selectedSpeakerId === device.deviceId
+                          ? 'bg-blue-50 text-blue-900'
                           : 'text-gray-800'
                         }
                       `}
                     >
-                      <Speaker 
+                      <Speaker
                         className={`w-4 h-4 ${
-                          selectedSpeakerId === device.deviceId 
-                            ? 'text-blue-600' 
+                          selectedSpeakerId === device.deviceId
+                            ? 'text-blue-600'
                             : 'text-gray-400'
-                        }`} 
+                        }`}
                       />
                       <span className="truncate">{device.label}</span>
                       {selectedSpeakerId === device.deviceId && (
                         <div className="w-2 h-2 bg-blue-500 rounded-full ml-auto flex-shrink-0" />
                       )}
-                    </button>
+                    </Button>
                   ))}
                   {speakers.length === 0 && (
                     <div className="px-3 py-4 text-center text-gray-500 text-sm">

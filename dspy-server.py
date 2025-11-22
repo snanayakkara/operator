@@ -42,6 +42,8 @@ try:
     from llm.predictors import get_predictor, process_with_dspy, PREDICTOR_CLASSES
     from llm.evaluate import run_evaluation, RUBRIC_SCORERS
     from llm.optim_gepa import GEPAOptimizer
+    import lmstudio  # LM Studio Python SDK for streaming with progress callbacks
+    import requests  # For fallback REST API calls
 except ImportError as e:
     print(f"❌ Missing dependencies: {e}")
     print("💡 Install requirements: pip install -r requirements-dspy.txt")
@@ -92,6 +94,10 @@ server_stats = {
     'errors_encountered': 0,
     'active_optimizations': 0
 }
+
+# LM Studio SDK client (initialized on server start)
+lm_studio_client = None
+USE_LMSTUDIO_SDK = True  # Feature flag - enabled by default
 
 # Job processing system
 job_queue = []
@@ -529,9 +535,15 @@ def health_check():
                 'enabled_agents': enabled_agents
             },
             'stats': server_stats,
+            'lmstudio_sdk': {
+                'enabled': USE_LMSTUDIO_SDK,
+                'connected': lm_studio_client is not None,
+                'streaming_available': lm_studio_client is not None
+            },
             'endpoints': {
                 'process': '/v1/dspy/process',
-                'evaluate': '/v1/dspy/evaluate', 
+                'process_stream': '/v1/dspy/process/stream',
+                'evaluate': '/v1/dspy/evaluate',
                 'optimize': '/v1/dspy/optimize',
                 'health': '/v1/health'
             }
@@ -633,6 +645,189 @@ def process_with_dspy_endpoint():
         
         log_request('process', success=False, error=error_msg)
         return jsonify(response), 500
+
+@app.route('/v1/dspy/process/stream', methods=['POST'])
+def process_with_dspy_stream():
+    """
+    Process transcript using DSPy predictor with LM Studio SDK streaming.
+
+    Provides real-time progress updates during prompt processing and token generation.
+
+    Request:
+        {
+            "agent_type": "quick-letter",
+            "transcript": "Patient dictation...",
+            "options": {
+                "timeout": 300000,
+                "fresh_run": false
+            }
+        }
+
+    Response (Server-Sent Events):
+        event: progress
+        data: {"phase": "AI Analysis", "progress": 45, "details": "Processing prompt tokens"}
+
+        event: token
+        data: {"delta": "The patient ", "fullText": "The patient "}
+
+        event: complete
+        data: {"result": "...", "processing_time": 1234}
+
+        event: error
+        data: {"error": "Error message"}
+    """
+    start_time = now_melbourne()
+
+    def generate():
+        """SSE generator function."""
+        try:
+            # Validate request
+            data = request.get_json()
+            validation_error = validate_request_data(data, ['agent_type', 'transcript'])
+            if validation_error:
+                yield f"event: error\ndata: {json.dumps({'error': validation_error})}\n\n"
+                return
+
+            agent_type = data['agent_type']
+            transcript = data['transcript']
+            options = data.get('options', {})
+
+            # Check feature flag and SDK availability
+            if not USE_LMSTUDIO_SDK or lm_studio_client is None:
+                yield f"event: error\ndata: {json.dumps({'error': 'LM Studio SDK not available, use /v1/dspy/process instead'})}\n\n"
+                return
+
+            # Check if DSPy enabled for this agent
+            if not is_dspy_enabled(agent_type):
+                yield f"event: error\ndata: {json.dumps({'error': f'DSPy not enabled for agent type: {agent_type}'})}\n\n"
+                return
+
+            # Phase 1: Setup (0-10%)
+            yield f"event: progress\ndata: {json.dumps({'phase': 'Audio Processing', 'progress': 5, 'details': 'Initializing DSPy predictor'})}\n\n"
+
+            # Configure fresh run if requested
+            if options.get('fresh_run'):
+                config = get_config()
+                config.set_fresh_run()
+
+            # Configure language model for agent
+            configure_lm(agent_type)
+
+            # Get predictor and system prompt
+            predictor = get_predictor(agent_type)
+            if not predictor:
+                yield f"event: error\ndata: {json.dumps({'error': f'No predictor found for agent: {agent_type}'})}\n\n"
+                return
+
+            # Phase 2: AI Analysis (10-40%)
+            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 15, 'details': 'Analyzing transcript'})}\n\n"
+
+            # Get system prompt from predictor (assuming it has a system_prompt attribute)
+            system_prompt = getattr(predictor, 'system_prompt', None) or getattr(predictor, 'signature', '')
+
+            # Determine model to use based on agent type
+            agent_config = get_config().config.get('agents', {}).get(agent_type, {})
+            model_name = agent_config.get('model', 'medgemma-27b-text-it-mlx')
+
+            logger.info(f"Starting SDK streaming for {agent_type} with model {model_name}")
+
+            # Phase 3: Get loaded models and select appropriate one
+            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 40, 'details': 'Finding loaded model'})}\n\n"
+
+            # Get list of loaded models
+            loaded_models = lm_studio_client.llm.list_loaded()
+            if not loaded_models:
+                yield f"event: error\ndata: {json.dumps({'error': 'No models loaded in LM Studio. Please load a model first.'})}\n\n"
+                return
+
+            # Use first loaded model (in production, we'd match by model_name)
+            model_info = loaded_models[0]
+            logger.info(f"Using loaded model: {model_info.get('identifier', 'unknown')}")
+
+            # Get the LLM instance
+            llm = lm_studio_client.llm
+
+            full_text = ""
+            char_count = 0
+            estimated_total_chars = 2000  # Estimate based on typical report length
+
+            # Prepare the prompt (combining system + user)
+            combined_prompt = f"{system_prompt}\n\nUser: {transcript}\n\nAssistant:"
+
+            # Stream completion with prompt processing progress callback
+            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 45, 'details': 'Starting generation'})}\n\n"
+
+            # Create callbacks for progress tracking
+            def on_prompt_progress(progress: float):
+                """Callback for prompt processing progress (0.0-1.0)."""
+                # Map 0.0-1.0 to 45-90% range
+                overall_progress = 45 + int(progress * 45)
+                nonlocal full_text  # Access outer scope
+                # Cannot yield from nested function, so we'll track progress differently
+                # The SDK will call this but we'll emit progress in the main loop
+
+            def on_fragment(fragment):
+                """Callback for each generated token fragment."""
+                nonlocal full_text, char_count
+                if hasattr(fragment, 'content') and fragment.content:
+                    full_text += fragment.content
+                    char_count += len(fragment.content)
+
+            # Stream with callbacks
+            try:
+                config = lmstudio.LlmPredictionConfig(
+                    temperature=agent_config.get('temperature', 0.3),
+                    max_tokens=agent_config.get('max_tokens', 8000)
+                )
+
+                # Use complete_stream with callbacks
+                prediction_stream = llm.complete_stream(
+                    prompt=combined_prompt,
+                    config=config,
+                    on_prompt_processing_progress=on_prompt_progress,
+                    on_prediction_fragment=on_fragment
+                )
+
+                # Iterate over the stream
+                last_progress = 45
+                for fragment in prediction_stream:
+                    if hasattr(fragment, 'content') and fragment.content:
+                        content = fragment.content
+                        full_text += content
+                        char_count += len(content)
+
+                        # Emit token
+                        yield f"event: token\ndata: {json.dumps({'delta': content, 'fullText': full_text})}\n\n"
+
+                        # Phase 4: Generation progress (90-100% based on char count)
+                        new_progress = min(98, 90 + int((char_count / estimated_total_chars) * 8))
+                        if new_progress > last_progress:
+                            yield f"event: progress\ndata: {json.dumps({'phase': 'Generation', 'progress': new_progress, 'details': f'Generated {char_count} characters'})}\n\n"
+                            last_progress = new_progress
+
+            except Exception as stream_error:
+                logger.error(f"Streaming error: {stream_error}")
+                yield f"event: error\ndata: {json.dumps({'error': f'Streaming failed: {str(stream_error)}'})}\n\n"
+                return
+
+            # Phase 5: Finalization (98-100%)
+            yield f"event: progress\ndata: {json.dumps({'phase': 'Generation', 'progress': 99, 'details': 'Finalizing report'})}\n\n"
+
+            processing_time = (now_melbourne() - start_time).total_seconds() * 1000
+
+            # Complete
+            yield f"event: complete\ndata: {json.dumps({'result': full_text, 'processing_time': round(processing_time), 'agent_type': agent_type})}\n\n"
+
+            log_request('process/stream', success=True)
+
+        except Exception as e:
+            processing_time = (now_melbourne() - start_time).total_seconds() * 1000
+            error_msg = f"DSPy streaming failed: {str(e)}"
+            logger.error(f"{error_msg}\n{traceback.format_exc()}")
+            yield f"event: error\ndata: {json.dumps({'error': error_msg, 'processing_time': round(processing_time)})}\n\n"
+            log_request('process/stream', success=False, error=error_msg)
+
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/v1/dspy/evaluate', methods=['POST'])
 def evaluate_endpoint():
@@ -2434,33 +2629,52 @@ def get_context_snippet(text, term):
 
 def initialize_server():
     """Initialize DSPy server configuration and dependencies."""
+    global lm_studio_client
+
     try:
         logger.info("Initializing DSPy server...")
-        
+
         # Check DSPy configuration
         config = get_config()
         if not config:
             raise DSPyServerError("Failed to load DSPy configuration")
-        
+
+        # Initialize LM Studio SDK client (if feature enabled)
+        if USE_LMSTUDIO_SDK:
+            try:
+                logger.info("Initializing LM Studio SDK client...")
+                # Connect to LM Studio with explicit api_host
+                lm_studio_client = lmstudio.Client(api_host='localhost:1234')
+                # Test connection
+                loaded_models = lm_studio_client.llm.list_loaded()
+                logger.info(f"✅ LM Studio SDK client initialized successfully ({len(loaded_models)} models loaded)")
+            except Exception as e:
+                logger.warning(f"⚠️ LM Studio SDK initialization failed: {e}")
+                logger.warning("Streaming endpoint will not be available. Use /v1/dspy/process for non-streaming mode.")
+                lm_studio_client = None
+        else:
+            logger.info("LM Studio SDK disabled via feature flag")
+
         # Verify required directories exist
         required_dirs = ['eval/devset', 'eval/feedback', 'llm/prompts', 'data/asr']
         for dir_path in required_dirs:
             Path(dir_path).mkdir(parents=True, exist_ok=True)
-        
+
         # Start background job processor
         start_job_processor()
-        
+
         # Start background privacy cleanup processor
         start_cleanup_processor()
-        
+
         # Log server configuration
         logger.info(f"DSPy server initialized successfully")
         logger.info(f"Available agents: {list(PREDICTOR_CLASSES.keys())}")
         logger.info(f"Available rubrics: {list(RUBRIC_SCORERS.keys())}")
         logger.info(f"DSPy enabled: {config.config.get('use_dspy', False)}")
-        
+        logger.info(f"LM Studio SDK streaming: {'enabled' if lm_studio_client else 'disabled'}")
+
         return True
-        
+
     except Exception as e:
         logger.error(f"Server initialization failed: {e}")
         return False

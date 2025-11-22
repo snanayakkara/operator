@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import Button from '../buttons/Button';
 import type { AgentType } from '@/types/medical.types';
 
 interface MissingInfoPanelProps {
@@ -159,12 +160,14 @@ export const MissingInfoPanel: React.FC<MissingInfoPanelProps> = ({ missingInfo,
           )}
         </div>
         {onDismiss && (
-          <button
-            className="text-amber-700 text-xs underline"
+          <Button
             onClick={onDismiss}
+            variant="ghost"
+            size="sm"
+            className="text-amber-700 text-xs underline"
           >
             Dismiss
-          </button>
+          </Button>
         )}
       </div>
       <div className="p-3 space-y-3">
@@ -183,19 +186,23 @@ export const MissingInfoPanel: React.FC<MissingInfoPanelProps> = ({ missingInfo,
       </div>
       <div className="p-3 border-t border-amber-200 bg-amber-50 flex items-center justify-end space-x-2">
         {onDismiss && (
-          <button
-            className="px-3 py-2 text-xs rounded border border-amber-200 bg-white hover:bg-amber-50"
+          <Button
             onClick={onDismiss}
+            variant="outline"
+            size="sm"
+            className="text-xs border-amber-200 bg-white hover:bg-amber-50"
           >
             Skip for now
-          </button>
+          </Button>
         )}
-        <button
-          className="px-3 py-2 text-xs rounded bg-amber-600 text-white hover:bg-amber-700"
+        <Button
           onClick={() => onSubmit(answers)}
+          variant="primary"
+          size="sm"
+          className="text-xs bg-amber-600 hover:bg-amber-700"
         >
           Reprocess with answers
-        </button>
+        </Button>
       </div>
     </div>
   );

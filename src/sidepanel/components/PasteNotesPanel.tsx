@@ -8,6 +8,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, FileText, Loader, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Button, { IconButton } from './buttons/Button';
 
 interface PasteNotesPanelProps {
   isVisible: boolean;
@@ -140,14 +141,15 @@ export const PasteNotesPanel: React.FC<PasteNotesPanelProps> = ({
                   </p>
                 </div>
               </div>
-              <button
+              <IconButton
                 onClick={handleCancel}
                 disabled={isGenerating}
-                className="text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                icon={X}
+                variant="ghost"
+                size="sm"
                 aria-label="Close paste notes panel"
-              >
-                <X className="w-5 h-5" />
-              </button>
+                className="text-gray-500 hover:text-gray-700"
+              />
             </div>
           </div>
 
@@ -164,12 +166,14 @@ export const PasteNotesPanel: React.FC<PasteNotesPanelProps> = ({
                 <div className="flex-1">
                   <div className="text-sm font-medium text-red-800">{error}</div>
                   {onRetryExtraction && (
-                    <button
+                    <Button
                       onClick={handleRetry}
-                      className="mt-2 text-xs text-red-600 hover:text-red-800 underline"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 text-xs text-red-600 hover:text-red-800 underline p-0 h-auto"
                     >
                       Retry EMR extraction
-                    </button>
+                    </Button>
                   )}
                 </div>
               </motion.div>
@@ -243,28 +247,25 @@ export const PasteNotesPanel: React.FC<PasteNotesPanelProps> = ({
               </div>
 
               <div className="flex items-center space-x-2">
-                <button
+                <Button
                   onClick={handleCancel}
                   disabled={isGenerating}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  variant="outline"
+                  size="md"
                 >
                   Cancel
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={handleGenerate}
                   disabled={!notes.trim() || isGenerating}
-                  className="px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  variant="success"
+                  size="md"
+                  isLoading={isGenerating}
+                  startIcon={isGenerating ? Loader : undefined}
                 >
-                  {isGenerating ? (
-                    <>
-                      <Loader className="w-4 h-4 animate-spin" />
-                      <span>Generating...</span>
-                    </>
-                  ) : (
-                    <span>Generate Letter</span>
-                  )}
-                </button>
+                  {isGenerating ? 'Generating...' : 'Generate Letter'}
+                </Button>
               </div>
             </div>
           </div>

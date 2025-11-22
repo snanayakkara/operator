@@ -192,7 +192,11 @@ const AIReasoningModal: React.FC<AIReasoningModalProps> = ({
                       onClick={() => tab.content && handleCopy(tab.content, tab.id)}
                       disabled={!tab.content}
                       isSuccess={copiedTab === tab.id}
-                      icon={copiedTab === tab.id ? CheckCircle : Copy}
+                      startIcon={
+                        copiedTab === tab.id
+                          ? <CheckCircle className="w-4 h-4" />
+                          : <Copy className="w-4 h-4" />
+                      }
                     >
                       {copiedTab === tab.id ? 'Copied' : 'Copy'}
                     </Button>

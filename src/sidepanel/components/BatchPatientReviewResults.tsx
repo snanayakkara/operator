@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { BatchPatientReviewFinding, PatientClassification } from '@/types/medical.types';
 import { IndividualFindingCard } from './IndividualFindingCard';
+import Button from './buttons/Button';
 
 interface BatchPatientReviewResultsProps {
   classification: PatientClassification;
@@ -257,20 +258,24 @@ export const BatchPatientReviewResults: React.FC<BatchPatientReviewResultsProps>
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-semibold text-gray-900 text-base">Clinical Findings</h4>
               <div className="flex space-x-2">
-                <button
+                <Button
                   onClick={() => setCompletedFindings(new Set())}
-                  className="text-xs text-gray-600 hover:text-gray-800"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
                   disabled={completedCount === 0}
                 >
                   Clear all
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => setCompletedFindings(new Set(Array.from({ length: totalFindings }, (_, i) => i)))}
+                  variant="ghost"
+                  size="sm"
                   className="text-xs text-blue-600 hover:text-blue-800"
                   disabled={completedCount === totalFindings}
                 >
                   Complete all
-                </button>
+                </Button>
               </div>
             </div>
 

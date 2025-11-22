@@ -14,6 +14,7 @@ import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { LucideIcon, Mic, Keyboard } from 'lucide-react';
 import { buttonVariants, withReducedMotion } from '@/utils/animations';
+import Button from './buttons/Button';
 import type { AgentType } from '@/types/medical.types';
 
 export interface QuickActionItemProps {
@@ -206,16 +207,17 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
         absolute inset-0 transition-all duration-200 ease-out
         ${isHovered && !isProcessing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}
       `}>
-        <button
+        <Button
           disabled={isProcessing}
+          variant="ghost"
           className={`
             group w-full h-full flex flex-col items-center justify-center
-            p-2 rounded-lg transition-all duration-150
+            p-2 rounded-lg
             ${theme.hover}
-            ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
           `}
           aria-label={label}
           title={showTooltip ? label : undefined}
+          isLoading={isProcessing}
         >
           {/* Icon */}
           <div className="w-6 h-6 mb-1.5 flex items-center justify-center">
@@ -229,13 +231,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
           <div className="text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2">
             {displayLabel}
           </div>
-
-          {isProcessing && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-lg">
-              <div className={`w-4 h-4 border-2 ${theme.spinner} border-t-transparent rounded-full animate-spin`} />
-            </div>
-          )}
-        </button>
+        </Button>
       </div>
 
       {/* Expanded state - split Dictate|Type buttons */}
@@ -245,15 +241,14 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
       `}>
         <div className="grid grid-cols-2 gap-0.5 h-full">
           {/* Dictate Button */}
-          <button
+          <Button
             onClick={handleDictate}
             disabled={isProcessing}
+            variant="ghost"
             className={`
               flex flex-col items-center justify-center
-              rounded-l-lg border-r border-gray-200
-              transition-all duration-150
+              rounded-l-lg rounded-r-none border-r border-gray-200
               ${theme.hover}
-              ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             title={`Dictate ${label}`}
             aria-label={`Dictate ${label} with voice`}
@@ -262,18 +257,17 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
             <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
               Dict
             </div>
-          </button>
+          </Button>
 
           {/* Type Button */}
-          <button
+          <Button
             onClick={handleType}
             disabled={isProcessing}
+            variant="ghost"
             className={`
               flex flex-col items-center justify-center
-              rounded-r-lg
-              transition-all duration-150
+              rounded-r-lg rounded-l-none
               ${theme.hover}
-              ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
             `}
             title={`Type ${label}`}
             aria-label={`Type ${label} manually`}
@@ -282,7 +276,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
             <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
               Type
             </div>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

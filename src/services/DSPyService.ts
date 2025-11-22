@@ -277,6 +277,175 @@ export class DSPyService {
   }
 
   /**
+   * Process transcript using DSPy predictor with SDK streaming
+   *
+   * Provides real-time progress updates during prompt processing and token generation.
+   */
+  public async processWithDSpyStreaming(
+    agentType: string,
+    transcript: string,
+    options: {
+      onProgress?: (phase: string, progress: number, details?: string) => void;
+      onToken?: (delta: string, fullText: string) => void;
+      signal?: AbortSignal;
+    } = {}
+  ): Promise<DSPyResult> {
+    const startTime = Date.now();
+    const requestId = this.generateRequestId();
+
+    try {
+      // Check if DSPy is enabled
+      if (!(await this.isDSPyEnabled(agentType))) {
+        return {
+          success: false,
+          error: `DSPy not enabled for agent type: ${agentType}`
+        };
+      }
+
+      logger.info('Processing with DSPy SDK streaming', {
+        component: 'DSPyService',
+        agent_type: agentType,
+        transcript_length: transcript.length,
+        request_id: requestId
+      });
+
+      // Check server health first
+      const isHealthy = await this.checkServerHealth();
+      if (!isHealthy) {
+        return {
+          success: false,
+          error: 'DSPy server is not available at localhost:8002. Please ensure the server is running.',
+          processing_time: Date.now() - startTime
+        };
+      }
+
+      // Prepare request payload
+      const payload = {
+        agent_type: agentType,
+        transcript: transcript,
+        request_id: requestId,
+        options: {}
+      };
+
+      // Make streaming request to DSPy server
+      const controller = new AbortController();
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => controller.abort());
+      }
+
+      const response = await fetch('http://localhost:8002/v1/dspy/process/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const [eventLine, dataLine] = line.split('\n');
+          if (!eventLine || !dataLine) continue;
+
+          const event = eventLine.replace('event: ', '').trim();
+          const dataStr = dataLine.replace('data: ', '').trim();
+
+          let data;
+          try {
+            data = JSON.parse(dataStr);
+          } catch (e) {
+            logger.warn('Failed to parse SSE data', {
+              component: 'DSPyService',
+              data: dataStr
+            });
+            continue;
+          }
+
+          switch (event) {
+            case 'progress':
+              options.onProgress?.(data.phase, data.progress, data.details);
+              break;
+
+            case 'token':
+              options.onToken?.(data.delta, data.fullText);
+              finalResult = data.fullText;
+              break;
+
+            case 'complete':
+              logger.info('DSPy SDK streaming completed', {
+                component: 'DSPyService',
+                agent_type: agentType,
+                request_id: requestId,
+                processing_time: data.processing_time
+              });
+
+              return {
+                success: true,
+                result: data.result,
+                processing_time: data.processing_time
+              };
+
+            case 'error':
+              throw new Error(data.error);
+          }
+        }
+      }
+
+      // If we exit the loop without a complete event, use last accumulated result
+      return {
+        success: true,
+        result: finalResult,
+        processing_time: Date.now() - startTime
+      };
+
+    } catch (error) {
+      const err = toError(error);
+      logger.error('DSPy SDK streaming failed', err, {
+        component: 'DSPyService',
+        agent_type: agentType,
+        request_id: requestId
+      });
+
+      if (err.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'DSPy streaming was cancelled',
+          processing_time: Date.now() - startTime
+        };
+      }
+
+      return {
+        success: false,
+        error: err.message,
+        processing_time: Date.now() - startTime
+      };
+    }
+  }
+
+  /**
    * Run evaluation on development set via external server
    */
   public async runEvaluation(

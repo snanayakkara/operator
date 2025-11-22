@@ -55,6 +55,7 @@ import { RecordingToasts } from '@/utils/toastHelpers';
 import { notifySuccess, notifyError } from '@/utils/notifications';
 import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
+import { RoundsProvider, useRounds } from '@/contexts/RoundsContext';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
 import { SessionPersistenceService } from '@/services/SessionPersistenceService';
@@ -64,6 +65,8 @@ import type { MobileJobSummary } from '@/types/mobileJobs.types';
 import Modal from './components/modals/Modal';
 import Button from './components/buttons/Button';
 import { ChevronDown, Calendar, Brain, Star, Keyboard } from 'lucide-react';
+import { RoundsView } from './components/rounds/RoundsView';
+import { QuickAddModal } from './components/rounds/QuickAddModal';
 
 interface CurrentDisplayData {
   transcription: string;
@@ -174,7 +177,9 @@ const OptimizedApp: React.FC = memo(() => {
     <ErrorBoundary>
       <QueryProvider>
         <AudioDeviceProvider>
-          <OptimizedAppContent />
+          <RoundsProvider>
+            <OptimizedAppContent />
+          </RoundsProvider>
         </AudioDeviceProvider>
       </QueryProvider>
     </ErrorBoundary>
@@ -185,6 +190,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Use optimized state management
   const { state, actions, selectors } = useAppState();
   const audioDeviceContext = useAudioDeviceContext();
+  const rounds = useRounds();
+  const [roundsOpen, setRoundsOpen] = useState(false);
+  const [globalQuickAddOpen, setGlobalQuickAddOpen] = useState(false);
   const overlayState = {
     patientEducation: selectors.isOverlayActive('patient-education'),
     patientSelection: selectors.isOverlayActive('patient-selection'),
@@ -288,6 +296,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     Boolean(pendingMobileJobPreview) &&
     normalizePreview(pendingMobileJobPreview) !== normalizePreview(pendingMobileJobHeader) &&
     !normalizePreview(pendingMobileJobPreview).startsWith(normalizePreview(pendingMobileJobHeader));
+  const pendingMobileJobConfidence = pendingMobileJob?.triage_metadata?.confidence;
 
   type ProcessMobileJobParams = {
     agentType: AgentType;
@@ -319,6 +328,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       });
     };
 
+    // Track streaming state for token-based progress
+    let streamedChars = 0;
+    const estimatedChars = 500; // Estimate for Quick Letter (~300-800 chars)
+
     const context: MedicalContext = {
       sessionId,
       timestamp: Date.now(),
@@ -332,6 +345,36 @@ const OptimizedAppContent: React.FC = memo(() => {
       onProgress: (phase: string, progressValue?: number, progressDetails?: string) => {
         const normalized = typeof progressValue === 'number' ? progressValue : 50;
         updateProgress('ai-analysis', normalized, progressDetails || phase);
+      },
+      onStream: (delta: string, fullText: string) => {
+        console.log(`📊 onStream called: delta length=${delta.length}, fullText length=${fullText.length}`);
+
+        // Update streaming state in app
+        actions.setStreaming(true);
+        actions.appendStreamChunk(delta);
+
+        // Track streamed characters for progress
+        streamedChars = fullText.length;
+
+        // Calculate generation progress (90-100% range)
+        // 90% = first token received, 100% = estimated completion
+        const generationProgress = 90 + Math.min((streamedChars / estimatedChars) * 10, 9.5);
+        const stageProgress = Math.min((streamedChars / estimatedChars) * 100, 95);
+
+        console.log(`📈 Progress update: ${Math.round(generationProgress)}% (${streamedChars}/${estimatedChars} chars)`);
+
+        updateProgress('generation', generationProgress, `Generating letter (${streamedChars} chars)`);
+
+        // Also update session in real-time
+        actions.updatePatientSession(sessionId, {
+          pipelineProgress: {
+            stage: 'generation',
+            progress: Math.round(generationProgress),
+            stageProgress: Math.round(stageProgress),
+            details: `Streaming: ${streamedChars} chars`,
+            modelName: 'LM Studio'
+          }
+        });
       }
     };
 
@@ -423,35 +466,32 @@ const OptimizedAppContent: React.FC = memo(() => {
           throw new Error('Transcript not available yet. Try again in a moment.');
         }
 
-        let patientInfo = patientCacheService.getCachedData();
-        if (!patientInfo) {
-          console.log('📭 No cached patient data, triggering background extraction');
-          await patientCacheService.extractAndCache();
-          patientInfo = patientCacheService.getCachedData();
-        }
+        // ALWAYS extract fresh patient data for mobile job attachment
+        console.log('📋 Extracting fresh patient data for mobile job attachment...');
 
-        if (!patientInfo) {
-          console.log('📡 Patient cache still empty – forcing direct extraction via EMR tab');
-          const freshData = await extractPatientData();
-          if (freshData) {
-            patientInfo = {
-              name: freshData.name || 'Patient',
-              id: freshData.id || `Patient-${Date.now()}`,
-              dob: freshData.dob || '',
-              age: freshData.age || '',
-              phone: freshData.phone,
-              email: freshData.email,
-              medicare: freshData.medicare,
-              insurance: freshData.insurance,
-              address: freshData.address,
-              extractedAt: freshData.extractedAt || Date.now()
-            };
-          }
-        }
+        // Invalidate cache to prevent reusing stale data
+        patientCacheService.invalidateCache();
+        console.log('🗑️ Cache invalidated - extracting fresh patient data');
 
-        if (!patientInfo) {
+        // Extract patient data directly (bypasses cache and throttling)
+        const freshData = await extractPatientData();
+
+        if (!freshData) {
           throw new Error('No patient detected. Open a patient chart in Xestro before attaching the dictation.');
         }
+
+        const patientInfo = {
+          name: freshData.name || 'Patient',
+          id: freshData.id || `Patient-${Date.now()}`,
+          dob: freshData.dob || '',
+          age: freshData.age || '',
+          phone: freshData.phone,
+          email: freshData.email,
+          medicare: freshData.medicare,
+          insurance: freshData.insurance,
+          address: freshData.address,
+          extractedAt: freshData.extractedAt || Date.now()
+        };
 
         actions.setCurrentPatientInfo(patientInfo);
 
@@ -562,6 +602,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.updatePatientSession(sessionId, {
           results: completedSession.results,
           summary: completedSession.summary,
+          agentType: completedSession.agentType,
+          agentName: completedSession.agentName,
           status: completedSession.status,
           completed: completedSession.completed,
           processingTime: completedSession.processingTime,
@@ -574,11 +616,26 @@ const OptimizedAppContent: React.FC = memo(() => {
           angiogramExtractedData: completedSession.angiogramExtractedData
         });
 
+        console.log('📝 Setting mobile job results:', {
+          hasContent: !!report.content,
+          contentLength: report.content?.length || 0,
+          hasSummary: !!report.summary,
+          summaryLength: report.summary?.length || 0,
+          agentType: finalAgentType
+        });
+
         actions.setResults(report.content);
         if (report.summary) {
-          actions.setAIGeneratedSummary(report.summary);
+          console.log('✅ Setting AI generated summary for mobile job');
+          actions.setAiGeneratedSummary(report.summary);
+        } else {
+          console.warn('⚠️ No summary found in mobile job report');
         }
         actions.setMissingInfo(report.metadata?.missingInformation || null);
+
+        // Clear streaming state after completion (parsed results now in report.content/summary)
+        actions.clearStream();
+        actions.setStreaming(false);
 
         await persistenceService.saveSession(completedSession);
         await mobileJobsService.markAttached(job.id, sessionId, patientInfo.name, finalAgentType);
@@ -4864,10 +4921,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         attachingMobileJobId={attachingMobileJobId}
         deletingMobileJobId={deletingMobileJobId}
         attachedMobileJobIds={attachedMobileJobIds}
+        onOpenRounds={() => setRoundsOpen(true)}
+        onOpenQuickAdd={() => setGlobalQuickAddOpen(true)}
       />
 
       {/* Main Content Area - Single Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {roundsOpen && (
+          <div className="absolute inset-0 z-40 bg-white shadow-lg overflow-hidden">
+            <RoundsView onClose={() => setRoundsOpen(false)} />
+          </div>
+        )}
         
         {/* Main Content */}
         <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
@@ -5212,6 +5276,13 @@ const OptimizedAppContent: React.FC = memo(() => {
             <div className="flex-1 min-h-0 overflow-y-auto">
               {(() => {
                 const displayData = getCurrentDisplayData();
+
+                // Determine session source for progress filtering (mobile jobs skip audio/transcription stages)
+                const currentSession = state.patientSessions.find(s =>
+                  s.id === (displayData.isDisplayingSession ? state.displaySession.displaySessionId : state.currentSessionId)
+                );
+                const sessionSource = currentSession?.source || 'recording';
+
                 return (
                   <OptimizedResultsPanel
                     results={displayData.results}
@@ -5288,6 +5359,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 onMTEERReprocessWithValidation={!displayData.isDisplayingSession ? handleMTEERReprocessWithValidation : undefined}
                 pipelineProgress={displayData.pipelineProgress || state.pipelineProgress}
                 processingStartTime={displayData.processingStartTime ?? state.processingStartTime}
+                sessionSource={sessionSource}
                 revisionPanel={revisionPanelData}
                 revisionContext={revisionContext}
                 onRevisionToggle={handleRevisionToggle}
@@ -5847,10 +5919,10 @@ const OptimizedAppContent: React.FC = memo(() => {
                 <Calendar className="w-3 h-3" />
                 {formatRelativeTime(pendingMobileJob.created_at)}
               </span>
-              {pendingMobileJob.triage_metadata?.confidence && (
+              {typeof pendingMobileJobConfidence === 'number' && (
                 <span className="flex items-center gap-1 text-gray-600">
                   <Brain className="w-3 h-3" />
-                  {Math.round(pendingMobileJob.triage_metadata.confidence * 100)}% confidence
+                  {Math.round(pendingMobileJobConfidence * 100)}% confidence
                 </span>
               )}
               <span className="ml-auto text-emerald-600 font-medium">
@@ -6208,6 +6280,16 @@ const OptimizedAppContent: React.FC = memo(() => {
           onClose={handleCloseModelErrorDialog}
         />
       )}
+
+      <QuickAddModal
+        open={globalQuickAddOpen}
+        onClose={() => setGlobalQuickAddOpen(false)}
+        onSave={async ({ name, scratchpad }) => {
+          await rounds.quickAddPatient(name, scratchpad);
+          setRoundsOpen(true);
+          setGlobalQuickAddOpen(false);
+        }}
+      />
 
       {/* Toast Notifications */}
       <ToastContainer />

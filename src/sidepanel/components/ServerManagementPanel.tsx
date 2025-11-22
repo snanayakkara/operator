@@ -15,6 +15,9 @@
 import React, { useState } from 'react';
 import { useModelStatus } from '@/hooks/useModelStatus';
 import { Copy, CheckCircle, XCircle, Clock, Server, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
+import Button, { IconButton } from './buttons/Button';
+import { StatusBadge } from './status';
+import type { ProcessingState } from '@/utils/stateColors';
 
 interface ServerManagementPanelProps {
   className?: string;
@@ -30,6 +33,13 @@ interface ServerStatusIndicatorProps {
   icon?: React.ReactNode;
 }
 
+/**
+ * Maps server health status to ProcessingState for StatusBadge
+ */
+const mapServerHealthToState = (isHealthy: boolean): ProcessingState => {
+  return isHealthy ? 'completed' : 'error';
+};
+
 const ServerStatusIndicator: React.FC<ServerStatusIndicatorProps> = ({
   name,
   url,
@@ -38,14 +48,14 @@ const ServerStatusIndicator: React.FC<ServerStatusIndicatorProps> = ({
   icon
 }) => {
   const statusIcon = isHealthy ? (
-    <CheckCircle className="w-4 h-4 text-green-600" />
+    <CheckCircle className="w-4 h-4" />
   ) : (
-    <XCircle className="w-4 h-4 text-red-600" />
+    <XCircle className="w-4 h-4" />
   );
 
-  const statusColor = isHealthy 
-    ? 'text-green-800 bg-green-50 border-green-200' 
-    : 'text-red-800 bg-red-50 border-red-200';
+  const statusColor = isHealthy
+    ? 'bg-green-50 border-green-200'
+    : 'bg-red-50 border-red-200';
 
   return (
     <div className={`flex items-start space-x-3 p-3 rounded-lg border ${statusColor}`}>
@@ -53,9 +63,16 @@ const ServerStatusIndicator: React.FC<ServerStatusIndicatorProps> = ({
         {icon || statusIcon}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium truncate">{name}</h4>
-          <span className="text-xs text-gray-500 font-mono">{url.replace('http://localhost:', ':')}</span>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-sm font-medium truncate text-gray-900">{name}</h4>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">{url.replace('http://localhost:', ':')}</span>
+            <StatusBadge
+              state={mapServerHealthToState(isHealthy)}
+              size="sm"
+              label={isHealthy ? 'Running' : 'Offline'}
+            />
+          </div>
         </div>
         {details.length > 0 && (
           <div className="mt-1 space-y-0.5">
@@ -126,9 +143,10 @@ export const ServerManagementPanel: React.FC<ServerManagementPanelProps> = ({
 
     return (
       <div className={`bg-white rounded-lg border border-gray-200 p-3 ${className}`}>
-        <button 
+        <Button
           onClick={() => setIsExpanded(true)}
-          className="flex items-center justify-between w-full text-left"
+          variant="ghost"
+          className="w-full text-left justify-between"
         >
           <div className="flex items-center space-x-2">
             {statusIcon}
@@ -137,7 +155,7 @@ export const ServerManagementPanel: React.FC<ServerManagementPanelProps> = ({
             </span>
           </div>
           <ChevronDown className="w-4 h-4 text-gray-400" />
-        </button>
+        </Button>
       </div>
     );
   }
@@ -196,22 +214,22 @@ export const ServerManagementPanel: React.FC<ServerManagementPanelProps> = ({
           <h3 className="text-base font-semibold text-gray-900">
             Development Servers
           </h3>
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-            health.allHealthy
-              ? 'bg-green-100 text-green-800'
-              : 'bg-orange-100 text-orange-800'
-          }`}>
-            {health.healthy}/{health.total} Running
-          </span>
+          <StatusBadge
+            state={health.allHealthy ? 'completed' : 'needs_review'}
+            size="sm"
+            label={`${health.healthy}/${health.total} Running`}
+          />
         </div>
-        
+
         {compactMode && (
-          <button 
+          <IconButton
             onClick={() => setIsExpanded(false)}
+            icon={<ChevronUp />}
+            variant="ghost"
+            size="sm"
+            aria-label="Collapse server panel"
             className="text-gray-400 hover:text-gray-600"
-          >
-            <ChevronUp className="w-4 h-4" />
-          </button>
+          />
         )}
       </div>
 
@@ -251,27 +269,16 @@ export const ServerManagementPanel: React.FC<ServerManagementPanelProps> = ({
           <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-2">
             <code className="text-sm font-mono text-gray-900">./dev</code>
           </div>
-          
-          <button
+
+          <Button
             onClick={handleCopyCommand}
-            className={`inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium transition-colors ${
-              copySuccess
-                ? 'bg-green-50 border-green-300 text-green-700'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
+            variant={copySuccess ? 'success' : 'outline'}
+            size="sm"
+            startIcon={copySuccess ? <CheckCircle /> : <Copy />}
+            className={copySuccess ? 'bg-green-50 border-green-300 text-green-700' : ''}
           >
-            {copySuccess ? (
-              <>
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 mr-1" />
-                Copy
-              </>
-            )}
-          </button>
+            {copySuccess ? 'Copied!' : 'Copy'}
+          </Button>
         </div>
         
         <p className="mt-2 text-xs text-gray-600">

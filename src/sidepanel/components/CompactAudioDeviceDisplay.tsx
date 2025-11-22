@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mic, Speaker, ChevronDown } from 'lucide-react';
 import { useAudioDevices, type AudioDevice } from '@/hooks/useAudioDevices';
+import Button from './buttons/Button';
 
 interface CompactAudioDeviceDisplayProps {
   disabled?: boolean;
@@ -65,13 +66,15 @@ export const CompactAudioDeviceDisplay: React.FC<CompactAudioDeviceDisplayProps>
 
   if (!hasPermission) {
     return (
-      <button
+      <Button
         onClick={requestPermission}
-        className="text-gray-500 hover:text-gray-700 text-[10px] transition-colors"
+        variant="ghost"
+        size="sm"
+        className="text-gray-500 hover:text-gray-700 text-[10px] !h-auto !px-0"
         disabled={disabled}
       >
         Enable audio access
-      </button>
+      </Button>
     );
   }
 
@@ -79,55 +82,51 @@ export const CompactAudioDeviceDisplay: React.FC<CompactAudioDeviceDisplayProps>
     <div className="flex items-center space-x-2 text-[10px]" data-audio-dropdown>
       {/* Microphone Dropdown */}
       <div className="relative">
-        <button
+        <Button
           onClick={() => !disabled && setMicDropdownOpen(!micDropdownOpen)}
           disabled={disabled}
-          className={`
-            flex items-center space-x-1 text-gray-500 hover:text-gray-700 transition-colors
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-          `}
+          variant="ghost"
+          size="sm"
+          className={`flex items-center space-x-1 text-gray-500 hover:text-gray-700 !h-auto !px-0 ${
+            disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          }`}
           title={`Current microphone: ${getCurrentMicrophoneLabel()}`}
         >
           <span>🎤</span>
           <span className="max-w-[80px] truncate">
             {truncateDeviceName(getCurrentMicrophoneLabel(), 20)}
           </span>
-          <ChevronDown 
+          <ChevronDown
             className={`w-2 h-2 transition-transform ${
               micDropdownOpen ? 'transform rotate-180' : ''
-            }`} 
+            }`}
           />
-        </button>
+        </Button>
 
         {/* Microphone Dropdown Menu */}
         {micDropdownOpen && !disabled && microphones.length > 0 && (
           <div className="absolute top-full left-0 mt-1 z-[9998] bg-white border border-gray-200 rounded-md shadow-lg min-w-[200px] max-w-[250px]">
             <div className="py-1">
               {microphones.map((device) => (
-                <button
+                <Button
                   key={device.deviceId}
                   onClick={() => handleDeviceSelect(device)}
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<Mic className={`w-4 h-4 ${selectedMicrophoneId === device.deviceId ? 'text-blue-600' : 'text-gray-400'}`} />}
                   className={`
-                    w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 
-                    transition-colors flex items-center space-x-2
-                    ${selectedMicrophoneId === device.deviceId 
-                      ? 'bg-blue-50 text-blue-900' 
+                    !w-full !justify-start text-xs hover:bg-gray-50 !h-auto py-1.5
+                    ${selectedMicrophoneId === device.deviceId
+                      ? 'bg-blue-50 text-blue-900'
                       : 'text-gray-800'
                     }
                   `}
                 >
-                  <Mic 
-                    className={`w-3 h-3 ${
-                      selectedMicrophoneId === device.deviceId 
-                        ? 'text-blue-600' 
-                        : 'text-gray-400'
-                    }`} 
-                  />
-                  <span className="truncate">{device.label}</span>
+                  <span className="truncate flex-1 text-left">{device.label}</span>
                   {selectedMicrophoneId === device.deviceId && (
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full ml-auto flex-shrink-0" />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -139,55 +138,51 @@ export const CompactAudioDeviceDisplay: React.FC<CompactAudioDeviceDisplayProps>
 
       {/* Speaker Dropdown */}
       <div className="relative">
-        <button
+        <Button
           onClick={() => !disabled && setSpeakerDropdownOpen(!speakerDropdownOpen)}
           disabled={disabled}
-          className={`
-            flex items-center space-x-1 text-gray-500 hover:text-gray-700 transition-colors
-            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-          `}
+          variant="ghost"
+          size="sm"
+          className={`flex items-center space-x-1 text-gray-500 hover:text-gray-700 !h-auto !px-0 ${
+            disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          }`}
           title={`Current speaker: ${getCurrentSpeakerLabel()}`}
         >
           <span>🔊</span>
           <span className="max-w-[80px] truncate">
             {truncateDeviceName(getCurrentSpeakerLabel(), 20)}
           </span>
-          <ChevronDown 
+          <ChevronDown
             className={`w-2 h-2 transition-transform ${
               speakerDropdownOpen ? 'transform rotate-180' : ''
-            }`} 
+            }`}
           />
-        </button>
+        </Button>
 
         {/* Speaker Dropdown Menu */}
         {speakerDropdownOpen && !disabled && speakers.length > 0 && (
           <div className="absolute top-full left-0 mt-1 z-[9998] bg-white border border-gray-200 rounded-md shadow-lg min-w-[200px] max-w-[250px]">
             <div className="py-1">
               {speakers.map((device) => (
-                <button
+                <Button
                   key={device.deviceId}
                   onClick={() => handleDeviceSelect(device)}
+                  variant="ghost"
+                  size="sm"
+                  startIcon={<Speaker className={`w-4 h-4 ${selectedSpeakerId === device.deviceId ? 'text-blue-600' : 'text-gray-400'}`} />}
                   className={`
-                    w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 
-                    transition-colors flex items-center space-x-2
-                    ${selectedSpeakerId === device.deviceId 
-                      ? 'bg-blue-50 text-blue-900' 
+                    !w-full !justify-start text-xs hover:bg-gray-50 !h-auto py-1.5
+                    ${selectedSpeakerId === device.deviceId
+                      ? 'bg-blue-50 text-blue-900'
                       : 'text-gray-800'
                     }
                   `}
                 >
-                  <Speaker 
-                    className={`w-3 h-3 ${
-                      selectedSpeakerId === device.deviceId 
-                        ? 'text-blue-600' 
-                        : 'text-gray-400'
-                    }`} 
-                  />
-                  <span className="truncate">{device.label}</span>
+                  <span className="truncate flex-1 text-left">{device.label}</span>
                   {selectedSpeakerId === device.deviceId && (
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full ml-auto flex-shrink-0" />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

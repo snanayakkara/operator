@@ -12,6 +12,8 @@ import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport, RightHeart
  */
 export interface PersistedSession {
   id: string;
+  source?: 'live' | 'mobile' | 'paste';
+  mobileJobId?: string;
   patient: PatientInfo;
   transcription: string;
   results: string;

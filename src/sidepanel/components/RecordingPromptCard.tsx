@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { X as _X, Clock as _Clock, Lightbulb, BookOpen, ChevronDown, ChevronRight, Mic as _Mic } from 'lucide-react';
 import { getRecordingPrompt, type RecordingPromptSection } from '@/config/recordingPrompts';
 import type { AgentType } from '@/types/medical.types';
+import Button from './buttons/Button';
 
 interface RecordingPromptCardProps {
   agentType: AgentType;
@@ -51,9 +52,11 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
     
     return (
       <div key={section.title} className={`border border-gray-200 rounded-xl overflow-hidden ${compactMode ? 'mb-2' : 'mb-3'}`}>
-        <button
+        <Button
           onClick={() => toggleSection(section.title)}
-          className={`w-full bg-gray-50 hover:bg-gray-100 flex items-center justify-between text-left transition-colors ${
+          variant="ghost"
+          size={compactMode ? 'sm' : 'md'}
+          className={`!w-full !justify-between bg-gray-50 hover:bg-gray-100 rounded-none ${
             compactMode ? 'px-3 py-2' : 'px-4 py-3'
           }`}
         >
@@ -66,7 +69,7 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
           ) : (
             <ChevronRight className={`text-gray-500 ${compactMode ? 'w-3 h-3' : 'w-4 h-4'}`} />
           )}
-        </button>
+        </Button>
         
         {isExpanded && (
           <div className={`bg-white ${compactMode ? 'px-3 py-2' : 'px-4 py-3'}`}>

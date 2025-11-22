@@ -11,6 +11,7 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Activity, Heart, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import Button from '../buttons/Button';
 import type { CalculatedHaemodynamics } from '@/types/medical.types';
 
 interface CalculatedHaemodynamicsDisplayProps {
@@ -216,10 +217,11 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 1: Essential Calculations */}
       {hasTier1Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <button
+          <Button
             type="button"
             onClick={() => toggleTier('tier1')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 rounded-t-lg"
+            variant="ghost"
+            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
           >
             <div className="flex items-center space-x-2">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
@@ -231,7 +233,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
             ) : (
               <ChevronDown className="w-5 h-5 text-gray-400" />
             )}
-          </button>
+          </Button>
 
           {expandedTiers.has('tier1') && (
             <div className="px-4 pb-4 space-y-3">
@@ -340,10 +342,11 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 2: High-Value Calculations */}
       {hasTier2Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <button
+          <Button
             type="button"
             onClick={() => toggleTier('tier2')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 rounded-t-lg"
+            variant="ghost"
+            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
           >
             <div className="flex items-center space-x-2">
               <Activity className="w-5 h-5 text-purple-600" />
@@ -355,7 +358,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
             ) : (
               <ChevronDown className="w-5 h-5 text-gray-400" />
             )}
-          </button>
+          </Button>
 
           {expandedTiers.has('tier2') && (
             <div className="px-4 pb-4 space-y-3">
@@ -438,10 +441,11 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 3: Advanced Calculations */}
       {hasTier3Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <button
+          <Button
             type="button"
             onClick={() => toggleTier('tier3')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 rounded-t-lg"
+            variant="ghost"
+            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
           >
             <div className="flex items-center space-x-2">
               <Heart className="w-5 h-5 text-blue-600" />
@@ -453,7 +457,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
             ) : (
               <ChevronDown className="w-5 h-5 text-gray-400" />
             )}
-          </button>
+          </Button>
 
           {expandedTiers.has('tier3') && (
             <div className="px-4 pb-4 space-y-3">

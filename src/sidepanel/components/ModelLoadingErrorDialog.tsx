@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { AlertTriangle, MemoryStick, X, RefreshCw, CheckCircle2 } from 'lucide-react';
 import type { ModelLoadingError } from '@/types/errors.types';
 import { getModelInfo, formatMemorySize, getModelsForAvailableMemory as _getModelsForAvailableMemory, getRecommendedFallbackModel } from '@/utils/modelInfo';
+import Button, { IconButton } from './buttons/Button';
 
 interface ModelLoadingErrorDialogProps {
   error: ModelLoadingError;
@@ -80,13 +81,14 @@ export const ModelLoadingErrorDialog: React.FC<ModelLoadingErrorDialogProps> = (
                 </p>
               </div>
             </div>
-            <button
+            <IconButton
               onClick={onClose}
-              className="p-1 hover:bg-rose-100 rounded-lg transition-colors"
+              icon={X}
+              variant="ghost"
+              size="sm"
               aria-label="Close dialog"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+              className="hover:bg-rose-100"
+            />
           </div>
         </div>
 
@@ -146,23 +148,18 @@ export const ModelLoadingErrorDialog: React.FC<ModelLoadingErrorDialogProps> = (
                   <span>Close unused <strong>VSCode windows</strong></span>
                 </li>
               </ul>
-              <button
+              <Button
                 onClick={handleRetry}
                 disabled={isRetrying}
-                className="w-full mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                variant="primary"
+                size="md"
+                fullWidth
+                isLoading={isRetrying}
+                startIcon={RefreshCw}
+                className="mt-4"
               >
-                {isRetrying ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Retrying...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Retry with {error.requestedModel}
-                  </>
-                )}
-              </button>
+                {isRetrying ? 'Retrying...' : `Retry with ${error.requestedModel}`}
+              </Button>
             </div>
           </div>
 
@@ -194,10 +191,13 @@ export const ModelLoadingErrorDialog: React.FC<ModelLoadingErrorDialogProps> = (
                       const isSelected = modelId === selectedModel;
 
                       return (
-                        <button
+                        <Button
                           key={modelId}
                           onClick={() => setSelectedModel(modelId)}
-                          className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                          variant={isSelected ? 'success' : 'outline'}
+                          size="md"
+                          fullWidth
+                          className={`!justify-start text-left px-4 py-3 ${
                             isSelected
                               ? 'border-emerald-500 bg-emerald-50'
                               : 'border-gray-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/50'
@@ -236,28 +236,23 @@ export const ModelLoadingErrorDialog: React.FC<ModelLoadingErrorDialogProps> = (
                               <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                             )}
                           </div>
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
 
-                  <button
+                  <Button
                     onClick={handleSwitchModel}
                     disabled={!selectedModel || isSwitching}
-                    className="w-full mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                    variant="success"
+                    size="md"
+                    fullWidth
+                    isLoading={isSwitching}
+                    startIcon={isSwitching ? RefreshCw : CheckCircle2}
+                    className="mt-4"
                   >
-                    {isSwitching ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        Switching Models...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        Switch to {selectedModel && getModelInfo(selectedModel).displayName}
-                      </>
-                    )}
-                  </button>
+                    {isSwitching ? 'Switching Models...' : `Switch to ${selectedModel && getModelInfo(selectedModel).displayName}`}
+                  </Button>
                 </>
               )}
             </div>

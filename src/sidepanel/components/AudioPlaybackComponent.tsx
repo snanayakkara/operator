@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, RotateCcw, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
+import { IconButton } from './buttons/Button';
 
 interface AudioPlaybackComponentProps {
   audioBlob: Blob;
@@ -264,33 +265,26 @@ export const AudioPlaybackComponent: React.FC<AudioPlaybackComponentProps> = ({
       <div className="space-y-3">
         {/* Main Controls */}
         <div className="flex items-center space-x-3">
-          <button
+          <IconButton
             onClick={handlePlayPause}
             disabled={!audioStats?.isValid || loadError !== null}
-            className={`
-              flex items-center justify-center w-10 h-10 rounded-full transition-colors
-              ${!audioStats?.isValid || loadError 
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }
-            `}
+            icon={isPlaying ? <Pause /> : <Play className="ml-0.5" />}
+            variant="primary"
+            size="lg"
+            className="rounded-full"
             title={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? (
-              <Pause className="w-5 h-5" />
-            ) : (
-              <Play className="w-5 h-5 ml-0.5" />
-            )}
-          </button>
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          />
 
-          <button
+          <IconButton
             onClick={handleRestart}
             disabled={!audioStats?.isValid || loadError !== null}
-            className="p-2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            icon={<RotateCcw />}
+            variant="ghost"
+            size="md"
             title="Restart"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+            aria-label="Restart"
+          />
 
           {/* Time Display */}
           <div className="flex-1 text-center">
@@ -301,17 +295,14 @@ export const AudioPlaybackComponent: React.FC<AudioPlaybackComponentProps> = ({
 
           {/* Volume Controls */}
           <div className="flex items-center space-x-2">
-            <button
+            <IconButton
               onClick={handleMuteToggle}
-              className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+              icon={isMuted || volume === 0 ? <VolumeX /> : <Volume2 />}
+              variant="ghost"
+              size="sm"
               title={isMuted ? 'Unmute' : 'Mute'}
-            >
-              {isMuted || volume === 0 ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
-            </button>
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
+            />
             <input
               type="range"
               min="0"

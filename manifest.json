@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Operator",
-  "version": "3.35.0",
+  "version": "3.36.0",
   "description": "Operator - Medical AI assistant with advanced dictation, transcription, and EMR integration capabilities",
   
   "permissions": [
@@ -91,6 +91,7 @@
         "assets/*",
         "chunks/*",
         "src/components/BatchReviewResults.html",
+        "src/canvas/index.html",
         "workers/*"
       ],
       "matches": [

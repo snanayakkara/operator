@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { ToastService, Toast } from '@/services/ToastService';
+import { IconButton } from './buttons/Button';
 
 const ToastIcon: React.FC<{ type: Toast['type'] }> = ({ type }) => {
   const iconProps = { className: "w-4 h-4 flex-shrink-0" };
@@ -56,15 +57,16 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
             </p>
           )}
         </div>
-        
-        <button
+
+        <IconButton
           onClick={() => onRemove(toast.id)}
-          className="flex-shrink-0 bg-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200 ease-out rounded-md p-1"
+          icon={<X />}
+          variant="ghost"
+          size="sm"
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
           title="Dismiss notification"
           aria-label="Dismiss notification"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        />
       </div>
     </div>
   );

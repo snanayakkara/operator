@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Settings, ChevronRight, Bell } from 'lucide-react';
+import { Settings, ChevronRight, Bell, Smartphone, Plus } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, PatientSession } from '@/types/medical.types';
 import type { StorageStats } from '@/types/persistence.types';
 import { StateChip } from './StateChip';
@@ -23,6 +23,11 @@ import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { formatDeviceSummary } from '@/utils/deviceNameUtils';
+import Button from './buttons/Button';
+import { IconButton } from './buttons/Button';
+import { DropdownPortal } from './DropdownPortal';
+import { MobileJobsPanel } from './MobileJobsPanel';
+import type { MobileJobSummary } from '@/types/mobileJobs.types';
 
 export interface SidebarHeaderProps {
   // Status
@@ -54,6 +59,19 @@ export interface SidebarHeaderProps {
 
   // Actions (none currently needed - settings opens extension options page)
   onTitleClick?: () => void;
+
+  // Mobile jobs integration
+  mobileJobs?: MobileJobSummary[];
+  mobileJobsLoading?: boolean;
+  mobileJobsError?: string | null;
+  onRefreshMobileJobs?: () => Promise<void> | void;
+  onAttachMobileJob?: (job: MobileJobSummary) => Promise<void> | void;
+  onDeleteMobileJob?: (job: MobileJobSummary) => Promise<void> | void;
+  attachingMobileJobId?: string | null;
+  deletingMobileJobId?: string | null;
+  attachedMobileJobIds?: Set<string>;
+  onOpenRounds?: () => void;
+  onOpenQuickAdd?: () => void;
 }
 
 export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
@@ -76,12 +94,26 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   storageStats,
   onDeleteAllChecked,
   onDeleteOldSessions,
-  onTitleClick
+  onTitleClick,
+  mobileJobs = [],
+  mobileJobsLoading = false,
+  mobileJobsError,
+  onRefreshMobileJobs,
+  onAttachMobileJob,
+  onDeleteMobileJob,
+  attachingMobileJobId,
+  deletingMobileJobId,
+  attachedMobileJobIds,
+  onOpenRounds,
+  onOpenQuickAdd
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
+  const [mobileJobsOpen, setMobileJobsOpen] = useState(false);
+  const [mobileJobsLoaded, setMobileJobsLoaded] = useState(false);
   const deviceButtonRef = useRef<HTMLButtonElement>(null);
   const sessionButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileJobsButtonRef = useRef<HTMLButtonElement>(null);
 
   const {
     getCurrentMicrophoneLabel,
@@ -110,6 +142,15 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     setSessionDropdownOpen(!sessionDropdownOpen);
   };
 
+  const handleMobileJobsToggle = () => {
+    const next = !mobileJobsOpen;
+    setMobileJobsOpen(next);
+    if (next && !mobileJobsLoaded) {
+      onRefreshMobileJobs?.();
+      setMobileJobsLoaded(true);
+    }
+  };
+
   const handleSettingsClick = () => {
     // Open Chrome extension options page
     chrome.runtime.openOptionsPage();
@@ -118,6 +159,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   // Calculate unchecked (active) sessions
   const uncheckedCount = patientSessions.filter(s => !checkedSessionIds?.has(s.id)).length;
 
+  const unattachedMobileJobs = mobileJobs.filter(job => !job.attached_session_id);
+
   return (
     <header className="flex-shrink-0 bg-white border-b border-gray-200">
       {/* Row 1: Primary header (≤ 40px) */}
@@ -125,15 +168,17 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         {/* Left: App name + State chip */}
         <div className="flex items-center gap-1 min-w-0">
           {onTitleClick ? (
-            <button
+            <Button
               type="button"
               onClick={onTitleClick}
-              className="text-sm font-semibold text-gray-900 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded"
+              variant="ghost"
+              size="sm"
+              className="text-sm font-semibold text-gray-900 flex-shrink-0 !h-auto !px-0 hover:bg-transparent"
               title="Return to home"
               aria-label="Return to home"
             >
               operator
-            </button>
+            </Button>
           ) : (
             <h1 className="text-sm font-semibold text-gray-900 flex-shrink-0">
               operator
@@ -149,68 +194,103 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
         {/* Right: Icon actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {onOpenRounds && (
+            <Button
+              onClick={onOpenRounds}
+              variant="ghost"
+              size="sm"
+              className="text-gray-700"
+            >
+              Rounds
+            </Button>
+          )}
+          {onOpenQuickAdd && (
+            <Button
+              onClick={onOpenQuickAdd}
+              variant="outline"
+              size="sm"
+              startIcon={Plus}
+              className="text-gray-700"
+            >
+              Quick Add
+            </Button>
+          )}
+
           {/* Queue Status */}
           <QueueStatusDisplay isCompact={true} />
 
+          {/* Mobile Jobs */}
+          <div className="relative">
+            <IconButton
+              ref={mobileJobsButtonRef}
+              data-dropdown-trigger
+              onClick={handleMobileJobsToggle}
+              icon={<Smartphone />}
+              variant="ghost"
+              size="sm"
+              className={`text-gray-600 !w-auto !h-auto p-1.5 ${mobileJobsOpen ? 'bg-gray-100' : ''}`}
+              aria-label={unattachedMobileJobs.length > 0 ? `${unattachedMobileJobs.length} mobile dictations awaiting attachment` : 'Mobile dictations'}
+              title="Mobile dictations"
+            />
+            {unattachedMobileJobs.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-10">
+                {unattachedMobileJobs.length > 9 ? '9+' : unattachedMobileJobs.length}
+              </span>
+            )}
+          </div>
+
           {/* Session Manager */}
-          <button
-            ref={sessionButtonRef}
-            onClick={handleSessionDropdownToggle}
-            className="
-              relative p-1.5 rounded hover:bg-gray-100 transition-colors
-              focus:outline-none focus:ring-2 focus:ring-blue-500
-            "
-            aria-label={uncheckedCount > 0 ? `${uncheckedCount} active session${uncheckedCount !== 1 ? 's' : ''}` : 'Session history'}
-            title={uncheckedCount > 0 ? 'View active sessions' : 'Session history'}
-          >
-            <Bell className="w-4 h-4 text-gray-600" />
+          <div className="relative">
+            <IconButton
+              ref={sessionButtonRef}
+              onClick={handleSessionDropdownToggle}
+              icon={<Bell />}
+              variant="ghost"
+              size="sm"
+              className="text-gray-600 !w-auto !h-auto p-1.5"
+              aria-label={uncheckedCount > 0 ? `${uncheckedCount} active session${uncheckedCount !== 1 ? 's' : ''}` : 'Session history'}
+              title={uncheckedCount > 0 ? 'View active sessions' : 'Session history'}
+            />
             {uncheckedCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {uncheckedCount > 9 ? '9+' : uncheckedCount}
               </span>
             )}
-          </button>
+          </div>
 
           {/* Settings */}
-          <button
+          <IconButton
             onClick={handleSettingsClick}
-            className="
-              p-1.5 rounded hover:bg-gray-100 transition-colors
-              focus:outline-none focus:ring-2 focus:ring-blue-500
-            "
+            icon={<Settings />}
+            variant="ghost"
+            size="sm"
+            className="text-gray-600 !w-auto !h-auto p-1.5"
             aria-label="Open settings"
             title="Settings"
-          >
-            <Settings className="w-4 h-4 text-gray-600" />
-          </button>
+          />
         </div>
       </div>
 
       {/* Row 2: Device summary (collapsible) */}
       {hasPermission && (
         <div className="px-2.5 pb-2">
-          <button
+          <Button
             ref={deviceButtonRef}
             onClick={handleDevicePopoverToggle}
             data-dropdown-trigger
+            variant="ghost"
+            size="sm"
+            fullWidth
+            endIcon={<ChevronRight className={`transition-transform ${devicePopoverOpen ? 'rotate-90' : ''}`} />}
             className="
-              w-full flex items-center justify-between gap-2
-              px-2 py-1.5 rounded-md text-xs
+              !justify-between !h-auto px-2 py-1.5 text-xs
               text-gray-600 hover:bg-gray-50 hover:text-gray-900
-              transition-colors
-              focus:outline-none focus:ring-2 focus:ring-blue-500
             "
             aria-label="Change audio devices"
             aria-expanded={devicePopoverOpen}
           >
             <span className="truncate">{deviceSummary}</span>
-            <ChevronRight
-              className={`w-3 h-3 flex-shrink-0 transition-transform ${
-                devicePopoverOpen ? 'rotate-90' : ''
-              }`}
-              aria-hidden="true"
-            />
-          </button>
+          </Button>
         </div>
       )}
 
@@ -220,6 +300,38 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         onClose={() => setDevicePopoverOpen(false)}
         triggerRef={deviceButtonRef}
       />
+
+      {mobileJobsOpen && (
+        <DropdownPortal
+          isOpen={mobileJobsOpen}
+          onClickOutside={() => setMobileJobsOpen(false)}
+        >
+          <div
+            data-dropdown-menu
+            className="z-50"
+            style={{
+              position: 'fixed',
+              top: `${(mobileJobsButtonRef.current?.getBoundingClientRect().bottom || 0) + 8}px`,
+              left: `${Math.max(8, (mobileJobsButtonRef.current?.getBoundingClientRect().right || 340) - 360)}px`
+            }}
+          >
+            <MobileJobsPanel
+              jobs={mobileJobs}
+              isLoading={mobileJobsLoading}
+              error={mobileJobsError}
+              onRefresh={onRefreshMobileJobs}
+              onAttach={(job) => {
+                setMobileJobsOpen(false); // Close dropdown to expose workflow menu
+                onAttachMobileJob?.(job);
+              }}
+              onDelete={onDeleteMobileJob}
+              attachingJobId={attachingMobileJobId || null}
+              deletingJobId={deletingMobileJobId || null}
+              attachedJobIds={attachedMobileJobIds}
+            />
+          </div>
+        </DropdownPortal>
+      )}
 
       {/* Session Dropdown */}
       {sessionDropdownOpen && onRemoveSession && onClearAllSessions && (

@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { AlertCircle, RefreshCw, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { tokens } from '@/utils/design-tokens';
 import type { ErrorFallbackProps } from './ErrorBoundary';
+import Button from '../buttons/Button';
 
 const ErrorFallback: React.FC<ErrorFallbackProps> = ({ error, errorInfo, resetError }) => {
   const [showDetails, setShowDetails] = useState(false);
@@ -69,36 +70,37 @@ User Agent: ${navigator.userAgent}
 
           {/* Action Buttons */}
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={resetError}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-lg font-medium hover:from-violet-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
+              variant="primary"
+              size="md"
+              fullWidth
+              startIcon={<RefreshCw />}
             >
-              <RefreshCw className="w-4 h-4" />
               Try Again
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleReload}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
+              variant="outline"
+              size="md"
+              fullWidth
             >
               Reload Page
-            </button>
+            </Button>
           </div>
 
           {/* Technical Details Toggle */}
           <div className="border-t border-gray-200 pt-4">
-            <button
+            <Button
               onClick={() => setShowDetails(!showDetails)}
-              className="flex items-center justify-between w-full text-left px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              variant="ghost"
+              size="md"
+              fullWidth
+              endIcon={showDetails ? <ChevronUp /> : <ChevronDown />}
+              className="!justify-between"
             >
-              <span className="text-sm font-medium text-gray-700">
-                Technical Details
-              </span>
-              {showDetails ? (
-                <ChevronUp className="w-4 h-4 text-gray-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-gray-500" />
-              )}
-            </button>
+              Technical Details
+            </Button>
 
             {showDetails && (
               <div className="mt-3 space-y-3">
@@ -127,22 +129,17 @@ User Agent: ${navigator.userAgent}
                 )}
 
                 {/* Copy Button */}
-                <button
+                <Button
                   onClick={handleCopyError}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                  variant="outline"
+                  size="md"
+                  fullWidth
+                  startIcon={<Copy className={copied ? 'text-emerald-600' : ''} />}
+                  isSuccess={copied}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700"
                 >
-                  {copied ? (
-                    <>
-                      <Copy className="w-4 h-4 text-emerald-600" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      Copy Error Details
-                    </>
-                  )}
-                </button>
+                  {copied ? 'Copied!' : 'Copy Error Details'}
+                </Button>
               </div>
             )}
           </div>

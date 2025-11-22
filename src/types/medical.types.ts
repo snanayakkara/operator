@@ -21,6 +21,8 @@ export interface MedicalContext {
   enhancedProcessing?: boolean;
   // Progress tracking for long recordings
   onProgress?: (phase: string, progress: number, details?: string) => void;
+  // Streaming token callback for real-time text generation
+  onStream?: (delta: string, fullText: string) => void;
   // Cross-agent intelligence properties
   sharedInsights?: any[];
   riskAssessment?: any[];
@@ -782,6 +784,8 @@ export type SessionStatus =
 
 export interface PatientSession {
   id: string;
+  source?: 'live' | 'mobile' | 'paste';
+  mobileJobId?: string;
   patient: PatientInfo;
   transcription: string;
   results: string;
