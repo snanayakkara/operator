@@ -148,37 +148,6 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     }
   }, [targetSlot]);
 
-  useEffect(() => {
-    if (isStandalone) return;
-
-    const handleMessage = (message: any) => {
-      if (message?.type === 'CANVAS_CAMERA_RESULT' && Array.isArray(message.payload?.screenshots)) {
-        const shots = message.payload.screenshots as Array<{ index: number; dataUrl: string; width: number; height: number } | null>;
-        setScreenshots((prev) => {
-          const updated = [...prev];
-          shots.forEach((shot, index) => {
-            if (shot && typeof shot.index === 'number') {
-              updated[shot.index] = {
-                id: `slot-${shot.index}-${Date.now()}`,
-                dataUrl: shot.dataUrl,
-                timestamp: Date.now(),
-                width: shot.width ?? 0,
-                height: shot.height ?? 0
-              };
-            }
-          });
-          return updated;
-        });
-        if (typeof message.payload.targetSlot === 'number') {
-          setTargetSlot(message.payload.targetSlot);
-        }
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleMessage);
-    return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, [isStandalone]);
-
   const _handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     console.log('🎯 Drag enter on drop zone', index);
@@ -304,6 +273,42 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
   }, []);
 
   useEffect(() => {
+    if (isStandalone || typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+
+    const handleMessage = (message: any) => {
+      if (message?.type === 'CANVAS_CAMERA_RESULT' && Array.isArray(message.payload?.screenshots)) {
+        const shots = message.payload.screenshots as Array<{ index: number; dataUrl: string; width: number; height: number } | null>;
+        setScreenshots((prev) => {
+          const updated = [...prev];
+          shots.forEach((shot, index) => {
+            if (shot && typeof shot.index === 'number') {
+              updated[shot.index] = {
+                id: `slot-${shot.index}-${Date.now()}`,
+                dataUrl: shot.dataUrl,
+                timestamp: Date.now(),
+                width: shot.width ?? 0,
+                height: shot.height ?? 0
+              };
+            }
+          });
+          return updated;
+        });
+        if (typeof message.payload.targetSlot === 'number') {
+          setTargetSlot(message.payload.targetSlot);
+        }
+      }
+      if (message?.type === 'CAMERA_OVERLAY_RESULT' && message.payload?.dataUrl) {
+        const slot = typeof message.payload.slot === 'number' ? message.payload.slot : 0;
+        importDataUrl(message.payload.dataUrl, slot);
+        setTargetSlot(slot);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleMessage);
+  }, [importDataUrl, isStandalone]);
+
+  useEffect(() => {
     const listener = (message: any) => {
       if (message?.type === 'PAGE_FILE_DROPPED' && message.payload?.dataUrl) {
         // Prefer armed target slot; fallback to next available
@@ -326,19 +331,28 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       return;
     }
 
-    try {
-      const url = chrome.runtime?.getURL
-        ? chrome.runtime.getURL(`src/canvas/index.html?slot=${index}`)
-        : `chrome-extension://${chrome?.runtime?.id ?? ''}/src/canvas/index.html?slot=${index}`;
-
-      if (chrome?.tabs?.create) {
-        chrome.tabs.create({ url, active: true });
-      } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tabId = tabs?.[0]?.id;
+      if (tabId != null) {
+        chrome.tabs.sendMessage(
+          tabId,
+          { type: 'OPEN_CAMERA_OVERLAY', targetSlot: index },
+          (resp) => {
+            if (chrome.runtime.lastError || resp?.ok !== true) {
+              console.warn('Falling back to extension tab for camera:', chrome.runtime.lastError?.message);
+              try {
+                const url = chrome.runtime?.getURL
+                  ? chrome.runtime.getURL(`src/canvas/index.html?slot=${index}`)
+                  : `chrome-extension://${chrome?.runtime?.id ?? ''}/src/canvas/index.html?slot=${index}`;
+                chrome.tabs.create?.({ url, active: true });
+              } catch (error) {
+                console.error('Failed to open camera tab fallback', error);
+              }
+            }
+          }
+        );
       }
-    } catch (error) {
-      console.error('Failed to open camera tab', error);
-    }
+    });
   }, [isStandalone]);
 
   const handleCameraConfirm = useCallback((dataUrl: string) => {

@@ -1,4 +1,4 @@
-import { LMStudioRequest, MODEL_CONFIG } from './LMStudioService';
+import { MODEL_CONFIG, LMStudioService } from './LMStudioService';
 import { logger } from '@/utils/Logger';
 import {
   IntakeParserResult,
@@ -6,7 +6,7 @@ import {
   Task,
   WardUpdateDiff
 } from '@/types/rounds.types';
-import { LMStudioService } from './LMStudioService';
+import type { LMStudioRequest } from '@/types/medical.types';
 
 const emptyIntakeResult: IntakeParserResult = {
   issues: [],
@@ -136,9 +136,9 @@ export class RoundsLLMService {
         {
           role: 'system',
           content: [
-            'You are generating a GP-facing discharge letter in the same concise, clinically useful tone as existing Operator GP letters.',
-            'Be concise, avoid fluff, focus on: reason for admission, hospital course, key investigations (labs/imaging), medication changes if mentioned, and GP follow-up actions inferred from open tasks.',
-            'Return a clean letter in plain text, no JSON, no markdown headings.'
+            'You are writing a GP-facing discharge letter in the same style as Operator Quick Letter: polished, clinical, and narrative with short, well-structured paragraphs (no bullet lists).',
+            'Include: reason for admission, succinct hospital course, key investigations (labs/imaging) that matter long term, any medication changes if present, and clear GP follow-up actions inferred from open tasks, and completed tasks mentioned in the summary.',
+            'Keep it concise, professional, and readable; return plain text only (no JSON, no headings).'
           ].join(' ')
         },
         {

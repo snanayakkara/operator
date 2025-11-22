@@ -119,6 +119,15 @@ class ContentScriptHandler {
   private setupEventListeners() {
     // Listen for messages from background script
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message?.type === 'OPEN_CAMERA_OVERLAY' || message?.type === 'OPEN_CANVAS_OVERLAY') {
+        const targetSlot = typeof message.targetSlot === 'number' ? message.targetSlot : 0;
+        this.openCameraOverlay(targetSlot);
+        sendResponse?.({ ok: true });
+        return true;
+      }
+      return false;
+    });
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleMessage(message, sender, sendResponse);
       return true; // Keep message channel open
     });
@@ -164,6 +173,271 @@ class ContentScriptHandler {
     } else {
       this.autoSearchFromHash();
     }
+  }
+
+  private cameraOverlay: {
+    container: HTMLDivElement;
+    video: HTMLVideoElement;
+    stream: MediaStream | null;
+    deviceSelect: HTMLSelectElement;
+    refreshButton: HTMLButtonElement;
+    targetSlot: number | null;
+  } | null = null;
+
+  private async openCameraOverlay(targetSlot: number) {
+    try {
+      this.destroyCameraOverlay();
+
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.background = 'rgba(0,0,0,0.6)';
+      overlay.style.backdropFilter = 'blur(4px)';
+      overlay.style.zIndex = '2147483647';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.fontFamily = '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif';
+
+      const card = document.createElement('div');
+      card.style.width = 'min(960px, 92vw)';
+      card.style.maxWidth = '960px';
+      card.style.background = '#fff';
+      card.style.borderRadius = '24px';
+      card.style.boxShadow = '0 20px 60px rgba(0,0,0,0.2)';
+      card.style.overflow = 'hidden';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+      header.style.padding = '16px 20px';
+      header.style.borderBottom = '1px solid #e5e7eb';
+
+      const titleWrap = document.createElement('div');
+      const title = document.createElement('div');
+      title.textContent = `Use Camera (Slot ${targetSlot + 1})`;
+      title.style.fontSize = '18px';
+      title.style.fontWeight = '700';
+      title.style.color = '#111827';
+      const subtitle = document.createElement('div');
+      subtitle.textContent = 'Continuity Camera works when this page is foregrounded';
+      subtitle.style.fontSize = '13px';
+      subtitle.style.color = '#6b7280';
+      subtitle.style.marginTop = '4px';
+      titleWrap.appendChild(title);
+      titleWrap.appendChild(subtitle);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.border = 'none';
+      closeBtn.style.background = 'transparent';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.style.fontSize = '18px';
+      closeBtn.style.color = '#6b7280';
+      closeBtn.onclick = () => this.destroyCameraOverlay();
+
+      header.appendChild(titleWrap);
+      header.appendChild(closeBtn);
+
+      const body = document.createElement('div');
+      body.style.padding = '16px 20px';
+      body.style.display = 'grid';
+      body.style.gap = '12px';
+
+      const selectWrap = document.createElement('div');
+      const label = document.createElement('label');
+      label.textContent = 'Camera source';
+      label.style.fontSize = '14px';
+      label.style.fontWeight = '600';
+      label.style.color = '#111827';
+      label.style.display = 'block';
+      label.style.marginBottom = '4px';
+      label.setAttribute('for', 'operator-camera-select');
+
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '8px';
+
+      const select = document.createElement('select');
+      select.id = 'operator-camera-select';
+      select.style.width = '100%';
+      select.style.padding = '10px 12px';
+      select.style.border = '1px solid #d1d5db';
+      select.style.borderRadius = '10px';
+      select.style.fontSize = '14px';
+      select.style.color = '#111827';
+      select.style.background = '#fff';
+      select.style.outline = 'none';
+      select.onchange = () => this.startCamera(select.value);
+
+      const refresh = document.createElement('button');
+      refresh.textContent = 'Refresh';
+      refresh.style.padding = '10px 12px';
+      refresh.style.border = '1px solid #d1d5db';
+      refresh.style.borderRadius = '10px';
+      refresh.style.background = '#fff';
+      refresh.style.cursor = 'pointer';
+      refresh.onclick = () => this.enumerateAndStart(select);
+
+      row.appendChild(select);
+      row.appendChild(refresh);
+      selectWrap.appendChild(label);
+      selectWrap.appendChild(row);
+
+      const tip = document.createElement('div');
+      tip.textContent = 'Unlock your iPhone, keep Wi‑Fi & Bluetooth on, then click Refresh if “iPhone Camera” is missing.';
+      tip.style.fontSize = '12px';
+      tip.style.color = '#6b7280';
+
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      video.style.width = '100%';
+      video.style.aspectRatio = '16 / 9';
+      video.style.background = '#000';
+      video.style.borderRadius = '16px';
+      video.style.objectFit = 'cover';
+
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.justifyContent = 'flex-end';
+      controls.style.gap = '10px';
+      controls.style.paddingTop = '8px';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.padding = '10px 16px';
+      cancelBtn.style.border = '1px solid #d1d5db';
+      cancelBtn.style.borderRadius = '10px';
+      cancelBtn.style.background = '#fff';
+      cancelBtn.style.cursor = 'pointer';
+      cancelBtn.onclick = () => this.destroyCameraOverlay();
+
+      const captureBtn = document.createElement('button');
+      captureBtn.textContent = 'Capture';
+      captureBtn.style.padding = '10px 16px';
+      captureBtn.style.border = 'none';
+      captureBtn.style.borderRadius = '10px';
+      captureBtn.style.background = 'linear-gradient(135deg, #6366f1, #8b5cf6)';
+      captureBtn.style.color = '#fff';
+      captureBtn.style.cursor = 'pointer';
+      captureBtn.onclick = () => this.captureFrame(targetSlot);
+
+      controls.appendChild(cancelBtn);
+      controls.appendChild(captureBtn);
+
+      body.appendChild(selectWrap);
+      body.appendChild(tip);
+      body.appendChild(video);
+      body.appendChild(controls);
+
+      card.appendChild(header);
+      card.appendChild(body);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+
+      this.cameraOverlay = {
+        container: overlay,
+        video,
+        stream: null,
+        deviceSelect: select,
+        refreshButton: refresh,
+        targetSlot
+      };
+
+      await this.enumerateAndStart(select);
+    } catch (error) {
+      console.error('Failed to open camera overlay:', error);
+    }
+  }
+
+  private async enumerateAndStart(select: HTMLSelectElement) {
+    try {
+      let permissionStream: MediaStream | null = null;
+      try {
+        permissionStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch (err) {
+        console.warn('Camera permission request failed before enumerate:', err);
+      } finally {
+        if (permissionStream) {
+          permissionStream.getTracks().forEach((t) => t.stop());
+        }
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videos = devices.filter((d) => d.kind === 'videoinput');
+      select.innerHTML = '';
+      videos.forEach((device, idx) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Camera ${idx + 1}`;
+        select.appendChild(option);
+      });
+      const preferred =
+        videos.find((d) => d.label.toLowerCase().includes('iphone')) ||
+        videos.find((d) => d.label.toLowerCase().includes('continuity')) ||
+        videos[0];
+      if (preferred) {
+        select.value = preferred.deviceId;
+        await this.startCamera(preferred.deviceId);
+      }
+    } catch (error) {
+      console.error('Failed to enumerate cameras:', error);
+    }
+  }
+
+  private async startCamera(deviceId: string) {
+    if (!this.cameraOverlay) return;
+    try {
+      if (this.cameraOverlay.stream) {
+        this.cameraOverlay.stream.getTracks().forEach((t) => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        audio: false
+      });
+      this.cameraOverlay.video.srcObject = stream;
+      this.cameraOverlay.stream = stream;
+    } catch (error) {
+      console.error('Failed to start camera:', error);
+    }
+  }
+
+  private captureFrame(targetSlot: number) {
+    if (!this.cameraOverlay?.video) return;
+    const video = this.cameraOverlay.video;
+    const { videoWidth, videoHeight } = video;
+    if (!videoWidth || !videoHeight) return;
+    const square = Math.min(videoWidth, videoHeight);
+    const sx = (videoWidth - square) / 2;
+    const sy = (videoHeight - square) / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, sx, sy, square, square, 0, 0, 1024, 1024);
+    const dataUrl = canvas.toDataURL('image/png');
+    chrome.runtime.sendMessage({
+      type: 'CAMERA_OVERLAY_RESULT',
+      payload: { slot: targetSlot, dataUrl, width: 1024, height: 1024 }
+    });
+    this.destroyCameraOverlay();
+  }
+
+  private destroyCameraOverlay() {
+    if (this.cameraOverlay?.stream) {
+      this.cameraOverlay.stream.getTracks().forEach((t) => t.stop());
+    }
+    if (this.cameraOverlay?.container) {
+      this.cameraOverlay.container.remove();
+    }
+    this.cameraOverlay = null;
   }
 
   private async handleMessage(

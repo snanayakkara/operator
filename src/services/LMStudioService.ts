@@ -14,6 +14,7 @@ import { logger } from '@/utils/Logger';
 import { GemmaPromptFormatter } from '@/utils/GemmaPromptFormatter';
 import { StreamingParser } from '@/utils/StreamingParser';
 import { ModelLoadingError } from '@/types/errors.types';
+export type { LMStudioRequest } from '@/types/medical.types';
 
 /**
  * Centralized Model Configuration

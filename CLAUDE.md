@@ -338,6 +338,20 @@ npm run optim:quick-letter
 
 ## 15) Recent Major Updates (highlights)
 
+**v3.37.0 (Nov 2025)**
+- **Rounds UI/UX Overhaul**: Comprehensive redesign of Rounds feature layout and interactions
+  - **Tab badges with counts**: `Patients (5)` | `Tasks (12)` for quick orientation
+  - **Handover button badge**: Shows active patient count `Handover (5)`
+  - **Patient selection indicator**: Shows selected patient name with icon in amber action bar
+  - **Sticky patient actions**: Amber bar stays visible when scrolling
+  - **GP letter loading spinner**: Uses `isLoading` prop for proper spinner animation
+  - **Toast notifications**: Success/info toasts for all actions (copy, discharge, undo, delete)
+  - **Delete confirmation modal**: ConfirmModal with danger variant prevents accidental deletions
+  - **Enhanced empty state**: Styled card with icon, description, and CTA button
+  - **Layout fixes**: Header flex improvements, button `flex-shrink-0` prevents squishing, reduced gap in action bar
+  - **Removed duplicates**: Eliminated duplicate Quick Add button from PatientsView
+  - **Color-coded action bars**: Indigo for global actions, amber for patient-specific actions
+
 **v3.32.0 (Nov 2025)**
 - **Quick Letter - Intelligent First Name Extraction**: Parses full patient names (strips titles) to extract first name only; prevents awkward title-heavy greetings ("I saw Bruce today" not "I saw Mr Bruce Taylor today"); system prompts enhanced with explicit first-name-only instructions
 - **RHC - Anti-Hallucination Post-Processing**: Comprehensive pipeline to detect and remove example text leaked from system prompts; pattern matching for placeholder brackets `[Age]`, `[gender]`, `[stated diagnosis]`; console warnings for suspicious content; preserves legitimate bracketed content like `[site not specified]`

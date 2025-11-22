@@ -5,12 +5,16 @@ import Button from '../buttons/Button';
 interface QuickAddModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (payload: { name: string; scratchpad: string }) => Promise<void>;
+  onSave: (payload: { name: string; scratchpad: string; ward?: string }) => Promise<void>;
+  defaultWard?: string;
 }
 
-export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, onClose, onSave }) => {
+const WARD_OPTIONS = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
+
+export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, onClose, onSave, defaultWard = '1 South' }) => {
   const [name, setName] = useState('');
   const [scratchpad, setScratchpad] = useState('');
+  const [ward, setWard] = useState(defaultWard);
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
@@ -20,9 +24,10 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, onClose, onS
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), scratchpad });
+      await onSave({ name: name.trim(), scratchpad, ward });
       setName('');
       setScratchpad('');
+      setWard(defaultWard);
       onClose();
     } finally {
       setSaving(false);
@@ -52,6 +57,18 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({ open, onClose, onS
               placeholder="Jane Smith"
               required
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Ward</label>
+            <select
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={ward}
+              onChange={(e) => setWard(e.target.value)}
+            >
+              {WARD_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Scratchpad / referral</label>

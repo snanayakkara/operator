@@ -142,6 +142,7 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
               <div className="flex items-center gap-2">
                 {onDelete && (
                   <Button
+                    type="button"
                     size="sm"
                     variant="ghost"
                     className="text-xs text-red-600 hover:text-red-700"
@@ -198,7 +199,7 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
   };
 
   return (
-    <div className="w-[340px] max-h-[520px] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-200 p-4 space-y-3">
+    <div className="w-[340px] max-h-[720px] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-200 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="bg-gray-100 rounded-full p-1.5">

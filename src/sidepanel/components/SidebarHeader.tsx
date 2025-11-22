@@ -13,8 +13,8 @@
  * - Icons 14-16px with 8px gaps
  */
 
-import React, { useState, useRef } from 'react';
-import { Settings, ChevronRight, Bell, Smartphone, Plus } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Settings, ChevronRight, Bell, Smartphone, Plus, Compass } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, PatientSession } from '@/types/medical.types';
 import type { StorageStats } from '@/types/persistence.types';
 import { StateChip } from './StateChip';
@@ -111,6 +111,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
   const [mobileJobsOpen, setMobileJobsOpen] = useState(false);
   const [mobileJobsLoaded, setMobileJobsLoaded] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
   const deviceButtonRef = useRef<HTMLButtonElement>(null);
   const sessionButtonRef = useRef<HTMLButtonElement>(null);
   const mobileJobsButtonRef = useRef<HTMLButtonElement>(null);
@@ -156,6 +157,15 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     chrome.runtime.openOptionsPage();
   };
 
+  useEffect(() => {
+    const updateWidth = () => {
+      setIsNarrow(window.innerWidth < 440);
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
   // Calculate unchecked (active) sessions
   const uncheckedCount = patientSessions.filter(s => !checkedSessionIds?.has(s.id)).length;
 
@@ -195,25 +205,47 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         {/* Right: Icon actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {onOpenRounds && (
-            <Button
-              onClick={onOpenRounds}
-              variant="ghost"
-              size="sm"
-              className="text-gray-700"
-            >
-              Rounds
-            </Button>
+            isNarrow ? (
+              <IconButton
+                onClick={onOpenRounds}
+                variant="ghost"
+                size="sm"
+                icon={<Compass />}
+                aria-label="Rounds"
+                title="Open Rounds"
+              />
+            ) : (
+              <Button
+                onClick={onOpenRounds}
+                variant="ghost"
+                size="sm"
+                className="text-gray-700"
+              >
+                Rounds
+              </Button>
+            )
           )}
           {onOpenQuickAdd && (
-            <Button
-              onClick={onOpenQuickAdd}
-              variant="outline"
-              size="sm"
-              startIcon={Plus}
-              className="text-gray-700"
-            >
-              Quick Add
-            </Button>
+            isNarrow ? (
+              <IconButton
+                onClick={onOpenQuickAdd}
+                variant="outline"
+                size="sm"
+                icon={<Plus />}
+                aria-label="Quick Add"
+                title="Quick Add"
+              />
+            ) : (
+              <Button
+                onClick={onOpenQuickAdd}
+                variant="outline"
+                size="sm"
+                startIcon={Plus}
+                className="text-gray-700"
+              >
+                Quick Add
+              </Button>
+            )
           )}
 
           {/* Queue Status */}

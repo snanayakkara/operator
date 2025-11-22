@@ -122,6 +122,7 @@ export default defineConfig({
       '@/components': resolve(__dirname, 'src/sidepanel/components'),
       '@/types': resolve(__dirname, 'src/types'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     rollupOptions: {

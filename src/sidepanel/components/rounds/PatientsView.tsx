@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Plus, AlertCircle, Activity, BedDouble } from 'lucide-react';
+import { CheckCircle2, Plus, AlertCircle, Activity, BedDouble, Users } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { createEmptyPatient } from '@/services/RoundsPatientService';
@@ -12,11 +12,13 @@ interface PatientsViewProps {
 
 export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) => {
   const { patients, selectedPatient, setSelectedPatientId, addPatient, markDischarged, intakeParsing, updatePatient } = useRounds();
+  const wardOptions = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualMrn, setManualMrn] = useState('');
   const [manualBed, setManualBed] = useState('');
   const [manualOneLiner, setManualOneLiner] = useState('');
+  const [manualWard, setManualWard] = useState(wardOptions[0]);
 
   const activePatients = useMemo(() =>
     [...patients].filter(p => p.status === 'active').sort((a, b) => {
@@ -41,7 +43,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
     const newPatient = createEmptyPatient(manualName.trim(), {
       mrn: manualMrn.trim(),
       bed: manualBed.trim(),
-      oneLiner: manualOneLiner.trim()
+      oneLiner: manualOneLiner.trim(),
+      site: manualWard
     });
     await addPatient(newPatient);
     setShowManualForm(false);
@@ -49,6 +52,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
     setManualMrn('');
     setManualBed('');
     setManualOneLiner('');
+    setManualWard(wardOptions[0]);
   };
 
   const renderCard = (patient: RoundsPatient) => {
@@ -99,7 +103,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
         </div>
         <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
           <BedDouble className="w-4 h-4" />
-          <span>{patient.bed || 'Bed: not set'}</span>
+          <span>{patient.site ? patient.site : 'Ward: not set'}{patient.bed ? ` • Bed ${patient.bed}` : ''}</span>
           <span className="text-gray-300">•</span>
           <span>MRN: {patient.mrn || 'pending'}</span>
         </div>
@@ -111,16 +115,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full">
-      <div className="lg:w-2/5 border-r border-gray-200 p-4 space-y-3">
+    <div className="flex flex-col lg:flex-row h-full gap-3">
+      <div className="lg:w-2/5 border border-gray-200 rounded-xl p-3 space-y-3 bg-white shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Ward list</h3>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
-              Add patient
-            </Button>
-            <Button variant="ghost" size="xs" onClick={onOpenQuickAdd}>Quick Add</Button>
-          </div>
+          <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
+          <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
+            Add patient
+          </Button>
         </div>
 
         {showManualForm && (
@@ -130,6 +131,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
               <input className="rounded-md border px-2 py-1 text-sm" placeholder="MRN/UR" value={manualMrn} onChange={(e) => setManualMrn(e.target.value)} />
               <input className="rounded-md border px-2 py-1 text-sm" placeholder="Bed" value={manualBed} onChange={(e) => setManualBed(e.target.value)} />
               <input className="rounded-md border px-2 py-1 text-sm col-span-2" placeholder="One-liner" value={manualOneLiner} onChange={(e) => setManualOneLiner(e.target.value)} />
+              <select className="rounded-md border px-2 py-1 text-sm col-span-2" value={manualWard} onChange={(e) => setManualWard(e.target.value)}>
+                {wardOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
             </div>
             <div className="flex justify-end gap-2">
               <Button size="xs" variant="outline" onClick={() => setShowManualForm(false)}>Cancel</Button>
@@ -141,7 +145,18 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
         <div className="space-y-2">
           {activePatients.map(renderCard)}
           {activePatients.length === 0 && (
-            <p className="text-sm text-gray-500">No active patients yet. Use Quick Add to capture a referral.</p>
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
+                <Users className="w-6 h-6 text-indigo-500" />
+              </div>
+              <h4 className="text-sm font-medium text-gray-900 mb-1">No patients yet</h4>
+              <p className="text-xs text-gray-500 mb-4 max-w-[200px]">
+                Add your first patient to start tracking rounds and tasks.
+              </p>
+              <Button size="sm" startIcon={Plus} onClick={onOpenQuickAdd}>
+                Quick Add Patient
+              </Button>
+            </div>
           )}
         </div>
 
@@ -164,11 +179,11 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       </div>
 
       <div className="flex-1 min-h-0">
-        {selectedPatient ? (
+        {selectedPatient && selectedPatient.status === 'active' ? (
           <PatientDetail patient={selectedPatient} />
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-gray-500">
-            Select a patient to view details.
+            Select an active patient to view details.
           </div>
         )}
       </div>

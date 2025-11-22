@@ -28,7 +28,10 @@ export const computeLabTrendString = (labSeries: LabValue[] = [], maxValues = 4)
   }).join(' → ');
 };
 
-const pickPinnedOrOpen<T extends { pinToHud?: boolean }>(items: T[], predicate?: (item: T) => boolean): T[] => {
+const pickPinnedOrOpen = <T extends { pinToHud?: boolean }>(
+  items: T[],
+  predicate?: (item: T) => boolean
+): T[] => {
   if (!items.length) return [];
   const pinned = items.filter(item => item.pinToHud);
   if (pinned.length) return pinned;
@@ -40,7 +43,7 @@ const pickPinnedOrOpen<T extends { pinToHud?: boolean }>(items: T[], predicate?:
 };
 
 const buildHudInvestigations = (investigations: Investigation[]): HudInvestigation[] => {
-  const selected = pickPinnedOrOpen(investigations);
+  const selected = pickPinnedOrOpen<Investigation>(investigations);
   return selected.map((inv) => ({
     id: inv.id,
     type: inv.type,

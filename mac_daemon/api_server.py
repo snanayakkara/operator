@@ -11,7 +11,7 @@ from typing import Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .config import Config
-from .jobs import Job, load_job, list_jobs, save_job
+from .jobs import Job, load_job, list_jobs, save_job, job_processed_dir
 
 logger = logging.getLogger(__name__)
 

@@ -23,15 +23,18 @@ interface RoundsContextValue {
   selectedPatient: RoundsPatient | null;
   hudState: HudPatientState | null;
   intakeParsing: Record<string, IntakeStatus>;
+  activeWard: string;
   setSelectedPatientId: (id: string | null) => void;
   addPatient: (patient: RoundsPatient) => Promise<void>;
-  quickAddPatient: (name: string, scratchpad: string) => Promise<RoundsPatient | null>;
+  quickAddPatient: (name: string, scratchpad: string, ward?: string) => Promise<RoundsPatient | null>;
   updatePatient: (id: string, updater: (patient: RoundsPatient) => RoundsPatient) => Promise<void>;
   applyWardDiff: (id: string, diff: WardUpdateDiff, transcript: string) => Promise<void>;
   undoLastWardUpdate: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
   markDischarged: (id: string, status: 'active' | 'discharged') => Promise<void>;
   addIntakeNote: (id: string, text: string) => Promise<void>;
+  setActiveWard: (ward: string) => void;
+  deletePatient: (id: string) => Promise<void>;
 }
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
@@ -53,6 +56,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [intakeParsing, setIntakeParsing] = useState<Record<string, IntakeStatus>>({});
   const [lastWardSnapshots, setLastWardSnapshots] = useState<Record<string, RoundsPatient | null>>({});
+  const [activeWard, setActiveWard] = useState<string>('1 South');
 
   // Load patients on mount
   useEffect(() => {
@@ -113,8 +117,8 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [llm, persistPatients]);
 
-  const quickAddPatient = useCallback(async (name: string, scratchpad: string): Promise<RoundsPatient | null> => {
-    const patient = createEmptyPatient(name, { intakeNoteText: scratchpad });
+  const quickAddPatient = useCallback(async (name: string, scratchpad: string, ward?: string): Promise<RoundsPatient | null> => {
+    const patient = createEmptyPatient(name, { intakeNoteText: scratchpad, site: ward || activeWard });
     await addPatient(patient);
     setSelectedPatientId(patient.id);
 
@@ -155,7 +159,17 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const markDischarged = useCallback(async (id: string, status: 'active' | 'discharged') => {
     const timestamp = isoNow();
     persistPatients(prev => prev.map(p => p.id === id ? { ...p, status, lastUpdatedAt: timestamp } : p));
-  }, [persistPatients]);
+    if (status === 'discharged' && selectedPatientId === id) {
+      setSelectedPatientId(null);
+    }
+  }, [persistPatients, selectedPatientId]);
+
+  const deletePatient = useCallback(async (id: string) => {
+    persistPatients(prev => prev.filter(p => p.id !== id));
+    if (selectedPatientId === id) {
+      setSelectedPatientId(null);
+    }
+  }, [persistPatients, selectedPatientId]);
 
   const selectedPatient = useMemo(() => {
     if (!selectedPatientId) return null;
@@ -187,6 +201,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     selectedPatient,
     hudState,
     intakeParsing,
+    activeWard,
     setSelectedPatientId,
     addPatient,
     quickAddPatient,
@@ -195,7 +210,9 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     undoLastWardUpdate,
     refresh,
     markDischarged,
-    addIntakeNote
+    addIntakeNote,
+    setActiveWard,
+    deletePatient
   };
 
   return (

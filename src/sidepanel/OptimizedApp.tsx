@@ -4890,45 +4890,47 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
-      {/* Header - Two-Tier Sidebar Header */}
-      <SidebarHeader
-        status={recorder.isRecording ? 'recording' : state.processingStatus}
-        isRecording={recorder.isRecording}
-        currentAgent={state.currentAgent || state.ui.activeWorkflow}
-        modelStatus={state.modelStatus}
-        onRefreshServices={checkModelStatus}
-        patientSessions={state.patientSessions}
-        onRemoveSession={actions.removePatientSession}
-        onClearAllSessions={actions.clearPatientSessions}
-        onSessionSelect={handleSessionSelect}
-        onResumeRecording={handleResumeRecording}
-        onAgentReprocess={handleAgentReprocess}
-        selectedSessionId={stableSelectedSessionId}
-        currentSessionId={state.currentSessionId}
-        checkedSessionIds={allCheckedSessions}
-        onToggleSessionCheck={handleToggleSessionCheck}
-        persistedSessionIds={state.persistedSessionIds}
-        storageStats={storageStats}
-        onDeleteAllChecked={handleDeleteAllChecked}
-        onDeleteOldSessions={handleDeleteOldSessions}
-        onTitleClick={handleReturnHome}
-        mobileJobs={mobileJobs}
-        mobileJobsLoading={mobileJobsLoading}
-        mobileJobsError={mobileJobsError}
-        onRefreshMobileJobs={refreshMobileJobs}
-        onAttachMobileJob={handleRequestAttachMobileJob}
-        onDeleteMobileJob={handleDeleteMobileJob}
-        attachingMobileJobId={attachingMobileJobId}
-        deletingMobileJobId={deletingMobileJobId}
-        attachedMobileJobIds={attachedMobileJobIds}
-        onOpenRounds={() => setRoundsOpen(true)}
-        onOpenQuickAdd={() => setGlobalQuickAddOpen(true)}
-      />
+      {/* Header - Hidden when Rounds overlay is open */}
+      {!roundsOpen && (
+        <SidebarHeader
+          status={recorder.isRecording ? 'recording' : state.processingStatus}
+          isRecording={recorder.isRecording}
+          currentAgent={state.currentAgent || state.ui.activeWorkflow}
+          modelStatus={state.modelStatus}
+          onRefreshServices={checkModelStatus}
+          patientSessions={state.patientSessions}
+          onRemoveSession={actions.removePatientSession}
+          onClearAllSessions={actions.clearPatientSessions}
+          onSessionSelect={handleSessionSelect}
+          onResumeRecording={handleResumeRecording}
+          onAgentReprocess={handleAgentReprocess}
+          selectedSessionId={stableSelectedSessionId}
+          currentSessionId={state.currentSessionId}
+          checkedSessionIds={allCheckedSessions}
+          onToggleSessionCheck={handleToggleSessionCheck}
+          persistedSessionIds={state.persistedSessionIds}
+          storageStats={storageStats}
+          onDeleteAllChecked={handleDeleteAllChecked}
+          onDeleteOldSessions={handleDeleteOldSessions}
+          onTitleClick={handleReturnHome}
+          mobileJobs={mobileJobs}
+          mobileJobsLoading={mobileJobsLoading}
+          mobileJobsError={mobileJobsError}
+          onRefreshMobileJobs={refreshMobileJobs}
+          onAttachMobileJob={handleRequestAttachMobileJob}
+          onDeleteMobileJob={handleDeleteMobileJob}
+          attachingMobileJobId={attachingMobileJobId}
+          deletingMobileJobId={deletingMobileJobId}
+          attachedMobileJobIds={attachedMobileJobIds}
+          onOpenRounds={() => setRoundsOpen(true)}
+          onOpenQuickAdd={() => setGlobalQuickAddOpen(true)}
+        />
+      )}
 
       {/* Main Content Area - Single Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {roundsOpen && (
-          <div className="absolute inset-0 z-40 bg-white shadow-lg overflow-hidden">
+          <div className="fixed inset-0 z-50 bg-white shadow-lg overflow-hidden flex flex-col">
             <RoundsView onClose={() => setRoundsOpen(false)} />
           </div>
         )}
@@ -5428,8 +5430,14 @@ const OptimizedAppContent: React.FC = memo(() => {
               try {
                 // Handle screenshot annotation action
                 if (actionId === 'annotate-screenshots') {
-                  console.log('📸 Opening screenshot annotation modal');
-                  actions.openOverlay('screenshot-annotation');
+                  console.log('📸 Opening full-page Canvas');
+                  try {
+                    const url = chrome.runtime.getURL('src/canvas/index.html');
+                    await chrome.tabs.create({ url, active: true });
+                  } catch (error) {
+                    console.error('❌ Failed to open Canvas page:', error);
+                    actions.setErrors(['Unable to open Canvas. Please try again.']);
+                  }
                   actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
                   return;
                 }

@@ -92,7 +92,15 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
 
   // Calculate grid columns based on available actions
   const totalActions = 2 + (hasReasoningArtifacts ? 1 : 0) + (onEditAndTrain ? 1 : 0) + customActions.length;
-  const gridCols = totalActions <= 4 ? `grid-cols-${totalActions}` : 'grid-cols-4';
+  // Use explicit grid classes (dynamic grid-cols-${n} doesn't work without Tailwind safelist)
+  const gridColsMap: Record<number, string> = {
+    2: 'grid-cols-2',
+    3: 'grid-cols-3',
+    4: 'grid-cols-4',
+    5: 'grid-cols-5',
+    6: 'grid-cols-6',
+  };
+  const gridCols = gridColsMap[Math.min(totalActions, 6)] || 'grid-cols-4';
 
   return (
     <div className={`p-4 border-t border-emerald-200/50 ${className}`}>
@@ -104,7 +112,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
           size="md"
           isSuccess={copiedRecently}
           icon={Copy}
-          className="flex-col h-auto py-3"
+          className="flex-col h-auto py-3 text-center"
         >
           {copiedRecently ? 'Copied!' : 'Copy'}
         </Button>
@@ -116,10 +124,10 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
           size="md"
           isSuccess={insertedRecently}
           icon={SquareIcon}
-          className="flex-col h-auto py-3"
+          className="flex-col h-auto py-3 text-center"
           title="Paste into the active EMR field"
         >
-          {insertedRecently ? 'Inserted!' : 'Insert to EMR'}
+          {insertedRecently ? 'Inserted!' : 'Insert'}
         </Button>
 
         {/* Edit & Train Button */}
@@ -130,7 +138,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
             variant={editAndTrainActive ? 'primary' : 'outline'}
             size="md"
             icon={Edit3}
-            className="flex-col h-auto py-3"
+            className="flex-col h-auto py-3 text-center"
             title="Revise output and capture training example"
           >
             {editAndTrainActive ? 'Editing…' : 'Edit & Train'}
@@ -144,7 +152,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
             variant="outline"
             size="md"
             icon={Brain}
-            className="flex-col h-auto py-3"
+            className="flex-col h-auto py-3 text-center"
             title="View AI Reasoning Process"
           >
             Reasoning
@@ -160,7 +168,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
               variant={action.variant === 'primary' ? 'primary' : 'outline'}
               size="md"
               icon={action.icon}
-              className="flex-col h-auto py-3"
+              className="flex-col h-auto py-3 text-center"
               title={action.label}
             >
               {action.label}

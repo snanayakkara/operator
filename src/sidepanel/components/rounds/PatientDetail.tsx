@@ -11,7 +11,7 @@ interface PatientDetailProps {
 }
 
 export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
-  const { updatePatient, markDischarged, undoLastWardUpdate } = useRounds();
+  const { updatePatient, markDischarged, undoLastWardUpdate, deletePatient } = useRounds();
   const [mrn, setMrn] = useState(patient.mrn);
   const [bed, setBed] = useState(patient.bed);
   const [oneLiner, setOneLiner] = useState(patient.oneLiner);
@@ -30,6 +30,11 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [letterLoading, setLetterLoading] = useState(false);
   const [letterError, setLetterError] = useState<string | null>(null);
   const [newIntakeNote, setNewIntakeNote] = useState('');
+  const wardOptions = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
+  const [expanded, setExpanded] = useState(false);
+  const [showIssueForm, setShowIssueForm] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showIntake, setShowIntake] = useState(false);
 
   useEffect(() => {
     setName(patient.name);
@@ -227,75 +232,88 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm text-gray-500">Patient</div>
+      <div className="rounded-xl border-2 border-gray-500 p-4 bg-white shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] text-gray-500">Patient</div>
             <input
-              className="text-xl font-semibold text-gray-900 bg-transparent border-b border-transparent focus:border-gray-300 focus:outline-none"
+              className="text-lg sm:text-xl font-semibold text-gray-900 bg-transparent border-b border-transparent focus:border-gray-300 focus:outline-none w-full"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={saveDemographics}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" startIcon={Link2} onClick={handleGoToPatient}>
-              Go To Patient
-            </Button>
-            <Button variant="outline" size="sm" startIcon={Mic} onClick={() => setWardUpdateOpen(true)}>
-              Dictate ward update
-            </Button>
-            <Button variant="outline" size="sm" startIcon={Clipboard} onClick={generateGpLetter} disabled={letterLoading}>
-              {letterLoading ? 'Generating…' : 'GP letter'}
-            </Button>
-            <Button
-              variant={patient.status === 'active' ? 'secondary' : 'outline'}
-              size="sm"
-              startIcon={patient.status === 'active' ? Undo2 : CheckSquare}
-              onClick={() => markDischarged(patient.id, patient.status === 'active' ? 'discharged' : 'active')}
-            >
-              {patient.status === 'active' ? 'Discharge' : 'Reopen'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => undoLastWardUpdate(patient.id)}>
-              Undo last update
+          <div className="flex items-center gap-1 flex-wrap">
+            <Button variant="ghost" size="xs" className="px-2" onClick={() => setExpanded(e => !e)}>
+              {expanded ? 'Hide details' : 'Show details'}
             </Button>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-gray-600">MRN / UR</label>
-            <input className="mt-1 w-full rounded-md border px-2 py-1 text-sm" value={mrn} onChange={(e) => setMrn(e.target.value)} onBlur={saveDemographics} />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Bed</label>
-            <input className="mt-1 w-full rounded-md border px-2 py-1 text-sm" value={bed} onChange={(e) => setBed(e.target.value)} onBlur={saveDemographics} />
-          </div>
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-gray-600">One-liner</label>
-            <textarea className="mt-1 w-full rounded-md border px-3 py-2 text-sm min-h-[60px]" value={oneLiner} onChange={(e) => setOneLiner(e.target.value)} onBlur={saveDemographics} />
-          </div>
-        </div>
+        {!expanded && (
+          <div className="text-sm text-gray-600">Details collapsed. Click Show to expand.</div>
+        )}
+
+        {expanded && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div className="sm:col-span-1">
+                <label className="text-xs font-medium text-gray-600">Ward</label>
+                <select
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                  value={patient.site || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    updatePatient(patient.id, (p) => ({ ...p, site: val, lastUpdatedAt: isoNow() }));
+                  }}
+                >
+                  <option value="">Select ward</option>
+                  {wardOptions.map(w => <option key={w} value={w}>{w}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">MRN / UR</label>
+                <input className="mt-1 w-full rounded-md border px-2 py-2 text-sm" value={mrn} onChange={(e) => setMrn(e.target.value)} onBlur={saveDemographics} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Bed</label>
+                <input className="mt-1 w-full rounded-md border px-2 py-2 text-sm" value={bed} onChange={(e) => setBed(e.target.value)} onBlur={saveDemographics} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">One-liner</label>
+              <textarea className="mt-1 w-full rounded-md border px-3 py-2 text-sm min-h-[60px]" value={oneLiner} onChange={(e) => setOneLiner(e.target.value)} onBlur={saveDemographics} />
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-gray-900">Issues</h4>
-          <div className="flex items-center gap-2">
-            <input
-              className="rounded-md border px-2 py-1 text-sm"
-              placeholder="Issue title"
-              value={newIssueTitle}
-              onChange={(e) => setNewIssueTitle(e.target.value)}
-            />
-            <input
-              className="rounded-md border px-2 py-1 text-sm"
-              placeholder="Initial note"
-              value={newIssueNote}
-              onChange={(e) => setNewIssueNote(e.target.value)}
-            />
-            <Button size="xs" startIcon={Plus} onClick={addIssue}>Add</Button>
+      <div className="rounded-xl border-2 border-amber-500 p-4 bg-white shadow-sm">
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-gray-900">Issues</h4>
+            <Button size="xs" startIcon={Plus} onClick={() => setShowIssueForm(v => !v)}>{showIssueForm ? 'Close' : 'Add'}</Button>
           </div>
+          {showIssueForm && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                className="rounded-md border px-2 py-2 text-sm w-full"
+                placeholder="Issue title"
+                value={newIssueTitle}
+                onChange={(e) => setNewIssueTitle(e.target.value)}
+              />
+              <input
+                className="rounded-md border px-2 py-2 text-sm w-full"
+                placeholder="Initial note"
+                value={newIssueNote}
+                onChange={(e) => setNewIssueNote(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button size="xs" onClick={addIssue} disabled={!newIssueTitle.trim()}>Save</Button>
+                <Button size="xs" variant="ghost" onClick={() => { setShowIssueForm(false); setNewIssueTitle(''); setNewIssueNote(''); }}>Cancel</Button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           {sortedIssues.map(issue => (
@@ -339,15 +357,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
+      <div className="rounded-xl border-2 border-blue-500 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900">Investigations</h4>
-          <div className="flex items-center gap-2">
-            <input className="rounded-md border px-2 py-1 text-sm" placeholder="Lab name" value={newLabName} onChange={(e) => setNewLabName(e.target.value)} />
-            <input className="rounded-md border px-2 py-1 text-sm w-20" placeholder="Value" value={newLabValue} onChange={(e) => setNewLabValue(e.target.value)} />
-            <input className="rounded-md border px-2 py-1 text-sm w-24" placeholder="Units" value={newLabUnits} onChange={(e) => setNewLabUnits(e.target.value)} />
-            <Button size="xs" startIcon={Plus} onClick={addLab}>Add lab</Button>
-          </div>
         </div>
         <div className="space-y-3">
           {patient.investigations.map(inv => (
@@ -363,27 +375,40 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
               )}
             </div>
           ))}
-          <div className="border border-dashed border-gray-200 rounded-lg p-3">
-            <div className="text-xs uppercase text-gray-500 mb-1">Add imaging / procedure</div>
+          <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="text-xs uppercase text-gray-500">Add lab</div>
+            <div className="grid grid-cols-3 gap-2">
+              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name" value={newLabName} onChange={(e) => setNewLabName(e.target.value)} />
+              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Value" value={newLabValue} onChange={(e) => setNewLabValue(e.target.value)} />
+              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Units" value={newLabUnits} onChange={(e) => setNewLabUnits(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button size="xs" startIcon={Plus} onClick={addLab} disabled={!newLabName.trim() || !newLabValue.trim()}>Add lab</Button>
+            </div>
+            <div className="text-xs uppercase text-gray-500 pt-2">Add imaging / procedure</div>
             <div className="grid grid-cols-2 gap-2">
               <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name (e.g., Echo)" value={newImagingName} onChange={(e) => setNewImagingName(e.target.value)} />
               <input className="rounded-md border px-2 py-1 text-sm col-span-2" placeholder="Summary" value={newImagingSummary} onChange={(e) => setNewImagingSummary(e.target.value)} />
             </div>
             <div className="flex justify-end mt-2">
-              <Button size="xs" startIcon={Plus} onClick={addImaging}>Add summary</Button>
+              <Button size="xs" startIcon={Plus} onClick={addImaging} disabled={!newImagingName.trim() || !newImagingSummary.trim()}>Add summary</Button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
+      <div className="rounded-xl border-2 border-green-600 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900">Tasks</h4>
-          <div className="flex items-center gap-2">
-            <input className="rounded-md border px-2 py-1 text-sm" placeholder="Add task" value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} />
-            <Button size="xs" startIcon={Plus} onClick={addTask}>Add</Button>
-          </div>
+          <Button size="xs" startIcon={Plus} onClick={() => setShowTaskForm(v => !v)}>{showTaskForm ? 'Close' : 'Add'}</Button>
         </div>
+        {showTaskForm && (
+          <div className="flex items-center gap-2 mb-3">
+            <input className="rounded-md border px-2 py-2 text-sm flex-1" placeholder="Add task" value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} />
+            <Button size="xs" startIcon={Plus} onClick={addTask} disabled={!newTaskText.trim()}>Save</Button>
+            <Button size="xs" variant="ghost" onClick={() => { setShowTaskForm(false); setNewTaskText(''); }}>Cancel</Button>
+          </div>
+        )}
         <div className="space-y-2">
           {[...openTasks, ...doneTasks].map(task => (
             <div key={task.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
@@ -398,43 +423,50 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 p-4 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-gray-900">Intake notes</h4>
-          <div className="text-xs text-gray-500">Stored as typed; not modified.</div>
+      <div className="rounded-xl border-2 border-purple-500 p-4 bg-white shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900">Intake notes</h4>
+            <p className="text-xs text-gray-500">Stored as typed; not modified.</p>
+          </div>
+          <Button size="xs" variant="ghost" onClick={() => setShowIntake(v => !v)}>{showIntake ? 'Hide' : 'Show'}</Button>
         </div>
-        <div className="flex items-center gap-2 mb-2">
-          <input
-            className="flex-1 rounded-md border px-2 py-1 text-sm"
-            placeholder="Add intake note"
-            value={newIntakeNote}
-            onChange={(e) => setNewIntakeNote(e.target.value)}
-          />
-          <Button
-            size="xs"
-            onClick={() => {
-              if (!newIntakeNote.trim()) return;
-              const timestamp = isoNow();
-              updatePatient(patient.id, (p) => ({
-                ...p,
-                intakeNotes: [...p.intakeNotes, { id: generateRoundsId('intake'), timestamp, text: newIntakeNote.trim() }],
-                lastUpdatedAt: timestamp
-              }));
-              setNewIntakeNote('');
-            }}
-          >
-            Add
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {patient.intakeNotes.map(note => (
-            <div key={note.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <div className="text-xs text-gray-500 mb-1">{new Date(note.timestamp).toLocaleString()}</div>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</div>
+        {showIntake && (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                className="flex-1 rounded-md border px-2 py-1 text-sm"
+                placeholder="Add intake note"
+                value={newIntakeNote}
+                onChange={(e) => setNewIntakeNote(e.target.value)}
+              />
+              <Button
+                size="xs"
+                onClick={() => {
+                  if (!newIntakeNote.trim()) return;
+                  const timestamp = isoNow();
+                  updatePatient(patient.id, (p) => ({
+                    ...p,
+                    intakeNotes: [...p.intakeNotes, { id: generateRoundsId('intake'), timestamp, text: newIntakeNote.trim() }],
+                    lastUpdatedAt: timestamp
+                  }));
+                  setNewIntakeNote('');
+                }}
+              >
+                Add
+              </Button>
             </div>
-          ))}
-          {patient.intakeNotes.length === 0 && <p className="text-sm text-gray-500">No intake notes yet.</p>}
-        </div>
+            <div className="space-y-2">
+              {patient.intakeNotes.map(note => (
+                <div key={note.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-1">{new Date(note.timestamp).toLocaleString()}</div>
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap">{note.text}</div>
+                </div>
+              ))}
+              {patient.intakeNotes.length === 0 && <p className="text-sm text-gray-500">No intake notes yet.</p>}
+            </div>
+          </>
+        )}
       </div>
 
       {letterOpen && (
