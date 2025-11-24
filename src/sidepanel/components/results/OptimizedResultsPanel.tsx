@@ -153,6 +153,8 @@ interface OptimizedResultsPanelProps {
   isSavingRevision?: boolean;
   isSavingGoldenPair?: boolean;
   isViewingSession?: boolean;
+  // OCR explanation from vision model (for image-based investigation summary)
+  ocrExplanation?: string | null;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -238,7 +240,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   onRevisionMarkGoldenPair,
   isSavingRevision = false,
   isSavingGoldenPair = false,
-  isViewingSession = false
+  isViewingSession = false,
+  ocrExplanation = null
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const angioValidation = useValidationCheckpoint<ValidationResult>({ agentType: 'angiogram-pci' });
@@ -1035,16 +1038,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     <Button
                       onClick={handleLetterCopy}
                       variant={letterButtonStates.copied ? 'success' : 'outline'}
-                      size="md"
-                      icon={letterButtonStates.copied ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                      size="sm"
+                      icon={letterButtonStates.copied ? <CheckIcon className="w-3.5 h-3.5 text-blue-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-3.5 h-3.5" title="Copy" />}
                       isSuccess={letterButtonStates.copied}
-                      className={`p-3 flex flex-col items-center space-y-1 ${
+                      className={`p-2 flex flex-col items-center space-y-0.5 ${
                         letterButtonStates.copied
                           ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
                       }`}
                     >
-                      <span className={`text-xs ${letterButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
+                      <span className={`text-[10px] ${letterButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
                         {letterButtonStates.copied ? 'Copied!' : 'Copy'}
                       </span>
                     </Button>
@@ -1053,16 +1056,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     <Button
                       onClick={handleLetterInsert}
                       variant={letterButtonStates.inserted ? 'success' : 'outline'}
-                      size="md"
-                      icon={letterButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-blue-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                      size="sm"
+                      icon={letterButtonStates.inserted ? <CheckIcon className="w-3.5 h-3.5 text-blue-600 checkmark-appear" /> : <SquareIcon className="w-3.5 h-3.5" />}
                       isSuccess={letterButtonStates.inserted}
-                      className={`p-3 flex flex-col items-center space-y-1 ${
+                      className={`p-2 flex flex-col items-center space-y-0.5 ${
                         letterButtonStates.inserted
                           ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
                       }`}
                     >
-                      <span className={`text-xs ${letterButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
+                      <span className={`text-[10px] ${letterButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
                         {letterButtonStates.inserted ? 'Inserted!' : 'Insert'}
                       </span>
                     </Button>
@@ -1072,17 +1075,17 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       <Button
                         onClick={() => onRevisionToggle?.(!isRevisionOpen)}
                         variant={isRevisionOpen ? 'primary' : 'outline'}
-                        size="md"
-                        icon={<Sparkles className={`w-4 h-4 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />}
-                        className={`p-3 flex flex-col items-center space-y-1 ${
+                        size="sm"
+                        icon={<Sparkles className={`w-3.5 h-3.5 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />}
+                        className={`p-2 flex flex-col items-center space-y-0.5 ${
                           isRevisionOpen
                             ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                             : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
                         }`}
                         title="Revise output and capture training example"
                       >
-                        <span className={`text-xs ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
-                          {isRevisionOpen ? 'Editing…' : 'Edit & Train'}
+                        <span className={`text-[10px] ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
+                          {isRevisionOpen ? 'Edit' : 'Train'}
                         </span>
                       </Button>
                     )}
@@ -1093,18 +1096,18 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                         onClick={handleQuickLetterReprocess}
                         disabled={isProcessing}
                         variant="outline"
-                        size="md"
+                        size="sm"
                         isLoading={isProcessing}
-                        icon={isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        className={`p-3 flex flex-col items-center space-y-1 ${
+                        icon={isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        className={`p-2 flex flex-col items-center space-y-0.5 ${
                           isProcessing
                             ? 'bg-blue-100/60 border-blue-200 text-blue-400'
                             : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-blue-700'
                         }`}
                         title="Reprocess this transcription with the Quick Letter agent"
                       >
-                        <span className={`text-xs ${isProcessing ? 'text-blue-400' : 'text-blue-700'}`}>
-                          Reprocess
+                        <span className={`text-[10px] ${isProcessing ? 'text-blue-400' : 'text-blue-700'}`}>
+                          Redo
                         </span>
                       </Button>
                     )}
@@ -1114,16 +1117,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       onClick={onGeneratePatientVersion}
                       disabled={isGeneratingPatientVersion}
                       variant="outline"
-                      size="md"
+                      size="sm"
                       isLoading={isGeneratingPatientVersion}
-                      icon={isGeneratingPatientVersion ? undefined : <Users className="w-4 h-4" />}
-                      className={`p-3 flex flex-col items-center space-y-1 ${
+                      icon={isGeneratingPatientVersion ? undefined : <Users className="w-3.5 h-3.5" />}
+                      className={`p-2 flex flex-col items-center space-y-0.5 ${
                         isGeneratingPatientVersion
                           ? 'bg-blue-100/60 border-blue-300 text-blue-500'
                           : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
                       }`}
                     >
-                      <span className="text-xs">{isGeneratingPatientVersion ? 'Generating' : 'Patient Version'}</span>
+                      <span className="text-[10px]">{isGeneratingPatientVersion ? 'Gen...' : 'Patient'}</span>
                     </Button>
                   </div>
                 </div>
@@ -1154,16 +1157,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       <Button
                         onClick={handlePatientVersionCopy}
                         variant={patientVersionButtonStates.copied ? 'success' : 'outline'}
-                        size="md"
-                        icon={patientVersionButtonStates.copied ? <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
+                        size="sm"
+                        icon={patientVersionButtonStates.copied ? <CheckIcon className="w-3.5 h-3.5 text-purple-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-3.5 h-3.5" title="Copy" />}
                         isSuccess={patientVersionButtonStates.copied}
-                        className={`p-3 flex flex-col items-center space-y-1 ${
+                        className={`p-2 flex flex-col items-center space-y-0.5 ${
                           patientVersionButtonStates.copied
                             ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
                             : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
                         }`}
                       >
-                        <span className={`text-xs ${patientVersionButtonStates.copied ? 'text-purple-700' : 'text-gray-700'}`}>
+                        <span className={`text-[10px] ${patientVersionButtonStates.copied ? 'text-purple-700' : 'text-gray-700'}`}>
                           {patientVersionButtonStates.copied ? 'Copied!' : 'Copy'}
                         </span>
                       </Button>
@@ -1172,16 +1175,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       <Button
                         onClick={handlePatientVersionInsert}
                         variant={patientVersionButtonStates.inserted ? 'success' : 'outline'}
-                        size="md"
-                        icon={patientVersionButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-purple-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
+                        size="sm"
+                        icon={patientVersionButtonStates.inserted ? <CheckIcon className="w-3.5 h-3.5 text-purple-600 checkmark-appear" /> : <SquareIcon className="w-3.5 h-3.5" />}
                         isSuccess={patientVersionButtonStates.inserted}
-                        className={`p-3 flex flex-col items-center space-y-1 ${
+                        className={`p-2 flex flex-col items-center space-y-0.5 ${
                           patientVersionButtonStates.inserted
                             ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
                             : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
                         }`}
                       >
-                        <span className={`text-xs ${patientVersionButtonStates.inserted ? 'text-purple-700' : 'text-gray-700'}`}>
+                        <span className={`text-[10px] ${patientVersionButtonStates.inserted ? 'text-purple-700' : 'text-gray-700'}`}>
                           {patientVersionButtonStates.inserted ? 'Inserted!' : 'Insert'}
                         </span>
                       </Button>
@@ -1190,11 +1193,11 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       <Button
                         onClick={handlePatientVersionDownload}
                         variant="outline"
-                        size="md"
-                        icon={<Download className="w-4 h-4" />}
-                        className="bg-white/60 border-purple-200 p-3 flex flex-col items-center space-y-1 hover:bg-purple-50/60 text-gray-700"
+                        size="sm"
+                        icon={<Download className="w-3.5 h-3.5" />}
+                        className="bg-white/60 border-purple-200 p-2 flex flex-col items-center space-y-0.5 hover:bg-purple-50/60 text-gray-700"
                       >
-                        <span className="text-xs text-gray-700">Download</span>
+                        <span className="text-[10px] text-gray-700">Download</span>
                       </Button>
                     </div>
                     </div>
@@ -1348,6 +1351,34 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 results={results}
                 agentType={agentType}
               />
+
+              {/* OCR Explanation - collapsible, read-only for user insight (image-based investigation summary) */}
+              {agentType === 'investigation-summary' && ocrExplanation && !streaming && (
+                <div className="mt-4 mx-4">
+                  <details className="group">
+                    <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1.5 py-2">
+                      <svg
+                        className="w-3 h-3 transition-transform group-open:rotate-90"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="font-medium">AI Vision Interpretation</span>
+                      <span className="text-gray-400">(what the AI extracted from the image)</span>
+                    </summary>
+                    <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-[10px] text-gray-400 mb-2 italic">
+                        This shows the raw extraction from the vision model - for your reference only, not copied with results
+                      </p>
+                      <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap select-none">
+                        {ocrExplanation}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              )}
 
               {/* Show transcription AFTER results for investigation-summary */}
               {agentType === 'investigation-summary' && originalTranscription && !streaming && (

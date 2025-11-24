@@ -18,9 +18,9 @@ TRIAGE_SYSTEM_PROMPT = """You are a medical dictation triage assistant.\nReturn 
 WORKFLOW_HINTS: Dict[str, str] = {
     "quick_letter": DictationType.CLINIC_LETTER,
     "consultation_summary": DictationType.CLINIC_LETTER,
-    "background": DictationType.NOTE,
-    "investigations": DictationType.NOTE,
-    "medications": DictationType.NOTE,
+    "background": DictationType.CLINIC_LETTER,
+    "investigations": DictationType.CLINIC_LETTER,
+    "medications": DictationType.CLINIC_LETTER,
     "angiogram_report": DictationType.PROCEDURE_REPORT,
     "general": DictationType.UNKNOWN,
 }
@@ -74,40 +74,17 @@ class Pipeline:
         transcript_path = job_dir / "transcript.txt"
         transcript_path.write_text(transcript_text, encoding="utf-8")
         job.transcript_path = str(transcript_path)
-        job.status = JobStatus.TRANSCRIBED
         job.triage_metadata = {"whisper_metadata": metadata}
-        self._persist(job)
-
         header = self._extract_header(transcript_text)
         job.header_text = header
-        triage_data = self._triage_header(job, header)
-        job.dictation_type = triage_data.get("dictation_type", DictationType.UNKNOWN)
-        job.confidence = float(triage_data.get("confidence", 0.0))
+        job.triage_metadata["raw_header"] = header
+
+        # Hint dictation type from workflow_code if provided, otherwise leave as unknown.
         hint_type = self._lookup_workflow_hint(job.workflow_code)
-        if hint_type and (job.dictation_type == DictationType.UNKNOWN or job.confidence == 0.0):
-            # Fall back to the mobile workflow hint when the LLM could not confidently classify the dictation.
+        if hint_type:
             job.dictation_type = hint_type
-        triage_data.setdefault("raw_header", header)
-        job.triage_metadata.update(
-            {
-                "patient_name": triage_data.get("patient_name", ""),
-                "dob": triage_data.get("dob", ""),
-                "mrn": triage_data.get("mrn", ""),
-                "hospital": triage_data.get("hospital", ""),
-                "raw_header": triage_data["raw_header"],
-            }
-        )
 
-        next_status = self._determine_status(job)
-        job.status = next_status
-
-        if next_status == JobStatus.COMPLETED:
-            logger.info("Job %s completed via auto agent pipeline", job.id)
-        elif next_status == JobStatus.TRIAGED:
-            logger.info("Job %s triaged, awaiting review", job.id)
-        elif next_status == JobStatus.NEEDS_REVIEW:
-            logger.info("Job %s needs review (confidence=%.2f)", job.id, job.confidence)
-
+        job.status = JobStatus.NEEDS_REVIEW
         self._persist(job)
         return job
 

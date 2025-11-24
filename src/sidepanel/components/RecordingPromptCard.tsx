@@ -88,21 +88,21 @@ export const RecordingPromptCard: React.FC<RecordingPromptCardProps> = React.mem
   };
 
   return (
-    <div className={`w-full bg-gradient-to-br from-white to-slate-50/50 border border-gray-200 ${compactMode ? 'rounded-xl shadow-md' : 'max-w-none mx-2 rounded-xl shadow-lg mb-4'}`}>
-      <div className={`bg-gradient-to-br from-white to-slate-50/50 w-full overflow-hidden ${compactMode ? 'rounded-xl max-h-[40vh]' : 'rounded-xl max-h-[70vh]'}`}>
-        {/* Header */}
-        <div className={`bg-gradient-to-r from-red-500 to-rose-600 text-white ${compactMode ? 'px-3 py-2' : 'px-4 py-3'}`}>
+    <div className={`w-full bg-white border border-gray-200 ${compactMode ? 'rounded-lg shadow-sm' : 'max-w-none mx-2 rounded-lg shadow-sm mb-4'}`}>
+      <div className={`bg-white w-full overflow-hidden ${compactMode ? 'rounded-lg max-h-[40vh]' : 'rounded-lg max-h-[70vh]'}`}>
+        {/* Header - flat rose color */}
+        <div className={`bg-rose-500 text-white ${compactMode ? 'px-3 py-2' : 'px-3 py-2.5'}`}>
           <div className="flex items-center space-x-2">
             {!compactMode && (
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-red-300 rounded-full animate-pulse"></div>
-                <span className="text-sm font-semibold">RECORDING</span>
+                <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse"></div>
+                <span className="text-xs font-medium uppercase tracking-wide">Recording</span>
               </div>
             )}
             <div className="flex items-center space-x-2">
-              <BookOpen className={compactMode ? 'w-3 h-3' : 'w-4 h-4'} />
+              <BookOpen className={compactMode ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
               <span className={`font-medium ${compactMode ? 'text-xs' : 'text-sm'}`}>
-                {compactMode ? promptConfig.title.replace(' Recording', '') : `Recording Guide: ${promptConfig.title.replace(' Recording', '')}`}
+                {compactMode ? promptConfig.title.replace(' Recording', '') : promptConfig.title.replace(' Recording', '')}
               </span>
             </div>
           </div>

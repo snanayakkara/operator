@@ -9,10 +9,11 @@ import {
   ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 
+// Simplified theme - monochrome with subtle accent
 const VISUALIZER_THEME = {
-  accentPrimary: '#22d3ee',
-  accentSecondary: '#a855f7',
-  accentGlow: 'rgba(34, 211, 238, 0.45)'
+  accentPrimary: '#64748b',   // slate-500
+  accentSecondary: '#94a3b8', // slate-400
+  accentGlow: 'rgba(100, 116, 139, 0.3)'
 } as const;
 
 const STATUS_STYLES = {
@@ -276,16 +277,11 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
 
   return (
     <motion.div
-      className={`relative flex-1 w-full max-w-xl overflow-hidden rounded-[28px] border border-slate-200 bg-white p-8 shadow-[0_25px_80px_-50px_rgba(15,23,42,0.45)] ${className}`}
+      className={`relative flex-1 w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm ${className}`}
       variants={withReducedMotion(_cardVariants)}
       initial="hidden"
       animate="visible"
     >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-200/25 via-transparent to-purple-200/20" />
-        <div className="absolute -top-24 right-[-120px] h-72 w-72 rounded-full bg-cyan-300/35 blur-3xl" />
-        <div className="absolute bottom-[-120px] left-[-100px] h-72 w-72 rounded-full bg-purple-300/30 blur-3xl" />
-      </div>
 
       {/* Status cluster */}
       <motion.div
@@ -399,8 +395,7 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
             >
               Live Spectrum
             </motion.div>
-            <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-slate-100 px-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_35px_90px_-70px_rgba(14,165,233,0.45)]">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.18),_transparent_65%)]" />
+            <div className="relative flex h-36 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 px-4">
               {symmetricalFrequencyData.length > 0 ? (
                 <svg
                   width="100%"
@@ -568,31 +563,25 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Stop Recording Button with enhanced animations */}
+      {/* Stop Recording Button - clean flat design */}
       <AnimatePresence>
         {isRecording && (
           <motion.button
             onClick={onStop}
-            className="relative mx-auto mt-9 flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 px-7 py-3 text-sm font-semibold text-white shadow-[0_35px_80px_-35px_rgba(14,165,233,0.85)]"
-            initial={{ opacity: 0, scale: 0.88, y: 18 }}
+            className="relative mx-auto mt-6 flex items-center gap-2 rounded-lg bg-rose-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-rose-600 active:bg-rose-700"
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.88, y: -18 }}
-            whileHover={{
-              scale: 1.04,
-              translateY: -4,
-              boxShadow: '0 28px 60px -32px rgba(14,165,233,0.85)'
-            }}
-            whileTap={{ scale: 0.96 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             transition={{
               type: 'spring',
               damping: 20,
-              stiffness: 320,
-              delay: 0.4
+              stiffness: 300,
+              delay: 0.2
             }}
           >
-            <div className="flex items-center justify-center rounded-full bg-white/15 p-2 text-white">
-              <StopCircle className="h-5 w-5" />
-            </div>
+            <StopCircle className="h-4 w-4" />
             <span>Stop recording</span>
           </motion.button>
         )}

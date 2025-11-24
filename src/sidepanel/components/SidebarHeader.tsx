@@ -13,14 +13,15 @@
  * - Icons 14-16px with 8px gaps
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Settings, ChevronRight, Bell, Smartphone, Plus, Compass } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Settings, ChevronRight, Bell, Smartphone, Plus } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, PatientSession } from '@/types/medical.types';
 import type { StorageStats } from '@/types/persistence.types';
 import { StateChip } from './StateChip';
 import { DevicePopover } from './DevicePopover';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
+import { PipelineStrip, PipelineStageId } from './ui/PipelineStrip';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { formatDeviceSummary } from '@/utils/deviceNameUtils';
 import Button from './buttons/Button';
@@ -34,6 +35,9 @@ export interface SidebarHeaderProps {
   status: ProcessingStatus;
   isRecording?: boolean;
   currentAgent?: AgentType | null;
+
+  // Pipeline stage for PipelineStrip
+  pipelineStage?: PipelineStageId;
 
   // Model/Services
   modelStatus: ModelStatus;
@@ -70,7 +74,6 @@ export interface SidebarHeaderProps {
   attachingMobileJobId?: string | null;
   deletingMobileJobId?: string | null;
   attachedMobileJobIds?: Set<string>;
-  onOpenRounds?: () => void;
   onOpenQuickAdd?: () => void;
 }
 
@@ -78,6 +81,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   status,
   isRecording = false,
   currentAgent: _currentAgent,
+  pipelineStage,
   modelStatus,
   onRefreshServices: _onRefreshServices,
   patientSessions = [],
@@ -104,14 +108,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   attachingMobileJobId,
   deletingMobileJobId,
   attachedMobileJobIds,
-  onOpenRounds,
   onOpenQuickAdd
 }) => {
   const [devicePopoverOpen, setDevicePopoverOpen] = useState(false);
   const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
   const [mobileJobsOpen, setMobileJobsOpen] = useState(false);
   const [mobileJobsLoaded, setMobileJobsLoaded] = useState(false);
-  const [isNarrow, setIsNarrow] = useState(false);
   const deviceButtonRef = useRef<HTMLButtonElement>(null);
   const sessionButtonRef = useRef<HTMLButtonElement>(null);
   const mobileJobsButtonRef = useRef<HTMLButtonElement>(null);
@@ -157,15 +159,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     chrome.runtime.openOptionsPage();
   };
 
-  useEffect(() => {
-    const updateWidth = () => {
-      setIsNarrow(window.innerWidth < 440);
-    };
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
-
   // Calculate unchecked (active) sessions
   const uncheckedCount = patientSessions.filter(s => !checkedSessionIds?.has(s.id)).length;
 
@@ -204,48 +197,16 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
         {/* Right: Icon actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {onOpenRounds && (
-            isNarrow ? (
-              <IconButton
-                onClick={onOpenRounds}
-                variant="ghost"
-                size="sm"
-                icon={<Compass />}
-                aria-label="Rounds"
-                title="Open Rounds"
-              />
-            ) : (
-              <Button
-                onClick={onOpenRounds}
-                variant="ghost"
-                size="sm"
-                className="text-gray-700"
-              >
-                Rounds
-              </Button>
-            )
-          )}
           {onOpenQuickAdd && (
-            isNarrow ? (
-              <IconButton
-                onClick={onOpenQuickAdd}
-                variant="outline"
-                size="sm"
-                icon={<Plus />}
-                aria-label="Quick Add"
-                title="Quick Add"
-              />
-            ) : (
-              <Button
-                onClick={onOpenQuickAdd}
-                variant="outline"
-                size="sm"
-                startIcon={Plus}
-                className="text-gray-700"
-              >
-                Quick Add
-              </Button>
-            )
+            <IconButton
+              onClick={onOpenQuickAdd}
+              variant="ghost"
+              size="sm"
+              icon={<Plus />}
+              aria-label="Quick Add"
+              title="Quick Add"
+              className="text-gray-600 hover:text-gray-900"
+            />
           )}
 
           {/* Queue Status */}
@@ -325,6 +286,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           </Button>
         </div>
       )}
+
+      {/* Pipeline Strip - shows current workflow stage */}
+      <PipelineStrip
+        activeStage={pipelineStage}
+        className="border-t border-gray-100"
+      />
 
       {/* Device Popover */}
       <DevicePopover

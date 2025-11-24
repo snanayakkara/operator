@@ -16,6 +16,7 @@ import { TranscriptionSection } from './components/results/TranscriptionSection'
 import { QuickActionsGrouped } from './components/QuickActionsGrouped';
 import { AIReviewSection } from './components/AIReviewSection';
 import { SidebarHeader } from './components/SidebarHeader';
+import type { PipelineStageId } from './components/ui/PipelineStrip';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
@@ -27,6 +28,7 @@ import { LiveAudioVisualizer } from './components/LiveAudioVisualizer';
 import { ScreenshotAnnotationModal } from './components/ScreenshotAnnotationModal';
 import { PatientMismatchConfirmationModal } from './components/PatientMismatchConfirmationModal';
 import { BPDiaryImporter } from './components/BPDiaryImporter';
+import { ImageInvestigationModal } from './components/ImageInvestigationModal';
 import { OptimizationPanel } from '../components/settings/OptimizationPanel';
 import { PasteNotesPanel } from './components/PasteNotesPanel';
 import { SparsityStepperModal } from './components/SparsityStepperModal';
@@ -58,6 +60,7 @@ import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@
 import { RoundsProvider, useRounds } from '@/contexts/RoundsContext';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
+import { InvestigationImageExtractor } from '@/services/InvestigationImageExtractor';
 import { SessionPersistenceService } from '@/services/SessionPersistenceService';
 import type { StorageStats } from '@/types/persistence.types';
 import { mobileJobsService } from '@/services/MobileJobsService';
@@ -93,6 +96,7 @@ interface CurrentDisplayData {
   pipelineProgress?: PipelineProgress | null;
   processingStatus: ProcessingStatus;
   isDisplayingSession: boolean;
+  ocrExplanation?: string | null; // OCR explanation from vision model for image-based sessions
 }
 
 const MOBILE_DICTATION_AGENT_MAP: Record<string, AgentType> = {
@@ -100,8 +104,19 @@ const MOBILE_DICTATION_AGENT_MAP: Record<string, AgentType> = {
   'procedure_report': 'angiogram-pci',
   'echo_report': 'consultation',
   'task': 'background',
-  'note': 'transcription',
-  'unknown': 'transcription'
+  'note': 'quick-letter',
+  'unknown': 'quick-letter'
+};
+
+// Direct mapping from user's mobile menu selection to agents
+const WORKFLOW_CODE_AGENT_MAP: Record<string, AgentType> = {
+  'quick_letter': 'quick-letter',
+  'consultation_summary': 'consultation',
+  'background': 'background',
+  'investigations': 'investigation-summary',
+  'medications': 'medication',
+  'angiogram_report': 'angiogram-pci',
+  'general': 'quick-letter',
 };
 
 // Helper function to format relative time
@@ -168,6 +183,23 @@ const MOBILE_AGENT_LABELS = MOBILE_AGENT_OPTIONS.reduce<Record<AgentType, string
   return acc;
 }, {} as Record<AgentType, string>);
 
+// Maps a mobile job to the appropriate agent with fallback chain
+const mapMobileJobToAgent = (job: MobileJobSummary): AgentType => {
+  // Priority 1: User's explicit workflow_code choice from mobile menu
+  if (job.workflow_code && WORKFLOW_CODE_AGENT_MAP[job.workflow_code]) {
+    return WORKFLOW_CODE_AGENT_MAP[job.workflow_code];
+  }
+
+  // Priority 2: LLM-inferred dictation_type from daemon triage
+  if (job.dictation_type && MOBILE_DICTATION_AGENT_MAP[job.dictation_type]) {
+    return MOBILE_DICTATION_AGENT_MAP[job.dictation_type];
+  }
+
+  // Priority 3: Default to quick-letter (most versatile for general dictations)
+  return 'quick-letter';
+};
+
+// Legacy function for backward compatibility (when only dictation_type is available)
 const mapDictationTypeToAgent = (dictationType: string): AgentType => {
   return MOBILE_DICTATION_AGENT_MAP[dictationType] || 'quick-letter';
 };
@@ -200,6 +232,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     bpDiaryImporter: selectors.isOverlayActive('bp-diary-importer'),
     lipidProfileImporter: selectors.isOverlayActive('lipid-profile-importer'),
     tteTrendImporter: selectors.isOverlayActive('tte-trend-importer'),
+    imageInvestigation: selectors.isOverlayActive('image-investigation'),
     patientMismatch: selectors.isOverlayActive('patient-mismatch'),
     pasteNotes: selectors.isOverlayActive('paste-notes'),
     sparsityStepper: selectors.isOverlayActive('sparsity-stepper')
@@ -255,7 +288,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Smart default selection: Auto-select recommended agent when modal opens
   useEffect(() => {
     if (pendingMobileJob && !pendingMobileAgent) {
-      const defaultAgent = mapDictationTypeToAgent(pendingMobileJob.dictation_type);
+      const defaultAgent = mapMobileJobToAgent(pendingMobileJob);
       setPendingMobileAgent(defaultAgent);
     }
   }, [pendingMobileJob, pendingMobileAgent]);
@@ -501,7 +534,7 @@ const OptimizedAppContent: React.FC = memo(() => {
             ? crypto.randomUUID()
             : `mobile-${job.id}-${Date.now()}`;
 
-        const agentType = selectedAgent ?? mapDictationTypeToAgent(job.dictation_type);
+        const agentType = selectedAgent ?? mapMobileJobToAgent(job);
         const summary = job.header_text || job.triage_metadata?.raw_header || 'Mobile dictation';
 
         const sessionTemplate: PatientSession = {
@@ -676,7 +709,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   const handleRequestAttachMobileJob = useCallback((job: MobileJobSummary) => {
     setPendingMobileJob(job);
-    setPendingMobileAgent(mapDictationTypeToAgent(job.dictation_type));
+    setPendingMobileAgent(mapMobileJobToAgent(job));
   }, []);
 
   useEffect(() => {
@@ -3153,6 +3186,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   const getCurrentDisplayData = useCallback((): CurrentDisplayData => {
     // PRIORITY 1: If user explicitly selected a completed session, ALWAYS show it (even during active work)
     if (state.displaySession.isDisplayingSession && state.displaySession.displaySessionId) {
+      // Get ocrExplanation from the session
+      const session = state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
+
       const displayData: CurrentDisplayData = {
         transcription: state.displaySession.displayTranscription,
         results: state.displaySession.displayResults,
@@ -3177,7 +3213,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         audioDuration: state.displaySession.displayAudioDuration ?? null,
         pipelineProgress: state.displaySession.displayPipelineProgress ?? null,
         processingStatus: 'complete' as ProcessingStatus, // Completed sessions are always 'complete'
-        isDisplayingSession: true
+        isDisplayingSession: true,
+        ocrExplanation: session?.ocrExplanation ?? null
       };
 
       // Debug logging for session display data
@@ -3193,7 +3230,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         patientName: displayData.patientInfo?.name || 'Unknown',
         hasPipelineProgress: !!displayData.pipelineProgress,
         pipelineStage: displayData.pipelineProgress?.stage,
-        pipelineProgressPercent: displayData.pipelineProgress?.progress
+        pipelineProgressPercent: displayData.pipelineProgress?.progress,
+        hasOcrExplanation: !!displayData.ocrExplanation,
+        ocrExplanationLength: displayData.ocrExplanation?.length || 0
       });
 
       return displayData;
@@ -3259,7 +3298,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         })(),
         pipelineProgress: state.pipelineProgress,
         processingStatus: state.processingStatus,
-        isDisplayingSession: false
+        isDisplayingSession: false,
+        ocrExplanation: state.currentSessionId
+          ? state.patientSessions.find(s => s.id === state.currentSessionId)?.ocrExplanation ?? null
+          : null
       };
     }
 
@@ -3281,7 +3323,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       audioDuration: null,
       pipelineProgress: state.pipelineProgress,
       processingStatus: state.processingStatus,
-      isDisplayingSession: false
+      isDisplayingSession: false,
+      ocrExplanation: null
     };
   }, [
     recorder.isRecording,
@@ -4888,6 +4931,31 @@ const OptimizedAppContent: React.FC = memo(() => {
       (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent)
     );
 
+  // Map current state to PipelineStageId for the header strip
+  const currentPipelineStage = useMemo((): PipelineStageId | undefined => {
+    if (recorder.isRecording) return 'record';
+    if (state.processingStatus === 'transcribing') return 'transcribe';
+
+    // Get current session's pipeline progress
+    const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
+    const pipelineStage = currentSession?.pipelineProgress?.stage;
+
+    if (pipelineStage === 'audio-processing') return 'record';
+    if (pipelineStage === 'transcribing') return 'transcribe';
+    if (pipelineStage === 'ai-analysis') return 'classify';
+    if (pipelineStage === 'generation') {
+      // Map to summary or letter based on agent type
+      const agent = state.currentAgent || state.ui.activeWorkflow;
+      if (agent === 'quick-letter' || agent === 'consultation') return 'letter';
+      return 'summary';
+    }
+
+    // If showing edit/train mode
+    if (state.ui.showEditAndTrain) return 'train';
+
+    return undefined;
+  }, [recorder.isRecording, state.processingStatus, state.patientSessions, state.currentSessionId, state.currentAgent, state.ui.activeWorkflow, state.ui.showEditAndTrain]);
+
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Hidden when Rounds overlay is open */}
@@ -4896,6 +4964,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           status={recorder.isRecording ? 'recording' : state.processingStatus}
           isRecording={recorder.isRecording}
           currentAgent={state.currentAgent || state.ui.activeWorkflow}
+          pipelineStage={currentPipelineStage}
           modelStatus={state.modelStatus}
           onRefreshServices={checkModelStatus}
           patientSessions={state.patientSessions}
@@ -4922,7 +4991,6 @@ const OptimizedAppContent: React.FC = memo(() => {
           attachingMobileJobId={attachingMobileJobId}
           deletingMobileJobId={deletingMobileJobId}
           attachedMobileJobIds={attachedMobileJobIds}
-          onOpenRounds={() => setRoundsOpen(true)}
           onOpenQuickAdd={() => setGlobalQuickAddOpen(true)}
         />
       )}
@@ -5371,6 +5439,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 onRevisionMarkGoldenPair={handleRevisionMarkGoldenPair}
                 isSavingRevision={isSavingRevision}
                 isSavingGoldenPair={isSavingGoldenPair}
+                ocrExplanation={displayData.ocrExplanation ?? null}
                   />
                 );
               })()}
@@ -5757,6 +5826,12 @@ const OptimizedAppContent: React.FC = memo(() => {
             voiceActivityLevel={state.voiceActivityLevel}
             recordingTime={recorder.recordingTime}
             whisperServerRunning={state.modelStatus.whisperServer?.running}
+            onOpenRounds={() => setRoundsOpen(true)}
+            onImageInvestigation={() => {
+              console.log('📷 Opening Image Investigation modal');
+              actions.openOverlay('image-investigation');
+              actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+            }}
           />
         </div>
       </div>
@@ -5889,6 +5964,170 @@ const OptimizedAppContent: React.FC = memo(() => {
         />
       )}
 
+      {/* Image Investigation Modal */}
+      {overlayState.imageInvestigation && (
+        <ImageInvestigationModal
+          isOpen={overlayState.imageInvestigation}
+          isProcessing={state.isProcessing}
+          onClose={() => {
+            actions.closeOverlay('image-investigation');
+            actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+          }}
+          onProcess={async (imageDataUrl, investigationType, investigationDate) => {
+            console.log('📷 Processing investigation image:', { investigationType, investigationDate });
+
+            const processingStartTime = Date.now();
+            const sessionId = `investigation-image-${processingStartTime}`;
+
+            try {
+              // Close modal
+              actions.closeOverlay('image-investigation');
+
+              // Get patient info from cache if available
+              const patientInfo = PatientDataCacheService.getInstance().getCachedData();
+
+              // Create new session
+              const newSession: PatientSession = {
+                id: sessionId,
+                timestamp: Date.now(),
+                transcription: '', // Will be filled with extracted text
+                results: '',
+                agentType: 'investigation-summary',
+                agentName: 'Investigation Summary',
+                patient: patientInfo || { name: 'Unknown', id: '', dob: '', age: '', extractedAt: Date.now() },
+                status: 'processing',
+                completed: false,
+                processingStartTime
+              };
+              actions.addPatientSession(newSession);
+
+              // Set as selected session
+              actions.setSelectedSessionId(sessionId);
+              actions.setProcessing(true);
+              actions.setProcessingStatus('transcribing');
+              actions.setUIMode('processing', { sessionId, origin: 'user' });
+
+              // Initialize pipeline progress for image OCR
+              actions.setPipelineProgress({
+                stage: 'transcribing',
+                progress: 15,
+                stageProgress: 10,
+                details: 'Extracting text from image with vision OCR',
+                modelName: InvestigationImageExtractor.getInstance().getDefaultOCRModel()
+              });
+
+              // Extract text from image using vision OCR
+              const extractor = InvestigationImageExtractor.getInstance();
+              const extractionResult = await extractor.extractFromImage(
+                imageDataUrl,
+                investigationType,
+                investigationDate
+              );
+
+              if (!extractionResult.success) {
+                throw new Error(extractionResult.error || 'Failed to extract text from image');
+              }
+
+              console.log('✅ Image OCR extraction complete:', {
+                textLength: extractionResult.extractedText.length,
+                processingTime: extractionResult.processingTime
+              });
+
+              // Format the extracted text for the Investigation Summary agent
+              // Include the investigation type and date as context
+              // Prefix with instruction to compress and abbreviate the raw OCR extraction
+              const formattedDate = extractor.formatDateForAgent(investigationDate);
+              const inputForAgent = `${investigationType} ${formattedDate}: ${extractionResult.extractedText}
+
+[Note: The above is raw text extracted from an image. Please compress into the standard abbreviated format with medical abbreviations like LV, RV, EF, MR, AR, dil, mod, etc.]`;
+
+              // Update session with transcription (extracted text)
+              actions.updatePatientSession(sessionId, {
+                transcription: extractionResult.extractedText,
+                status: 'processing'
+              });
+              actions.setTranscription(extractionResult.extractedText);
+
+              // Update pipeline progress for AI processing
+              actions.setPipelineProgress({
+                stage: 'ai-analysis',
+                progress: 50,
+                stageProgress: 30,
+                details: 'Formatting investigation summary',
+                modelName: MODEL_CONFIG.QUICK_MODEL
+              });
+              actions.setProcessingStatus('formatting');
+
+              // Process with Investigation Summary agent
+              const { AgentFactory } = await import('@/services/AgentFactory');
+              const result = await AgentFactory.processWithAgent(
+                'investigation-summary',
+                inputForAgent,
+                {
+                  onProgress: (message: string, progress: number) => {
+                    actions.setPipelineProgress({
+                      stage: 'generation',
+                      progress: Math.min(50 + progress * 0.5, 98),
+                      stageProgress: progress,
+                      details: message,
+                      modelName: MODEL_CONFIG.QUICK_MODEL
+                    });
+                  }
+                }
+              );
+
+              // Calculate processing time
+              const processingTime = Date.now() - processingStartTime;
+
+              // Update session with results
+              actions.updatePatientSession(sessionId, {
+                results: result.content,
+                status: 'completed',
+                completed: true,
+                processingTime,
+                ocrExplanation: extractionResult.extractedText, // Store OCR explanation for user insight
+                pipelineProgress: {
+                  stage: 'generation',
+                  progress: 100,
+                  stageProgress: 100,
+                  details: `Completed in ${Math.round(processingTime / 1000)}s`,
+                  modelName: MODEL_CONFIG.QUICK_MODEL
+                }
+              });
+
+              // Update app state
+              actions.setResults(result.content);
+              actions.completeProcessingAtomic(sessionId, result.content);
+
+              // Ensure session is selected for display
+              actions.setSelectedSessionId(sessionId);
+
+              console.log('✅ Investigation image processing complete', {
+                sessionId,
+                resultsLength: result.content.length,
+                processingTime
+              });
+
+            } catch (error) {
+              console.error('❌ Investigation image processing failed:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+              // Update session to show error
+              actions.updatePatientSession(sessionId, {
+                status: 'error',
+                completed: true,
+                errors: [errorMessage]
+              });
+
+              actions.setErrors([`Image processing failed: ${errorMessage}`]);
+              actions.setProcessingStatus('idle');
+              actions.setProcessing(false);
+              actions.setUIMode('idle', { sessionId: null, origin: 'user' });
+            }
+          }}
+        />
+      )}
+
       {pendingMobileJob && (
         <Modal
           isOpen
@@ -5963,7 +6202,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                       <div className="space-y-1.5">
                         {group.agents.map((option, optionIndex) => {
                           const isActive = pendingMobileAgent === option.value;
-                          const isRecommended = option.value === mapDictationTypeToAgent(pendingMobileJob.dictation_type);
+                          const isRecommended = option.value === mapMobileJobToAgent(pendingMobileJob);
                           const keyboardNumber = agentIndex + optionIndex + 1;
 
                           return (

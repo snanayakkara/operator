@@ -7,6 +7,9 @@
 - **Generation**: LM Studio at `http://localhost:1234` (MedGemma‑27B for complex; Gemma‑3n‑e4b for simple)
 - **DSPy/GEPA** optimisation server at `http://localhost:8002`
 - **Intelligent Features**: lazy agent loading, cross‑agent knowledge sharing, smart recommendations, real‑time progress tracking
+- **Rounds/Handover**: Quick Add intake parser, ward update diffing, global task board, GP discharge letter generator, HUD JSON export
+- **Vision Intake**: Investigation Summary can OCR investigation photos/screenshots via Qwen3‑VL (type/date metadata + extraction prompts)
+- **Mobile/Shortcut Ingest**: macOS daemon ingests Shortcut sidecars (workflow codes, timestamps, geolocation), runs triage, and surfaces jobs in a grouped attachment modal
 - Australian spelling & guideline framing; privacy‑first (no cloud calls)
 
 ---
@@ -32,6 +35,12 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 - **Side panel UX**: LiveAudioVisualizer + compact RecordingPromptCard; Sessions timeline is a chronological queue with state-themed cards, inline progress chips, and quick actions; OptimizedResultsPanel shows progress & results; Options page for management
 - **Unified Pipeline Progress**: Single segmented progress bar (`UnifiedPipelineProgress`) showing live updates through 4 pipeline stages: Audio Processing (0-10%) → Transcribing (10-40%) → AI Analysis (40-90%) → Generation (90-100%); replaces old fragmented overlays with real-time progress tracking, elapsed time, ETA, and model identification
 - **Consistent UI/UX**: Shared state color system (`stateColors.ts`) ensures visual consistency across progress bars, session timeline, and status indicators; `ResultsContainer` provides standardized layout with agent-specific content slots; `ActionButtons` with extensible custom actions support
+- **Quick actions refresh**: Collapsible 5-column grid with Dictate/Type/Image paths for Investigation Summary, full-panel Appointment Wrap-Up builder, PipelineStrip/Tag/MicroMeter/AudioScrubber primitives, and simplified monochrome LiveAudioVisualizer.
+
+### 1.3 Vision Intake, Mobile/Shortcut Ingest, Rounds
+- **Vision intake**: `InvestigationImageExtractor` validates <=10MB data URLs and calls `LMStudioService.processWithVisionAgent` (Qwen3‑VL default) to turn investigation report photos into dictated text; `ImageInvestigationModal` (drag/drop, type/date metadata) is reachable from the Investigation Summary quick action.
+- **Mobile/Shortcut ingest**: macOS daemon watcher parses Shortcut sidecars (`workflow_code`, timestamps, lat/lon) and stages them with audio; triage infers dictation type; side panel attachment modal groups recommended agents with keyboard shortcuts, header + preview, confidence chip, and explicit workflow_code mapping.
+- **Rounds**: Ward list with Quick Add intake parser, ward update dictation → `RoundsLLMService.parseWardUpdate`, undoable diffs, global task board, HUD export, content-script “Go To” navigation, and GP discharge letter generation from recent ward context.
 
 ---
 

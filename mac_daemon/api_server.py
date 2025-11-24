@@ -46,6 +46,8 @@ def _job_summary(job: Job) -> Dict[str, object]:
         "confidence": job.confidence,
         "header_text": job.header_text,
         "triage_metadata": job.triage_metadata,
+        "workflow_code": job.workflow_code,
+        "workflow_label": job.workflow_label,
         "attached_session_id": job.triage_metadata.get("attached_session_id")
         if isinstance(job.triage_metadata, dict)
         else None,

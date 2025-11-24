@@ -9,6 +9,33 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - (Add upcoming changes here)
 
+## [3.37.0] - 2025-11-25
+
+### Added
+
+- **Investigation Summary image OCR**
+  - New `InvestigationImageExtractor` service uses LM Studio vision (`qwen3-vl-8b-instruct` default) to turn report photos/screenshots into dictated text with investigation-type/date metadata.
+  - Added `ImageInvestigationModal` (drag/drop upload, type dropdown, DD/MM/YYYY date input, preview) and an "Image" path inside the Investigation Summary quick action.
+  - Stored OCR explanation + processing time for investigation sessions; captures formatting stage in session state.
+- **UI primitives**
+  - Introduced `PipelineStrip`, `Tag`, `MicroMeter/ConfidenceMeter`, `AudioScrubber`, `InstrumentSection`, and `CardWithActions` for consistent pipeline/status UI.
+- **Mobile/Shortcut intake**
+  - macOS daemon now ingests Shortcut sidecars (`workflow_code`, timestamps, geolocation), persists metadata alongside jobs, and uses workflow hints during triage/auto-pipeline runs.
+  - Side panel mobile modal groups agents by category, shows header+preview with confidence chip, supports number-key shortcuts, and honors workflow_code mappings for smarter defaults.
+- **Rounds upgrades**
+  - Rounds view now offers Go To patient navigation, GP discharge letter generation from ward context, discharge/reopen + undo controls, and checkboxable handover compilation.
+
+### Changed
+
+- Quick Actions grid is collapsible, moves Investigation Summary into Dictate / Type / Image options, and promotes full-panel Appointment Wrap-Up builder; buttons and visualizer rethemed with the new design tokens.
+- `LMStudioService` now exposes default OCR model helper, richer vision diagnostics, Whisper timeout guidance, and a formatting status for downstream UI; investigation formatting and OCR metadata persisted in sessions.
+- Transcription/results surfaces gained audio playback scrubber, streamlined action buttons, pipeline strip mapping, and updated state chips/badge tokens.
+
+### Fixed
+
+- Shortcut sidecars are staged with processed jobs (no more orphaned metadata); workflow hints apply even when triage confidence is low or audio is empty.
+- Ward actions in Rounds support safe undo/discharge flows; ASR correction seeds expanded for medical terminology.
+
 ## [3.36.0] - 2025-11-22
 
 ### Added

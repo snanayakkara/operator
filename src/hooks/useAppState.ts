@@ -44,7 +44,8 @@ export type UIOverlay =
   | 'paste-notes'
   | 'field-ingestion'
   | 'processing-phase'
-  | 'sparsity-stepper';
+  | 'sparsity-stepper'
+  | 'image-investigation';
 
 export type UISidePanel =
   | 'none'

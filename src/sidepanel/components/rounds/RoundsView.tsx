@@ -159,35 +159,38 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
 
       {/* Patient Actions Bar */}
       {selectedActivePatient && (
-        <div className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 border-b border-amber-100 overflow-x-auto sticky top-[57px] z-10">
-          <span className="text-xs font-medium text-amber-800 flex items-center gap-1 flex-shrink-0">
-            <Users className="w-3 h-3" />
-            {selectedActivePatient.name}
-          </span>
-          <div className="w-px h-4 bg-amber-200 flex-shrink-0" />
-          <Button size="xs" variant="outline" startIcon={Link2} className="bg-white flex-shrink-0" onClick={handleGoToPatient}>Go To</Button>
-          <Button size="xs" variant="outline" startIcon={Mic} className="bg-white flex-shrink-0" onClick={() => setWardUpdateOpen(true)}>Ward update</Button>
-          <Button size="xs" variant="outline" startIcon={Clipboard} className="bg-white flex-shrink-0" onClick={handleGenerateGpLetter} disabled={letterLoading} isLoading={letterLoading}>GP letter</Button>
-          <Button
-            size="xs"
-            variant={selectedActivePatient.status === 'active' ? 'secondary' : 'outline'}
-            startIcon={selectedActivePatient.status === 'active' ? CheckSquare : Undo2}
-            onClick={() => {
-              const newStatus = selectedActivePatient.status === 'active' ? 'discharged' : 'active';
-              markDischarged(selectedActivePatient.id, newStatus);
-              notifySuccess(
-                newStatus === 'discharged' ? 'Patient discharged' : 'Patient reopened',
-                `${selectedActivePatient.name} ${newStatus === 'discharged' ? 'moved to archive' : 'returned to active list'}`
-              );
-            }}
-          >
-            {selectedActivePatient.status === 'active' ? 'Discharge' : 'Reopen'}
-          </Button>
-          <Button size="xs" variant="outline" startIcon={Undo2} className="bg-white flex-shrink-0" onClick={() => {
-            undoLastWardUpdate(selectedActivePatient.id);
-            notifySuccess('Undo successful', 'Last ward update reverted');
-          }}>Undo</Button>
-          <Button size="xs" variant="outline" startIcon={Trash2} className="bg-white text-rose-600 border-rose-200 flex-shrink-0" onClick={() => setShowDeleteConfirm(true)}>Delete</Button>
+        <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 sticky top-[57px] z-10">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-xs font-medium text-amber-800 flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {selectedActivePatient.name}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <Button size="xs" variant="outline" startIcon={Link2} className="bg-white" onClick={handleGoToPatient}>Go To</Button>
+            <Button size="xs" variant="outline" startIcon={Mic} className="bg-white" onClick={() => setWardUpdateOpen(true)}>Ward update</Button>
+            <Button size="xs" variant="outline" startIcon={Clipboard} className="bg-white" onClick={handleGenerateGpLetter} disabled={letterLoading} isLoading={letterLoading}>GP letter</Button>
+            <Button
+              size="xs"
+              variant={selectedActivePatient.status === 'active' ? 'secondary' : 'outline'}
+              startIcon={selectedActivePatient.status === 'active' ? CheckSquare : Undo2}
+              onClick={() => {
+                const newStatus = selectedActivePatient.status === 'active' ? 'discharged' : 'active';
+                markDischarged(selectedActivePatient.id, newStatus);
+                notifySuccess(
+                  newStatus === 'discharged' ? 'Patient discharged' : 'Patient reopened',
+                  `${selectedActivePatient.name} ${newStatus === 'discharged' ? 'moved to archive' : 'returned to active list'}`
+                );
+              }}
+            >
+              {selectedActivePatient.status === 'active' ? 'Discharge' : 'Reopen'}
+            </Button>
+            <Button size="xs" variant="outline" startIcon={Undo2} className="bg-white" onClick={() => {
+              undoLastWardUpdate(selectedActivePatient.id);
+              notifySuccess('Undo successful', 'Last ward update reverted');
+            }}>Undo</Button>
+            <Button size="xs" variant="outline" startIcon={Trash2} className="bg-white text-rose-600 border-rose-200" onClick={() => setShowDeleteConfirm(true)}>Delete</Button>
+          </div>
         </div>
       )}
 

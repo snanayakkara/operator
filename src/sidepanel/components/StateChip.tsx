@@ -67,6 +67,13 @@ const STATUS_CHIP_CONFIGS: Record<ProcessingStatus, ChipConfig> = {
     showDot: true,
     animated: true
   },
+  formatting: {
+    label: 'Formatting',
+    bgColor: 'bg-purple-50',
+    textColor: 'text-purple-700',
+    showDot: true,
+    animated: true
+  },
   enhancing: {
     label: 'Enhancing',
     bgColor: 'bg-purple-50',

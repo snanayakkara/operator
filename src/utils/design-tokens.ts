@@ -60,6 +60,53 @@ export const colors = {
     investigation: '#3b82f6', // blue-500
     education: '#10b981',    // emerald-500
   },
+
+  // Category accent colors (consistent across app)
+  category: {
+    background: '#6366f1',   // indigo-500
+    investigations: '#3b82f6', // blue-500
+    medications: '#10b981',  // emerald-500
+    imaging: '#8b5cf6',      // violet-500
+    bloods: '#ef4444',       // red-500
+    education: '#06b6d4',    // cyan-500
+    letter: '#f59e0b',       // amber-500
+    consultation: '#ec4899', // pink-500
+    procedure: '#f97316',    // orange-500
+  },
+
+  // Card header tints (very light backgrounds)
+  headerTint: {
+    default: '#f9fafb',      // gray-50
+    warning: '#fffbeb',      // amber-50
+    success: '#ecfdf5',      // emerald-50
+    info: '#f0f9ff',         // sky-50
+    error: '#fef2f2',        // rose-50
+  },
+
+  // Dot grid pattern colors
+  dotGrid: {
+    dot: '#e5e7eb',          // gray-200
+    background: '#ffffff',    // white
+  },
+} as const;
+
+/**
+ * Background pattern utilities
+ */
+export const patterns = {
+  // Dot grid background CSS
+  dotGrid: {
+    backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+    backgroundSize: '16px 16px',
+  },
+  dotGridSubtle: {
+    backgroundImage: 'radial-gradient(circle, #f3f4f6 1px, transparent 1px)',
+    backgroundSize: '16px 16px',
+  },
+  dotGridDense: {
+    backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+    backgroundSize: '12px 12px',
+  },
 } as const;
 
 /**
@@ -245,6 +292,7 @@ export const components = {
  */
 export const tokens = {
   colors,
+  patterns,
   spacing,
   typography,
   borderRadius,

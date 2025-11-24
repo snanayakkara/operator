@@ -100,7 +100,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   const { triggerRef, position } = useDropdownPosition({
     isOpen: isExpanded,
     alignment: 'center',
-    offset: { x: 0, y: -2 }, // Minimal gap to connect visually with button
+    offset: { x: 0, y: -50 }, // Larger negative value to close the gap with actions bar
     maxHeight: 480,
     dropdownWidth: 340, // Sidepanel is 360px, leave 20px margins
     preferredDirection: 'up'

@@ -13,15 +13,15 @@
 import React, { useState, memo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  CheckSquare,
   Calendar,
   Search,
   ArrowLeft,
-  Settings as _Settings,
   ChevronRight,
   ChevronDown,
   Mic,
-  Keyboard
+  Keyboard,
+  Stethoscope,
+  Camera
 } from 'lucide-react';
 import { QuickActionItem } from './QuickActionItem';
 import { RecordPanel } from './RecordPanel';
@@ -30,9 +30,7 @@ import { CORE_ACTIONS, SECONDARY_ACTIONS } from '@/config/quickActionsConfig';
 import type { AgentType } from '@/types/medical.types';
 import {
   staggerContainer,
-  listItemVariants,
-  withReducedMotion,
-  STAGGER_CONFIGS
+  withReducedMotion
 } from '@/utils/animations';
 import { Button, IconButton } from './buttons';
 
@@ -47,6 +45,8 @@ interface QuickActionsGroupedProps {
   recordingTime?: number;
   whisperServerRunning?: boolean;
   onTypeClick?: (workflowId: AgentType) => void; // For expandable workflows that support Type mode
+  onOpenRounds?: () => void;
+  onImageInvestigation?: () => void; // For image-based investigation summary
 }
 
 export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
@@ -58,18 +58,19 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   voiceActivityLevel = 0,
   recordingTime = 0,
   whisperServerRunning = true,
-  onTypeClick
+  onTypeClick,
+  onOpenRounds,
+  onImageInvestigation
 }) => {
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [showAppointmentBuilder, setShowAppointmentBuilder] = useState(false);
   const [showInvestigationOptions, setShowInvestigationOptions] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    // Load collapsed state from localStorage, default to true (collapsed)
     const saved = localStorage.getItem('quickActionsCollapsed');
     return saved === null ? true : saved === 'true';
   });
 
-  // Persist collapsed state to localStorage
+  // Persist collapsed state
   useEffect(() => {
     localStorage.setItem('quickActionsCollapsed', isCollapsed.toString());
   }, [isCollapsed]);
@@ -213,13 +214,34 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
               </div>
             </Button>
+
+            <Button
+              onClick={() => {
+                if (onImageInvestigation) {
+                  onImageInvestigation();
+                }
+                setShowInvestigationOptions(false);
+              }}
+              disabled={processingAction === 'investigation-summary'}
+              variant="outline"
+              className="justify-start h-auto py-4"
+            >
+              <div className="flex items-start space-x-3 w-full">
+                <Camera className="w-5 h-5 text-blue-600 mt-1 flex-shrink-0" />
+                <div className="min-w-0 flex-1 text-left">
+                  <div className="text-gray-900 text-sm font-semibold mb-1">Image</div>
+                  <div className="text-gray-600 text-xs">Scan from photo or screenshot</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+              </div>
+            </Button>
           </div>
         </div>
 
         {/* Footer */}
         <div className="p-4 bg-gray-50">
           <p className="text-gray-600 text-xs">
-            💡 <strong>Tip:</strong> Dictate uses AI to format your speech, Type opens the field for manual entry
+            💡 <strong>Tip:</strong> Dictate uses AI to format your speech, Type opens the field for manual entry, Image extracts from photos
           </p>
         </div>
       </div>
@@ -280,50 +302,45 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
     );
   }
 
-  // MAIN GRID VIEW
+  // MAIN GRID VIEW - 5-column grid with collapse toggle
   return (
     <motion.div
-      className="bg-white pb-3"
+      className="bg-white pb-2"
       variants={withReducedMotion(staggerContainer)}
       initial="hidden"
       animate="visible"
       style={{ position: 'relative', zIndex: 10 }}
     >
-      {/* Header with collapse/expand button */}
-      <motion.div
-        className="px-2 mb-3"
-        variants={withReducedMotion(listItemVariants)}
-      >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2">
-            <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-            <h3 className="text-gray-900 font-semibold text-[13px]">Quick Actions</h3>
-          </div>
-          <IconButton
+      {/* Header with collapse toggle */}
+      <div className="px-2 py-1.5 flex items-center justify-between">
+        <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Actions</span>
+        <div className="flex items-center gap-1">
+          {onOpenRounds && (
+            <button
+              onClick={onOpenRounds}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Open Rounds"
+            >
+              <Stethoscope className="w-3 h-3" />
+            </button>
+          )}
+          <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            variant="ghost"
-            size="sm"
-            icon={isCollapsed ? ChevronRight : ChevronDown}
-            aria-label={isCollapsed ? "Expand quick actions" : "Collapse quick actions"}
-            className="text-gray-600 hover:text-gray-900"
-          />
+            className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label={isCollapsed ? "Expand actions" : "Collapse actions"}
+          >
+            {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
-        <div className="h-px bg-gray-200" />
-      </motion.div>
+      </div>
 
-      {/* Collapsed View - All 5 items in single row (compact) */}
+      {/* Collapsed View - single row with 5 essential items */}
       {isCollapsed && (
-        <motion.div
-          className="px-2"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <div className="grid grid-cols-5 gap-x-1.5">
-            {/* Record Button in first position - compact */}
+        <div className="px-2">
+          <div className="grid grid-cols-5 gap-0.5">
+            {/* Record Button */}
             {onStartWorkflow && (
-              <div className="flex items-center justify-center scale-90" style={{ position: 'relative', zIndex: 100 }}>
+              <div style={{ position: 'relative', zIndex: 100 }}>
                 <RecordPanel
                   onWorkflowSelect={onStartWorkflow}
                   activeWorkflow={activeWorkflow}
@@ -337,116 +354,85 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
               </div>
             )}
 
-            {/* All 4 essential actions: Background, Investigations, Medications, Wrap Up */}
+            {/* 4 essential actions */}
             {CORE_ACTIONS.filter(action =>
-              ['background', 'investigation-summary', 'medications', 'appointment-wrap-up'].includes(action.id)
+              ['background', 'investigation-summary', 'medications', 'quick-letter'].includes(action.id)
             ).map((action) => (
-              <div key={action.id} className="scale-90">
-                <QuickActionItem
-                  id={action.id}
-                  label={action.label}
-                  alias={action.alias}
-                  icon={action.icon}
-                  category="core"
-                  onClick={() => handleAction(action.id)}
-                  isProcessing={processingAction === action.id}
-                  isExpandable={action.isExpandable}
-                  workflowId={action.workflowId}
-                  onDictate={handleDictate}
-                  onType={handleType}
-                />
-              </div>
+              <QuickActionItem
+                key={action.id}
+                id={action.id}
+                label={action.label}
+                alias={action.alias}
+                icon={action.icon}
+                category="core"
+                onClick={() => handleAction(action.id)}
+                isProcessing={processingAction === action.id}
+                isExpandable={action.isExpandable}
+                workflowId={action.workflowId}
+                onDictate={handleDictate}
+                onType={handleType}
+                onImage={action.id === 'investigation-summary' ? () => onImageInvestigation?.() : undefined}
+              />
             ))}
           </div>
-        </motion.div>
+        </div>
       )}
 
-      {/* Expanded View - All Actions */}
+      {/* Expanded View - all actions in 5-column grid */}
       {!isCollapsed && (
-        <>
-          {/* Core Actions Group with Record Button */}
-          <motion.div
-            className="px-2 mb-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="grid grid-cols-5 gap-x-2 gap-y-2.5">
-              {/* Record Button in first position */}
-              {onStartWorkflow && (
-                <div className="flex items-center justify-center" style={{ position: 'relative', zIndex: 100 }}>
-                  <RecordPanel
-                    onWorkflowSelect={onStartWorkflow}
-                    activeWorkflow={activeWorkflow}
-                    isRecording={isRecording}
-                    disabled={false}
-                    voiceActivityLevel={voiceActivityLevel}
-                    recordingTime={recordingTime}
-                    whisperServerRunning={whisperServerRunning}
-                    onTypeClick={onTypeClick}
-                  />
-                </div>
-              )}
+        <div className="px-2">
+          <div className="grid grid-cols-5 gap-0.5">
+            {/* Record Button */}
+            {onStartWorkflow && (
+              <div style={{ position: 'relative', zIndex: 100 }}>
+                <RecordPanel
+                  onWorkflowSelect={onStartWorkflow}
+                  activeWorkflow={activeWorkflow}
+                  isRecording={isRecording}
+                  disabled={false}
+                  voiceActivityLevel={voiceActivityLevel}
+                  recordingTime={recordingTime}
+                  whisperServerRunning={whisperServerRunning}
+                  onTypeClick={onTypeClick}
+                />
+              </div>
+            )}
 
-              {/* All Core Actions */}
-              {CORE_ACTIONS.map((action) => (
-                <div key={action.id} className="flex items-center justify-center">
-                  <QuickActionItem
-                    id={action.id}
-                    label={action.label}
-                    alias={action.alias}
-                    icon={action.icon}
-                    category="core"
-                    onClick={() => handleAction(action.id)}
-                    isProcessing={processingAction === action.id}
-                    isExpandable={action.isExpandable}
-                    workflowId={action.workflowId}
-                    onDictate={handleDictate}
-                    onType={handleType}
-                  />
-                </div>
-              ))}
-            </div>
-          </motion.div>
+            {/* All Core Actions */}
+            {CORE_ACTIONS.map((action) => (
+              <QuickActionItem
+                key={action.id}
+                id={action.id}
+                label={action.label}
+                alias={action.alias}
+                icon={action.icon}
+                category="core"
+                onClick={() => handleAction(action.id)}
+                isProcessing={processingAction === action.id}
+                isExpandable={action.isExpandable}
+                workflowId={action.workflowId}
+                onDictate={handleDictate}
+                onType={handleType}
+                onImage={action.id === 'investigation-summary' ? () => onImageInvestigation?.() : undefined}
+              />
+            ))}
 
-          {/* Group Separator */}
-          <div className="px-2 mb-4">
-            <div className="h-px bg-gray-100" />
+            {/* All Secondary Actions */}
+            {SECONDARY_ACTIONS.map((action) => (
+              <QuickActionItem
+                key={action.id}
+                id={action.id}
+                label={action.label}
+                alias={action.alias}
+                icon={action.icon}
+                category="secondary"
+                onClick={() => handleAction(action.id)}
+                isProcessing={processingAction === action.id}
+                colorTheme={action.colorTheme}
+              />
+            ))}
           </div>
-
-          {/* Secondary Actions Group (all 10 items as individual buttons) */}
-          <motion.div
-            className="px-2"
-            variants={withReducedMotion(staggerContainer)}
-            transition={{
-              staggerChildren: STAGGER_CONFIGS.tight,
-              delayChildren: 0.1
-            }}
-          >
-            <div className="grid grid-cols-5 gap-x-2 gap-y-2.5">
-              {SECONDARY_ACTIONS.map((action, index) => (
-                <motion.div
-                  key={action.id}
-                  variants={withReducedMotion(listItemVariants)}
-                  custom={index}
-                  className="flex items-center justify-center"
-                >
-                  <QuickActionItem
-                    id={action.id}
-                    label={action.label}
-                    alias={action.alias}
-                    icon={action.icon}
-                    category="secondary"
-                    onClick={() => handleAction(action.id)}
-                    isProcessing={processingAction === action.id}
-                    colorTheme={action.colorTheme}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </>
+        </div>
       )}
     </motion.div>
   );

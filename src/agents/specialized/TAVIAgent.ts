@@ -782,8 +782,15 @@ Note: This report was generated with limited AI processing due to technical issu
     let narrativeContent = response;
 
     try {
-      // Look for JSON block at the beginning of the response
-      const jsonBlockMatch = response.match(/^\s*\{[\s\S]*?\}(?=\n|$)/);
+      // Strip conversational preamble if LLM ignores output format instructions
+      // Common patterns: "Okay, here is...", "Sure, I'll...", "Here's the...", etc.
+      let cleanedResponse = response.replace(
+        /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|based on|certainly)[^{]*?(?=\{)/i,
+        ''
+      ).trim();
+
+      // Look for JSON block (now at the beginning after stripping preamble)
+      const jsonBlockMatch = cleanedResponse.match(/^\s*\{[\s\S]*?\}(?=\s*(?:\n\n|\*\*|$))/);
 
       if (jsonBlockMatch) {
         const jsonString = jsonBlockMatch[0];
@@ -798,8 +805,8 @@ Note: This report was generated with limited AI processing due to technical issu
             jsonData = validationResult.data;
             console.log('✅ TAVI JSON validation successful');
 
-            // Remove JSON block from narrative content
-            narrativeContent = response.substring(jsonString.length).trim();
+            // Remove JSON block from narrative content (use cleanedResponse)
+            narrativeContent = cleanedResponse.substring(jsonString.length).trim();
 
             // Log missing fields if any
             if (jsonData.missingFields && jsonData.missingFields.length > 0) {
@@ -824,9 +831,13 @@ Note: This report was generated with limited AI processing due to technical issu
       validationErrors.push('Failed to parse response format');
     }
 
-    // Fallback: if no narrative content after JSON removal, use full response
+    // Fallback: if no narrative content after JSON removal, use cleaned response
     if (!narrativeContent || narrativeContent.trim().length === 0) {
-      narrativeContent = response;
+      // Strip any remaining preamble from narrative content
+      narrativeContent = response.replace(
+        /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|based on|certainly)[^*{]*?(?=\*\*)/i,
+        ''
+      ).trim() || response;
     }
 
     console.log(`📊 TAVI parsing result: JSON=${jsonData ? 'valid' : 'invalid'}, errors=${validationErrors.length}, narrative=${narrativeContent.length} chars`);

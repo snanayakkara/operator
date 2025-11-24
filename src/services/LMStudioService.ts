@@ -50,7 +50,7 @@ export interface LMStudioConfig {
    * - QUICK_MODEL: 10-30 seconds for simple formatting
    */
   agentModels?: Record<string, string>;
-  
+
   /**
    * Agent-specific token limits for different complexity levels
    * 
@@ -60,7 +60,7 @@ export interface LMStudioConfig {
    * - Simple formatting: 2000-4000 tokens sufficient
    */
   agentTokenLimits?: Record<string, number>;
-  
+
   /**
    * Agent-specific timeout overrides for different processing requirements
    * 
@@ -117,7 +117,7 @@ export class LMStudioService {
         // This configuration ensures optimal speed for simple tasks while maintaining
         // medical accuracy for complex clinical analysis and detailed procedure reports
       },
-      
+
       agentTokenLimits: {
         // AI Medical Review requires extensive output for comprehensive clinical analysis
         'ai-medical-review': 10000, // Increased to 10k tokens to prevent truncation
@@ -146,7 +146,7 @@ export class LMStudioService {
         // Default for unlisted agents
         'default': 4000
       },
-      
+
       agentTimeouts: {
         // AI Medical Review needs extended time for comprehensive analysis
         'ai-medical-review': 600000, // 10 minutes
@@ -238,7 +238,7 @@ export class LMStudioService {
     onProgress?: (progress: number, details?: string) => void
   ): Promise<string> {
     const startTime = Date.now();
-    
+
     logger.info('LMStudioService.transcribeAudio() called', {
       component: 'lm-studio',
       operation: 'transcribe-start',
@@ -247,7 +247,7 @@ export class LMStudioService {
       transcriptionUrl: this.config.transcriptionUrl,
       model: this.config.transcriptionModel
     });
-    
+
     try {
       // Progress callback helper
       const reportProgress = (progress: number, details?: string) => {
@@ -291,7 +291,7 @@ export class LMStudioService {
         try {
           const compressionResult = await audioOptimizer.compressAudio(audioBlob);
           processedAudioBlob = compressionResult.compressedBlob;
-          
+
           reportProgress(25, `Audio compressed: ${Math.round(compressionResult.compressedSize / 1024)}KB`);
           logger.info('Audio compression completed', {
             component: 'lm-studio',
@@ -337,14 +337,14 @@ export class LMStudioService {
           error: error instanceof Error ? error.message : String(error)
         });
       }
-      
+
       // First, try the OpenAI-compatible transcription endpoint
       // eslint-disable-next-line no-undef
       const formData = new FormData();
       formData.append('file', processedAudioBlob, 'audio.webm');
       formData.append('model', this.config.transcriptionModel);
       formData.append('response_format', 'text');
-      
+
       // Add medical glossary as prompt if available
       if (glossaryPrompt) {
         formData.append('prompt', glossaryPrompt);
@@ -352,24 +352,24 @@ export class LMStudioService {
 
       // Use separate transcription URL if configured, otherwise use base LMStudio URL
       const transcriptionUrl = this.config.transcriptionUrl || this.config.baseUrl;
-      
+
       // Use optimized bloods endpoint for bloods agent (faster processing, no VAD)
       const endpoint = agentType === 'bloods' ? '/v1/audio/transcriptions/bloods' : '/v1/audio/transcriptions';
       const fullUrl = `${transcriptionUrl}${endpoint}`;
-      
+
       if (agentType === 'bloods') {
         console.log('🩸 Using optimized bloods transcription endpoint (no VAD, fast parameters)');
       }
-      
+
       console.log('🌐 Sending transcription request:', {
         url: fullUrl,
         formDataEntries: Array.from(formData.entries()).map(([key, value]) => [
-          key, 
+          key,
           value instanceof File ? `File(${value.name}, ${value.size} bytes)` : value
         ]),
         timeout: this.config.timeout
       });
-      
+
       reportProgress(35, 'Sending audio to MLX Whisper for transcription');
 
       // Combine user signal with timeout signal for robust cancellation
@@ -394,76 +394,76 @@ export class LMStudioService {
         // Clear progress simulation
         clearInterval(progressSimulation);
         reportProgress(90, 'Processing transcription response');
-      
-      console.log('📡 Transcription response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        ok: response.ok,
-        url: response.url
-      });
 
-      if (response.ok) {
-        const text = await response.text();
-        const processingTime = Date.now() - startTime;
-        reportProgress(100, `Transcription complete (${processingTime}ms)`);
-        
-        console.log('✅ Transcription successful:', {
-          responseLength: text.length,
-          processingTime: processingTime + 'ms',
-          responsePreview: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
-          fullResponse: text // Log full response to help debug
+        console.log('📡 Transcription response:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          ok: response.ok,
+          url: response.url
         });
-        
-        // Check for suspicious responses
-        if (text.trim().toLowerCase() === 'thank you') {
-          console.warn('🚨 SUSPICIOUS TRANSCRIPTION: Got "thank you" response');
-          console.warn('📊 Audio blob details:', {
-            size: audioBlob.size,
-            type: audioBlob.type
-          });
-          console.warn('💡 This typically indicates:');
-          console.warn('   - Audio too short or quiet');
-          console.warn('   - Server processing issue');
-          console.warn('   - Model defaulting to common phrase');
-        }
-        
-        // Update model status on success
-        this.modelStatus.isConnected = true;
-        this.modelStatus.lastPing = Date.now();
-        this.modelStatus.latency = processingTime;
 
-        return text.trim();
-      } else {
-        // Log the error but don't throw yet - try fallback
-        console.warn(`Transcription endpoint returned ${response.status}: ${response.statusText}`);
-        
-        // Check if this is the MLX Whisper server
-        if (this.config.transcriptionUrl && this.config.transcriptionUrl.includes('8001')) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          const placeholderText = `[MLX Whisper server unavailable (HTTP ${response.status}). To resolve: 1) Run './start-whisper-server.sh' or 2) Check server logs for errors. The audio was recorded successfully and can be reprocessed once the server is running.]`;
-          
-          console.error('❌ MLX Whisper server error:', response.status, errorText);
-          console.warn('💡 To fix this:');
-          console.warn('   1. Check server status: curl http://localhost:8001/v1/health');
-          console.warn('   2. Start server: ./start-whisper-server.sh');
-          console.warn('   3. Or manually: source venv-whisper/bin/activate && python whisper-server.py');
-          console.warn('   4. Check that port 8001 is available');
-          
-          return placeholderText;
+        if (response.ok) {
+          const text = await response.text();
+          const processingTime = Date.now() - startTime;
+          reportProgress(100, `Transcription complete (${processingTime}ms)`);
+
+          console.log('✅ Transcription successful:', {
+            responseLength: text.length,
+            processingTime: processingTime + 'ms',
+            responsePreview: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+            fullResponse: text // Log full response to help debug
+          });
+
+          // Check for suspicious responses
+          if (text.trim().toLowerCase() === 'thank you') {
+            console.warn('🚨 SUSPICIOUS TRANSCRIPTION: Got "thank you" response');
+            console.warn('📊 Audio blob details:', {
+              size: audioBlob.size,
+              type: audioBlob.type
+            });
+            console.warn('💡 This typically indicates:');
+            console.warn('   - Audio too short or quiet');
+            console.warn('   - Server processing issue');
+            console.warn('   - Model defaulting to common phrase');
+          }
+
+          // Update model status on success
+          this.modelStatus.isConnected = true;
+          this.modelStatus.lastPing = Date.now();
+          this.modelStatus.latency = processingTime;
+
+          return text.trim();
         } else {
-          // Generic transcription service error
-          const placeholderText = '[Audio transcription unavailable. Set up MLX Whisper server by running "./start-whisper-server.sh" or configure an alternative transcription service. Your audio recording is saved and ready for processing.]';
-          
-          console.warn('⚠️ Transcription service not available. Returning placeholder text.');
-          console.warn('💡 To fix this:');
-          console.warn('   1. Set up MLX Whisper server (recommended)');
-          console.warn('   2. Use OpenAI Whisper API');
-          console.warn('   3. Configure alternative transcription provider');
-          
-          return placeholderText;
+          // Log the error but don't throw yet - try fallback
+          console.warn(`Transcription endpoint returned ${response.status}: ${response.statusText}`);
+
+          // Check if this is the MLX Whisper server
+          if (this.config.transcriptionUrl && this.config.transcriptionUrl.includes('8001')) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            const placeholderText = `[MLX Whisper server unavailable (HTTP ${response.status}). To resolve: 1) Run './start-whisper-server.sh' or 2) Check server logs for errors. The audio was recorded successfully and can be reprocessed once the server is running.]`;
+
+            console.error('❌ MLX Whisper server error:', response.status, errorText);
+            console.warn('💡 To fix this:');
+            console.warn('   1. Check server status: curl http://localhost:8001/v1/health');
+            console.warn('   2. Start server: ./start-whisper-server.sh');
+            console.warn('   3. Or manually: source venv-whisper/bin/activate && python whisper-server.py');
+            console.warn('   4. Check that port 8001 is available');
+
+            return placeholderText;
+          } else {
+            // Generic transcription service error
+            const placeholderText = '[Audio transcription unavailable. Set up MLX Whisper server by running "./start-whisper-server.sh" or configure an alternative transcription service. Your audio recording is saved and ready for processing.]';
+
+            console.warn('⚠️ Transcription service not available. Returning placeholder text.');
+            console.warn('💡 To fix this:');
+            console.warn('   1. Set up MLX Whisper server (recommended)');
+            console.warn('   2. Use OpenAI Whisper API');
+            console.warn('   3. Configure alternative transcription provider');
+
+            return placeholderText;
+          }
         }
-      }
 
       } catch (fetchError) {
         // Clear progress simulation on fetch error
@@ -473,29 +473,29 @@ export class LMStudioService {
 
     } catch (error) {
       this.modelStatus.isConnected = false;
-      
+
       // Check if this is a timeout error
       if (error instanceof Error && error.name === 'TimeoutError') {
-        const timeoutMessage = `[MLX Whisper server timeout after ${this.config.timeout/1000}s. First-time model loading can take 2-5 minutes. Your audio is saved - try reprocessing after the server finishes loading.]`;
-        
+        const timeoutMessage = `[MLX Whisper server timeout after ${this.config.timeout / 1000}s. First-time model loading can take 2-5 minutes. Your audio is saved - try reprocessing after the server finishes loading.]`;
+
         console.error('❌ MLX Whisper timeout:', error.message);
         console.warn('💡 This is normal for the first transcription. The model is loading...');
         console.warn('   - Subsequent transcriptions should be much faster');
         console.warn('   - You can check server logs for progress');
         console.warn('   - Server status: curl http://localhost:8001/v1/health');
-        
+
         return timeoutMessage;
       }
-      
+
       // Provide helpful error message for other errors
       const errorMessage = `[Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check if MLX Whisper server is running with './start-whisper-server.sh'. Audio is saved for later processing.]`;
-      
+
       console.error('❌ Transcription error:', error);
       console.warn('💡 To fix this:');
       console.warn('   1. Check if MLX Whisper server is running: curl http://localhost:8001/v1/health');
       console.warn('   2. Start server: source venv-whisper/bin/activate && python whisper-server.py');
       console.warn('   3. Check server logs for errors');
-      
+
       return errorMessage;
     }
   }
@@ -818,7 +818,7 @@ export class LMStudioService {
     ];
 
     // Determine which model to use based on agent type
-    const modelToUse = (agentType && this.config.agentModels?.[agentType]) 
+    const modelToUse = (agentType && this.config.agentModels?.[agentType])
       ? this.config.agentModels[agentType]
       : this.config.processorModel;
 
@@ -938,7 +938,7 @@ export class LMStudioService {
     // Set up timeout warning at 2 minutes or 1/3 of timeout, whichever is shorter
     const warningTime = Math.min(120000, agentTimeout / 3);
     const warningTimeout = setTimeout(() => {
-      console.warn(`⏰ LMStudio request taking longer than ${Math.round(warningTime/60000)} minutes - this is normal for ${agentType || 'default'} agent`);
+      console.warn(`⏰ LMStudio request taking longer than ${Math.round(warningTime / 60000)} minutes - this is normal for ${agentType || 'default'} agent`);
       if (agentType === 'ai-medical-review') {
         console.warn('   AI Medical Review typically takes 3-5 minutes for comprehensive analysis');
       }
@@ -1064,7 +1064,7 @@ export class LMStudioService {
         }
 
         console.log('📄 Full response content:', content);
-        
+
         // Clear timeout warning since request completed
         clearTimeout(warningTimeout);
 
@@ -1074,13 +1074,13 @@ export class LMStudioService {
         this.modelStatus.latency = Date.now() - startTime;
 
         console.log(`⏱️ LMStudio request completed in ${Date.now() - startTime}ms`);
-        
+
         return content.trim();
 
       } catch (error) {
         lastError = error as Error;
         // Request attempt failed - continuing to next attempt
-        
+
         // Update connection status
         this.modelStatus.isConnected = false;
       }
@@ -1088,7 +1088,7 @@ export class LMStudioService {
 
     // Clear timeout warning on failure
     clearTimeout(warningTimeout);
-    
+
     throw new Error(`LMStudio request failed after ${this.config.retryAttempts + 1} attempts: ${lastError?.message}`);
   }
 
@@ -1134,10 +1134,10 @@ export class LMStudioService {
 
   public async checkConnection(): Promise<ModelStatus> {
     const now = Date.now();
-    
+
     // Return cached result if within TTL to prevent excessive requests
-    if (this.lastHealthCheckResult && 
-        now - this.lastHealthCheckTime < this.HEALTH_CHECK_CACHE_TTL) {
+    if (this.lastHealthCheckResult &&
+      now - this.lastHealthCheckTime < this.HEALTH_CHECK_CACHE_TTL) {
       // Cache hit - eliminate logging to prevent console spam
       // Only log if explicitly needed for debugging (can be enabled via dev tools)
       return { ...this.lastHealthCheckResult };
@@ -1151,7 +1151,7 @@ export class LMStudioService {
 
     // Create a single health check promise to prevent concurrent requests
     this.pendingHealthCheck = this.performHealthCheck();
-    
+
     try {
       const result = await this.pendingHealthCheck;
       return result;
@@ -1163,7 +1163,7 @@ export class LMStudioService {
   private async performHealthCheck(): Promise<ModelStatus> {
     try {
       const startTime = Date.now();
-      
+
       // Check LMStudio connection with reduced timeout for faster failure detection
       const response = await fetch(`${this.config.baseUrl}/v1/models`, {
         method: 'GET',
@@ -1243,10 +1243,10 @@ export class LMStudioService {
 
   public async getAvailableModels(): Promise<string[]> {
     const now = Date.now();
-    
+
     // Return cached models if available and within TTL
-    if (this.modelsCache && 
-        now - this.modelsCache.timestamp < this.MODELS_CACHE_TTL) {
+    if (this.modelsCache &&
+      now - this.modelsCache.timestamp < this.MODELS_CACHE_TTL) {
       console.debug('🔄 Models cache hit (5min TTL)');
       return [...this.modelsCache.models];
     }
@@ -1260,13 +1260,13 @@ export class LMStudioService {
       if (response.ok) {
         const data = await response.json();
         const models = data.data?.map((model: { id: string }) => model.id) || [];
-        
+
         // Cache the result
         this.modelsCache = {
           models: [...models],
           timestamp: now
         };
-        
+
         return models;
       }
     } catch (error) {
@@ -1476,7 +1476,7 @@ export class LMStudioService {
 // Streaming types and helpers for SSE chat completions
 export type StreamOpts = {
   model: string;
-  messages: { role: 'system'|'user'|'assistant'; content: string }[];
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;

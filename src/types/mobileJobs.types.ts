@@ -21,6 +21,8 @@ export interface MobileJobSummary {
   transcript_available?: boolean;
   attached_session_id?: string | null;
   attached_at?: string | null;
+  workflow_code?: string;
+  workflow_label?: string;
 }
 
 export interface MobileJobDetail extends MobileJobSummary {

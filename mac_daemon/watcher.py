@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Any, Callable, Deque, Dict, Optional, Tuple
 
 from .config import Config, ensure_directories
-from .jobs import Job, JobStatus, create_job, list_jobs, save_job
+from .jobs import Job, JobStatus, create_job, job_processed_dir, list_jobs, save_job
 from .pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
-QueueItem = Tuple[Job, Path, Optional[Dict[str, Any]]]
+QueueItem = Tuple[Job, Path, Optional[Dict[str, Any]], Optional[Path]]
 
 
 class Watcher:
@@ -98,14 +98,19 @@ class Watcher:
                 continue
             if audio_file.suffix.lower() not in allowed:
                 continue
-            stem = audio_file.stem
-            sidecar_path = audio_file.with_name(f"{stem}.json")
+            job = create_job(audio_file.name)
+            sidecar_path = self._find_sidecar(audio_file)
             metadata: Optional[Dict[str, Any]] = None
-            if sidecar_path.exists():
+            staged_sidecar: Optional[Path] = None
+            if sidecar_path:
+                logger.info("Found sidecar %s for %s", sidecar_path.name, audio_file.name)
                 loaded_metadata = parse_shortcut_metadata(sidecar_path)
                 if loaded_metadata:
                     metadata = loaded_metadata
-            job = create_job(audio_file.name)
+                staged_sidecar = self._stage_sidecar(sidecar_path, job)
+            elif logger.isEnabledFor(logging.DEBUG):
+                logger.debug("No sidecar found for %s", audio_file.name)
+
             working_target = self.config.working_path / f"{job.id}{audio_file.suffix.lower()}"
             working_target.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -114,7 +119,7 @@ class Watcher:
                 logger.error("Failed to move %s to working dir: %s", audio_file, exc)
                 continue
             with self._lock:
-                self._queue.append((job, working_target, metadata))
+                self._queue.append((job, working_target, metadata, staged_sidecar))
             logger.info("Enqueued job %s for %s", job.id, audio_file.name)
             if self._on_job_enqueued:
                 try:
@@ -126,35 +131,78 @@ class Watcher:
         with self._lock:
             if not self._queue:
                 return False
-            job, staged_path, metadata = self._queue.popleft()
+            job, staged_path, metadata, staged_sidecar = self._queue.popleft()
         try:
             self.pipeline.process_job(job, staged_path, metadata=metadata)
+            self._move_staged_sidecar_to_job_dir(job, staged_sidecar)
             self._last_job_summary = f"{job.audio_filename} → {job.status}"
         except Exception as exc:  # pragma: no cover - runtime heavy
             job.status = JobStatus.ERROR
             job.error_message = str(exc)
             save_job(job, self.config.processed_path, self.config.jobs_path)
+            self._move_staged_sidecar_to_job_dir(job, staged_sidecar)
             self._last_job_summary = f"{job.audio_filename} failed"
             logger.exception("Job %s failed: %s", job.id, exc)
             if staged_path.exists():
                 staged_path.unlink(missing_ok=True)  # type: ignore[arg-type]
         return True
 
+    def _move_staged_sidecar_to_job_dir(self, job: Job, staged_sidecar: Optional[Path]) -> None:
+        if not staged_sidecar:
+            return
+        if not staged_sidecar.exists():
+            logger.debug("Staged sidecar missing for job %s at %s", job.id, staged_sidecar)
+            return
+        job_dir = job_processed_dir(self.config.processed_path, job)
+        job_dir.mkdir(parents=True, exist_ok=True)
+        destination = job_dir / "shortcut_metadata.json"
+        try:
+            staged_sidecar.replace(destination)
+            logger.info("Moved shortcut sidecar to %s for job %s", destination, job.id)
+        except OSError as exc:
+            logger.warning(
+                "Failed to move sidecar %s for job %s to %s: %s",
+                staged_sidecar,
+                job.id,
+                destination,
+                exc,
+            )
 
-def parse_shortcut_metadata(path: Path) -> Dict[str, Any]:
+    def _stage_sidecar(self, sidecar_path: Path, job: Job) -> Optional[Path]:
+        """Move a sidecar into the working directory so it is tracked with the job."""
+        staged_path = self.config.working_path / f"{job.id}_shortcut_metadata{sidecar_path.suffix}"
+        staged_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            sidecar_path.replace(staged_path)
+            return staged_path
+        except OSError as exc:
+            logger.warning("Failed to move sidecar %s to working dir: %s", sidecar_path, exc)
+            return None
+
+    def _find_sidecar(self, audio_file: Path) -> Optional[Path]:
+        """Prefer .json sidecars, fall back to .txt for legacy shortcuts."""
+        for ext in (".json", ".txt"):
+            candidate = audio_file.with_suffix(ext)
+            if candidate.exists():
+                return candidate
+        return None
+
+
+def parse_shortcut_metadata(path: Path) -> Optional[Dict[str, Any]]:
     """Parse metadata from the Shortcut sidecar file, logging on failure."""
     try:
         with path.open("r", encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
-        return {}
+        return None
     except json.JSONDecodeError as exc:
         logger.warning("Shortcut metadata %s contained invalid JSON: %s", path, exc)
-        return {}
+        return None
     except OSError as exc:
         logger.warning("Unable to read shortcut metadata %s: %s", path, exc)
-        return {}
+        return None
     if not isinstance(data, dict):
         logger.warning("Shortcut metadata %s did not contain a JSON object", path)
-        return {}
+        return None
+    logger.info("Parsed shortcut metadata from %s", path.name)
     return data

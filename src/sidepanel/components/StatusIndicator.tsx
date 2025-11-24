@@ -115,6 +115,14 @@ const STATUS_CONFIGS = {
     bgColor: 'bg-surface-tertiary',
     animate: true
   },
+  formatting: {
+    icon: Zap,
+    label: 'Formatting',
+    description: 'Formatting investigation summary...',
+    color: 'text-accent-violet',
+    bgColor: 'bg-surface-tertiary',
+    animate: true
+  },
   enhancing: {
     icon: Brain,
     label: 'Enhancing',
@@ -294,6 +302,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       transcribing: 40,
       classifying: 60,
       processing: 80,
+      formatting: 85,
       enhancing: 90,
       complete: 100,
       error: 0,

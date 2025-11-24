@@ -1,6 +1,6 @@
 # Operator
 
- [![Version](https://img.shields.io/badge/version-3.36.0-blue.svg)]()
+ [![Version](https://img.shields.io/badge/version-3.37.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.36.0 adds the Rounds feature with Quick Add intake parsing, ward dictation-to-diff pipeline, global task board, handover generator, GP discharge letters, and HUD-ready patient JSON.
+> **Latest:** v3.37.0 adds image-to-investigation summaries with a vision OCR pipeline, Shortcut/mobile dictation intake with auto-triage, Rounds GP letter + Go To patient actions, streamlined quick actions (Dictate / Type / Image), and safer LM Studio vision defaults with richer progress telemetry.
 
 ## 🏥 Overview
 
@@ -23,6 +23,9 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 - **📝 Smart ASR Corrections** - User phrasebook with medical terminology auto-correction
 - **🏗️ Cross-agent Intelligence** - Shared patient context and clinical insights
 - **⚙️ EMR Integration** - Seamless Xestro, Epic, and Cerner field detection
+- **🖼️ Vision Intake** - Investigation Summary now ingests photos/screenshots via Qwen3-VL OCR with clinical extraction prompts
+- **📱 Mobile + Shortcut Intake** - iOS Shortcuts/mac-daemon sidecar metadata triage routes mobile dictations into side panel workflows
+- **🏥 Rounds Command Center** - Ward list, Quick Add intake parser, ward update diffing, GP letters, and HUD exports for handover
 
 ## 🎯 Key Features
 
@@ -330,6 +333,7 @@ MLX Whisper: whisper-large-v3-turbo  # ~/.cache/lm-studio/models/mlx-community/
 # Generation Models (LM Studio localhost:1234)
 Complex Tasks: MedGemma-27B-MLX        # TAVI, PCI, Consultation, Investigation Summary
 Simple Tasks: Gemma-3n-e4b            # Background, Medication, Quick responses
+Vision/OCR: qwen3-vl-8b-instruct-mlx  # Investigation photos, BP diary images
 
 # Optional: DSPy Optimization
 DSPy Server: localhost:8002           # Prompt optimization and evaluation
@@ -619,58 +623,22 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
-### v3.6.0 (January 2025) - Code Quality Excellence & Developer Experience
-#### Major Achievements
-- **Zero ESLint Errors** - Eliminated all 479 ESLint errors across 141 files, achieving perfect code quality
-- **Enhanced Developer Tooling** - Improved ./dev startup script with real-time model loading feedback and comprehensive diagnostics
-- **TAVI Workup Stability** - Fixed persistent "Processing Report..." and "Loading Session" display bugs
-- **Session Management** - Resolved race conditions and state management issues affecting session display
-- **Consistent UI** - Implemented uniform transcription interface across all processing states
+### v3.37.0 (November 2025) — Vision Intake & Mobile Triage
+- **Image → Investigation Summary**: Drag-and-drop modal for investigation photos/screenshots (TTE/CTCA/ECG/etc.) with Qwen3-VL OCR, date/type metadata, and clinician-voice extraction prompts.
+- **Quick Actions overhaul**: Dictate / Type / Image paths for Investigation Summary, collapsible 5-column grid, full-panel Appointment Wrap-Up builder, new PipelineStrip/Tag/MicroMeter UI primitives, and simplified monochrome visualizer.
+- **Mobile + Shortcut ingestion**: macOS daemon now ingests Shortcut sidecars (workflow codes, geolocation, timestamps), runs triage pipelines, and surfaces jobs in a grouped modal with previews, confidence chips, keyboard shortcuts, and agent recommendations.
+- **Rounds upgrades**: Go To patient from rounds, one-click GP discharge letter generation from ward data, selective handover compilation, undoable ward updates, and discharge/reopen toggles.
+- **Model safety & telemetry**: LM Studio service exposes default OCR model helper, vision diagnostics, better Whisper timeout messaging, formatting progress state, and refreshed ASR correction seeds.
 
-#### Technical Improvements
-- **ESLint Compliance** - Fixed all case declarations, unused variables, React hooks violations, useless escapes
-- **Dev Script UX** - Added elapsed time tracking, timeout awareness, better error messages, startup log capture
-- **Bug Fixes** - Resolved multiple TAVI workup display issues and transcription UI inconsistencies
-- **Code Cleanup** - Removed Phase 3 legacy files, standardized code patterns across codebase
+### v3.36.0 (November 2025) — Rounds Launch
+- Local ward list with issues/investigations/tasks, Quick Add intake parser, ward dictation-to-diff pipeline with undo, global task board, handover generator, GP discharge letters, and HUD JSON export.
+- Ward update dictation now uses shared recorder + Whisper pipeline with diff preview and undo before applying.
 
-### v3.5.0 (September 2025) - Legacy Naming Cleanup
-#### Major Fixes
-- **HTTP 400 Error Resolution** - Fixed LM Studio communication issues with Gemma prompt formatting
-- **Enhanced TAVI Display** - Proper structured UI with interactive transcription controls (Skip/Accept/Edit)
-- **Patient Demographics Parsing** - Fixed TypeError with robust type checking and string conversion
-- **Performance Optimization** - Reduced audio debug console spam by 99.97% (0.1% vs 3% frequency)
-- **Clinical Safety** - Added anti-hallucination guardrails and input validation for data accuracy
+### v3.35.0 (November 2025) — Mobile Dictation UX
+- Fixed mobile Quick Letter dual-card display and summary population, redesigned mobile dictation modal (collapsible transcript, metadata row, category grouping, smart defaults, keyboard shortcuts), and added accessibility + iconography polish.
 
-#### Technical Improvements
-- **GemmaPromptFormatter Fix** - Corrected malformed prompt concatenation causing API failures
-- **TAVIWorkupAgent Enhancement** - Improved EMR data extraction with proper error handling
-- **Console Cleanup** - Minimal debug logging for production-ready experience
-- **Code Quality** - Removed duplicate return statements and improved error boundaries
-
-### v3.3.0 (September 2025) - Phase 4 Intelligence
-#### Major Features
-- **AudioProcessingQueueService** - Intelligent job queue with priority-based processing
-- **Few-shot Learning** - Quick Letter agent with clinical exemplars and GEPA optimization
-- **TAVI JSON Validation** - Structured output with Zod schema validation
-- **ASR Corrections Pipeline** - User phrasebook with automatic medical terminology corrections
-- **Cross-agent Intelligence** - Shared patient context and clinical insights
-- **Streaming Tokens** - Real-time AI generation with live progress tracking
-
-#### Technical Improvements
-- **Session Isolation** - Fixed race conditions for concurrent recording sessions
-- **Bundle Splitting** - Lazy agent loading with 0ms cached performance
-- **Performance Monitoring** - Comprehensive metrics collection and SLA tracking
-- **E2E Test Coverage** - 14 test files covering all v3.3.0 features
-
-### v3.2.1 (September 2025)
-- **Full-page Settings** - Comprehensive transcription management UI
-- **Design System** - Monochrome clinical interface with responsive components
-- **Audio Queue Integration** - Priority processing with configurable concurrency
-
-### v3.2.0 (September 2025)
-- **LazyAgentLoader** - Dynamic agent chunks for faster startup
-- **SmartRecommendationEngine** - AI-powered agent suggestions
-- **DSPy/GEPA Foundation** - Prompt optimization infrastructure with human feedback
+### v3.34.0 (November 2025) — Unified Status Badges
+- Centralized status badge system and color mappings across patient headers, transcription status, warnings, and server indicators with shared `stateColors.ts` and consolidated badge components.
 
 ## 🤝 Contributing
 
@@ -696,38 +664,6 @@ npm run test:e2e               # Full E2E test suite
 npm run validate:production    # Production readiness check
 ```
 
-## 📋 Recent Updates
-
-### v3.5.0 (September 2025) - Legacy Naming Cleanup
-**🚀 Major TAVI Workup Agent Fixes:**
-- **HTTP 400 Error Resolution** - Fixed LM Studio communication with corrected Gemma prompt formatting
-- **Enhanced TAVI Display** - Proper structured UI with interactive transcription controls (Skip/Accept/Edit)
-- **Patient Demographics Parsing** - Fixed TypeError with robust type checking and string conversion
-- **Performance Optimization** - Reduced audio debug console spam, improved error handling
-- **Clinical Safety** - Added anti-hallucination guardrails and input validation for data accuracy
-
-### v3.3.1 (September 2025) - TAVI Workup Enhancement
-**🚀 Major TAVI Workup Agent Improvements:**
-- **Eliminated Dialog Opening** - TAVI workup now reads EMR data directly from DOM using `extractCustomNoteContent()` method
-- **Automatic Patient Demographics** - Name, DOB, age automatically extracted from EMR (no longer required in dictation)
-- **Direct Content Script Communication** - Added `EXTRACT_CUSTOM_NOTE_CONTENT` message handler for efficient extraction
-- **Enhanced LLM Payload** - Added `patient_demographics` field with automatic EMR-extracted patient data
-- **Updated System Prompts** - Clarified that patient demographics are automatically provided from EMR
-- **Performance Improvement** - Faster processing without UI disruption, consistent with efficient agents like AI Review
-
-**Technical Changes:**
-- Content script: Added `EXTRACT_CUSTOM_NOTE_CONTENT` message handler
-- TAVI Agent: Complete refactor of `extractEMRDialogFields()` method using `chrome.tabs.sendMessage()`
-- System Prompts: Updated to indicate automatic patient demographic extraction
-- Payload Structure: Enhanced with separate `patient_demographics` and `emr_fields` sections
-
-**Benefits:**
-- ✅ No more dialog opening during TAVI processing
-- ✅ Automatic patient identification without dictation
-- ✅ Faster EMR data extraction
-- ✅ Consistent behavior with other high-performance agents
-- ✅ Better user experience with reduced UI disruption
-
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
@@ -743,7 +679,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.6.0 | **Updated**: January 2025 | **Architecture**: Phase 4 Intelligence with Local-First Medical AI
+**Version**: 3.37.0 | **Updated**: November 2025 | **Architecture**: Phase 4 Intelligence with Local-First Medical AI + Vision Intake
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

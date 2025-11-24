@@ -294,6 +294,7 @@ export type ProcessingStatus =
   | 'transcribing'
   | 'classifying'
   | 'processing'
+  | 'formatting' // AI formatting stage (e.g., investigation summary formatting)
   | 'enhancing'
   | 'complete'
   | 'error'
@@ -818,6 +819,8 @@ export interface PatientSession {
   audioDuration?: number; // Audio duration in seconds for ETA prediction
   warnings?: string[];
   errors?: string[];
+  // OCR explanation from vision model (for image-based investigation summary)
+  ocrExplanation?: string; // Raw explanation from vision OCR model showing what it extracted from the image
   // Quick Action field tracking for EMR insertion
   quickActionField?: string; // For Quick Actions: stores the EMR field action ID ('medications', 'background', 'investigation-summary')
   // Additional fields for parallel processing

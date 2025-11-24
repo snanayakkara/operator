@@ -19,6 +19,7 @@ import {
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { RefreshCw, ThumbsUp, Edit3, SkipForward } from 'lucide-react';
 import { AudioPlayback } from '../AudioPlayback';
+import { AudioScrubber } from '../ui/AudioScrubber';
 import { Button, IconButton } from '../buttons';
 import { StatusBadge } from '../status';
 import type { AgentType } from '@/types/medical.types';
@@ -104,6 +105,65 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   const [transcriptionInserted, setTranscriptionInserted] = useState(false);
   const [editedTranscription, setEditedTranscription] = useState(originalTranscription || '');
   const [reprocessExpanded, setReprocessExpanded] = useState(false);
+
+  // Audio scrubber state
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+
+  // Initialize audio element when blob is available
+  React.useEffect(() => {
+    if (!audioBlob) {
+      setAudioUrl(null);
+      setAudioElement(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(audioBlob);
+    setAudioUrl(url);
+
+    const audio = new Audio(url);
+    audio.addEventListener('loadedmetadata', () => {
+      setAudioDuration(audio.duration);
+    });
+    audio.addEventListener('timeupdate', () => {
+      setAudioCurrentTime(audio.currentTime);
+    });
+    audio.addEventListener('ended', () => {
+      setIsAudioPlaying(false);
+    });
+    setAudioElement(audio);
+
+    return () => {
+      audio.pause();
+      URL.revokeObjectURL(url);
+    };
+  }, [audioBlob]);
+
+  const handleAudioPlayPause = () => {
+    if (!audioElement) return;
+    if (isAudioPlaying) {
+      audioElement.pause();
+    } else {
+      audioElement.play();
+    }
+    setIsAudioPlaying(!isAudioPlaying);
+  };
+
+  const handleAudioSeek = (time: number) => {
+    if (!audioElement) return;
+    audioElement.currentTime = time;
+    setAudioCurrentTime(time);
+  };
+
+  const handleAudioMuteToggle = () => {
+    if (!audioElement) return;
+    audioElement.muted = !isAudioMuted;
+    setIsAudioMuted(!isAudioMuted);
+  };
 
   // Component renders optimally when memoized properly
 
@@ -192,30 +252,22 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
           </span>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {/* Transcription Actions - Enhanced during processing */}
           {onTranscriptionCopy && (
-            <Button
+            <IconButton
               onClick={(e) => {
                 e.stopPropagation();
                 handleTranscriptionCopy();
               }}
               variant="ghost"
               size="sm"
-              className={
-                isProcessing
-                  ? 'bg-blue-50 border border-blue-200 hover:bg-blue-100 shadow-sm'
-                  : ''
-              }
+              icon={transcriptionCopied ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />}
+              aria-label={isProcessing ? "Copy raw transcription" : "Copy transcription"}
               title={isProcessing ? "Copy raw transcription" : "Copy transcription"}
-              startIcon={transcriptionCopied ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />}
-            >
-              {isProcessing && (
-                <span className="text-xs text-blue-700 font-medium whitespace-nowrap">Copy Raw</span>
-              )}
-            </Button>
+            />
           )}
-          
+
           {onTranscriptionInsert && (
             <IconButton
               onClick={(e) => {
@@ -232,18 +284,39 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
 
           {/* Reprocess indicator */}
           {onAgentReprocess && (
-            <div className="p-1.5">
-              <RefreshCw className={`w-3.5 h-3.5 text-purple-500 ${isProcessing ? 'animate-spin' : ''}`} />
-            </div>
+            <IconButton
+              onClick={(e) => e.stopPropagation()}
+              variant="ghost"
+              size="sm"
+              icon={<RefreshCw className={`w-3.5 h-3.5 text-purple-500 ${isProcessing ? 'animate-spin' : ''}`} />}
+              aria-label="Reprocess available"
+              title="Expand to reprocess with different agent"
+            />
           )}
-          
+
           {transcriptionExpanded ? (
-            <ChevronUpIcon className="w-4 h-4 text-gray-400" />
+            <ChevronUpIcon className="w-3.5 h-3.5 text-gray-400" />
           ) : (
-            <ChevronDownIcon className="w-4 h-4 text-gray-400" />
+            <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400" />
           )}
         </div>
       </Button>
+
+      {/* Collapsed Audio Scrubber - shows when collapsed and audio available */}
+      {!transcriptionExpanded && audioBlob && audioUrl && (
+        <div className="px-4 pb-2">
+          <AudioScrubber
+            currentTime={audioCurrentTime}
+            duration={audioDuration}
+            isPlaying={isAudioPlaying}
+            isMuted={isAudioMuted}
+            onSeek={handleAudioSeek}
+            onPlayPause={handleAudioPlayPause}
+            onMuteToggle={handleAudioMuteToggle}
+            className="bg-gray-50/50 rounded px-2 py-1"
+          />
+        </div>
+      )}
 
       {/* Expanded Transcription Content */}
       {transcriptionExpanded && (

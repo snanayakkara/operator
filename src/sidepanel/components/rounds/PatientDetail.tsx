@@ -386,9 +386,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
               <Button size="xs" startIcon={Plus} onClick={addLab} disabled={!newLabName.trim() || !newLabValue.trim()}>Add lab</Button>
             </div>
             <div className="text-xs uppercase text-gray-500 pt-2">Add imaging / procedure</div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name (e.g., Echo)" value={newImagingName} onChange={(e) => setNewImagingName(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm col-span-2" placeholder="Summary" value={newImagingSummary} onChange={(e) => setNewImagingSummary(e.target.value)} />
+            <div className="flex flex-col gap-2">
+              <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Name (e.g., Echo)" value={newImagingName} onChange={(e) => setNewImagingName(e.target.value)} />
+              <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Summary" value={newImagingSummary} onChange={(e) => setNewImagingSummary(e.target.value)} />
             </div>
             <div className="flex justify-end mt-2">
               <Button size="xs" startIcon={Plus} onClick={addImaging} disabled={!newImagingName.trim() || !newImagingSummary.trim()}>Add summary</Button>

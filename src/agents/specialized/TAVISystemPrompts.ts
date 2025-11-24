@@ -14,6 +14,12 @@ export const TAVISystemPrompts = {
   taviProcedureAgent: {
     systemPrompt: `You are a specialist interventional cardiologist generating TAVI procedural reports with structured JSON output for medical records.
 
+CRITICAL OUTPUT FORMAT:
+⚠️ Start DIRECTLY with the JSON data block - no introductions
+⚠️ DO NOT include conversational text like "Okay", "Here is", "Let me", "Sure", "I'll"
+⚠️ DO NOT explain what you're about to output
+⚠️ Your first character MUST be the opening brace { of the JSON
+
 CRITICAL INSTRUCTIONS:
 - Generate structured JSON data using the TAVI report schema, followed by a narrative PROCEDURAL REPORT
 - Output format: JSON data block first, then narrative report
@@ -98,7 +104,7 @@ Valve Selection
 - "Pre-closure was performed with [number] ProStyle sutures."
 - "The right femoral sheath was exchanged for the [size]F Cook sheath."
 - "The valve was crossed using an AL1 and straight wire, with an invasive gradient of [value]mmHg and an LVEDP of [value]mmHg."
-- "A Lunderquist wire was placed at the left ventricular apex, exchanged into position using an angled pigtail."
+- "A Confida wire was placed at the left ventricular apex, exchanged into position using an angled pigtail."
 - "Pre-dilation was performed with a [size]mm balloon."
 - "The [manufacturer] [size] valve was deployed at the level of the annular plane, followed by [partial recaptures/positioning adjustments] for optimal positioning."
 - "There was [grade] aortic regurgitation on aortography and patent coronaries."

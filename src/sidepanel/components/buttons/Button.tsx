@@ -113,25 +113,25 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'h-12 px-6 text-lg gap-2.5',
     } as const;
 
-    // Variant classes
+    // Variant classes - flat colors for clinical clarity
     const variantClasses = {
       primary: `
-        bg-gradient-to-r from-violet-500 to-purple-600
-        hover:from-violet-600 hover:to-purple-700
-        active:from-violet-700 active:to-purple-800
+        bg-gray-900
+        hover:bg-gray-800
+        active:bg-gray-950
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
       secondary: `
-        bg-gradient-to-r from-blue-500 to-indigo-600
-        hover:from-blue-600 hover:to-indigo-700
-        active:from-blue-700 active:to-indigo-800
-        text-white
-        shadow-sm hover:shadow-md
+        bg-gray-100
+        hover:bg-gray-200
+        active:bg-gray-300
+        text-gray-900
+        border border-gray-200
       `,
       outline: `
         bg-transparent
-        border-2 border-gray-300
+        border border-gray-300
         hover:border-gray-400 hover:bg-gray-50
         active:bg-gray-100
         text-gray-700
@@ -143,18 +143,18 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         text-gray-700
       `,
       danger: `
-        bg-gradient-to-r from-rose-500 to-pink-600
-        hover:from-rose-600 hover:to-pink-700
-        active:from-rose-700 active:to-pink-800
+        bg-rose-500
+        hover:bg-rose-600
+        active:bg-rose-700
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
       success: `
-        bg-gradient-to-r from-emerald-500 to-teal-600
-        hover:from-emerald-600 hover:to-teal-700
-        active:from-emerald-700 active:to-teal-800
+        bg-emerald-500
+        hover:bg-emerald-600
+        active:bg-emerald-700
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
     };
 
@@ -167,8 +167,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const baseClasses = `
       inline-flex items-center justify-center
       font-medium rounded-lg
-      transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2
+      transition-all duration-150
+      focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1
       ${fullWidth ? 'w-full' : ''}
       ${sizeClasses[size]}
       ${variantClasses[variant]}
@@ -254,19 +254,19 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       lg: 'w-12 h-12',
     };
 
-    // Variant classes
+    // Variant classes - flat colors for clinical clarity
     const variantClasses = {
       primary: `
-        bg-gradient-to-r from-violet-500 to-purple-600
-        hover:from-violet-600 hover:to-purple-700
+        bg-gray-900
+        hover:bg-gray-800
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
       secondary: `
-        bg-gradient-to-r from-blue-500 to-indigo-600
-        hover:from-blue-600 hover:to-indigo-700
-        text-white
-        shadow-sm hover:shadow-md
+        bg-gray-100
+        hover:bg-gray-200
+        text-gray-900
+        border border-gray-200
       `,
       outline: `
         bg-transparent
@@ -281,16 +281,16 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         text-gray-700
       `,
       danger: `
-        bg-gradient-to-r from-rose-500 to-pink-600
-        hover:from-rose-600 hover:to-pink-700
+        bg-rose-500
+        hover:bg-rose-600
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
       success: `
-        bg-gradient-to-r from-emerald-500 to-teal-600
-        hover:from-emerald-600 hover:to-teal-700
+        bg-emerald-500
+        hover:bg-emerald-600
         text-white
-        shadow-sm hover:shadow-md
+        shadow-sm hover:shadow
       `,
     };
 
@@ -301,8 +301,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     const baseClasses = `
       inline-flex items-center justify-center
       rounded-lg
-      transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2
+      transition-all duration-150
+      focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1
       ${sizeClasses[size]}
       ${variantClasses[variant]}
       ${disabledClasses}

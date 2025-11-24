@@ -12,7 +12,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { LucideIcon, Mic, Keyboard } from 'lucide-react';
+import { LucideIcon, Mic, Keyboard, Camera } from 'lucide-react';
 import { buttonVariants, withReducedMotion } from '@/utils/animations';
 import Button from './buttons/Button';
 import type { AgentType } from '@/types/medical.types';
@@ -27,11 +27,12 @@ export interface QuickActionItemProps {
   isProcessing?: boolean;
   disabled?: boolean;
   className?: string;
-  // Expandable action support (Dictate vs Type)
+  // Expandable action support (Dictate vs Type vs Image)
   isExpandable?: boolean;
   workflowId?: AgentType;
   onDictate?: (workflowId: AgentType, actionId: string) => void;
   onType?: (actionId: string) => void;
+  onImage?: (actionId: string) => void;
   // Color theme for functional grouping
   colorTheme?: 'blue' | 'cyan' | 'purple' | 'emerald' | 'violet';
 }
@@ -90,6 +91,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
   workflowId,
   onDictate,
   onType,
+  onImage,
   colorTheme
 }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -123,6 +125,16 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
     setIsHovered(false);
   }, [onType, id]);
 
+  const handleImage = useCallback(async () => {
+    if (onImage) {
+      onImage(id);
+    }
+    setIsHovered(false);
+  }, [onImage, id]);
+
+  // Determine if this action has all three options (D, T, V)
+  const hasImageOption = !!onImage;
+
   // Non-expandable actions - simple button
   if (!isExpandable) {
     return (
@@ -130,7 +142,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
         onClick={onClick}
         disabled={disabled || isProcessing}
         className={`
-          group relative flex flex-col items-center justify-center
+          group relative w-full flex flex-col items-center justify-center
           p-2 rounded-lg
           transition-all duration-150
           ${disabled || isProcessing
@@ -146,25 +158,25 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
         title={showTooltip ? label : undefined}
         data-action-id={id}
       >
-        {/* Icon container - normalized 24x24px bounding box */}
+        {/* Icon container - compact for 5-col grid */}
         <div className="
-          w-6 h-6 mb-1.5 flex items-center justify-center
+          w-5 h-5 mb-1 flex items-center justify-center
           transition-transform duration-150
           group-hover:scale-110
         ">
           <Icon
             className={`
-              w-5 h-5
+              w-4 h-4
               ${theme.icon}
               ${isProcessing ? 'animate-pulse' : ''}
             `}
-            strokeWidth={2}
+            strokeWidth={1.5}
           />
         </div>
 
-        {/* Label - max 2 lines, centered, 11px font for better 5-col fit */}
+        {/* Label - max 2 lines, centered, 9px font for 5-col fit */}
         <div className="
-          text-[11px] font-medium text-gray-700 text-center leading-tight
+          text-[9px] font-medium text-gray-700 text-center leading-tight
           max-w-full
           line-clamp-2
         ">
@@ -197,7 +209,7 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
   // Expandable actions - hover to reveal Dictate/Type split
   return (
     <div
-      className={`relative overflow-hidden w-full ${className}`}
+      className={`relative overflow-hidden w-full min-w-0 ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{ minHeight: '64px' }} // Ensure consistent height
@@ -207,76 +219,101 @@ export const QuickActionItem: React.FC<QuickActionItemProps> = ({
         absolute inset-0 transition-all duration-200 ease-out
         ${isHovered && !isProcessing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}
       `}>
-        <Button
+        <button
           disabled={isProcessing}
-          variant="ghost"
           className={`
             group w-full h-full flex flex-col items-center justify-center
             p-2 rounded-lg
-            ${theme.hover}
+            bg-transparent
+            transition-all duration-150
+            ${isProcessing ? 'opacity-50 cursor-not-allowed' : `${theme.hover} cursor-pointer`}
           `}
           aria-label={label}
           title={showTooltip ? label : undefined}
-          isLoading={isProcessing}
         >
           {/* Icon */}
           <div className="w-6 h-6 mb-1.5 flex items-center justify-center">
-            <Icon
-              className={`w-5 h-5 ${theme.icon}`}
-              strokeWidth={2}
-            />
+            {isProcessing ? (
+              <div className={`w-4 h-4 border-2 ${theme.spinner} border-t-transparent rounded-full animate-spin`} />
+            ) : (
+              <Icon
+                className={`w-5 h-5 ${theme.icon}`}
+                strokeWidth={2}
+              />
+            )}
           </div>
 
           {/* Label */}
           <div className="text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2">
             {displayLabel}
           </div>
-        </Button>
+        </button>
       </div>
 
-      {/* Expanded state - split Dictate|Type buttons */}
+      {/* Expanded state - split buttons (2 or 3 columns) */}
       <div className={`
         absolute inset-0 transition-all duration-200 ease-out
         ${isHovered && !isProcessing ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
       `}>
-        <div className="grid grid-cols-2 gap-0.5 h-full">
+        <div className={`grid ${hasImageOption ? 'grid-cols-3' : 'grid-cols-2'} gap-0.5 h-full`}>
           {/* Dictate Button */}
-          <Button
+          <button
             onClick={handleDictate}
             disabled={isProcessing}
-            variant="ghost"
             className={`
               flex flex-col items-center justify-center
-              rounded-l-lg rounded-r-none border-r border-gray-200
-              ${theme.hover}
+              rounded-l-lg rounded-r-none
+              bg-transparent transition-all duration-150
+              ${isProcessing ? 'opacity-50 cursor-not-allowed' : `${theme.hover} cursor-pointer`}
             `}
             title={`Dictate ${label}`}
             aria-label={`Dictate ${label} with voice`}
           >
-            <Mic className={`w-4 h-4 ${theme.icon} mb-1`} strokeWidth={2} />
-            <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
-              Dict
+            <Mic className={`w-3 h-3 ${theme.icon} mb-0.5`} strokeWidth={2} />
+            <div className={`text-[7px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
+              D
             </div>
-          </Button>
+          </button>
 
           {/* Type Button */}
-          <Button
+          <button
             onClick={handleType}
             disabled={isProcessing}
-            variant="ghost"
             className={`
               flex flex-col items-center justify-center
-              rounded-r-lg rounded-l-none
-              ${theme.hover}
+              ${hasImageOption ? 'rounded-none' : 'rounded-r-lg rounded-l-none'}
+              bg-transparent transition-all duration-150
+              ${isProcessing ? 'opacity-50 cursor-not-allowed' : `${theme.hover} cursor-pointer`}
             `}
             title={`Type ${label}`}
             aria-label={`Type ${label} manually`}
           >
-            <Keyboard className={`w-4 h-4 ${theme.icon} mb-1`} strokeWidth={2} />
-            <div className={`text-[10px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
-              Type
+            <Keyboard className={`w-3 h-3 ${theme.icon} mb-0.5`} strokeWidth={2} />
+            <div className={`text-[7px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
+              T
             </div>
-          </Button>
+          </button>
+
+          {/* Image/Vision Button (optional) */}
+          {hasImageOption && (
+            <button
+              onClick={handleImage}
+              disabled={isProcessing}
+              className={`
+                flex flex-col items-center justify-center
+                rounded-r-lg rounded-l-none
+                bg-transparent transition-all duration-150
+                ${isProcessing ? 'opacity-50 cursor-not-allowed' : `${theme.hover} cursor-pointer`}
+              `}
+              title={`Scan ${label} from image`}
+              aria-label={`Scan ${label} from photo`}
+            >
+              <Camera className={`w-3 h-3 ${theme.icon} mb-0.5`} strokeWidth={2} />
+              <div className={`text-[7px] font-medium ${theme.icon.replace('text-', 'text-').replace('-600', '-700')} leading-none`}>
+                V
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -66,20 +66,20 @@ function formatCountdown(ms: number): string {
  * Gradients are in format: "from-red-500 to-red-600" -> extract red-500
  */
 function extractPrimaryColorFromGradient(gradient: string): string {
-  // Map Tailwind gradient classes to hex colors
+  // Map Tailwind gradient classes to more muted hex colors for clinical clarity
   const colorMap: Record<string, string> = {
-    'from-red-500': '#ef4444',
-    'from-blue-500': '#3b82f6',
-    'from-purple-500': '#a855f7',
-    'from-emerald-500': '#10b981',
-    'from-indigo-500': '#6366f1',
-    'from-rose-500': '#f43f5e',
-    'from-teal-500': '#14b8a6'
+    'from-red-500': '#64748b',     // slate-500 for recording
+    'from-blue-500': '#64748b',    // slate-500 for transcribing
+    'from-purple-500': '#64748b',  // slate-500 for AI analysis
+    'from-emerald-500': '#059669', // emerald-600 for generation
+    'from-indigo-500': '#64748b',  // slate-500 default
+    'from-rose-500': '#64748b',    // slate-500
+    'from-teal-500': '#0d9488'     // teal-600 for completed
   };
 
   // Extract the "from-*" class
   const fromClass = gradient.split(' ').find(c => c.startsWith('from-'));
-  return fromClass && colorMap[fromClass] ? colorMap[fromClass] : '#6366f1'; // Default indigo
+  return fromClass && colorMap[fromClass] ? colorMap[fromClass] : '#64748b'; // Default slate
 }
 
 export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
