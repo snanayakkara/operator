@@ -7,7 +7,6 @@
 
 import React, { forwardRef, ButtonHTMLAttributes } from 'react';
 import { Loader2, Check } from 'lucide-react';
-import { tokens } from '@/utils/design-tokens';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';

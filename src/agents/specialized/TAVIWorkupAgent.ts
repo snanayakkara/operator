@@ -138,14 +138,7 @@ export class TAVIWorkupAgent extends MedicalAgent {
         } as TAVIWorkupReport;
       }
 
-      // Merge user input if provided
-      let finalData = correctedData;
-      if (context?.userProvidedFields) {
-        console.log('🚨 TAVI AGENT: Merging user-provided fields...');
-        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
-      }
-
-      console.log('✅ TAVI AGENT: Validation complete, proceeding to reasoning model');
+    console.log('✅ TAVI AGENT: Validation complete, proceeding to reasoning model');
 
       // Phase 2: LLM Processing
       reportProgress('Processing dictation with AI', 0, 'Preparing comprehensive TAVI analysis');

@@ -101,7 +101,7 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
   const [acceptedCorrections, setAcceptedCorrections] = useState<Set<string>>(new Set());
   const hasAnySuggestions = useMemo(() => {
     const missingWithSuggestions = [...validation.missingCritical, ...validation.missingOptional]
-      .some(m => m.suggestedValue !== undefined || /suggest(ed|ion)\s*[:\-]\s*([^\s]+)/i.test(m.reason));
+      .some(m => m.suggestedValue !== undefined || /suggest(ed|ion)\s*[:-]\s*([^\s]+)/i.test(m.reason));
     const unacceptedCorrections = validation.corrections.some(c => !acceptedCorrections.has(c.field));
     return missingWithSuggestions || unacceptedCorrections;
   }, [validation.missingCritical, validation.missingOptional, validation.corrections, acceptedCorrections]);
@@ -136,7 +136,7 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
   // Parse a suggested value out of reason text if validator didn't provide structured value
   const parseSuggestedFromReason = (reason: string): unknown => {
     // Try to find a number (int or float) after words like "suggested" or in parentheses
-    const m1 = reason.match(/suggest(?:ed|ion)?\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+    const m1 = reason.match(/suggest(?:ed|ion)?\s*[:-]?\s*(\d+(?:\.\d+)?)/i);
     if (m1) return Number(m1[1]);
     const m2 = reason.match(/\((\d+(?:\.\d+)?)\)/);
     if (m2) return Number(m2[1]);

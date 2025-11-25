@@ -7,7 +7,6 @@
 
 import React from 'react';
 import { AlertCircle, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
-import { tokens } from '@/utils/design-tokens';
 
 export type ValidationMessageType = 'error' | 'warning' | 'success' | 'info';
 

@@ -199,11 +199,6 @@ const mapMobileJobToAgent = (job: MobileJobSummary): AgentType => {
   return 'quick-letter';
 };
 
-// Legacy function for backward compatibility (when only dictation_type is available)
-const mapDictationTypeToAgent = (dictationType: string): AgentType => {
-  return MOBILE_DICTATION_AGENT_MAP[dictationType] || 'quick-letter';
-};
-
 const OptimizedApp: React.FC = memo(() => {
   return (
     <ErrorBoundary>
@@ -1303,25 +1298,6 @@ const OptimizedAppContent: React.FC = memo(() => {
       await markSessionChecked(sessionId);
     }
   }, [checkedSessions, markSessionChecked, unmarkSessionChecked]);
-
-  // Delete session from persistence
-  const handleDeleteSession = useCallback(async (sessionId: string) => {
-    try {
-      await persistenceService.deleteSession(sessionId);
-      actions.removePatientSession(sessionId);
-      actions.removePersistedSessionId(sessionId);
-      setCheckedSessions(prev => {
-        const next = new Set(prev);
-        next.delete(sessionId);
-        return next;
-      });
-      await updateStorageStats();
-      console.log('🗑️ Session deleted from persistence:', sessionId);
-    } catch (error) {
-      console.error('❌ Failed to delete session:', error);
-      ToastService.getInstance().error('Failed to delete session');
-    }
-  }, [persistenceService, actions, updateStorageStats]);
 
   // Bulk delete operations for storage management
   const handleDeleteAllChecked = useCallback(async () => {
@@ -6177,16 +6153,15 @@ const OptimizedAppContent: React.FC = memo(() => {
               </span>
             </div>
 
-            {/* Agent Selection with Categories */}
-            <fieldset>
-              <legend className="text-xs font-semibold text-gray-700 mb-2">Choose agent workflow</legend>
-              <div role="radiogroup" aria-label="Agent workflow selection" className="space-y-3">
-                {MOBILE_AGENT_OPTIONS_GROUPED.map((group, groupIndex) => {
-                  const allAgents = MOBILE_AGENT_OPTIONS_GROUPED.flatMap(g => g.agents);
-                  let agentIndex = 0;
-                  for (let i = 0; i < groupIndex; i++) {
-                    agentIndex += MOBILE_AGENT_OPTIONS_GROUPED[i].agents.length;
-                  }
+                {/* Agent Selection with Categories */}
+                <fieldset>
+                  <legend className="text-xs font-semibold text-gray-700 mb-2">Choose agent workflow</legend>
+                  <div role="radiogroup" aria-label="Agent workflow selection" className="space-y-3">
+                    {MOBILE_AGENT_OPTIONS_GROUPED.map((group, groupIndex) => {
+                      let agentIndex = 0;
+                      for (let i = 0; i < groupIndex; i++) {
+                        agentIndex += MOBILE_AGENT_OPTIONS_GROUPED[i].agents.length;
+                      }
 
                   return (
                     <div key={group.category} className="space-y-1.5">
@@ -6450,7 +6425,9 @@ const OptimizedAppContent: React.FC = memo(() => {
                       actions.updatePatientSession(sessionId, {
                         pipelineProgress: { stage: 'ai-analysis', progress, stageProgress: progress, details }
                       });
-                    } catch (_) {}
+                    } catch (err) {
+                      console.warn('Failed to update patient session progress', err);
+                    }
                   }
                 } as any);
 

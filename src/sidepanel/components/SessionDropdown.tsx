@@ -55,28 +55,6 @@ interface SessionDropdownProps {
 // Performance constants
 const INITIAL_VISIBLE_SESSIONS = 3; // Show only first 3 sessions in each category initially
 
-// Date grouping helpers
-type DateGroup = 'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 30 Days' | 'Older';
-
-const getDateGroup = (timestamp: number): DateGroup => {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  if (diff < dayMs) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (timestamp >= today.getTime()) {
-      return 'Today';
-    }
-    return 'Yesterday';
-  }
-  if (diff < 2 * dayMs) return 'Yesterday';
-  if (diff < 7 * dayMs) return 'This Week';
-  if (diff < 30 * dayMs) return 'Last 30 Days';
-  return 'Older';
-};
-
 const formatRecordedDate = (timestamp: number): string => {
   const date = new Date(timestamp);
   const today = new Date();

@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import { tokens } from '@/utils/design-tokens';
 
 interface SkeletonProps {
   /**

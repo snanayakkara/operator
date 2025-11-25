@@ -129,8 +129,10 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
         break;
       default:
         // Handle custom actions
-        const customAction = customActions.find(a => a.id === id);
-        customAction?.onClick();
+        {
+          const customAction = customActions.find(a => a.id === id);
+          customAction?.onClick();
+        }
     }
   };
 

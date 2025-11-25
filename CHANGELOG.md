@@ -7,7 +7,9 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 ## [Unreleased]
 
-- (Add upcoming changes here)
+- Rename Phase 4 branding to Advanced Intelligence across UI, docs, and agent plumbing; stats helpers updated to `getIntelligencePerformanceStats`.
+- DSPy now auto-enables when the local optimizer is healthy (overridable via `USE_DSPY`); defaults and messaging adjusted for “DSPy by default” vision with LM Studio fallback.
+- Lint cleanup: removed unused vars/imports, tightened regex escapes, added DOM globals, and ignored the Python ingest venv for ESLint noise.
 
 ## [3.37.0] - 2025-11-25
 

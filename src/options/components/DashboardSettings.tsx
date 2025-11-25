@@ -18,7 +18,7 @@ export const DashboardSettings: React.FC = () => {
     latency: 0,
     whisperServer: { running: false, model: 'whisper-large-v3-turbo', port: 8001, lastChecked: 0 },
   } as any);
-  const [phase4Stats, setPhase4Stats] = useState<any>(null);
+  const [intelligenceStats, setIntelligenceStats] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = async () => {
@@ -41,13 +41,13 @@ export const DashboardSettings: React.FC = () => {
         } as any);
       }
 
-      // Get Phase 4 stats
+      // Get advanced intelligence stats
       try {
-        const stats = AgentFactory.getPhase4PerformanceStats();
-        setPhase4Stats(stats);
+        const stats = AgentFactory.getIntelligencePerformanceStats();
+        setIntelligenceStats(stats);
       } catch (error) {
-        logger.warn('Failed to get Phase 4 stats', { error: error instanceof Error ? error.message : String(error) });
-        setPhase4Stats(null);
+        logger.warn('Failed to get intelligence stats', { error: error instanceof Error ? error.message : String(error) });
+        setIntelligenceStats(null);
       }
     } catch (error) {
       logger.error('Dashboard refresh failed', { error: error instanceof Error ? error.message : String(error) });
@@ -94,21 +94,21 @@ export const DashboardSettings: React.FC = () => {
               <Sparkles className="w-5 h-5 text-purple-600" />
               <span className="font-medium text-ink-primary">Intelligent Features</span>
             </div>
-            <span className="text-xs text-ink-secondary">{phase4Stats ? 'Active' : 'Loading'}</span>
+            <span className="text-xs text-ink-secondary">{intelligenceStats ? 'Active' : 'Loading'}</span>
           </div>
-          {phase4Stats ? (
+          {intelligenceStats ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-ink-secondary">Agent Cache</span>
-                <span className="text-ink-primary font-mono">{Math.round((phase4Stats.agentLoader?.cacheHitRate || 0) * 100)}%</span>
+                <span className="text-ink-primary font-mono">{Math.round((intelligenceStats.agentLoader?.cacheHitRate || 0) * 100)}%</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-ink-secondary">Avg Load</span>
-                <span className="text-ink-primary font-mono">{Math.round(phase4Stats.agentLoader?.averageLoadTime || 0)}ms</span>
+                <span className="text-ink-primary font-mono">{Math.round(intelligenceStats.agentLoader?.averageLoadTime || 0)}ms</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-ink-secondary">Cross-Agent</span>
-                <span className="text-ink-primary">{phase4Stats.crossAgentIntelligence?.globalInsights || 'Learning'}</span>
+                <span className="text-ink-primary">{intelligenceStats.crossAgentIntelligence?.globalInsights || 'Learning'}</span>
               </div>
             </div>
           ) : (
@@ -125,11 +125,11 @@ export const DashboardSettings: React.FC = () => {
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-ink-secondary">Patient Profiles</span>
-              <span className="text-ink-primary font-mono">{phase4Stats?.crossAgentIntelligence?.activeProfiles ?? '—'}</span>
+              <span className="text-ink-primary font-mono">{intelligenceStats?.crossAgentIntelligence?.activeProfiles ?? '—'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-ink-secondary">Global Insights</span>
-              <span className="text-ink-primary">{phase4Stats?.crossAgentIntelligence?.globalInsights ?? 'Learning'}</span>
+              <span className="text-ink-primary">{intelligenceStats?.crossAgentIntelligence?.globalInsights ?? 'Learning'}</span>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 /**
- * Phase 4: Cross-Agent Intelligence System
- * 
- * Enables Phase 3 agents to share insights, medical context, and learning
+ * Advanced Intelligence: Cross-Agent Intelligence System
+ *
+ * Enables agents to share insights, medical context, and learning
  * for enhanced clinical accuracy and comprehensive patient assessment.
  */
 

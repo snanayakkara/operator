@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, RefreshCw, Clipboard, Edit3, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { Upload, RefreshCw, Clipboard, Edit3, X, AlertTriangle } from 'lucide-react';
 import Button, { IconButton } from './buttons/Button';
 import { parseTTETrends } from '@/utils/tte/TTETrendParser';
 import { buildTTEInsightsSummary } from '@/utils/tte/TTETrendInsights';

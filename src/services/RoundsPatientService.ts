@@ -184,7 +184,6 @@ export const applyWardUpdateDiff = (
 
     if (update.newLabValues?.length) {
       target.labSeries = [...(target.labSeries || []), ...update.newLabValues];
-      target.summary = target.summary;
     }
     if (update.newSummaryText) {
       target.summary = update.newSummaryText;

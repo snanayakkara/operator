@@ -48,7 +48,7 @@ export interface PerformanceBenchmark {
 }
 
 export interface ConsolidationProgress {
-  phase: 'Phase 1' | 'Phase 2' | 'Phase 3' | 'Phase 4';
+  phase: 'Phase 1' | 'Phase 2' | 'Phase 3' | 'Advanced Intelligence';
   tasksCompleted: number;
   tasksTotal: number;
   completionPercentage: number;

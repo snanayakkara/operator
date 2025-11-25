@@ -59,7 +59,7 @@ interface ExportOptions {
  */
 export async function copyPreOpCardToClipboard(
   cardData: PreOpCardData,
-  options: ExportOptions = {}
+  _options: ExportOptions = {}
 ): Promise<void> {
   logger.info('PreOpCardExport: Starting clipboard copy', {
     procedureType: cardData.procedureType,
@@ -367,7 +367,7 @@ export function validatePreOpDataForExport(cardData: PreOpCardData): {
  */
 export async function previewPreOpCard(
   cardData: PreOpCardData,
-  options: ExportOptions = {}
+  _options: ExportOptions = {}
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     try {

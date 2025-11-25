@@ -219,7 +219,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Intelligent Features State
-  const [phase4Stats, setPhase4Stats] = useState<any>(null);
+  const [intelligenceStats, setIntelligenceStats] = useState<any>(null);
   
   // Session notification state
   const [showSessionDropdown, setShowSessionDropdown] = useState(false);
@@ -257,21 +257,21 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
 
   // Click-outside handling is managed by DropdownPortal component
 
-  // Load Phase 4 statistics
+  // Load intelligence statistics
   useEffect(() => {
-    const loadPhase4Stats = () => {
+    const loadIntelligenceStats = () => {
       try {
-        const stats = AgentFactory.getPhase4PerformanceStats();
-        setPhase4Stats(stats);
+        const stats = AgentFactory.getIntelligencePerformanceStats();
+        setIntelligenceStats(stats);
       } catch (error) {
-        console.warn('Phase 4 stats not available:', error);
-        setPhase4Stats(null);
+        console.warn('Advanced intelligence stats not available:', error);
+        setIntelligenceStats(null);
       }
     };
 
     // Load stats initially and every 30 seconds
-    loadPhase4Stats();
-    const interval = setInterval(loadPhase4Stats, 30000);
+    loadIntelligenceStats();
+    const interval = setInterval(loadIntelligenceStats, 30000);
     
     return () => clearInterval(interval);
   }, []);
@@ -636,33 +636,33 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   <span className="text-ink-primary text-sm font-medium">Intelligent Features</span>
                 </div>
                 <div className="text-xs text-ink-secondary">
-                  {phase4Stats ? 'Active' : 'Loading...'}
+                  {intelligenceStats ? 'Active' : 'Loading...'}
                 </div>
               </div>
-              {phase4Stats ? (
+              {intelligenceStats ? (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <span className="text-ink-secondary">Agent Cache:</span>
                     <span className="text-ink-primary ml-1">
-                      {Math.round((phase4Stats.agentLoader?.cacheHitRate || 0) * 100)}%
+                      {Math.round((intelligenceStats.agentLoader?.cacheHitRate || 0) * 100)}%
                     </span>
                   </div>
                   <div>
                     <span className="text-ink-secondary">Avg Load:</span>
                     <span className="text-ink-primary ml-1">
-                      {(phase4Stats.agentLoader?.averageLoadTime || 0) > 0 ? `${Math.round(phase4Stats.agentLoader.averageLoadTime)}ms` : '—'}
+                      {(intelligenceStats.agentLoader?.averageLoadTime || 0) > 0 ? `${Math.round(intelligenceStats.agentLoader.averageLoadTime)}ms` : '—'}
                     </span>
                   </div>
                   <div>
                     <span className="text-ink-secondary">Cross-Agent:</span>
                     <span className="text-ink-primary ml-1">
-                      {phase4Stats.crossAgentIntelligence?.globalInsights || 'Learning'}
+                      {intelligenceStats.crossAgentIntelligence?.globalInsights || 'Learning'}
                     </span>
                   </div>
                   <div>
                     <span className="text-ink-secondary">Profiles:</span>
                     <span className="text-ink-primary ml-1">
-                      {phase4Stats.crossAgentIntelligence?.activeProfiles || '—'}
+                      {intelligenceStats.crossAgentIntelligence?.activeProfiles || '—'}
                     </span>
                   </div>
                 </div>

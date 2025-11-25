@@ -1,6 +1,6 @@
 /**
- * Phase 4: Lazy Agent Loading System
- * 
+ * Advanced Intelligence: Lazy Agent Loading System
+ *
  * Optimizes bundle size and startup performance by loading agents on-demand.
  * Implements intelligent caching and preloading for frequently used agents.
  */

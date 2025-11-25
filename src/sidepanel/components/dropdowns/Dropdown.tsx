@@ -396,7 +396,6 @@ interface DropdownCheckboxItemProps {
 }
 
 export const DropdownCheckboxItem: React.FC<DropdownCheckboxItemProps> = ({
-  value,
   children,
   checked,
   onCheckedChange,

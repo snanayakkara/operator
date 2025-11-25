@@ -7,7 +7,6 @@
 
 import React, { useState } from 'react';
 import { AlertCircle, RefreshCw, Copy, ChevronDown, ChevronUp } from 'lucide-react';
-import { tokens } from '@/utils/design-tokens';
 import type { ErrorFallbackProps } from './ErrorBoundary';
 import Button from '../buttons/Button';
 

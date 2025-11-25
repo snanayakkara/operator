@@ -1,7 +1,7 @@
 /**
- * Phase 4: Smart Recommendation Engine
- * 
- * Leverages Phase 3 intelligence and cross-agent insights to provide
+ * Advanced Intelligence: Smart Recommendation Engine
+ *
+ * Leverages prior-stage intelligence and cross-agent insights to provide
  * intelligent agent selection and workflow optimization recommendations.
  */
 

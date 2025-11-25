@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { User, Clock, FileText, X, Phone, CreditCard } from 'lucide-react';
 import type { PatientSession } from '@/types/medical.types';
-import { Button, IconButton } from './buttons';
+import { IconButton } from './buttons';
 import { StatusBadge } from './status';
 import type { ProcessingState } from '@/utils/stateColors';
 

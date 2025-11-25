@@ -576,3 +576,4 @@ export const CanvasCameraModal: React.FC<CanvasCameraModalProps> = ({
     </AnimatePresence>
   );
 };
+/* global HTMLVideoElement, MediaDeviceInfo, HTMLSelectElement */

@@ -127,14 +127,6 @@ export class AngiogramPCIAgent extends MedicalAgent {
         };
       }
 
-      // Merge user input if provided
-      let finalData = correctedData;
-      if (context?.userProvidedFields) {
-        reportProgress(50, 'Merging validated data');
-        console.log('🚨 ANGIO/PCI AGENT: Merging user-provided fields...');
-        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
-      }
-
       console.log('✅ ANGIO/PCI AGENT: Validation complete, proceeding to reasoning model');
 
       // Extract relevant data based on procedure type

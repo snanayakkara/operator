@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   HudPatientState,
-  IntakeParserResult,
   RoundsPatient,
   WardUpdateDiff
 } from '@/types/rounds.types';
@@ -39,6 +38,7 @@ interface RoundsContextValue {
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useRounds = (): RoundsContextValue => {
   const ctx = useContext(RoundsContext);
   if (!ctx) {

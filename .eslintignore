@@ -2,3 +2,5 @@ dist/
 node_modules/
 venv-whisper/
 *.py
+mac_daemon/.venv-ingest/
+mac_daemon/.venv-ingest/**

@@ -7,7 +7,6 @@
 
 import React, { useState } from 'react';
 import { Bot, Users, Shield } from 'lucide-react';
-import { SmallTrophySpin } from './TrophySpinLoader';
 import Button from './buttons/Button';
 
 interface AIReviewAction {

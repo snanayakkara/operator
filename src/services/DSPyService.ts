@@ -3,8 +3,8 @@
  * 
  * Provides TypeScript interface to Python DSPy + GEPA optimization layer.
  * Features:
- * - Feature-flagged integration via USE_DSPY environment variable
- * - Seamless fallback to existing LMStudioService when disabled
+ * - Auto-enables when the local DSPy server is healthy (overridable via USE_DSPY)
+ * - Seamless fallback to existing LMStudioService when disabled or unavailable
  * - Localhost-only processing for privacy
  * - Configuration management via YAML
  */
@@ -89,17 +89,17 @@ export class DSPyService {
       api_base: 'http://localhost:1234/v1',
       api_key: 'local',
       model_name: 'local-model',
-      use_dspy: false, // Default to disabled - DSPy requires external setup
+      use_dspy: false, // Auto-enabled when server is healthy or explicitly requested
       cache_dir: '.cache/dspy',
       agents: {
         'angiogram-pci': {
-          enabled: false, // Disabled until external DSPy server is available
+          enabled: false, // Enabled automatically when DSPy is available
           max_tokens: 8000,
           temperature: 0.3,
           timeout_ms: 480000
         },
         'quick-letter': {
-          enabled: false, // Disabled until external DSPy server is available
+          enabled: false, // Enabled automatically when DSPy is available
           max_tokens: 4000,
           temperature: 0.2,
           timeout_ms: 180000
@@ -107,10 +107,12 @@ export class DSPyService {
       }
     };
 
+    let storedDSPyFlag: string | null = null;
+
     // Check for environment variable overrides via localStorage
     if (typeof window !== 'undefined') {
       try {
-        const storedDSPyFlag = localStorage.getItem('USE_DSPY');
+        storedDSPyFlag = localStorage.getItem('USE_DSPY');
         if (storedDSPyFlag === 'true') {
           config.use_dspy = true;
           // Enable agents when DSPy is explicitly enabled
@@ -123,6 +125,23 @@ export class DSPyService {
         logger.warn('Failed to check localStorage for DSPy flag', { 
           component: 'DSPyService',
           error: err.message
+        });
+      }
+    }
+
+    // Auto-enable when server is healthy and not explicitly disabled
+    if (!config.use_dspy && storedDSPyFlag !== 'false') {
+      const healthy = await this.checkServerHealth();
+      if (healthy) {
+        config.use_dspy = true;
+        Object.keys(config.agents).forEach(agentType => {
+          config.agents[agentType].enabled = true;
+        });
+
+        logger.info('DSPy auto-enabled (server healthy)', {
+          component: 'DSPyService',
+          mode: 'auto',
+          api_base: config.api_base
         });
       }
     }
@@ -150,7 +169,11 @@ export class DSPyService {
 
     if (agentType) {
       const agentConfig = config.agents[agentType];
-      return agentConfig?.enabled || false;
+      if (agentConfig) {
+        return agentConfig.enabled;
+      }
+      // Default to enabled for agents without explicit config when DSPy is on
+      return true;
     }
 
     return true;
@@ -356,9 +379,13 @@ export class DSPyService {
       let buffer = '';
       let finalResult = '';
 
-      while (true) {
+      let streamDone = false;
+      while (!streamDone) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          streamDone = true;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');

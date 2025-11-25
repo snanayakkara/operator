@@ -147,14 +147,6 @@ export class MTEERAgent extends MedicalAgent {
         };
       }
 
-      // Merge user-provided fields from validation modal
-      let finalData = correctedData;
-      if (context?.userProvidedFields) {
-        reportProgress(50, 'Merging validated data');
-        console.log('🚨 MTEER AGENT: Merging user-provided fields...');
-        finalData = this.mergeUserInput(correctedData, context.userProvidedFields);
-      }
-
       console.log('✅ MTEER AGENT: Validation complete, proceeding to reasoning model');
 
       // Extract mTEER data from input

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckSquare, Clipboard, Link2, Mic, Plus, Star, Undo2 } from 'lucide-react';
+import { Plus, Star } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { RoundsPatient } from '@/types/rounds.types';
@@ -11,7 +11,7 @@ interface PatientDetailProps {
 }
 
 export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
-  const { updatePatient, markDischarged, undoLastWardUpdate, deletePatient } = useRounds();
+  const { updatePatient } = useRounds();
   const [mrn, setMrn] = useState(patient.mrn);
   const [bed, setBed] = useState(patient.bed);
   const [oneLiner, setOneLiner] = useState(patient.oneLiner);
@@ -25,10 +25,6 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [newImagingName, setNewImagingName] = useState('');
   const [newImagingSummary, setNewImagingSummary] = useState('');
   const [wardUpdateOpen, setWardUpdateOpen] = useState(false);
-  const [letterOpen, setLetterOpen] = useState(false);
-  const [letterText, setLetterText] = useState('');
-  const [letterLoading, setLetterLoading] = useState(false);
-  const [letterError, setLetterError] = useState<string | null>(null);
   const [newIntakeNote, setNewIntakeNote] = useState('');
   const wardOptions = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
   const [expanded, setExpanded] = useState(false);
@@ -199,36 +195,6 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
 
   const openTasks = patient.tasks.filter(t => t.status === 'open');
   const doneTasks = patient.tasks.filter(t => t.status === 'done');
-
-  const handleGoToPatient = async () => {
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'NAVIGATE_TO_PATIENT',
-        fileNumber: patient.mrn || patient.name,
-        patientName: patient.name
-      });
-    } catch (error) {
-      console.error('Failed to trigger Go To Patient', error);
-    }
-  };
-
-  const generateGpLetter = () => {
-    setLetterLoading(true);
-    setLetterError(null);
-    const run = async () => {
-      try {
-        const { RoundsLLMService } = await import('@/services/RoundsLLMService');
-        const text = await RoundsLLMService.getInstance().generateGpLetter(patient);
-        setLetterText(text);
-        setLetterOpen(true);
-      } catch (error) {
-        setLetterError(error instanceof Error ? error.message : 'Failed to generate letter');
-      } finally {
-        setLetterLoading(false);
-      }
-    };
-    run();
-  };
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
@@ -468,30 +434,6 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
           </>
         )}
       </div>
-
-      {letterOpen && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-xl w-full max-w-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-900">GP discharge letter</h3>
-              <Button variant="ghost" size="sm" onClick={() => setLetterOpen(false)}>Close</Button>
-            </div>
-            {letterError && <div className="text-sm text-rose-600">{letterError}</div>}
-            <textarea className="w-full h-64 rounded-lg border px-3 py-2 text-sm" value={letterText} readOnly />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(letterText);
-                }}
-              >
-                Copy
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <WardUpdateModal
         open={wardUpdateOpen}

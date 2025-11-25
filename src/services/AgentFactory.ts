@@ -1,7 +1,7 @@
 /**
- * Agent Factory Service - Phase 4 Enhanced
- * 
- * Optimized factory with Phase 4 enhancements:
+ * Agent Factory Service - Advanced Intelligence layer
+ *
+ * Optimized factory with intelligence enhancements:
  * - LazyAgentLoader for dynamic loading and caching
  * - CrossAgentIntelligence for shared insights
  * - Smart recommendations and context enhancement
@@ -100,7 +100,7 @@ export class AgentFactory {
   };
 
   /**
-   * Process input with Phase 4 enhanced agent loading and intelligence
+   * Process input with advanced intelligence agent loading and context enrichment
    */
   public static async processWithAgent(
     workflowId: AgentType,
@@ -111,17 +111,17 @@ export class AgentFactory {
       patientName?: string;
       skipNotification?: boolean;
       sessionId?: string;
-      usePhase4Enhancement?: boolean;
+      useAdvancedIntelligence?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
   ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; taviStructuredSections?: any; educationData?: any; preOpPlanData?: PreOpPlanReport['planData']; status?: string; validationResult?: ValidationResult; extractedData?: any; structuredSections?: any }> {
     const startTime = Date.now();
     
     try {
-      // Phase 4 Enhancement: Enable by default for agents that benefit from cross-agent intelligence
-      const usePhase4 = options?.usePhase4Enhancement ?? this.shouldUsePhase4Enhancement(workflowId, context);
-      if (usePhase4) {
-        return await this.processWithPhase4Enhancement(workflowId, input, context, options);
+      // Advanced intelligence: Enable by default for agents that benefit from cross-agent intelligence
+      const useAdvancedPath = options?.useAdvancedIntelligence ?? this.shouldUseAdvancedIntelligence(workflowId, context);
+      if (useAdvancedPath) {
+        return await this.processWithAdvancedIntelligence(workflowId, input, context, options);
       }
 
       // Enhance context with user phrasebook terminology preferences
@@ -245,11 +245,11 @@ export class AgentFactory {
   }
 
   /**
-   * Determine if Phase 4 Enhancement should be used for this agent
+   * Determine if advanced intelligence should be used for this agent
    */
-  private static shouldUsePhase4Enhancement(workflowId: AgentType, _context?: any): boolean {
-    // Enable Phase 4 for agents that benefit from cross-agent intelligence
-    const phase4Agents: AgentType[] = [
+  private static shouldUseAdvancedIntelligence(workflowId: AgentType, _context?: any): boolean {
+    // Enable the enhanced path for agents that benefit from cross-agent intelligence
+    const advancedIntelligenceAgents: AgentType[] = [
       'investigation-summary',
       'background',
       'medication',
@@ -259,13 +259,13 @@ export class AgentFactory {
       'ai-medical-review'
     ];
 
-    return phase4Agents.includes(workflowId);
+    return advancedIntelligenceAgents.includes(workflowId);
   }
 
   /**
-   * Phase 4 Enhanced processing with cross-agent intelligence and optimization
+   * Advanced intelligence processing with cross-agent intelligence and optimization
    */
-  private static async processWithPhase4Enhancement(
+  private static async processWithAdvancedIntelligence(
     workflowId: AgentType,
     input: string,
     context?: any,
@@ -275,11 +275,11 @@ export class AgentFactory {
       skipNotification?: boolean;
       onProgress?: (phase: string, progress: number, details?: string) => void;
     }
-  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; phase4Metadata?: Record<string, unknown>; status?: string; validationResult?: ValidationResult; extractedData?: any; structuredSections?: any }> {
+  ): Promise<{ content: string; summary?: string; warnings?: string[]; errors?: string[]; processingTime: number; agentName: string; modelUsed?: string; reviewData?: any; missingInfo?: any; intelligenceMetadata?: Record<string, unknown>; status?: string; validationResult?: ValidationResult; extractedData?: any; structuredSections?: any }> {
     const startTime = Date.now();
-    logger.info('Phase 4 Enhanced processing initiated', {
+    logger.info('Advanced intelligence processing initiated', {
       component: 'agent-factory',
-      operation: 'phase4-start'
+      operation: 'advanced-intelligence-start'
     });
 
     try {
@@ -358,9 +358,9 @@ export class AgentFactory {
       const totalTime = Date.now() - startTime;
       
       // Step 5: Enhanced performance logging
-      logger.info(`Phase 4 Enhanced processing completed in ${totalTime}ms`, {
+      logger.info(`Advanced intelligence processing completed in ${totalTime}ms`, {
         component: 'agent-factory',
-        operation: 'phase4-complete',
+        operation: 'advanced-intelligence-complete',
         totalTime,
         loadTime,
         fromCache,
@@ -388,20 +388,20 @@ export class AgentFactory {
         modelUsed: report.metadata?.modelUsed, // Include model used for display
         reviewData: (report as any).reviewData,
         missingInfo: report.metadata?.missingInformation,
-        phase4Metadata: {
+        intelligenceMetadata: {
           enhancedProcessing: true,
           agentLoadTime: loadTime,
           fromCache,
           crossAgentInsights: options?.sessionId ? true : false,
-          totalPhase4Time: totalTime
+          totalProcessingTime: totalTime
         }
       };
 
     } catch (error) {
       const err = toError(error);
-      logger.error(`Phase 4 Enhanced processing failed for ${workflowId}`, err, {
+      logger.error(`Advanced intelligence processing failed for ${workflowId}`, err, {
         component: 'agent-factory',
-        operation: 'phase4-error',
+        operation: 'advanced-intelligence-error',
         workflow: workflowId
       });
       
@@ -412,7 +412,7 @@ export class AgentFactory {
       });
       return await this.processWithAgent(workflowId, input, context, undefined, {
         ...options,
-        usePhase4Enhancement: false
+        useAdvancedIntelligence: false
       });
     }
   }
@@ -699,9 +699,9 @@ export class AgentFactory {
   }
 
   /**
-   * Get performance statistics from Phase 4 systems
+   * Get performance statistics from advanced intelligence systems
    */
-  public static getPhase4PerformanceStats() {
+  public static getIntelligencePerformanceStats() {
     const intelligenceMetrics = this.crossAgentIntelligence.getMetrics();
     return {
       agentLoader: this.agentLoader.getPerformanceStats(),

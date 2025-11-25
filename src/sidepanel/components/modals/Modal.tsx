@@ -264,11 +264,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmVariant = 'primary',
   isLoading = false,
 }) => {
-  const confirmButtonClass =
-    confirmVariant === 'danger'
-      ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700'
-      : 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700';
-
   return (
     <Modal
       isOpen={isOpen}

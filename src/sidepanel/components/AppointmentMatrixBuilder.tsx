@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX, Plus, X, Activity, Building2, MapPin, FileText, ClipboardList } from 'lucide-react';
+import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX, Plus, X, Activity, Building2, ClipboardList } from 'lucide-react';
 import Button, { IconButton } from './buttons/Button';
 import type {
   AppointmentMatrix,
@@ -10,7 +10,7 @@ import type {
   FollowUpPeriod,
   FollowUpTask
 } from '../../config/appointmentPresets';
-import { generatePresetFromMatrix, getItemCodeFromMatrix, getTaskMessageFromMatrix, getNotesFromMatrix } from '../../config/appointmentPresets';
+import { generatePresetFromMatrix, getItemCodeFromMatrix, getTaskMessageFromMatrix } from '../../config/appointmentPresets';
 
 interface AppointmentMatrixBuilderProps {
   onGenerate: (preset: { itemCode: string; notes: string; displayName: string; taskMessage?: string }) => void;

@@ -677,11 +677,11 @@ use_dspy: false
 
 Recommended migration path:
 
-1. **Phase 1**: Enable DSPy for one agent (`quick-letter`)
-2. **Phase 2**: Run evaluations, verify quality
-3. **Phase 3**: Enable for complex agents (`angiogram-pci`)
-4. **Phase 4**: Add optimization workflows
-5. **Phase 5**: Enable human-in-the-loop feedback
+1. Pilot DSPy on one agent (`quick-letter`)
+2. Run evaluations, verify quality
+3. Expand to complex agents (`angiogram-pci`)
+4. Add optimization workflows
+5. Enable human-in-the-loop feedback
 
 ### Data Migration
 
@@ -793,14 +793,14 @@ New agents must meet evaluation criteria:
 - 🔄 Multi-patient optimization workflows with batch processing
 - 🔄 Extended evaluation datasets for all 11 medical agents
 
-### Phase 3 (Q2 2025 - Advanced Features)
+### Advanced Features (Q2 2025)
 - 📋 Multi-agent ensemble optimization for complex procedures
 - 📋 Custom medical rubric creation for specialized use cases  
 - 📋 Optimization history tracking with version control
 - 📋 A/B testing framework for prompt effectiveness
 - 📋 Advanced medical terminology expansion and refinement
 
-### Phase 4 (Future - Research & Development)
+### Research & Development (Future)
 - 📋 Federated learning with privacy-preserving medical optimization
 - 📋 Custom medical model fine-tuning on institution-specific data
 - 📋 Advanced prompt versioning with clinical validation workflows

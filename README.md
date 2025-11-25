@@ -12,7 +12,7 @@ A sophisticated **local-first medical AI dictation and EMR integration** Chrome 
 
 ## 🏥 Overview
 
-Operator transforms medical documentation through **Phase 4 Intelligence** featuring:
+Operator transforms medical documentation through **Advanced Intelligence** featuring:
 
 - **🔒 Privacy-First Local AI** - Complete data privacy with MLX Whisper + LM Studio (no cloud calls)
 - **🧠 14+ Specialized Medical Agents** - Interventional cardiology, diagnostics, documentation, and patient care
@@ -20,6 +20,7 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 - **💾 Session Persistence** - Local storage with category-based organization and intelligent expiry management
 - **🚀 Real-time Streaming** - Live token generation with progress tracking
 - **🎯 Few-shot Learning** - DSPy/GEPA optimized prompts with clinical exemplars
+- **🧩 DSPy by Default** - Auto-enables DSPy routing when the local optimizer is healthy, with seamless LM Studio fallback
 - **📝 Smart ASR Corrections** - User phrasebook with medical terminology auto-correction
 - **🏗️ Cross-agent Intelligence** - Shared patient context and clinical insights
 - **⚙️ EMR Integration** - Seamless Xestro, Epic, and Cerner field detection
@@ -67,7 +68,7 @@ Operator transforms medical documentation through **Phase 4 Intelligence** featu
 | **Patient Education** | Patient Care | Readable educational materials |
 | **Batch Patient Review** | Population Health | Multi-patient analysis and insights |
 
-### 🚀 Phase 4 Intelligence Features
+### 🚀 Advanced Intelligence Features
 
 #### Smart AI Processing
 - **LazyAgentLoader** - Dynamic agent chunks (7-38KB), 0ms cached loads
@@ -227,7 +228,7 @@ Audio Recording → Intelligent Queue → MLX Whisper → Agent Selection → Mo
                    Smart Retries       Medical ASR    LazyLoading    Streaming        JSON Validation
 ```
 
-### Phase 4 Intelligence Components
+### Advanced Intelligence Components
 
 ```typescript
 // Lazy Agent Loading
@@ -679,7 +680,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.37.0 | **Updated**: November 2025 | **Architecture**: Phase 4 Intelligence with Local-First Medical AI + Vision Intake
+**Version**: 3.37.0 | **Updated**: November 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Vision Intake
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

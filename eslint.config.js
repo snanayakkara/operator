@@ -5,6 +5,9 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
+  {
+    ignores: ['mac_daemon/.venv-ingest/**']
+  },
   js.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx,js}'],

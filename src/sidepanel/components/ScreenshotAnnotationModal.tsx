@@ -280,7 +280,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
         const shots = message.payload.screenshots as Array<{ index: number; dataUrl: string; width: number; height: number } | null>;
         setScreenshots((prev) => {
           const updated = [...prev];
-          shots.forEach((shot, index) => {
+          shots.forEach((shot) => {
             if (shot && typeof shot.index === 'number') {
               updated[shot.index] = {
                 id: `slot-${shot.index}-${Date.now()}`,

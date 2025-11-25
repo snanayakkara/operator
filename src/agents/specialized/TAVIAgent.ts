@@ -784,7 +784,7 @@ Note: This report was generated with limited AI processing due to technical issu
     try {
       // Strip conversational preamble if LLM ignores output format instructions
       // Common patterns: "Okay, here is...", "Sure, I'll...", "Here's the...", etc.
-      let cleanedResponse = response.replace(
+      const cleanedResponse = response.replace(
         /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|based on|certainly)[^{]*?(?=\{)/i,
         ''
       ).trim();

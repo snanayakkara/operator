@@ -1,5 +1,6 @@
 // Content script for Operator Chrome Extension
 // Handles EMR interaction and field manipulation
+/* global HTMLVideoElement, HTMLSelectElement */
 
 const CONTENT_SCRIPT_VERSION = '2.6.1-session-name-fix';
 console.log('🏥 Operator Chrome Extension Content Script Loading...', window.location.href);
@@ -197,7 +198,7 @@ class ContentScriptHandler {
       overlay.style.display = 'flex';
       overlay.style.alignItems = 'center';
       overlay.style.justifyContent = 'center';
-      overlay.style.fontFamily = '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif';
+      overlay.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
       const card = document.createElement('div');
       card.style.width = 'min(960px, 92vw)';

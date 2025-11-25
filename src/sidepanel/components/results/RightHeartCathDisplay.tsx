@@ -18,7 +18,7 @@ import {
   ChevronDownIcon as _ChevronDownIcon,
   ChevronUpIcon as _ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, User as UserIcon, Image, Loader2, Edit3, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, TrendingUp, Activity, Users as _Users, User as UserIcon, Image, Edit3, X } from 'lucide-react';
 import Button, { IconButton } from '../buttons/Button';
 import { TranscriptionSection } from './TranscriptionSection';
 import { CalculatedHaemodynamicsDisplay } from './CalculatedHaemodynamicsDisplay';
@@ -102,8 +102,8 @@ const SECTION_CONFIGS: SectionConfig[] = [
 export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   rhcReport,
   results,
-  onCopy,
-  onInsertToEMR,
+  onCopy: _onCopy,
+  onInsertToEMR: _onInsertToEMR,
   onUpdateRhcReport,
   className = '',
   originalTranscription,
@@ -130,7 +130,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const [buttonStates, setButtonStates] = useState({ exporting: false, exported: false });
   const [isEditingFields, setIsEditingFields] = useState(false);
   const [editedRHCReport, setEditedRHCReport] = useState<RightHeartCathReport | null>(null);
-  const [isInlineEditing, setIsInlineEditing] = useState(false);
+  const [isInlineEditing] = useState(false);
   const [inlineReportDraft, setInlineReportDraft] = useState<RightHeartCathReport | null>(null);
 
   // Validation hook
@@ -1369,7 +1369,7 @@ function renderSectionContent(
       }
       return renderCardiacOutputSection(cardiacOutput, rhcData.patientData);
 
-    case 'calculations':
+    case 'calculations': {
       // Use provided calculations when they have any numeric values; otherwise compute a lightweight fallback
       const hasAnyNumeric = (c?: any) => !!c && Object.values(c).some(v => typeof v === 'number');
 
@@ -1413,6 +1413,7 @@ function renderSectionContent(
         return <div className="text-gray-500 italic">No calculated haemodynamics available</div>;
       }
       return <CalculatedHaemodynamicsDisplay calculations={calcToShow} />;
+    }
 
     case 'exercise':
       if (!exerciseHaemodynamics) {
@@ -1466,35 +1467,4 @@ function renderSectionContent(
     default:
       return <div className="text-gray-500">Content not available</div>;
   }
-}
-
-// Helper functions for content formatting
-function formatForClipboard(rhcData: RightHeartCathReport | null, fallbackResults?: string): string {
-  if (rhcData && rhcData.content) {
-    // Extract the clean report content (already post-processed to remove markdown)
-    // Remove the JSON data marker if present
-    let content = rhcData.content;
-    const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
-    if (jsonMarkerIndex !== -1) {
-      content = content.substring(0, jsonMarkerIndex).trim();
-    }
-    return content;
-  }
-
-  // Fallback to results if no structured data
-  if (fallbackResults) {
-    let content = fallbackResults;
-    const jsonMarkerIndex = content.indexOf('<!-- RHC_STRUCTURED_DATA_JSON -->');
-    if (jsonMarkerIndex !== -1) {
-      content = content.substring(0, jsonMarkerIndex).trim();
-    }
-    return content;
-  }
-
-  return 'No report data available';
-}
-
-function formatForEMR(rhcData: RightHeartCathReport | null, fallbackResults?: string): string {
-  // Same formatting for EMR as clipboard (clean narrative text)
-  return formatForClipboard(rhcData, fallbackResults);
 }

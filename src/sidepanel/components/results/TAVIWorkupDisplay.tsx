@@ -20,7 +20,7 @@ import {
 } from '../icons/OptimizedIcons';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import AnimatedCopyIcon from '../AnimatedCopyIcon';
-import { Button, IconButton } from '../buttons';
+import { Button } from '../buttons';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { useValidationCheckpoint } from '@/hooks/useValidationCheckpoint';
 import type { ValidationResult } from '@/types/medical.types';

@@ -4,6 +4,7 @@
  * Thin segmented progress strip showing processing pipeline stages.
  * Stages light up as they complete. Click to scroll to relevant section.
  */
+/* eslint-disable react-refresh/only-export-components */
 
 import React, { memo } from 'react';
 

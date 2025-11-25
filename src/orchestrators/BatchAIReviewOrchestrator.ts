@@ -657,7 +657,7 @@ export class BatchAIReviewOrchestrator {
         { ...operationContext, operation: 'data-extraction' }
       );
 
-      // Phase 4: AI Review with caching (all patients processed, including those with incomplete data)
+      // Advanced path: AI Review with caching (all patients processed, including those with incomplete data)
       onPhaseChange?.('reviewing', 'ai-medical-review');
       
       if (extractedData.dataCompleteness && !extractedData.dataCompleteness.hasRealData) {

@@ -101,14 +101,12 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
   const [loading, setLoading] = useState(false);
   const [diff, setDiff] = useState<WardUpdateDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dictationStatus, setDictationStatus] = useState<string | null>(null);
   const { applyWardDiff } = useRounds();
   const llm = RoundsLLMService.getInstance();
   const recorder = useRecorder({
     onRecordingComplete: async (audioBlob) => {
-      setRecording(false);
       setTranscribing(true);
       setDictationStatus('Transcribing with Whisper…');
       try {
@@ -125,7 +123,6 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
       }
     },
     onError: (err: Error) => {
-      setRecording(false);
       setTranscribing(false);
       setDictationStatus(null);
       setError(err.message || 'Recording failed');
@@ -151,12 +148,10 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
   const handleRecordToggle = () => {
     if (recorder.isRecording) {
       recorder.stopRecording();
-      setRecording(false);
     } else {
       setError(null);
       setDiff(null);
       setDictationStatus('Recording…');
-      setRecording(true);
       recorder.startRecording();
     }
   };

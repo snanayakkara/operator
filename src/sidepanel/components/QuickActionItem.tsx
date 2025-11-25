@@ -14,7 +14,6 @@ import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { LucideIcon, Mic, Keyboard, Camera } from 'lucide-react';
 import { buttonVariants, withReducedMotion } from '@/utils/animations';
-import Button from './buttons/Button';
 import type { AgentType } from '@/types/medical.types';
 
 export interface QuickActionItemProps {

@@ -17,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import { ProcessingState, getStateColors } from '@/utils/stateColors';
-import { tokens } from '@/utils/design-tokens';
 
 export type BadgeSize = 'sm' | 'md' | 'lg';
 export type BadgeVariant = 'default' | 'dot' | 'outline';

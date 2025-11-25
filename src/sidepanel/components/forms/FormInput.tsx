@@ -5,9 +5,10 @@
  * Consolidates mono-input, pill-input, and glass-input patterns
  */
 
+/* global HTMLSelectElement */
+
 import React, { forwardRef, InputHTMLAttributes } from 'react';
 import { FieldValidationWrapper } from './ValidationMessage';
-import { tokens } from '@/utils/design-tokens';
 
 export type InputVariant = 'default' | 'filled' | 'outlined';
 export type InputSize = 'sm' | 'md' | 'lg';
@@ -141,13 +142,6 @@ const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
       ${effectiveState === 'error' ? 'text-rose-700' : 'text-gray-700'}
       ${disabled ? 'text-gray-400' : ''}
       ${labelClassName}
-    `.trim();
-
-    // Input wrapper classes (for icon positioning)
-    const inputWrapperClasses = `
-      relative flex items-center
-      ${startIcon ? 'pl-10' : ''}
-      ${endIcon ? 'pr-10' : ''}
     `.trim();
 
     // Input classes
