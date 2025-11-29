@@ -624,7 +624,7 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
-### v3.37.0 (November 2025) — Vision Intake & Mobile Triage
+### v3.38.0 (November 2025) — Rounds Checklist Release
 - **Image → Investigation Summary**: Drag-and-drop modal for investigation photos/screenshots (TTE/CTCA/ECG/etc.) with Qwen3-VL OCR, date/type metadata, and clinician-voice extraction prompts.
 - **Quick Actions overhaul**: Dictate / Type / Image paths for Investigation Summary, collapsible 5-column grid, full-panel Appointment Wrap-Up builder, new PipelineStrip/Tag/MicroMeter UI primitives, and simplified monochrome visualizer.
 - **Mobile + Shortcut ingestion**: macOS daemon now ingests Shortcut sidecars (workflow codes, geolocation, timestamps), runs triage pipelines, and surfaces jobs in a grouped modal with previews, confidence chips, keyboard shortcuts, and agent recommendations.
@@ -680,7 +680,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.37.0 | **Updated**: November 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Vision Intake
+**Version**: 3.38.0 | **Updated**: November 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Checklist & Vision Intake
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

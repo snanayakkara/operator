@@ -347,7 +347,7 @@ npm run optim:quick-letter
 
 ## 15) Recent Major Updates (highlights)
 
-**v3.37.0 (Nov 2025)**
+**v3.38.0 (Nov 2025)**
 - **Rounds UI/UX Overhaul**: Comprehensive redesign of Rounds feature layout and interactions
   - **Tab badges with counts**: `Patients (5)` | `Tasks (12)` for quick orientation
   - **Handover button badge**: Shows active patient count `Handover (5)`
