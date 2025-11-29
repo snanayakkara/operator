@@ -100,8 +100,10 @@ export class LMStudioService {
       transcriptionUrl: 'http://localhost:8001', // Separate MLX Whisper server
       timeout: 300000, // 5 minutes for local LLM medical report generation
       retryAttempts: 3,
-      apiPrefix: '/api/v1',
-      useV1Api: true,
+      // LM Studio legacy (0.3.x) defaults to /v1/chat/completions; newer builds expose /api/v1/chat/completions.
+      // Default to legacy-compatible path and let apiPrefix be supplied if /api/v1 is enabled in your server.
+      apiPrefix: undefined,
+      useV1Api: false,
       useStatefulChat: false,
       defaultContextLength: 8000,
       defaultIntegrations: [],
