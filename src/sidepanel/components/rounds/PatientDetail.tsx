@@ -984,7 +984,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   <textarea
                     className="w-full rounded-md border px-2 py-2 text-sm"
                     placeholder="Notes / summary (optional)"
-                    value={investigationEdits[inv.id]?.summary ?? inv.summary || ''}
+                    value={investigationEdits[inv.id]?.summary ?? (inv.summary || '')}
                     onChange={(e) => setInvestigationEdits(prev => ({
                       ...prev,
                       [inv.id]: { ...(prev[inv.id] || { name: inv.name, date: (inv.lastUpdatedAt || '').slice(0, 10) }), summary: e.target.value }
