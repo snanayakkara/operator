@@ -122,12 +122,13 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       const structuredFormat = await this.generateStructuredInvestigationFormat(normalizedInput, summaryResult, _context);
 
       // Step 4: Validate investigation format compliance
-      const formatValidation = this.validateInvestigationFormat(structuredFormat, summaryResult);
+      const formatValidation = this.validateInvestigationFormat(structuredFormat, summaryResult, _context);
 
       if (!formatValidation.isValid) {
         console.warn('Enhanced investigation format validation failed', {
           issues: formatValidation.issues,
-          confidence: formatValidation.confidence
+          confidence: formatValidation.confidence,
+          fromVision: _context?.fromVision || false
         });
         return null; // Trigger fallback
       }
@@ -454,15 +455,22 @@ export class InvestigationSummaryAgent extends MedicalAgent {
 
   /**
    * Validate investigation format compliance
+   * Uses lower confidence threshold (40%) for vision-extracted text vs (50%) for dictated text
    */
   private validateInvestigationFormat(
     structuredFormat: string,
-    summaryResult: any
+    summaryResult: any,
+    _context?: MedicalContext
   ): { isValid: boolean; confidence: number; issues: string[]; warnings: string[] } {
 
     const issues: string[] = [];
     const warnings: string[] = [];
     let confidence = summaryResult.qualityMetrics.overallQuality;
+
+    // Vision-extracted text is naturally more verbose/narrative than dictated text
+    // Lower threshold accounts for different quality scoring patterns
+    const isFromVision = _context?.fromVision || false;
+    const confidenceThreshold = isFromVision ? 40 : 50;
 
     const trimmedFormat = structuredFormat.trim();
 
@@ -511,11 +519,13 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       confidence -= 10;
     }
 
-    const isValid = confidence >= 50 && !issues.some(i => i.includes('parsing error') || i.includes('too short'));
+    const isValid = confidence >= confidenceThreshold && !issues.some(i => i.includes('parsing error') || i.includes('too short'));
 
     console.log('🔍 Enhanced investigation format validation completed', {
       isValid,
       confidence,
+      confidenceThreshold,
+      isFromVision,
       issues: issues.length,
       warnings: warnings.length,
       formatLength: trimmedFormat.length,

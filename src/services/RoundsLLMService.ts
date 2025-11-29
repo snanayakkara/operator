@@ -58,6 +58,7 @@ export class RoundsLLMService {
       model: MODEL_CONFIG.QUICK_MODEL,
       temperature: 0.2,
       max_tokens: 1200,
+      context_length: 6000,
       messages: [
         {
           role: 'system',
@@ -78,7 +79,23 @@ export class RoundsLLMService {
             patient ? `Current patient snapshot (for context, do not repeat fields):\n${JSON.stringify(patient)}` : ''
           ].join('\n')
         }
-      ]
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'intake_result',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              issues: { type: 'array' },
+              investigations: { type: 'array' },
+              tasks: { type: 'array' }
+            },
+            required: ['issues', 'investigations', 'tasks']
+          }
+        }
+      }
     };
 
     const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-intake');
@@ -90,6 +107,7 @@ export class RoundsLLMService {
       model: MODEL_CONFIG.QUICK_MODEL,
       temperature: 0.2,
       max_tokens: 1600,
+      context_length: 6000,
       messages: [
         {
           role: 'system',
@@ -119,7 +137,28 @@ export class RoundsLLMService {
             transcript
           ].join('\n')
         }
-      ]
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'ward_update_diff',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              issuesAdded: { type: 'array' },
+              issuesUpdated: { type: 'array' },
+              investigationsAdded: { type: 'array' },
+              investigationsUpdated: { type: 'array' },
+              tasksAdded: { type: 'array' },
+              tasksUpdated: { type: 'array' },
+              tasksCompletedById: { type: 'array' },
+              tasksCompletedByText: { type: ['array', 'null'] }
+            },
+            required: ['issuesAdded', 'issuesUpdated', 'investigationsAdded', 'investigationsUpdated', 'tasksAdded', 'tasksUpdated', 'tasksCompletedById']
+          }
+        }
+      }
     };
 
     const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-ward-update');
@@ -128,10 +167,12 @@ export class RoundsLLMService {
 
   public async generateGpLetter(patient: RoundsPatient): Promise<string> {
     const followUpTasks = patient.tasks.filter((t: Task) => t.status === 'open');
+    await this.lmStudio.ensureModelLoaded(MODEL_CONFIG.REASONING_MODEL);
     const request: LMStudioRequest = {
       model: MODEL_CONFIG.REASONING_MODEL,
       temperature: 0.25,
       max_tokens: 1200,
+      context_length: 8000,
       messages: [
         {
           role: 'system',
@@ -155,6 +196,44 @@ export class RoundsLLMService {
             JSON.stringify(patient.wardEntries.slice(-8)), // recent context
             'Open tasks (for follow-up):',
             JSON.stringify(followUpTasks)
+          ].join('\n')
+        }
+      ]
+    };
+
+    const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-gp-letter');
+    return typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  public async refineGpLetter(patient: RoundsPatient, currentLetter: string, instruction: string): Promise<string> {
+    await this.lmStudio.ensureModelLoaded(MODEL_CONFIG.REASONING_MODEL);
+    const request: LMStudioRequest = {
+      model: MODEL_CONFIG.REASONING_MODEL,
+      temperature: 0.2,
+      max_tokens: 900,
+      context_length: 8000,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are revising a GP-facing discharge letter. Make concise edits only; keep structure and tone.',
+            'Return the full revised letter.'
+          ].join(' ')
+        },
+        { role: 'assistant', content: currentLetter },
+        {
+          role: 'user',
+          content: [
+            'Patient context (for consistency, do not restate all):',
+            JSON.stringify({
+              name: patient.name,
+              mrn: patient.mrn,
+              bed: patient.bed,
+              site: patient.site,
+              oneLiner: patient.oneLiner
+            }),
+            'Edit request:',
+            instruction
           ].join('\n')
         }
       ]

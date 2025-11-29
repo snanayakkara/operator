@@ -13,11 +13,34 @@ export interface IntakeNote {
 
 export type IssueStatus = 'open' | 'resolved';
 
-export interface IssueSubpoint {
+export type IssueSubpointType = 'note' | 'procedure';
+
+export interface ProcedureDetails {
+  name: string;
+  date: string; // ISO date
+  notes?: string;
+  showDayCounter?: boolean;
+  checklistKey?: 'post-cardiac-surgery';
+}
+
+export interface IssueSubpointBase {
   id: string;
   timestamp: string; // ISO datetime
+  type?: IssueSubpointType; // legacy subpoints may omit type
+}
+
+export interface IssueSubpointNote extends IssueSubpointBase {
+  type?: 'note';
   text: string;
 }
+
+export interface IssueSubpointProcedure extends IssueSubpointBase {
+  type: 'procedure';
+  procedure: ProcedureDetails;
+  text?: string; // optional legacy/compat text
+}
+
+export type IssueSubpoint = IssueSubpointNote | IssueSubpointProcedure;
 
 export interface Issue {
   id: string;
@@ -48,6 +71,8 @@ export interface Investigation {
 
 export type TaskStatus = 'open' | 'done';
 
+export type TaskOrigin = 'manual' | 'procedure-checklist';
+
 export interface Task {
   id: string;
   text: string;
@@ -56,6 +81,9 @@ export interface Task {
   completedAt?: string;
   category?: 'imaging' | 'lab' | 'discharge' | 'followup' | 'other';
   pinToHud?: boolean;
+  origin?: TaskOrigin;
+  procedureId?: string;
+  scheduledDayOffset?: number; // Days from procedure date (0-based) when task should appear
 }
 
 export interface IssueUpdate {

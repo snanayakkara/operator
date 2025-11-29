@@ -4795,9 +4795,6 @@ class ContentScriptHandler {
   private async searchPatientByFiling(filingNumber: string): Promise<void> {
     console.log(`🔍 Searching for patient by filing: ${filingNumber}`);
 
-    // Wait for DOM to be ready (Xestro SPA may still be loading)
-    await this.wait(800);
-
     // Find patient search input (confirmed selector: #PatientSelectorInput)
     const searchInput = document.querySelector('#PatientSelectorInput') as HTMLInputElement;
     if (!searchInput) {
@@ -4814,8 +4811,38 @@ class ContentScriptHandler {
 
     console.log(`🔍 Typed filing number, waiting for dropdown...`);
 
-    // Wait for dropdown to appear with search results
-    await this.wait(500);
+    // Brief wait to allow XHR request to start (reduced from 800ms)
+    await this.wait(200);
+
+    // Poll for autocomplete menu to appear with results (max 3 seconds)
+    let attempts = 0;
+    let menuReady = false;
+    while (attempts < 30) { // 30 × 100ms = 3 seconds max
+      const menu = document.querySelector('.ui-autocomplete') as HTMLElement;
+      const menuItems = menu?.querySelectorAll('.ui-menu-item');
+      const hasItems = menuItems && menuItems.length > 0;
+      const isVisible = menu && menu.style.display !== 'none';
+
+      console.log(`🔍 Autocomplete menu status (attempt ${attempts + 1}/30):`, {
+        menuExists: !!menu,
+        itemCount: menuItems?.length || 0,
+        isVisible: isVisible,
+        display: menu?.style.display
+      });
+
+      if (hasItems && isVisible) {
+        console.log('✅ Autocomplete menu ready with items');
+        menuReady = true;
+        break;
+      }
+
+      await this.wait(100);
+      attempts++;
+    }
+
+    if (!menuReady) {
+      console.warn('⚠️ Autocomplete menu did not appear within 3 seconds, proceeding anyway...');
+    }
 
     // Press Down Arrow to select first result in dropdown
     searchInput.dispatchEvent(new KeyboardEvent('keydown', {
@@ -4830,15 +4857,17 @@ class ContentScriptHandler {
     // Small delay before pressing Enter
     await this.wait(200);
 
-    // Press Enter to confirm selection
-    searchInput.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter',
-      keyCode: 13,
-      code: 'Enter',
-      bubbles: true
-    }));
+    // Press Enter to confirm selection (dispatch all event types for robustness)
+    ['keydown', 'keyup', 'keypress'].forEach(eventType => {
+      searchInput.dispatchEvent(new KeyboardEvent(eventType, {
+        key: 'Enter',
+        keyCode: 13,
+        code: 'Enter',
+        bubbles: true
+      }));
+    });
 
-    console.log(`✅ Pressed Enter - patient navigation should complete`);
+    console.log(`✅ Pressed Enter (keydown/keyup/keypress) - patient navigation should complete`);
   }
 
   private async navigateToPatient(fileNumber: string, patientName: string): Promise<void> {

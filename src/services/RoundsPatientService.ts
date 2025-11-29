@@ -2,6 +2,7 @@ import {
   IntakeParserResult,
   Issue,
   IssueUpdate,
+  IssueSubpoint,
   RoundsPatient,
   Task,
   WardEntry,
@@ -11,12 +12,26 @@ import { computeLabTrendString, generateRoundsId, isoNow } from '@/utils/rounds'
 
 const normalizeText = (text: string) => text.trim().toLowerCase();
 
+const normalizeSubpoints = (subpoints: IssueSubpoint[] = []): IssueSubpoint[] => subpoints.map(sub => ({
+  ...sub,
+  type: sub.type || 'note',
+  text: 'text' in sub ? (sub as any).text || '' : '',
+  procedure: sub.type === 'procedure' ? sub.procedure : undefined
+}));
+
 const clonePatient = (patient: RoundsPatient): RoundsPatient => ({
   ...patient,
   intakeNotes: [...patient.intakeNotes],
   issues: patient.issues.map(issue => ({
     ...issue,
-    subpoints: [...(issue.subpoints || [])]
+    subpoints: (issue.subpoints || []).map(sub => ({
+      ...sub,
+      type: sub.type || 'note',
+      text: 'text' in sub ? (sub as any).text || '' : '',
+      procedure: sub.type === 'procedure'
+        ? { ...(sub as any).procedure }
+        : undefined
+    }))
   })),
   investigations: patient.investigations.map(inv => ({
     ...inv,
@@ -68,7 +83,12 @@ const ensureIssueDefaults = (issue: Issue): Issue => ({
   ...issue,
   id: issue.id || generateRoundsId('issue'),
   status: issue.status || 'open',
-  subpoints: issue.subpoints?.length ? issue.subpoints : [],
+  subpoints: (issue.subpoints || []).map(sub => ({
+    ...sub,
+    type: sub.type || 'note',
+    text: 'text' in sub ? (sub as any).text || '' : '',
+    procedure: sub.type === 'procedure' ? sub.procedure : undefined
+  })),
   lastUpdatedAt: issue.lastUpdatedAt || isoNow()
 });
 
@@ -89,11 +109,11 @@ export const mergeIntakeParserResult = (patient: RoundsPatient, parsed: IntakePa
     const existing = next.issues.find(issue => normalizeText(issue.title) === normalizedTitle);
     if (existing) {
       if (incoming.subpoints?.length) {
-        existing.subpoints = [...existing.subpoints, ...incoming.subpoints];
+        existing.subpoints = [...existing.subpoints, ...normalizeSubpoints(incoming.subpoints)];
       }
       existing.lastUpdatedAt = now;
     } else {
-      next.issues.push(ensureIssueDefaults(incoming));
+      next.issues.push(ensureIssueDefaults({ ...incoming, subpoints: normalizeSubpoints(incoming.subpoints) }));
     }
   });
 
@@ -136,8 +156,8 @@ const applyIssueUpdates = (issues: Issue[], updates: IssueUpdate[]): Issue[] => 
     const update = updates.find(u => u.issueId === issue.id);
     if (!update) return issue;
 
-    const mergedSubpoints = update.newSubpoints?.length
-      ? [...(issue.subpoints || []), ...update.newSubpoints]
+  const mergedSubpoints = update.newSubpoints?.length
+      ? [...(issue.subpoints || []), ...normalizeSubpoints(update.newSubpoints)]
       : issue.subpoints;
 
     return {

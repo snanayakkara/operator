@@ -1,6 +1,6 @@
 # Operator
 
- [![Version](https://img.shields.io/badge/version-3.37.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.38.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.37.0 adds image-to-investigation summaries with a vision OCR pipeline, Shortcut/mobile dictation intake with auto-triage, Rounds GP letter + Go To patient actions, streamlined quick actions (Dictate / Type / Image), and safer LM Studio vision defaults with richer progress telemetry.
+> **Latest:** v3.38.0 adds a compact rounds header with keyboard patient navigation + icon quick actions (Go To, Ward Update, GP letter with refine), procedure subpoints with day counters and auto-scheduled checklists, and clearer LM Studio model defaults for rounds/vision flows.
 
 ## 🏥 Overview
 
@@ -26,7 +26,7 @@ Operator transforms medical documentation through **Advanced Intelligence** feat
 - **⚙️ EMR Integration** - Seamless Xestro, Epic, and Cerner field detection
 - **🖼️ Vision Intake** - Investigation Summary now ingests photos/screenshots via Qwen3-VL OCR with clinical extraction prompts
 - **📱 Mobile + Shortcut Intake** - iOS Shortcuts/mac-daemon sidecar metadata triage routes mobile dictations into side panel workflows
-- **🏥 Rounds Command Center** - Ward list, Quick Add intake parser, ward update diffing, GP letters, and HUD exports for handover
+- **🏥 Rounds Command Center** - Ward list with keyboard navigation, Quick Add intake parser, ward update diffing, GP letters + refine, procedure checklists with day counters, and HUD exports for handover
 
 ## 🎯 Key Features
 

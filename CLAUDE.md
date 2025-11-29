@@ -7,7 +7,7 @@
 - **Generation**: LM Studio at `http://localhost:1234` (MedGemma‑27B for complex; Gemma‑3n‑e4b for simple)
 - **DSPy/GEPA** optimisation server at `http://localhost:8002`
 - **Intelligent Features**: lazy agent loading, cross‑agent knowledge sharing, smart recommendations, real‑time progress tracking
-- **Rounds/Handover**: Quick Add intake parser, ward update diffing, global task board, GP discharge letter generator, HUD JSON export
+- **Rounds/Handover**: Compact header with keyboard patient selector + icon quick actions (Go To, ward update, GP letter + refine, handover/quick add/discharge/undo/delete), Quick Add intake parser, ward update diffing, procedure subpoint day counters + checklists that auto-schedule tasks, global task board, HUD JSON export
 - **Vision Intake**: Investigation Summary can OCR investigation photos/screenshots via Qwen3‑VL (type/date metadata + extraction prompts)
 - **Mobile/Shortcut Ingest**: macOS daemon ingests Shortcut sidecars (workflow codes, timestamps, geolocation), runs triage, and surfaces jobs in a grouped attachment modal
 - Australian spelling & guideline framing; privacy‑first (no cloud calls)
@@ -40,7 +40,7 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 ### 1.3 Vision Intake, Mobile/Shortcut Ingest, Rounds
 - **Vision intake**: `InvestigationImageExtractor` validates <=10MB data URLs and calls `LMStudioService.processWithVisionAgent` (Qwen3‑VL default) to turn investigation report photos into dictated text; `ImageInvestigationModal` (drag/drop, type/date metadata) is reachable from the Investigation Summary quick action.
 - **Mobile/Shortcut ingest**: macOS daemon watcher parses Shortcut sidecars (`workflow_code`, timestamps, lat/lon) and stages them with audio; triage infers dictation type; side panel attachment modal groups recommended agents with keyboard shortcuts, header + preview, confidence chip, and explicit workflow_code mapping.
-- **Rounds**: Ward list with Quick Add intake parser, ward update dictation → `RoundsLLMService.parseWardUpdate`, undoable diffs, global task board, HUD export, content-script “Go To” navigation, and GP discharge letter generation from recent ward context.
+- **Rounds**: Ward list with Quick Add intake parser, ward update dictation → `RoundsLLMService.parseWardUpdate`, undoable diffs, global task board, HUD export, content-script “Go To” navigation, compact header with keyboard patient selector + icon quick actions, GP discharge letter generation + refine modal, and procedure subpoints with day counters/checklists that auto-schedule tasks.
 
 ---
 

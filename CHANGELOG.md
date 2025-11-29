@@ -11,6 +11,22 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 - DSPy now auto-enables when the local optimizer is healthy (overridable via `USE_DSPY`); defaults and messaging adjusted for “DSPy by default” vision with LM Studio fallback.
 - Lint cleanup: removed unused vars/imports, tightened regex escapes, added DOM globals, and ignored the Python ingest venv for ESLint noise.
 
+## [3.38.0] - 2025-11-29
+
+### Added
+
+- **Rounds productivity**
+  - Compact rounds header with keyboard-friendly patient selector, icon quick actions (Go To patient, ward update, GP letter with refine/copy), and overflow menu (handover builder, quick add, discharge, undo, delete).
+  - Issue subpoints now support procedures with day counters plus optional procedure checklists (initially post-cardiac-surgery) that auto-schedule day-based tasks.
+  - Intake notes drawer (stored verbatim), ward presets + custom ward input, and inline investigation/issue edit modes.
+- **LLM/GP letter**
+  - `RoundsLLMService` gains GP discharge letter + refine helpers that ensure MedGemma is loaded, and LM Studio requests now accept json `response_format`, `tools`, and `context_length` metadata.
+
+### Changed
+
+- Handover generator now respects per-patient include toggles and summarises open issues, investigations, and tasks; discharge/delete reset selection and collapse state safely.
+- LM Studio configuration clarifies reasoning vs quick vs OCR defaults with per-agent token/timeouts consolidated for rounds/vision agents.
+
 ## [3.37.0] - 2025-11-25
 
 ### Added

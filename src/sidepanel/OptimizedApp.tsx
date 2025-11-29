@@ -1347,6 +1347,27 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
 
+  // Individual session deletion handler
+  const handleRemoveSession = useCallback(async (sessionId: string) => {
+    try {
+      // Remove from persistent storage first
+      await persistenceService.deleteSession(sessionId);
+      console.log(`🗑️ Deleted session ${sessionId} from persistent storage`);
+
+      // Remove from in-memory state
+      actions.removePatientSession(sessionId);
+      actions.removePersistedSessionId(sessionId);
+
+      // Update storage stats UI
+      await updateStorageStats();
+
+      ToastService.getInstance().success('Session deleted');
+    } catch (error) {
+      console.error('❌ Failed to delete session:', error);
+      ToastService.getInstance().error('Failed to delete session');
+    }
+  }, [persistenceService, actions, updateStorageStats]);
+
   // Model loading error dialog handlers
   const handleRetryWithSameModel = useCallback(async () => {
     if (!failedWorkflowContext) return;
@@ -4944,7 +4965,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           modelStatus={state.modelStatus}
           onRefreshServices={checkModelStatus}
           patientSessions={state.patientSessions}
-          onRemoveSession={actions.removePatientSession}
+          onRemoveSession={handleRemoveSession}
           onClearAllSessions={actions.clearPatientSessions}
           onSessionSelect={handleSessionSelect}
           onResumeRecording={handleResumeRecording}
@@ -6040,6 +6061,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 'investigation-summary',
                 inputForAgent,
                 {
+                  fromVision: true, // Flag to indicate vision OCR source (affects validation thresholds)
                   onProgress: (message: string, progress: number) => {
                     actions.setPipelineProgress({
                       stage: 'generation',

@@ -11,7 +11,7 @@ interface PatientsViewProps {
 }
 
 export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) => {
-  const { patients, selectedPatient, setSelectedPatientId, addPatient, markDischarged, intakeParsing, updatePatient } = useRounds();
+  const { patients, selectedPatient, setSelectedPatientId, addPatient, markDischarged, intakeParsing, updatePatient, isPatientListCollapsed, togglePatientList } = useRounds();
   const wardOptions = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -66,10 +66,19 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       updatePatient(patient.id, p => ({ ...p, roundOrder: targetIndex }));
       updatePatient(swapWith.id, p => ({ ...p, roundOrder: index }));
     };
+
+    const handlePatientSelect = () => {
+      setSelectedPatientId(patient.id);
+      // Close the list overlay after selection
+      if (!isPatientListCollapsed) {
+        togglePatientList();
+      }
+    };
+
     return (
       <button
         key={patient.id}
-        onClick={() => setSelectedPatientId(patient.id)}
+        onClick={handlePatientSelect}
         className={`w-full text-left rounded-lg border ${selectedPatient?.id === patient.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} p-3 shadow-sm hover:border-blue-400 transition`}
       >
         <div className="flex items-center justify-between">
@@ -115,70 +124,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full gap-3">
-      <div className="lg:w-2/5 border border-gray-200 rounded-xl p-3 space-y-3 bg-white shadow-sm">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
-          <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
-            Add patient
-          </Button>
-        </div>
-
-        {showManualForm && (
-          <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
-            <div className="grid grid-cols-2 gap-2">
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name" value={manualName} onChange={(e) => setManualName(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="MRN/UR" value={manualMrn} onChange={(e) => setManualMrn(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Bed" value={manualBed} onChange={(e) => setManualBed(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm col-span-2" placeholder="One-liner" value={manualOneLiner} onChange={(e) => setManualOneLiner(e.target.value)} />
-              <select className="rounded-md border px-2 py-1 text-sm col-span-2" value={manualWard} onChange={(e) => setManualWard(e.target.value)}>
-                {wardOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button size="xs" variant="outline" onClick={() => setShowManualForm(false)}>Cancel</Button>
-              <Button size="xs" onClick={handleManualAdd} disabled={!manualName.trim()}>Save</Button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {activePatients.map(renderCard)}
-          {activePatients.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-              <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
-                <Users className="w-6 h-6 text-indigo-500" />
-              </div>
-              <h4 className="text-sm font-medium text-gray-900 mb-1">No patients yet</h4>
-              <p className="text-xs text-gray-500 mb-4 max-w-[200px]">
-                Add your first patient to start tracking rounds and tasks.
-              </p>
-              <Button size="sm" startIcon={Plus} onClick={onOpenQuickAdd}>
-                Quick Add Patient
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {dischargedPatients.length > 0 && (
-          <details className="mt-3">
-            <summary className="text-sm font-medium text-gray-700 cursor-pointer">Discharged / archived ({dischargedPatients.length})</summary>
-            <div className="mt-2 space-y-2">
-              {dischargedPatients.map(patient => (
-                <div key={patient.id} className="p-3 rounded-lg border border-gray-200 bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold text-gray-800">{patient.name}</div>
-                    <Button size="xs" variant="ghost" onClick={() => markDischarged(patient.id, 'active')}>Reopen</Button>
-                  </div>
-                  <p className="text-sm text-gray-600">{patient.oneLiner || 'No summary'}</p>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-      </div>
-
-      <div className="flex-1 min-h-0">
+    <div className="relative h-full">
+      {/* Patient Detail always occupies the workspace */}
+      <div className="h-full">
         {selectedPatient && selectedPatient.status === 'active' ? (
           <PatientDetail patient={selectedPatient} />
         ) : (
@@ -187,6 +135,79 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
           </div>
         )}
       </div>
+
+      {/* Ward list overlay panel */}
+      {!isPatientListCollapsed && (
+        <div className="fixed inset-0 z-40 flex">
+          <div className="flex-1 bg-black/30" onClick={togglePatientList} />
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl border-l border-gray-200 flex flex-col">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-3 py-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
+                  Add patient
+                </Button>
+                <Button variant="ghost" size="xs" onClick={togglePatientList}>Close</Button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-3">
+              {showManualForm && (
+                <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name" value={manualName} onChange={(e) => setManualName(e.target.value)} />
+                    <input className="rounded-md border px-2 py-1 text-sm" placeholder="MRN/UR" value={manualMrn} onChange={(e) => setManualMrn(e.target.value)} />
+                    <input className="rounded-md border px-2 py-1 text-sm" placeholder="Bed" value={manualBed} onChange={(e) => setManualBed(e.target.value)} />
+                    <input className="rounded-md border px-2 py-1 text-sm col-span-2" placeholder="One-liner" value={manualOneLiner} onChange={(e) => setManualOneLiner(e.target.value)} />
+                    <select className="rounded-md border px-2 py-1 text-sm col-span-2" value={manualWard} onChange={(e) => setManualWard(e.target.value)}>
+                      {wardOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button size="xs" variant="outline" onClick={() => setShowManualForm(false)}>Cancel</Button>
+                    <Button size="xs" onClick={handleManualAdd} disabled={!manualName.trim()}>Save</Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {activePatients.map(renderCard)}
+                {activePatients.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
+                      <Users className="w-6 h-6 text-indigo-500" />
+                    </div>
+                    <h4 className="text-sm font-medium text-gray-900 mb-1">No patients yet</h4>
+                    <p className="text-xs text-gray-500 mb-4 max-w-[200px]">
+                      Add your first patient to start tracking rounds and tasks.
+                    </p>
+                    <Button size="sm" startIcon={Plus} onClick={onOpenQuickAdd}>
+                      Quick Add Patient
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {dischargedPatients.length > 0 && (
+                <details className="pt-1">
+                  <summary className="text-sm font-medium text-gray-700 cursor-pointer">Discharged / archived ({dischargedPatients.length})</summary>
+                  <div className="mt-2 space-y-2">
+                    {dischargedPatients.map(patient => (
+                      <div key={patient.id} className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-gray-800">{patient.name}</div>
+                          <Button size="xs" variant="ghost" onClick={() => markDischarged(patient.id, 'active')}>Reopen</Button>
+                        </div>
+                        <p className="text-sm text-gray-600">{patient.oneLiner || 'No summary'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

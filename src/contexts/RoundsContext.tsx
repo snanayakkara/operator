@@ -23,6 +23,7 @@ interface RoundsContextValue {
   hudState: HudPatientState | null;
   intakeParsing: Record<string, IntakeStatus>;
   activeWard: string;
+  isPatientListCollapsed: boolean;
   setSelectedPatientId: (id: string | null) => void;
   addPatient: (patient: RoundsPatient) => Promise<void>;
   quickAddPatient: (name: string, scratchpad: string, ward?: string) => Promise<RoundsPatient | null>;
@@ -34,6 +35,8 @@ interface RoundsContextValue {
   addIntakeNote: (id: string, text: string) => Promise<void>;
   setActiveWard: (ward: string) => void;
   deletePatient: (id: string) => Promise<void>;
+  togglePatientList: () => void;
+  navigateToPatient: (direction: 'prev' | 'next') => void;
 }
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
@@ -57,6 +60,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [intakeParsing, setIntakeParsing] = useState<Record<string, IntakeStatus>>({});
   const [lastWardSnapshots, setLastWardSnapshots] = useState<Record<string, RoundsPatient | null>>({});
   const [activeWard, setActiveWard] = useState<string>('1 South');
+  const [isPatientListCollapsed, setIsPatientListCollapsed] = useState(false);
 
   // Load patients on mount
   useEffect(() => {
@@ -161,6 +165,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     persistPatients(prev => prev.map(p => p.id === id ? { ...p, status, lastUpdatedAt: timestamp } : p));
     if (status === 'discharged' && selectedPatientId === id) {
       setSelectedPatientId(null);
+      setIsPatientListCollapsed(false);
     }
   }, [persistPatients, selectedPatientId]);
 
@@ -168,6 +173,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     persistPatients(prev => prev.filter(p => p.id !== id));
     if (selectedPatientId === id) {
       setSelectedPatientId(null);
+      setIsPatientListCollapsed(false);
     }
   }, [persistPatients, selectedPatientId]);
 
@@ -177,6 +183,35 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [patients, selectedPatientId]);
 
   const hudState: HudPatientState | null = useMemo(() => buildHudPatientState(selectedPatient), [selectedPatient]);
+
+  // Toggle patient list collapse state
+  const togglePatientList = useCallback(() => {
+    setIsPatientListCollapsed(prev => !prev);
+  }, []);
+
+  // Navigate to previous or next active patient
+  const navigateToPatient = useCallback((direction: 'prev' | 'next') => {
+    const activePatients = patients.filter(p => p.status === 'active').sort((a, b) => a.roundOrder - b.roundOrder);
+    if (activePatients.length === 0) return;
+
+    const currentIndex = selectedPatientId
+      ? activePatients.findIndex(p => p.id === selectedPatientId)
+      : -1;
+
+    let nextIndex: number;
+    if (currentIndex === -1) {
+      // No selection or invalid selection - go to first
+      nextIndex = 0;
+    } else if (direction === 'next') {
+      // Wrap around: last -> first
+      nextIndex = (currentIndex + 1) % activePatients.length;
+    } else {
+      // Wrap around: first -> last
+      nextIndex = currentIndex === 0 ? activePatients.length - 1 : currentIndex - 1;
+    }
+
+    setSelectedPatientId(activePatients[nextIndex].id);
+  }, [patients, selectedPatientId]);
 
   // Persist HUD projection for external consumers (e.g., smart glasses bridge)
   useEffect(() => {
@@ -202,6 +237,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     hudState,
     intakeParsing,
     activeWard,
+    isPatientListCollapsed,
     setSelectedPatientId,
     addPatient,
     quickAddPatient,
@@ -212,7 +248,9 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     markDischarged,
     addIntakeNote,
     setActiveWard,
-    deletePatient
+    deletePatient,
+    togglePatientList,
+    navigateToPatient
   };
 
   return (

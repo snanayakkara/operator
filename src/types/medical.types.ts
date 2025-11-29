@@ -32,6 +32,8 @@ export interface MedicalContext {
   recommendations?: string[];
   // RHC validation: User-provided fields after validation modal
   userProvidedFields?: Record<string, any>; // e.g., { "patientData.height": 172 }
+  // Vision extraction: Indicates input came from vision OCR (affects quality thresholds)
+  fromVision?: boolean;
   // Patient demographics for enhanced correspondence
   demographics?: {
     name?: string;
@@ -177,6 +179,10 @@ export interface LMStudioRequest {
   top_p?: number;
   top_k?: number;
   min_p?: number;
+  tools?: any[];
+  response_format?: any;
+  integrations?: any[];
+  context_length?: number;
 }
 
 export type ChatMessageContentBlock =

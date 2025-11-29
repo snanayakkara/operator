@@ -6,6 +6,7 @@ import {
   Investigation,
   LabValue,
   RoundsPatient,
+  IssueSubpoint,
   Task
 } from '@/types/rounds.types';
 
@@ -59,7 +60,7 @@ const buildHudIssues = (patient: RoundsPatient): HudIssue[] => {
     id: issue.id,
     title: issue.title,
     status: issue.status,
-    latestSubpoint: issue.subpoints?.slice(-1)[0]?.text
+    latestSubpoint: getSubpointDisplay(issue.subpoints?.slice(-1)[0])
   }));
 };
 
@@ -70,6 +71,25 @@ const buildHudTasks = (tasks: Task[]): HudTask[] => {
     text: task.text,
     status: task.status
   }));
+};
+
+export const computeDayCount = (date: string): number | null => {
+  if (!date) return null;
+  const target = new Date(date);
+  if (Number.isNaN(target.getTime())) return null;
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diffDays = Math.floor((startOfToday - startOfTarget) / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+export const getSubpointDisplay = (subpoint?: IssueSubpoint): string | undefined => {
+  if (!subpoint) return undefined;
+  if (subpoint.type === 'procedure') {
+    return subpoint.procedure?.name || subpoint.text;
+  }
+  return subpoint.text;
 };
 
 export const buildHudPatientState = (patient: RoundsPatient | null | undefined): HudPatientState | null => {

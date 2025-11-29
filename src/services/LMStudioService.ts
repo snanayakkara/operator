@@ -37,6 +37,12 @@ export interface LMStudioConfig {
   transcriptionUrl?: string; // Optional separate transcription service URL
   timeout: number;
   retryAttempts: number;
+  apiToken?: string;
+  apiPrefix?: string;
+  useV1Api?: boolean;
+  useStatefulChat?: boolean;
+  defaultContextLength?: number;
+  defaultIntegrations?: any[];
   /**
    * Agent-specific model overrides for optimized performance
    * 
@@ -94,6 +100,11 @@ export class LMStudioService {
       transcriptionUrl: 'http://localhost:8001', // Separate MLX Whisper server
       timeout: 300000, // 5 minutes for local LLM medical report generation
       retryAttempts: 3,
+      apiPrefix: '/api/v1',
+      useV1Api: true,
+      useStatefulChat: false,
+      defaultContextLength: 8000,
+      defaultIntegrations: [],
       agentModels: {
         // OPTIMIZED MODELS FOR SPECIFIC TASKS:
 
@@ -214,6 +225,38 @@ export class LMStudioService {
       LMStudioService.instance = new LMStudioService(config);
     }
     return LMStudioService.instance;
+  }
+
+  public updateConfig(next: Partial<LMStudioConfig>): void {
+    this.config = { ...this.config, ...next };
+  }
+
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.config.apiToken) {
+      headers['Authorization'] = `Bearer ${this.config.apiToken}`;
+    }
+    return headers;
+  }
+
+  private getChatUrl(): string {
+    const prefix = this.config.apiPrefix || (this.config.useV1Api ? '/api/v1' : '/v1');
+    if (this.config.useStatefulChat) {
+      return `${this.config.baseUrl}${prefix}/chat`;
+    }
+    // Default to OpenAI-compatible completions path
+    return `${this.config.baseUrl}${this.config.useV1Api ? `${prefix}/chat` : '/v1/chat'}/completions`;
+  }
+
+  private finalizeRequestBody(request: LMStudioRequest): string {
+    const enriched: LMStudioRequest = { ...request };
+    if (this.config.defaultContextLength && !enriched.context_length) {
+      enriched.context_length = this.config.defaultContextLength;
+    }
+    if (this.config.defaultIntegrations?.length && !enriched.integrations) {
+      enriched.integrations = this.config.defaultIntegrations;
+    }
+    return JSON.stringify(enriched);
   }
 
   /**
@@ -745,12 +788,10 @@ export class LMStudioService {
     const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
     try {
-      const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+      const response = await fetch(this.getChatUrl(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(preparedRequest),
+        headers: this.getHeaders(),
+        body: this.finalizeRequestBody(preparedRequest),
         signal: combinedSignal
       });
 
@@ -837,12 +878,10 @@ export class LMStudioService {
     }
 
     try {
-      const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+      const response = await fetch(this.getChatUrl(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(preparedRequest),
+        headers: this.getHeaders(),
+        body: this.finalizeRequestBody(preparedRequest),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.config.timeout)]) : AbortSignal.timeout(this.config.timeout)
       });
 
@@ -912,7 +951,7 @@ export class LMStudioService {
     const guardApplied = preparedRequest !== request;
 
     // Create request body string once for reuse
-    const requestBody = JSON.stringify(preparedRequest);
+    const requestBody = this.finalizeRequestBody(preparedRequest);
 
     if (guardApplied) {
       console.log('🛡️ Applied Qwen no_think guard with non-thinking sampling preset');
@@ -954,11 +993,9 @@ export class LMStudioService {
         const timeoutSignal = AbortSignal.timeout(agentTimeout);
         const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
-        const response = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+        const response = await fetch(this.getChatUrl(), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: this.getHeaders(),
           body: requestBody,
           signal: combinedSignal
         });
@@ -1131,6 +1168,78 @@ export class LMStudioService {
   private pendingHealthCheck: Promise<ModelStatus> | null = null;
   private modelsCache: { models: string[], timestamp: number } | null = null;
   private readonly MODELS_CACHE_TTL = 300000; // 5 minutes cache for model list
+  private loadingModels = new Set<string>();
+
+  public async listModels(): Promise<string[]> {
+    const now = Date.now();
+    if (this.modelsCache && now - this.modelsCache.timestamp < this.MODELS_CACHE_TTL) {
+      return [...this.modelsCache.models];
+    }
+
+    const prefix = this.config.apiPrefix || '/api/v1';
+    const response = await fetch(`${this.config.baseUrl}${prefix}/models`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to list models: ${response.status} ${response.statusText}`);
+    }
+
+    const payload = await response.json();
+    const models = Array.isArray(payload?.data) ? payload.data : (payload?.models || []);
+    this.modelsCache = { models, timestamp: now };
+    return models;
+  }
+
+  public async loadModel(model: string): Promise<void> {
+    const prefix = this.config.apiPrefix || '/api/v1';
+    const response = await fetch(`${this.config.baseUrl}${prefix}/models/load`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ model })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load model: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  public async downloadModel(model: string): Promise<void> {
+    const prefix = this.config.apiPrefix || '/api/v1';
+    const response = await fetch(`${this.config.baseUrl}${prefix}/models/download`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ model })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to start download: ${response.status} ${response.statusText}`);
+    }
+  }
+
+  public async getDownloadStatus(model: string): Promise<any> {
+    const prefix = this.config.apiPrefix || '/api/v1';
+    const response = await fetch(`${this.config.baseUrl}${prefix}/models/download/status?model=${encodeURIComponent(model)}`, {
+      method: 'GET',
+      headers: this.getHeaders()
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get download status: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  public async ensureModelLoaded(model: string): Promise<void> {
+    if (this.loadingModels.has(model)) return;
+    this.loadingModels.add(model);
+    try {
+      await this.loadModel(model);
+    } catch (error) {
+      logger.warn('ensureModelLoaded failed', { model, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      this.loadingModels.delete(model);
+    }
+  }
 
   public async checkConnection(): Promise<ModelStatus> {
     const now = Date.now();
@@ -1279,10 +1388,6 @@ export class LMStudioService {
     }
 
     return [];
-  }
-
-  public updateConfig(newConfig: Partial<LMStudioConfig>): void {
-    this.config = { ...this.config, ...newConfig };
   }
 
   public async switchModel(type: 'processor', modelName: string): Promise<boolean> {
@@ -1484,6 +1589,10 @@ export type StreamOpts = {
   onMessage?: (json: any) => void;
   onEnd?: (finalText: string, usage?: any) => void;
   onError?: (err: Error) => void;
+  baseUrl?: string;
+  apiPrefix?: string;
+  apiToken?: string;
+  useStatefulChat?: boolean;
 };
 
 function splitSSEFrames(buf: string): string[] {
@@ -1500,9 +1609,17 @@ export async function streamChatCompletion(opts: StreamOpts): Promise<void> {
       stream: true,
     };
 
-    const res = await fetch('http://localhost:1234/v1/chat/completions', {
+    const baseUrl = opts.baseUrl || 'http://localhost:1234';
+    const prefix = opts.apiPrefix || '/api/v1';
+    const url = opts.useStatefulChat ? `${baseUrl}${prefix}/chat` : `${baseUrl}${prefix}/chat/completions`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (opts.apiToken) {
+      headers['Authorization'] = `Bearer ${opts.apiToken}`;
+    }
+
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal: opts.signal,
     });
