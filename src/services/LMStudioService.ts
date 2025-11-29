@@ -1629,7 +1629,8 @@ export async function streamChatCompletion(opts: StreamOpts): Promise<void> {
     };
 
     const baseUrl = opts.baseUrl || 'http://localhost:1234';
-    const prefix = opts.apiPrefix || '/api/v1';
+    // Default to OpenAI-compatible legacy path (/v1/...) to match LM Studio's chat endpoint
+    const prefix = opts.apiPrefix || '/v1';
     const url = opts.useStatefulChat ? `${baseUrl}${prefix}/chat` : `${baseUrl}${prefix}/chat/completions`;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (opts.apiToken) {
