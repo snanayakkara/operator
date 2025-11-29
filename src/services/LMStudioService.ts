@@ -242,20 +242,12 @@ export class LMStudioService {
   }
 
   private getChatUrlCandidates(): string[] {
-    const prefix = this.config.apiPrefix || (this.config.useV1Api ? '/api/v1' : '/v1');
-
-    // Primary target
-    const primary = this.config.useStatefulChat
-      ? `${this.config.baseUrl}${prefix}/chat`
-      : `${this.config.baseUrl}${this.config.useV1Api ? `${prefix}/chat` : '/v1/chat'}/completions`;
-
-    // Fallbacks to cover differing LM Studio builds (OpenAI compat vs. native /api)
-    const fallbacks = [
-      `${this.config.baseUrl}/v1/chat/completions`, // legacy OpenAI path
-      `${this.config.baseUrl}/api/v1/chat`         // native LM Studio chat path (stateful)
-    ];
-
-    return [primary, ...fallbacks.filter(url => url !== primary)];
+    // Stick to the OpenAI-compatible legacy path (/v1/chat/completions) to avoid
+    // LM Studio endpoint variance. If you explicitly enable stateful chat, use /v1/chat.
+    if (this.config.useStatefulChat) {
+      return [`${this.config.baseUrl}/v1/chat`];
+    }
+    return [`${this.config.baseUrl}/v1/chat/completions`];
   }
 
   private finalizeRequestBody(request: LMStudioRequest): string {
@@ -1006,33 +998,21 @@ export class LMStudioService {
         let response: Response | null = null;
         const urlCandidates = this.getChatUrlCandidates();
 
-        // Try all candidate URLs until one succeeds
+        // Only one candidate now, but keep loop for safety/logging
         for (const url of urlCandidates) {
-          try {
-            response = await fetch(url, {
-              method: 'POST',
-              headers: this.getHeaders(),
-              body: requestBody,
-              signal: combinedSignal
-            });
+          response = await fetch(url, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: requestBody,
+            signal: combinedSignal
+          });
 
-            if (response.ok) {
-              break;
-            }
-
-            // Retry next candidate on 404/405/501 style endpoint errors
-            if ([404, 405, 501].includes(response.status)) {
-              console.warn(`⚠️ LMStudio endpoint not supported at ${url} (status ${response.status}), trying fallback...`);
-              continue;
-            }
-
-            // For other HTTP errors, break and handle below
+          if (response.ok) {
             break;
-          } catch (endpointError) {
-            lastError = endpointError as Error;
-            // Try next candidate
-            continue;
           }
+
+          // Stop after first attempt if not OK
+          break;
         }
 
         if (!response) {
