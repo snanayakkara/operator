@@ -241,13 +241,21 @@ export class LMStudioService {
     return headers;
   }
 
-  private getChatUrl(): string {
+  private getChatUrlCandidates(): string[] {
     const prefix = this.config.apiPrefix || (this.config.useV1Api ? '/api/v1' : '/v1');
-    if (this.config.useStatefulChat) {
-      return `${this.config.baseUrl}${prefix}/chat`;
-    }
-    // Default to OpenAI-compatible completions path
-    return `${this.config.baseUrl}${this.config.useV1Api ? `${prefix}/chat` : '/v1/chat'}/completions`;
+
+    // Primary target
+    const primary = this.config.useStatefulChat
+      ? `${this.config.baseUrl}${prefix}/chat`
+      : `${this.config.baseUrl}${this.config.useV1Api ? `${prefix}/chat` : '/v1/chat'}/completions`;
+
+    // Fallbacks to cover differing LM Studio builds (OpenAI compat vs. native /api)
+    const fallbacks = [
+      `${this.config.baseUrl}/v1/chat/completions`, // legacy OpenAI path
+      `${this.config.baseUrl}/api/v1/chat`         // native LM Studio chat path (stateful)
+    ];
+
+    return [primary, ...fallbacks.filter(url => url !== primary)];
   }
 
   private finalizeRequestBody(request: LMStudioRequest): string {
@@ -995,12 +1003,41 @@ export class LMStudioService {
         const timeoutSignal = AbortSignal.timeout(agentTimeout);
         const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
-        const response = await fetch(this.getChatUrl(), {
-          method: 'POST',
-          headers: this.getHeaders(),
-          body: requestBody,
-          signal: combinedSignal
-        });
+        let response: Response | null = null;
+        const urlCandidates = this.getChatUrlCandidates();
+
+        // Try all candidate URLs until one succeeds
+        for (const url of urlCandidates) {
+          try {
+            response = await fetch(url, {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: requestBody,
+              signal: combinedSignal
+            });
+
+            if (response.ok) {
+              break;
+            }
+
+            // Retry next candidate on 404/405/501 style endpoint errors
+            if ([404, 405, 501].includes(response.status)) {
+              console.warn(`⚠️ LMStudio endpoint not supported at ${url} (status ${response.status}), trying fallback...`);
+              continue;
+            }
+
+            // For other HTTP errors, break and handle below
+            break;
+          } catch (endpointError) {
+            lastError = endpointError as Error;
+            // Try next candidate
+            continue;
+          }
+        }
+
+        if (!response) {
+          throw lastError || new Error('No LMStudio response received');
+        }
 
         if (!response.ok) {
           // Enhanced error logging for debugging vision API issues
