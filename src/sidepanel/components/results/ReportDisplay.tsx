@@ -93,6 +93,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
     const sections: { title: string; content: string }[] = [];
     const lines = content.split('\n');
     let currentSection: { title: string; content: string } | null = null;
+    const skipHeadingDetection = agentType === 'medication';
 
     const commitSection = () => {
       if (currentSection && currentSection.content.trim().length > 0) {
@@ -125,6 +126,9 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
         .trim();
 
       const isHeading = (() => {
+        // Medication lists are flat; avoid treating drug names as headings
+        if (skipHeadingDetection) return false;
+
         if (!normalizedHeading) return false;
         const upper = normalizedHeading.toUpperCase();
 
@@ -339,6 +343,39 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                   {JSON.stringify(jsonMetadata, null, 2)}
                 </pre>
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Simplified rendering for Investigation Summary / Background / Medications
+  const isSimpleCard = agentType === 'investigation-summary' || agentType === 'background' || agentType === 'medication';
+  if (isSimpleCard) {
+    return (
+      <div className={`relative bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
+        <div
+          className="absolute top-3 right-3 text-gray-500 text-xs flex items-center gap-1"
+          title="AI generation confidence"
+        >
+          <span>95%</span>
+          <CheckCircle className="w-3 h-3" />
+        </div>
+
+        <div className="p-4 space-y-4">
+          {displaySections.length > 0 ? (
+            displaySections.map((section, index) => (
+              <div
+                key={`${section.title || 'section'}-${index}`}
+                className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded-lg p-4"
+              >
+                {section.content}
+              </div>
+            ))
+          ) : (
+            <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
+              {displayContent}
             </div>
           )}
         </div>

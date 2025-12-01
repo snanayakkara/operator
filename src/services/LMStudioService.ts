@@ -250,6 +250,34 @@ export class LMStudioService {
     return [`${this.config.baseUrl}/v1/chat/completions`];
   }
 
+  private getChatUrl(): string {
+    const candidates = this.getChatUrlCandidates();
+    return candidates[0];
+  }
+
+  private getAudioExtensionForMime(mimeType: string | undefined): string {
+    const normalized = (mimeType || '').split(';')[0].trim().toLowerCase();
+
+    switch (normalized) {
+      case 'audio/mp4':
+      case 'audio/m4a':
+        return 'm4a';
+      case 'audio/mpeg':
+      case 'audio/mp3':
+        return 'mp3';
+      case 'audio/wav':
+      case 'audio/wave':
+      case 'audio/x-wav':
+        return 'wav';
+      case 'audio/ogg':
+        return 'ogg';
+      case 'audio/webm':
+        return 'webm';
+      default:
+        return 'webm';
+    }
+  }
+
   private finalizeRequestBody(request: LMStudioRequest): string {
     const enriched: LMStudioRequest = { ...request };
     if (this.config.defaultContextLength && !enriched.context_length) {
@@ -386,7 +414,10 @@ export class LMStudioService {
       // First, try the OpenAI-compatible transcription endpoint
       // eslint-disable-next-line no-undef
       const formData = new FormData();
-      formData.append('file', processedAudioBlob, 'audio.webm');
+      const audioMimeType = processedAudioBlob.type || audioBlob.type;
+      const audioExtension = this.getAudioExtensionForMime(audioMimeType);
+      const audioFilename = `audio.${audioExtension}`;
+      formData.append('file', processedAudioBlob, audioFilename);
       formData.append('model', this.config.transcriptionModel);
       formData.append('response_format', 'text');
 
@@ -412,6 +443,7 @@ export class LMStudioService {
           key,
           value instanceof File ? `File(${value.name}, ${value.size} bytes)` : value
         ]),
+        audioMimeType,
         timeout: this.config.timeout
       });
 

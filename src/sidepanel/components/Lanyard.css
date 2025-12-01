@@ -3,13 +3,14 @@
   position: relative;
   z-index: 0;
   width: 100%;
-  height: 75vh; /* 75% of viewport height - lanyard hangs down 3/4 of window */
+  height: calc(100% - 14px); /* Leave a buffer to avoid triggering scrollbars */
+  max-height: calc(100% - 14px);
   display: flex;
   justify-content: center;
   align-items: flex-start;
   transform: scale(1);
   transform-origin: top center;
-  margin-top: -20px;
+  margin-top: 0;
   overflow: visible;
   background: transparent;
 }
@@ -35,10 +36,11 @@
 /* Responsive adjustments */
 @media (max-width: 400px) {
   .lanyard-wrapper {
-    height: 60vh; /* Slightly smaller on mobile */
+    height: calc(100% - 14px);
+    max-height: calc(100% - 14px);
   }
 
   .lanyard-loading {
-    height: 60vh;
+    height: calc(100% - 14px);
   }
 }

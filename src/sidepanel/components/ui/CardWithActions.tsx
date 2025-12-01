@@ -81,7 +81,7 @@ export const CardWithActions: React.FC<CardWithActionsProps> = memo(({
   onSkip,
   copiedRecently = false,
   insertedRecently = false,
-  actions = ['copy', 'insert'],
+  actions = ['copy', 'insert'] as ('copy' | 'insert' | 'edit' | 'train' | 'download' | 'reprocess' | 'patient' | 'skip')[],
   headerActions,
   className = '',
   maxBodyHeight,

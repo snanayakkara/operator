@@ -9,8 +9,7 @@
  */
 
 import React, { memo, useState, Suspense } from 'react';
-import { AlertCircleIcon } from '../icons/OptimizedIcons';
-import { Copy, ExternalLink, Edit3, Brain, HelpCircle } from 'lucide-react';
+import { Copy, ExternalLink, Edit3, Brain } from 'lucide-react';
 import { SegmentedControl, SegmentOption } from '../ui/SegmentedControl';
 import type { AgentType, ReportMetadata } from '@/types/medical.types';
 
@@ -141,29 +140,16 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
   return (
     <div className={`p-3 border-t border-gray-200 ${className}`}>
       {/* Compact segmented control */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
         <SegmentedControl
           options={options}
           onChange={handleAction}
           successId={successId}
           multiSelect
           size="sm"
+          fullWidth
+          className="flex-1 justify-between"
         />
-
-        {/* Confidence indicator */}
-        <div
-          className="text-gray-400 text-xs flex items-center gap-1 cursor-help"
-          title="AI generation confidence"
-        >
-          <span>95%</span>
-          <HelpCircle className="w-3 h-3" />
-        </div>
-      </div>
-
-      {/* Success indicator - compact */}
-      <div className="mt-2 flex items-center gap-1.5">
-        <AlertCircleIcon className="w-3 h-3 text-emerald-500" />
-        <span className="text-emerald-600 text-xs">Generated successfully</span>
       </div>
 
       {/* AI Reasoning Modal */}

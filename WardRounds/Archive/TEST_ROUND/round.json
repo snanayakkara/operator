@@ -1,0 +1,9 @@
+{
+  "round_id": "TEST_ROUND",
+  "created_at": "2025-01-01T08:00:00Z",
+  "ward": "Test Ward",
+  "consultant": "SN",
+  "patient_count": 1,
+  "template_id": "ward_round_v1",
+  "layout_version": 1
+}

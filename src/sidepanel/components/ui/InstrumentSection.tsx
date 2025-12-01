@@ -73,11 +73,12 @@ export const InstrumentSection: React.FC<InstrumentSectionProps> = memo(({
               {tags.map((tag, index) => (
                 <Tag
                   key={index}
-                  label={tag.label}
                   color={tag.color || 'gray'}
                   variant={tag.variant || 'subtle'}
                   size="xs"
-                />
+                >
+                  {tag.label}
+                </Tag>
               ))}
             </div>
           )}
@@ -86,14 +87,14 @@ export const InstrumentSection: React.FC<InstrumentSectionProps> = memo(({
         {/* Right: Actions */}
         {actions && actions.length > 0 && onAction && (
           <div className="flex-shrink-0">
-            <SegmentedControl
-              options={actions}
-              onChange={onAction}
-              successId={selectedActionId}
-              size="xs"
-            />
-          </div>
-        )}
+              <SegmentedControl
+                options={actions}
+                onChange={onAction}
+                successId={selectedActionId}
+                size="sm"
+              />
+            </div>
+          )}
       </div>
 
       {/* Body */}

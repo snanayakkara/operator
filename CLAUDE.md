@@ -347,6 +347,16 @@ npm run optim:quick-letter
 
 ## 15) Recent Major Updates (highlights)
 
+**v3.39.0 (Dec 2025)**
+- **Rounds Ward Grouping**: Patients grouped by ward with divider headers; drag-and-drop reordering within each ward section
+- **Done Today Checkbox**: Per-patient completion tracking with `roundCompletedDate`; completed patients show dimmed styling
+- **Next of Kin Fields**: Name, relation, and phone fields in patient demographics; phone shows click-to-call button
+- **Delete Issue/Investigation**: Expand menu with delete action and confirmation dialog; deleting issue removes linked procedure tasks
+- **Ward Round Export**: Export active patients to PNG cards + `round.json` via `WardRoundCardExporter`; configurable round ID/ward/consultant
+- **Pending Updates Review**: Sidebar section to refresh and review pending ward round updates; apply or reject individually
+- **Idle State Cleanup**: Removed instruction text and background status from idle screen; lanyard centered vertically
+- **EMR Insertion Robustness**: Try/catch around content script calls for timeout handling; `insertionInFlightRef` prevents duplicate insertions
+
 **v3.38.0 (Nov 2025)**
 - **Rounds UI/UX Overhaul**: Comprehensive redesign of Rounds feature layout and interactions
   - **Tab badges with counts**: `Patients (5)` | `Tasks (12)` for quick orientation

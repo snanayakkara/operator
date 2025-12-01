@@ -10,7 +10,7 @@ export interface AppointmentPreset {
 export type AppointmentComplexity = 'simple' | 'complex';
 export type AppointmentModality = 'f2f' | 'telehealth' | 'phone';
 export type AppointmentType = 'new' | 'review';
-export type FollowUpPeriod = '6wk' | '3mth' | '12mth' | 'none';
+export type FollowUpPeriod = '1wk' | '6wk' | '3mth' | '6mth' | '12mth' | 'none';
 
 // NEW: Follow-up task structure
 export interface FollowUpTask {
@@ -71,7 +71,15 @@ export const getNotesFromMatrix = (matrix: AppointmentMatrix): string => {
   }
 
   const modalityText = followUpMethod === 'f2f' ? 'F2F' : followUpMethod === 'telehealth' ? 'TH' : 'Phone';
-  const periodText = followUp === '6wk' ? '6 weeks' : followUp === '3mth' ? '3 months' : '12 months';
+  const periodMap: Record<FollowUpPeriod, string> = {
+    '1wk': '1 week',
+    '6wk': '6 weeks',
+    '3mth': '3 months',
+    '6mth': '6 months',
+    '12mth': '12 months',
+    'none': ''
+  };
+  const periodText = periodMap[followUp] || '3 months';
 
   return `${modalityText} follow up in ${periodText} please`;
 };
@@ -117,13 +125,15 @@ export const generatePresetFromMatrix = (matrix: AppointmentMatrix): Appointment
   const complexityText = matrix.complexity === 'complex' ? 'complex ' : '';
   const typeText = matrix.type;
   const modalityText = matrix.modality === 'f2f' ? 'F2F' : matrix.modality === 'telehealth' ? 'TH' : 'Phone';
-  const followUpText = matrix.followUp === 'none'
-    ? 'no FUP'
-    : matrix.followUp === '6wk'
-      ? 'FUP 6wk'
-      : matrix.followUp === '3mth'
-        ? 'FUP 3mth'
-        : 'FUP 12mth';
+  const followUpTextMap: Record<FollowUpPeriod, string> = {
+    'none': 'no FUP',
+    '1wk': 'FUP 1wk',
+    '6wk': 'FUP 6wk',
+    '3mth': 'FUP 3mth',
+    '6mth': 'FUP 6mth',
+    '12mth': 'FUP 12mth'
+  };
+  const followUpText = followUpTextMap[matrix.followUp];
 
   const displayName = `${complexityText}${typeText} ${modalityText} + ${followUpText}`;
 

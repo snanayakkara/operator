@@ -23,7 +23,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [handoverText, setHandoverText] = useState('');
-  const { quickAddPatient, patients, activeWard, selectedPatient, setSelectedPatientId, markDischarged, undoLastWardUpdate, deletePatient, isPatientListCollapsed } = useRounds();
+  const { quickAddPatient, patients, activeWard, selectedPatient, setSelectedPatientId, markDischarged, undoLastWardUpdate, deletePatient } = useRounds();
   const [handoverSelection, setHandoverSelection] = useState<Record<string, boolean>>({});
   const [wardUpdateOpen, setWardUpdateOpen] = useState(false);
   const [letterOpen, setLetterOpen] = useState(false);
@@ -141,7 +141,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
             tooltip="Back"
           />
           <div className="min-w-0 flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-900 truncate">Cabrini ward list</span>
+            <span className="text-xs font-medium text-gray-900 truncate">Ward List</span>
           </div>
         </div>
         <div className="flex-shrink-0 text-[10px] text-gray-500">

@@ -27,6 +27,7 @@ import {
 import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
 import { ProcessingTimeDisplay } from '../ProcessingTimeDisplay';
+import { ActionSegmentedControl } from '../ui/SegmentedControl';
 import {
   ReportDisplay,
   TranscriptionSection,
@@ -625,7 +626,15 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             <>
               <FileTextIcon className="w-4 h-4 text-emerald-600" />
               <div>
-                <h3 className="text-gray-900 font-medium text-sm">Final Proof</h3>
+                <h3 className="text-gray-900 font-medium text-sm">
+                  {agentType === 'investigation-summary'
+                    ? 'Investigation Summary'
+                    : agentType === 'background'
+                      ? 'Background'
+                      : agentType === 'medication'
+                        ? 'Medications'
+                        : 'Final Proof'}
+                </h3>
                 <p className="text-emerald-700 text-xs">
                   {selectedSessionId ? 'Viewing previous session' : 'Processed output ready for review'}
                 </p>
@@ -1011,12 +1020,32 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
               {/* Letter Card */}
               <motion.div 
-                className="letter-card rounded-lg border border-blue-200 bg-blue-50"
+                className="letter-card rounded-lg border border-blue-200 bg-blue-50 overflow-hidden"
                 variants={withReducedMotion(cardVariants)}
               >
-                <div className="p-3 border-b border-blue-200 bg-blue-100">
-                  <h4 className="text-blue-800 font-semibold text-sm">Letter</h4>
+                {/* Header with title and actions */}
+                <div className="px-3 py-2 border-b border-blue-200 bg-blue-100">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-blue-800 font-semibold text-sm">{isRevisionOpen ? 'Letter (Editing)' : 'Letter'}</h4>
+                    <ActionSegmentedControl
+                      onCopy={handleLetterCopy}
+                      onInsert={handleLetterInsert}
+                      onTrain={canEditAndTrain ? () => onRevisionToggle?.(!isRevisionOpen) : undefined}
+                      onReprocess={canReprocessQuickLetter && !isProcessing ? handleQuickLetterReprocess : undefined}
+                      onPatient={!isGeneratingPatientVersion ? onGeneratePatientVersion : undefined}
+                      copiedRecently={letterButtonStates.copied}
+                      insertedRecently={letterButtonStates.inserted}
+                      actions={[
+                        'copy',
+                        'insert',
+                        ...(canEditAndTrain ? ['train' as const] : []),
+                        ...(canReprocessQuickLetter ? ['reprocess' as const] : []),
+                        'patient' as const
+                      ]}
+                    />
+                  </div>
                 </div>
+                {/* Body content */}
                 <div className="p-3 max-h-96 overflow-y-auto">
                   {isRevisionOpen && revisionPanel ? (
                     <textarea
@@ -1031,104 +1060,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                       {letterContentForActions}
                     </div>
                   )}
-                </div>
-                <div className="p-3 border-t border-blue-200 bg-blue-50">
-                  <div className={`grid gap-2 ${letterActionGridClass}`}>
-                    {/* Copy Letter Button */}
-                    <Button
-                      onClick={handleLetterCopy}
-                      variant={letterButtonStates.copied ? 'success' : 'outline'}
-                      size="sm"
-                      icon={letterButtonStates.copied ? <CheckIcon className="w-3.5 h-3.5 text-blue-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-3.5 h-3.5" title="Copy" />}
-                      isSuccess={letterButtonStates.copied}
-                      className={`p-2 flex flex-col items-center space-y-0.5 ${
-                        letterButtonStates.copied
-                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
-                          : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                      }`}
-                    >
-                      <span className={`text-[10px] ${letterButtonStates.copied ? 'text-blue-700' : 'text-gray-700'}`}>
-                        {letterButtonStates.copied ? 'Copied!' : 'Copy'}
-                      </span>
-                    </Button>
-
-                    {/* Insert Letter Button */}
-                    <Button
-                      onClick={handleLetterInsert}
-                      variant={letterButtonStates.inserted ? 'success' : 'outline'}
-                      size="sm"
-                      icon={letterButtonStates.inserted ? <CheckIcon className="w-3.5 h-3.5 text-blue-600 checkmark-appear" /> : <SquareIcon className="w-3.5 h-3.5" />}
-                      isSuccess={letterButtonStates.inserted}
-                      className={`p-2 flex flex-col items-center space-y-0.5 ${
-                        letterButtonStates.inserted
-                          ? 'bg-blue-500/20 border-blue-400 text-blue-700 completion-celebration'
-                          : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                      }`}
-                    >
-                      <span className={`text-[10px] ${letterButtonStates.inserted ? 'text-blue-700' : 'text-gray-700'}`}>
-                        {letterButtonStates.inserted ? 'Inserted!' : 'Insert'}
-                      </span>
-                    </Button>
-
-                    {/* Edit & Train Button */}
-                    {canEditAndTrain && (
-                      <Button
-                        onClick={() => onRevisionToggle?.(!isRevisionOpen)}
-                        variant={isRevisionOpen ? 'primary' : 'outline'}
-                        size="sm"
-                        icon={<Sparkles className={`w-3.5 h-3.5 ${isRevisionOpen ? 'text-white' : 'text-blue-700'}`} />}
-                        className={`p-2 flex flex-col items-center space-y-0.5 ${
-                          isRevisionOpen
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                            : 'bg-white/60 border-blue-200 hover:bg-blue-50/80 text-blue-700'
-                        }`}
-                        title="Revise output and capture training example"
-                      >
-                        <span className={`text-[10px] ${isRevisionOpen ? 'text-white font-semibold' : 'text-blue-700'}`}>
-                          {isRevisionOpen ? 'Edit' : 'Train'}
-                        </span>
-                      </Button>
-                    )}
-
-                    {/* Reprocess Quick Letter */}
-                    {canReprocessQuickLetter && (
-                      <Button
-                        onClick={handleQuickLetterReprocess}
-                        disabled={isProcessing}
-                        variant="outline"
-                        size="sm"
-                        isLoading={isProcessing}
-                        icon={isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                        className={`p-2 flex flex-col items-center space-y-0.5 ${
-                          isProcessing
-                            ? 'bg-blue-100/60 border-blue-200 text-blue-400'
-                            : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-blue-700'
-                        }`}
-                        title="Reprocess this transcription with the Quick Letter agent"
-                      >
-                        <span className={`text-[10px] ${isProcessing ? 'text-blue-400' : 'text-blue-700'}`}>
-                          Redo
-                        </span>
-                      </Button>
-                    )}
-
-                    {/* Generate Patient Version Button */}
-                    <Button
-                      onClick={onGeneratePatientVersion}
-                      disabled={isGeneratingPatientVersion}
-                      variant="outline"
-                      size="sm"
-                      isLoading={isGeneratingPatientVersion}
-                      icon={isGeneratingPatientVersion ? undefined : <Users className="w-3.5 h-3.5" />}
-                      className={`p-2 flex flex-col items-center space-y-0.5 ${
-                        isGeneratingPatientVersion
-                          ? 'bg-blue-100/60 border-blue-300 text-blue-500'
-                          : 'bg-white/60 border-blue-200 hover:bg-blue-50/60 text-gray-700'
-                      }`}
-                    >
-                      <span className="text-[10px]">{isGeneratingPatientVersion ? 'Gen...' : 'Patient'}</span>
-                    </Button>
-                  </div>
                 </div>
               </motion.div>
 
@@ -1346,7 +1277,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               }
               return null;
             })(),
-            <div className="space-y-0">
+            <div className="space-y-4">
               <ReportDisplay
                 results={results}
                 agentType={agentType}
@@ -1396,6 +1327,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   collapseWhen={resultsReady}
                   approvalState={approvalState}
                   onTranscriptionApprove={onTranscriptionApprove}
+                  className="mt-4 pt-3 border-t border-gray-200"
                 />
               )}
             </div>

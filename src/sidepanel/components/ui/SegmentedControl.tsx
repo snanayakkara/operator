@@ -25,6 +25,8 @@ interface SegmentedControlProps {
   successId?: string;
   /** Allow multiple selection (acts as button group) */
   multiSelect?: boolean;
+  /** Stretch control to fill available horizontal space */
+  fullWidth?: boolean;
 }
 
 export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
@@ -34,7 +36,8 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
   size = 'sm',
   className = '',
   successId,
-  multiSelect = false
+  multiSelect = false,
+  fullWidth = false
 }) => {
   const sizeClasses = {
     sm: 'h-7 text-xs gap-1 px-2',
@@ -48,7 +51,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
 
   return (
     <div
-      className={`inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5 ${className}`}
+      className={`inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5 ${fullWidth ? 'w-full' : ''} ${className}`}
       role={multiSelect ? 'group' : 'radiogroup'}
     >
       {options.map((option) => {
@@ -65,7 +68,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
             disabled={option.disabled}
             onClick={() => onChange?.(option.id)}
             className={`
-              inline-flex items-center justify-center
+              inline-flex items-center justify-center ${fullWidth ? 'flex-1' : ''}
               rounded transition-all duration-150
               font-medium whitespace-nowrap
               ${sizeClasses[size]}
@@ -152,7 +155,7 @@ export const ActionSegmentedControl: React.FC<ActionSegmentedControlProps> = mem
     options.push({ id: 'reprocess', label: 'Redo' });
   }
   if (actions.includes('patient') && onPatient) {
-    options.push({ id: 'patient', label: 'Pt' });
+    options.push({ id: 'patient', label: 'Patient' });
   }
   if (actions.includes('skip') && onSkip) {
     options.push({ id: 'skip', label: 'Skip' });

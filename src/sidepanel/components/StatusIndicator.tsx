@@ -516,13 +516,17 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                   )}
 
                   {/* Red notification badge - smaller during recording */}
-                  <div className={`absolute -top-1 -right-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-white ${
-                    isRecording ? 'w-4 h-4' : 'w-5 h-5'
-                  }`}>
-                    <span className={`font-bold text-surface-primary leading-none ${
-                      isRecording ? 'text-xs' : 'text-xs'
-                    }`}>
-                      {patientSessions.length > 9 ? '9+' : patientSessions.length}
+                  <div
+                    className={`absolute -top-1 -right-1 bg-red-500 rounded-full flex items-center justify-center border-2 border-white ${
+                      isRecording ? 'px-1.5 py-0.5 min-w-[18px]' : 'px-2 py-0.5 min-w-[20px]'
+                    }`}
+                  >
+                    <span
+                      className={`font-bold text-surface-primary leading-none text-xs text-center ${
+                        isRecording ? 'text-[10px]' : ''
+                      }`}
+                    >
+                      {patientSessions.length}
                     </span>
                   </div>
                 </IconButton>

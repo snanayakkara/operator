@@ -122,6 +122,12 @@ export interface WardEntry {
   diff: WardUpdateDiff;
 }
 
+export interface NextOfKin {
+  name: string;
+  relation: string;
+  phone: string;
+}
+
 export interface RoundsPatient {
   id: string;
   name: string;
@@ -136,11 +142,13 @@ export interface RoundsPatient {
   hudEnabled?: boolean;
   markedForTeaching?: boolean;
   tags?: string[];
+  nextOfKin?: NextOfKin;
   intakeNotes: IntakeNote[];
   issues: Issue[];
   investigations: Investigation[];
   tasks: Task[];
   wardEntries: WardEntry[];
+  roundCompletedDate?: string;
 }
 
 // HUD projection types for future smart-glasses integration

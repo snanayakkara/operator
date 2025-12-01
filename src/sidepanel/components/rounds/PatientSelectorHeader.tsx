@@ -27,7 +27,7 @@ export const PatientSelectorHeader: React.FC<PatientSelectorHeaderProps> = ({ cl
   // Get active patients sorted by round order
   const activePatients = patients
     .filter(p => p.status === 'active')
-    .sort((a, b) => a.roundOrder - b.roundOrder);
+    .sort((a, b) => (a.roundOrder ?? 0) - (b.roundOrder ?? 0));
 
   const currentIndex = selectedPatient
     ? activePatients.findIndex(p => p.id === selectedPatient.id)

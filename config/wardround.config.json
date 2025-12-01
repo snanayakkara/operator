@@ -1,0 +1,24 @@
+{
+  "paths": {
+    "icloudRoot": "~/Library/Mobile Documents/com~apple~CloudDocs",
+    "wardRoundRoot": "Operator/WardRounds"
+  },
+  "models": {
+    "vision": {
+      "name": "Qwen-VL-8B",
+      "endpoint": "http://localhost:8001/v1/vision"
+    },
+    "clinicalLLM": {
+      "name": "MedGemma-27B",
+      "endpoint": "http://localhost:8002/v1/chat"
+    }
+  },
+  "confidence": {
+    "minRegionConfidence": 0.7,
+    "minOverallConfidence": 0.75
+  },
+  "mocks": {
+    "visionDir": "",
+    "clinicalDir": ""
+  }
+}

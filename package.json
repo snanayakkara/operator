@@ -1,6 +1,6 @@
 {
   "name": "operator",
-  "version": "3.38.0",
+  "version": "3.39.0",
   "description": "Operator - Advanced medical AI assistant Chrome extension with specialized agents and EMR integration",
   "type": "module",
   "scripts": {
@@ -36,7 +36,9 @@
     "optim:angiogram:human": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task angiogram-pci --iterations 5 --with-human",
     "optim:quick-letter:human": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task quick-letter --iterations 5 --with-human",
     "optim:tavi:human": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task tavi --iterations 5 --with-human",
-    "optim:quick-letter:with-exemplars": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task quick-letter --iterations 5 --with-exemplars"
+    "optim:quick-letter:with-exemplars": "USE_DSPY=true dspy-env/bin/python -m llm.optim_gepa --task quick-letter --iterations 5 --with-exemplars",
+    "wardround:test": "TS_NODE_PROJECT=wardround/tsconfig.json node --loader ts-node/esm --experimental-specifier-resolution=node wardround/bin/ward_round_test.ts",
+    "wardround:watch": "TS_NODE_PROJECT=wardround/tsconfig.json node --loader ts-node/esm --experimental-specifier-resolution=node wardround/bin/ward_round_watch.ts"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",
@@ -62,6 +64,7 @@
     "@playwright/test": "^1.54.2",
     "@types/chrome": "^0.0.258",
     "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.19.1",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@types/three": "^0.180.0",

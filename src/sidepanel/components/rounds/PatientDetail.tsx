@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Star, ChevronDown } from 'lucide-react';
+import { Plus, Star, ChevronDown, Phone } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { IssueSubpoint, RoundsPatient } from '@/types/rounds.types';
@@ -51,6 +51,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [customWard, setCustomWard] = useState(
     patient.site && !wardOptions.includes(patient.site) ? patient.site : ''
   );
+  const [nokName, setNokName] = useState(patient.nextOfKin?.name || '');
+  const [nokRelation, setNokRelation] = useState(patient.nextOfKin?.relation || '');
+  const [nokPhone, setNokPhone] = useState(patient.nextOfKin?.phone || '');
   const [expanded, setExpanded] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -64,8 +67,10 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [editingProcedureToggles, setEditingProcedureToggles] = useState<Record<string, boolean>>({});
   const [dayCounterTick, setDayCounterTick] = useState(Date.now());
   const [openIssueMenuId, setOpenIssueMenuId] = useState<string | null>(null);
+  const [showInvestigationForm, setShowInvestigationForm] = useState(false);
   const [isInvestigationEditMode, setIsInvestigationEditMode] = useState(false);
   const [investigationEdits, setInvestigationEdits] = useState<Record<string, { name: string; summary?: string; date: string }>>({});
+  const [openInvestigationMenuId, setOpenInvestigationMenuId] = useState<string | null>(null);
   const toggleExpanded = () => setExpanded(prev => !prev);
   const ensureExpanded = () => setExpanded(true);
 
@@ -78,8 +83,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       patient.site && wardOptions.includes(patient.site) ? patient.site : patient.site ? 'Other' : ''
     );
     setCustomWard(patient.site && !wardOptions.includes(patient.site) ? patient.site : '');
+    setNokName(patient.nextOfKin?.name || '');
+    setNokRelation(patient.nextOfKin?.relation || '');
+    setNokPhone(patient.nextOfKin?.phone || '');
     setIsInvestigationEditMode(false);
+    setShowInvestigationForm(false);
     setInvestigationEdits({});
+    setOpenInvestigationMenuId(null);
   }, [patient.id, patient.name, patient.mrn, patient.bed, patient.oneLiner, patient.site]);
 
   useEffect(() => {
@@ -93,6 +103,12 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
     }
   }, [isEditMode]);
 
+  useEffect(() => {
+    if (isInvestigationEditMode) {
+      setOpenInvestigationMenuId(null);
+    }
+  }, [isInvestigationEditMode]);
+
   const saveDemographics = () => {
     updatePatient(patient.id, (p) => ({
       ...p,
@@ -100,6 +116,19 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       mrn: mrn.trim(),
       bed: bed.trim(),
       oneLiner,
+      lastUpdatedAt: isoNow()
+    }));
+  };
+
+  const saveNextOfKin = () => {
+    const hasNokData = nokName.trim() || nokRelation.trim() || nokPhone.trim();
+    updatePatient(patient.id, (p) => ({
+      ...p,
+      nextOfKin: hasNokData ? {
+        name: nokName.trim(),
+        relation: nokRelation.trim(),
+        phone: nokPhone.trim()
+      } : undefined,
       lastUpdatedAt: isoNow()
     }));
   };
@@ -140,6 +169,17 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       lastUpdatedAt: isoNow()
     }));
     setIsInvestigationEditMode(false);
+  };
+
+  const deleteInvestigation = (investigationId: string) => {
+    if (!window.confirm('Delete this investigation?')) return;
+    const timestamp = isoNow();
+    setOpenInvestigationMenuId(null);
+    updatePatient(patient.id, (p) => ({
+      ...p,
+      investigations: p.investigations.filter(inv => inv.id !== investigationId),
+      lastUpdatedAt: timestamp
+    }));
   };
 
   const handleWardSelection = (val: string) => {
@@ -262,6 +302,28 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       ),
       lastUpdatedAt: timestamp
     }));
+  };
+
+  const deleteIssue = (issueId: string) => {
+    if (!window.confirm('Delete this issue?')) return;
+    const timestamp = isoNow();
+    setOpenIssueMenuId(null);
+    updatePatient(patient.id, (p) => {
+      const removedProcedureIds = new Set<string>();
+      const issueToDelete = p.issues.find(i => i.id === issueId);
+      issueToDelete?.subpoints.forEach(sub => {
+        if (sub.type === 'procedure') {
+          removedProcedureIds.add(sub.id);
+        }
+      });
+
+      return {
+        ...p,
+        issues: p.issues.filter(i => i.id !== issueId),
+        tasks: p.tasks.filter(task => !task.procedureId || !removedProcedureIds.has(task.procedureId)),
+        lastUpdatedAt: timestamp
+      };
+    });
   };
 
   const enterEditMode = () => {
@@ -581,6 +643,53 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                 <textarea className="mt-1 w-full rounded-md border px-3 py-2 text-sm min-h-[60px]" value={oneLiner} onChange={(e) => setOneLiner(e.target.value)} onBlur={saveDemographics} />
               </div>
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900">Next of Kin</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Name</label>
+                    <input
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                      placeholder="NOK name"
+                      value={nokName}
+                      onChange={(e) => setNokName(e.target.value)}
+                      onBlur={saveNextOfKin}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Relation</label>
+                    <input
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                      placeholder="e.g. Spouse, Son"
+                      value={nokRelation}
+                      onChange={(e) => setNokRelation(e.target.value)}
+                      onBlur={saveNextOfKin}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Phone</label>
+                    <div className="flex items-center gap-1 mt-1">
+                      <input
+                        className="flex-1 rounded-md border px-2 py-2 text-sm"
+                        placeholder="Phone number"
+                        type="tel"
+                        value={nokPhone}
+                        onChange={(e) => setNokPhone(e.target.value)}
+                        onBlur={saveNextOfKin}
+                      />
+                      {nokPhone.trim() && (
+                        <a
+                          href={`tel:${nokPhone.trim()}`}
+                          className="flex items-center justify-center w-9 h-9 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                          title="Call NOK"
+                        >
+                          <Phone className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900">Intake notes</h4>
@@ -735,6 +844,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   >
                     <Plus className="w-3 h-3" />
                     Add note/procedure
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteIssue(issue.id)}
+                    className="px-3 py-1 rounded-full border bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 transition-colors"
+                  >
+                    Delete
                   </button>
                 </div>
               )}
@@ -929,32 +1045,44 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       <div className="rounded-xl border border-blue-400 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900">Investigations</h4>
-          {isInvestigationEditMode ? (
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
+            {!isInvestigationEditMode && (
               <button
                 type="button"
-                onClick={saveInvestigationEdits}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                onClick={() => setShowInvestigationForm(v => !v)}
+                className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-0.5"
               >
-                Save
+                <Plus className="w-3 h-3" />
+                {showInvestigationForm ? 'Close' : 'Add'}
               </button>
+            )}
+            {isInvestigationEditMode ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={saveInvestigationEdits}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelInvestigationEdit}
+                  className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={cancelInvestigationEdit}
+                onClick={startInvestigationEdit}
                 className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors"
               >
-                Cancel
+                Edit
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={startInvestigationEdit}
-              className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              Edit
-            </button>
-          )}
+            )}
+          </div>
         </div>
         <div className="space-y-3">
           {patient.investigations.map(inv => (
@@ -994,10 +1122,17 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium text-gray-900">{inv.name}</div>
-                    <div className="text-xs text-gray-500">{new Date(inv.lastUpdatedAt).toLocaleDateString()}</div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenInvestigationMenuId(prev => prev === inv.id ? null : inv.id)}
+                    className="w-full flex items-center justify-between rounded-md px-2 py-1 -mx-2 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="font-medium text-left text-gray-900">{inv.name}</div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span>{new Date(inv.lastUpdatedAt).toLocaleDateString()}</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${openInvestigationMenuId === inv.id ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
                   {inv.type === 'lab' ? (
                     <div className="space-y-1">
                       <div className="text-sm text-gray-700">Trend: {computeLabTrendString(inv.labSeries || []) || '—'}</div>
@@ -1006,45 +1141,79 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   ) : (
                     <div className="text-sm text-gray-700">{inv.summary || 'No summary yet'}</div>
                   )}
+                  {openInvestigationMenuId === inv.id && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => deleteInvestigation(inv.id)}
+                        className="px-3 py-1 rounded-full border bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
           ))}
-          <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
-            <div className="text-xs uppercase text-gray-500">Add lab</div>
-            <div className="grid grid-cols-3 gap-2">
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name" value={newLabName} onChange={(e) => setNewLabName(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm" placeholder="Value" value={newLabValue} onChange={(e) => setNewLabValue(e.target.value)} />
-              <input type="date" className="rounded-md border px-2 py-1 text-sm" value={newLabDate} onChange={(e) => setNewLabDate(e.target.value)} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button size="xs" startIcon={Plus} onClick={addLab} disabled={!newLabName.trim() || !newLabValue.trim() || !newLabDate}>Add lab</Button>
-            </div>
-            <div className="text-xs uppercase text-gray-500 pt-2">Add imaging / procedure</div>
-            <div className="flex flex-col gap-2">
-              <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Name (e.g., Echo)" value={newImagingName} onChange={(e) => setNewImagingName(e.target.value)} />
-              <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Summary" value={newImagingSummary} onChange={(e) => setNewImagingSummary(e.target.value)} />
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 whitespace-nowrap">Date</span>
-                <input
-                  type="date"
-                  className="rounded-md border px-2 py-1 text-sm w-full"
-                  value={newImagingDate}
-                  onChange={(e) => setNewImagingDate(e.target.value)}
-                />
+          {showInvestigationForm && (
+            <div className="border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
+              <div className="text-xs uppercase text-gray-500">Add lab</div>
+              <div className="grid grid-cols-3 gap-2">
+                <input className="rounded-md border px-2 py-1 text-sm" placeholder="Name" value={newLabName} onChange={(e) => setNewLabName(e.target.value)} />
+                <input className="rounded-md border px-2 py-1 text-sm" placeholder="Value" value={newLabValue} onChange={(e) => setNewLabValue(e.target.value)} />
+                <input type="date" className="rounded-md border px-2 py-1 text-sm" value={newLabDate} onChange={(e) => setNewLabDate(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={addLab}
+                  disabled={!newLabName.trim() || !newLabValue.trim() || !newLabDate}
+                  className="text-[10px] px-2 py-1 rounded text-gray-600 hover:text-gray-800 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  Add lab
+                </button>
+              </div>
+              <div className="text-xs uppercase text-gray-500 pt-2">Add imaging / procedure</div>
+              <div className="flex flex-col gap-2">
+                <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Name (e.g., Echo)" value={newImagingName} onChange={(e) => setNewImagingName(e.target.value)} />
+                <input className="rounded-md border px-2 py-1 text-sm w-full" placeholder="Summary" value={newImagingSummary} onChange={(e) => setNewImagingSummary(e.target.value)} />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 whitespace-nowrap">Date</span>
+                  <input
+                    type="date"
+                    className="rounded-md border px-2 py-1 text-sm w-full"
+                    value={newImagingDate}
+                    onChange={(e) => setNewImagingDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={addImaging}
+                  disabled={!newImagingName.trim() || !newImagingSummary.trim() || !newImagingDate}
+                  className="text-[10px] px-2 py-1 rounded text-gray-600 hover:text-gray-800 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  Add summary
+                </button>
               </div>
             </div>
-            <div className="flex justify-end mt-2">
-              <Button size="xs" startIcon={Plus} onClick={addImaging} disabled={!newImagingName.trim() || !newImagingSummary.trim() || !newImagingDate}>Add summary</Button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="rounded-xl border border-green-500 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-gray-900">Tasks</h4>
-          <Button size="xs" startIcon={Plus} onClick={() => setShowTaskForm(v => !v)}>{showTaskForm ? 'Close' : 'Add'}</Button>
+          <button
+            type="button"
+            onClick={() => setShowTaskForm(v => !v)}
+            className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-0.5"
+          >
+            <Plus className="w-3 h-3" />
+            {showTaskForm ? 'Close' : 'Add'}
+          </button>
         </div>
         {showTaskForm && (
           <div className="flex items-center gap-2 mb-3">

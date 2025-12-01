@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.38.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.39.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.38.0 adds a compact rounds header with keyboard patient navigation + icon quick actions (Go To, Ward Update, GP letter with refine), procedure subpoints with day counters and auto-scheduled checklists, and clearer LM Studio model defaults for rounds/vision flows.
+> **Latest:** v3.39.0 adds rounds ward grouping with drag-and-drop reordering, "done today" patient checkboxes, next of kin fields with click-to-call, delete issue/investigation actions, ward round PNG export, and pending updates review for import workflows.
 
 ## 🏥 Overview
 
@@ -214,7 +214,7 @@ curl http://localhost:8002/health
          ▼
 ┌─────────────────┐
 │   EMR Systems   │
-│   Xestro/Epic   │
+│   Xestro   │
 └─────────────────┘
 ```
 
@@ -369,14 +369,6 @@ interface QueueSettings {
   priorityOrder: AgentType[]; // Quick Letter → TAVI → PCI → ...
 }
 ```
-
-## 🏥 EMR Integration
-
-### Supported Systems
-- **Xestro**: Full integration with native field detection and auto-insertion
-- **Epic**: Basic support with common field patterns and clipboard integration
-- **Cerner**: Basic support with documentation areas and quick actions
-- **Allscripts**: Basic support with note fields and task creation
 
 ### EMR Features
 - **Auto-field Detection** - Intelligent recognition of active EMR fields
@@ -624,6 +616,16 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v3.39.0 (December 2025) — Rounds Ward Grouping Release
+- **Ward grouping & reorder**: Rounds list now groups patients by ward with drag-and-drop reordering within each ward section.
+- **Done today checkbox**: Per-patient completion tracking for daily rounds with visual dimming of completed patients.
+- **Next of Kin fields**: Name, relation, and phone fields in patient demographics with click-to-call button.
+- **Delete actions**: Delete issue and delete investigation buttons with confirmation dialogs.
+- **Ward round export**: Export active patients to PNG cards + round.json with configurable round ID, ward, and consultant.
+- **Pending updates review**: Import modal to review and apply/reject pending ward round updates from external sources.
+- **UI polish**: Cleaner idle state with centered lanyard (removed instruction text), collapsible investigation form, improved card layouts.
+- **EMR insertion robustness**: Better timeout handling for content script responses and insertion-in-flight guard to prevent duplicate insertions.
+
 ### v3.38.0 (November 2025) — Rounds Checklist Release
 - **Image → Investigation Summary**: Drag-and-drop modal for investigation photos/screenshots (TTE/CTCA/ECG/etc.) with Qwen3-VL OCR, date/type metadata, and clinician-voice extraction prompts.
 - **Quick Actions overhaul**: Dictate / Type / Image paths for Investigation Summary, collapsible 5-column grid, full-panel Appointment Wrap-Up builder, new PipelineStrip/Tag/MicroMeter UI primitives, and simplified monochrome visualizer.
@@ -680,7 +682,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.38.0 | **Updated**: November 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Checklist & Vision Intake
+**Version**: 3.39.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Ward Grouping & Export
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

@@ -11,6 +11,36 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 - DSPy now auto-enables when the local optimizer is healthy (overridable via `USE_DSPY`); defaults and messaging adjusted for “DSPy by default” vision with LM Studio fallback.
 - Lint cleanup: removed unused vars/imports, tightened regex escapes, added DOM globals, and ignored the Python ingest venv for ESLint noise.
 
+## [3.39.0] - 2025-12-01
+
+### Added
+
+- **Rounds ward grouping**
+  - Patient list now groups patients by ward with divider headers; drag-and-drop reordering within each ward section updates `roundOrder` globally.
+  - "Done today" checkbox per patient tracks `roundCompletedDate`; completed patients show dimmed styling.
+- **Next of Kin fields**
+  - Patient demographics now include name, relation, and phone for next of kin; phone field shows click-to-call button when populated.
+- **Delete issue/investigation**
+  - Issues and investigations can now be deleted via an expanded menu with confirmation dialog; deleting an issue also removes linked procedure tasks.
+- **Ward round export**
+  - Export active patients to PNG cards + `round.json` manifest via `WardRoundCardExporter`; configurable round ID, ward, and consultant inputs with output folder preview.
+- **Pending updates review**
+  - New section in rounds sidebar to refresh and review pending ward round updates from `WardRoundImportService`; apply or reject each update individually.
+
+### Changed
+
+- **Idle state UI**
+  - Removed instruction text and background processing status from idle screen; lanyard now centered vertically for a cleaner look.
+- **Investigation form UX**
+  - Investigation add form is now collapsible via an Add/Close toggle; investigation items show expand menu for delete action.
+- **EMR insertion robustness**
+  - Added try/catch around content script insertion calls to handle timeouts gracefully; introduced `insertionInFlightRef` guard to prevent duplicate concurrent insertions.
+
+### Fixed
+
+- Investigation edit mode now closes expanded menus on enter to avoid stale state.
+- Patient cards use stable round order sorting with fallback to `lastUpdatedAt` for undefined orders.
+
 ## [3.38.0] - 2025-11-29
 
 ### Added

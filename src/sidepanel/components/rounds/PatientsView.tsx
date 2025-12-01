@@ -1,10 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Plus, AlertCircle, Activity, BedDouble, Users } from 'lucide-react';
+import { CheckCircle2, Plus, AlertCircle, Activity, BedDouble, Users, GripVertical, Download } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { createEmptyPatient } from '@/services/RoundsPatientService';
 import { PatientDetail } from './PatientDetail';
 import { RoundsPatient } from '@/types/rounds.types';
+import { isoNow } from '@/utils/rounds';
+import { WardRoundCardExporter } from '@/services/WardRoundCardExporter';
+import { WardRoundImportService, applyPendingUpdateToPatient, PendingWardRoundUpdate } from '@/services/WardRoundImportService';
+import { DEFAULT_WARD_ROUND_ROOT, getWardExportsRoot } from '@/wardround/paths';
 
 interface PatientsViewProps {
   onOpenQuickAdd: () => void;
@@ -19,12 +23,33 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   const [manualBed, setManualBed] = useState('');
   const [manualOneLiner, setManualOneLiner] = useState('');
   const [manualWard, setManualWard] = useState(wardOptions[0]);
+  const [draggingPatientId, setDraggingPatientId] = useState<string | null>(null);
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [roundIdInput, setRoundIdInput] = useState(() => {
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const hours = now.getHours();
+    const slot = hours < 12 ? 'AM' : hours < 18 ? 'PM' : 'EVE';
+    return `${date}_${slot}`;
+  });
+  const [roundWard, setRoundWard] = useState('1 South');
+  const [roundConsultant, setRoundConsultant] = useState('SN');
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportErrors, setExportErrors] = useState<string[]>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<PendingWardRoundUpdate[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const { applyWardDiff } = useRounds();
+  const exportFolder = useMemo(
+    () => getWardExportsRoot(roundIdInput || '<round id>', { icloudRoot: '', wardRoundRoot: DEFAULT_WARD_ROUND_ROOT }),
+    [roundIdInput]
+  );
 
   const activePatients = useMemo(() =>
     [...patients].filter(p => p.status === 'active').sort((a, b) => {
-      if (a.roundOrder !== undefined && b.roundOrder !== undefined) {
-        return a.roundOrder - b.roundOrder;
-      }
+      const aOrder = a.roundOrder ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = b.roundOrder ?? Number.MAX_SAFE_INTEGER;
+      if (aOrder !== bOrder) return aOrder - bOrder;
       return new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime();
     }), [patients]);
 
@@ -33,10 +58,75 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime()
     ), [patients]);
 
+  const activePatientsByWard = useMemo(() => {
+    const buckets = new Map<string, RoundsPatient[]>();
+    activePatients.forEach(p => {
+      const ward = p.site?.trim() || 'Unassigned';
+      const list = buckets.get(ward) || [];
+      list.push(p);
+      buckets.set(ward, list);
+    });
+
+    const knownOrder = [...wardOptions, 'Unassigned'];
+    const additional = Array.from(buckets.keys()).filter(k => !knownOrder.includes(k)).sort();
+    const wardOrder = [...wardOptions, ...additional, 'Unassigned'].filter((ward, idx, arr) => arr.indexOf(ward) === idx);
+
+    return wardOrder
+      .filter(ward => buckets.has(ward))
+      .map(ward => ({
+        ward,
+        patients: (buckets.get(ward) || []).sort((a, b) => {
+          const aOrder = a.roundOrder ?? Number.MAX_SAFE_INTEGER;
+          const bOrder = b.roundOrder ?? Number.MAX_SAFE_INTEGER;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime();
+        })
+      }));
+  }, [activePatients, wardOptions]);
+
   const openTasksIndicator = (patient: RoundsPatient) => patient.tasks.filter(t => t.status === 'open').length;
   const updatedRecently = (patient: RoundsPatient) => patient.wardEntries.some(entry =>
     Date.now() - new Date(entry.timestamp).getTime() < 24 * 60 * 60 * 1000
   );
+  const isCompletedToday = (patient: RoundsPatient) => patient.roundCompletedDate === todayKey;
+
+  const toggleCompleted = (patient: RoundsPatient) => {
+    const nextValue = isCompletedToday(patient) ? undefined : todayKey;
+    updatePatient(patient.id, p => ({ ...p, roundCompletedDate: nextValue, lastUpdatedAt: isoNow() }));
+  };
+
+  const handleDragStart = (patientId: string) => {
+    setDraggingPatientId(patientId);
+  };
+
+  const handleDrop = (ward: string, targetId: string) => {
+    reorderWithinWard(ward, targetId);
+    setDraggingPatientId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingPatientId(null);
+  };
+
+  const reorderWithinWard = (ward: string, targetId: string) => {
+    if (!draggingPatientId || draggingPatientId === targetId) return;
+    const wardGroup = activePatientsByWard.find(g => g.ward === ward);
+    if (!wardGroup) return;
+    const ordered = [...wardGroup.patients];
+    const fromIndex = ordered.findIndex(p => p.id === draggingPatientId);
+    const toIndex = ordered.findIndex(p => p.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const [moved] = ordered.splice(fromIndex, 1);
+    ordered.splice(toIndex, 0, moved);
+
+    const nextGroups = activePatientsByWard.map(group =>
+      group.ward === ward ? { ...group, patients: ordered } : group
+    );
+    const flattened = nextGroups.flatMap(g => g.patients);
+    flattened.forEach((p, idx) => {
+      updatePatient(p.id, prev => ({ ...prev, roundOrder: idx }));
+    });
+  };
 
   const handleManualAdd = async () => {
     if (!manualName.trim()) return;
@@ -58,14 +148,16 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   const renderCard = (patient: RoundsPatient) => {
     const needsDetails = !patient.mrn || !patient.bed;
     const parsing = intakeParsing[patient.id] === 'running';
-    const index = activePatients.findIndex(p => p.id === patient.id);
-    const move = (direction: number) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= activePatients.length) return;
-      const swapWith = activePatients[targetIndex];
-      updatePatient(patient.id, p => ({ ...p, roundOrder: targetIndex }));
-      updatePatient(swapWith.id, p => ({ ...p, roundOrder: index }));
-    };
+    const wardLabel = patient.site?.trim() || 'Unassigned';
+    const completed = isCompletedToday(patient);
+    const isSelected = selectedPatient?.id === patient.id;
+    const cardClasses = `
+      w-full text-left rounded-lg border p-3 shadow-sm transition
+      ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}
+      ${completed ? 'opacity-70 bg-gray-50 border-gray-200' : ''}
+      ${draggingPatientId === patient.id ? 'ring-2 ring-blue-200' : ''}
+      hover:border-blue-400
+    `;
 
     const handlePatientSelect = () => {
       setSelectedPatientId(patient.id);
@@ -79,15 +171,36 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       <button
         key={patient.id}
         onClick={handlePatientSelect}
-        className={`w-full text-left rounded-lg border ${selectedPatient?.id === patient.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} p-3 shadow-sm hover:border-blue-400 transition`}
+        className={cardClasses}
+        draggable
+        onDragStart={(e) => { e.stopPropagation(); handleDragStart(patient.id); }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleDrop(wardLabel, patient.id); }}
+        onDragEnd={handleDragEnd}
       >
-        <div className="flex items-center justify-between">
-          <div className="text-base font-semibold text-gray-900">{patient.name}</div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-gray-400">
-              <button className="px-1" onClick={(e) => { e.stopPropagation(); move(-1); }}>↑</button>
-              <button className="px-1" onClick={(e) => { e.stopPropagation(); move(1); }}>↓</button>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <label
+              className="flex items-center gap-2 text-xs text-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                checked={completed}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  toggleCompleted(patient);
+                }}
+              />
+              <span className="uppercase tracking-wide">Done today</span>
+            </label>
+            <div>
+              <div className="text-base font-semibold text-gray-900">{patient.name}</div>
+              <div className="text-sm text-gray-600">{wardLabel}{patient.bed ? ` • Bed ${patient.bed}` : ''}</div>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
             {parsing && (
               <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-full">
                 parsing intake…
@@ -123,6 +236,58 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
     );
   };
 
+  const handleExportRound = async () => {
+    setExportMessage(null);
+    setExportErrors([]);
+    if (!activePatients.length) {
+      setExportMessage('No active patients to export.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const exporter = new WardRoundCardExporter();
+      const result = await exporter.exportRound(activePatients, {
+        roundId: roundIdInput,
+        ward: roundWard,
+        consultant: roundConsultant,
+        templateId: 'ward_round_v1',
+        layoutVersion: 1
+      });
+      setExportMessage(result.message);
+      setExportErrors(result.errors);
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const refreshPending = async () => {
+    setLoadingPending(true);
+    try {
+      const pending = await WardRoundImportService.listPending();
+      setPendingUpdates(pending);
+    } catch (error) {
+      console.warn('Failed to fetch pending ward round updates', error);
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  const handleApplyPending = async (pending: PendingWardRoundUpdate) => {
+    const patient = patients.find(p => p.id === pending.patientId);
+    if (!patient) return;
+    const diff = applyPendingUpdateToPatient(pending, patient);
+    await applyWardDiff(patient.id, diff, 'Ward round import (reviewed)');
+    await WardRoundImportService.resolvePending(pending.id);
+    setPendingUpdates(prev => prev.filter(p => p.id !== pending.id));
+  };
+
+  const handleRejectPending = async (pending: PendingWardRoundUpdate) => {
+    await WardRoundImportService.resolvePending(pending.id);
+    setPendingUpdates(prev => prev.filter(p => p.id !== pending.id));
+  };
+
   return (
     <div className="relative h-full">
       {/* Patient Detail always occupies the workspace */}
@@ -151,7 +316,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-3">
+            <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4 space-y-3">
               {showManualForm && (
                 <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
                   <div className="grid grid-cols-2 gap-2">
@@ -170,8 +335,18 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
                 </div>
               )}
 
-              <div className="space-y-2">
-                {activePatients.map(renderCard)}
+              <div className="space-y-4">
+                {activePatientsByWard.map(group => (
+                  <div key={group.ward} className="space-y-2">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase text-gray-500 px-1">
+                      <span>{group.ward}</span>
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                    <div className="space-y-2">
+                      {group.patients.map(renderCard)}
+                    </div>
+                  </div>
+                ))}
                 {activePatients.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
@@ -203,6 +378,83 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
                     ))}
                   </div>
                 </details>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 px-3 py-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Export ward round cards</div>
+                  <div className="text-xs text-gray-600">Saves PNGs + round.json into {exportFolder}</div>
+                </div>
+                <Button size="sm" startIcon={Download} isLoading={exporting} onClick={handleExportRound}>
+                  Export
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <input
+                  className="rounded-md border px-2 py-1 text-sm col-span-2"
+                  placeholder="Round ID"
+                  value={roundIdInput}
+                  onChange={(e) => setRoundIdInput(e.target.value)}
+                />
+                <input
+                  className="rounded-md border px-2 py-1 text-sm"
+                  placeholder="Ward"
+                  value={roundWard}
+                  onChange={(e) => setRoundWard(e.target.value)}
+                />
+                <input
+                  className="rounded-md border px-2 py-1 text-sm"
+                  placeholder="Consultant"
+                  value={roundConsultant}
+                  onChange={(e) => setRoundConsultant(e.target.value)}
+                />
+              </div>
+              {exportMessage && (
+                <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-2">
+                  {exportMessage}
+                  {exportErrors.length > 0 && (
+                    <ul className="list-disc pl-4 mt-1 text-rose-600">
+                      {exportErrors.map(err => <li key={err}>{err}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Pending ward round updates</div>
+                  <div className="text-xs text-gray-600">Review imports that need approval</div>
+                </div>
+                <Button size="xs" variant="outline" onClick={refreshPending} isLoading={loadingPending}>
+                  Refresh
+                </Button>
+              </div>
+              {pendingUpdates.length === 0 && (
+                <div className="text-xs text-gray-500">No pending updates.</div>
+              )}
+              {pendingUpdates.length > 0 && (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {pendingUpdates.map(pu => (
+                    <div key={pu.id} className="border border-gray-200 rounded-md p-2">
+                      <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                        <span>{pu.patientId}</span>
+                        <span className="text-xs text-gray-500">{pu.reason}</span>
+                      </div>
+                      <div className="text-xs text-gray-700 mt-1">{pu.llmNotes || 'Proposed changes ready for review.'}</div>
+                      <div className="text-xs text-gray-800 mt-2 space-y-1">
+                        {pu.proposedChanges.issues?.length > 0 && <div>Issues: {pu.proposedChanges.issues.length}</div>}
+                        {pu.proposedChanges.investigations?.length > 0 && <div>Investigations: {pu.proposedChanges.investigations.length}</div>}
+                        {pu.proposedChanges.tasks?.length > 0 && <div>Tasks: {pu.proposedChanges.tasks.length}</div>}
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <Button size="xs" onClick={() => handleApplyPending(pu)}>Apply</Button>
+                        <Button size="xs" variant="outline" onClick={() => handleRejectPending(pu)}>Reject</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

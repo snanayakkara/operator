@@ -260,6 +260,9 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Timeout ref for progress indicator cleanup
   const progressCleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Prevent overlapping EMR insertions (avoids duplicate appends when users click twice)
+  const insertionInFlightRef = useRef<Promise<void> | null>(null);
+
   // Stable service instances using useRef to prevent re-creation on renders
   const lmStudioService = useRef(LMStudioService.getInstance()).current;
   const whisperServerService = useRef(WhisperServerService.getInstance()).current;
@@ -4494,170 +4497,179 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // EMR insertion with field-specific targeting
   const handleInsertToEMR = useCallback(async (text: string, targetField?: string, agentContext?: AgentType | null) => {
-    try {
-      // Step 1: Validate patient names before insertion
-      const shouldProceed = await validatePatientBeforeInsertion(text);
-      if (!shouldProceed) {
-        console.log('🛑 Insertion cancelled due to patient mismatch');
-        return;
-      }
+    if (insertionInFlightRef.current) {
+      console.log('⏳ EMR insertion already in progress - reusing existing operation');
+      return insertionInFlightRef.current;
+    }
 
-      // Step 2: Proceed with normal insertion logic
-      console.log('✅ Patient validation passed - proceeding with insertion');
-
-      // Determine target field from agent type if not explicitly provided
-      // For display sessions, use the display session agent
-      const displayData = getCurrentDisplayData();
-
-      // PRIORITY: Check if there's a Quick Action field directly stored in the session
-      const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId) ||
-                            state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
-      const quickActionField = currentSession?.quickActionField;
-
-      const currentAgentType = targetField ? null : (agentContext || displayData.agent || state.currentAgent || state.ui.activeWorkflow);
-      const field = targetField || quickActionField || getTargetField(currentAgentType);
-
-      console.log('🔍 EMR insertion debug:');
-      console.log('  - agentContext:', agentContext);
-      console.log('  - currentAgent:', state.currentAgent);
-      console.log('  - activeWorkflow:', state.ui.activeWorkflow);
-      console.log('  - displayData.agent:', displayData.agent);
-      console.log('  - currentAgentType:', currentAgentType);
-      console.log('  - targetField:', targetField);
-      console.log('  - quickActionField (from session):', quickActionField);
-      console.log('  - field (final):', field);
-      console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
-      console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
-
-      const genericInsertionAgents: AgentType[] = ['angiogram-pci', 'quick-letter'];
-      const shouldForceGenericInsertion = currentAgentType !== null && genericInsertionAgents.includes(currentAgentType);
-
-      if (shouldForceGenericInsertion) {
-        console.log('📝 Agent requires direct cursor insertion - bypassing field mapping.');
-      }
-
-      if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
-        // Field-specific insertion: open field dialog and append content at the end
-        console.log(`📝 Opening ${getFieldDisplayName(field)} field and appending content`);
-
-        // Use insertMode: 'append' pattern - this will:
-        // 1. Open the field dialog
-        // 2. Navigate to the end of the existing content
-        // 3. Insert a newline and the new content
-        //
-        // IMPORTANT: Wrap with timeout to prevent hanging if content script doesn't respond
-        // (field dialogs can change page state and prevent response from being sent back)
-        try {
-          await Promise.race([
-            chrome.runtime.sendMessage({
-              type: 'EXECUTE_ACTION',
-              action: field, // Use the field name as the action (e.g., 'investigation-summary')
-              data: {
-                insertMode: 'append',
-                content: text
-              }
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Insertion timeout')), 3000))
-          ]);
-          console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
-        } catch (error) {
-          // Even if timeout/error occurs, the content was likely inserted successfully
-          // The timeout just means the content script didn't send a response back
-          console.log(`⚠️ Insertion response delayed/missing for ${getFieldDisplayName(field)}, continuing with auto-check...`);
+    const insertionOperation = (async () => {
+      try {
+        // Step 1: Validate patient names before insertion
+        const shouldProceed = await validatePatientBeforeInsertion(text);
+        if (!shouldProceed) {
+          console.log('🛑 Insertion cancelled due to patient mismatch');
+          return;
         }
-      } else if (!shouldForceGenericInsertion && text && text.trim().length > 0) {
-        // Smart fallback: If we have text to insert but no agent type, try Quick Action fields
-        // This handles cases where agent type tracking failed but we know we have processed content
-        console.log('🔍 No agent type but have text to insert - trying Quick Action field detection');
 
-        // Try each Quick Action field in sequence until one succeeds
-        const quickActionFields = [
-          { action: 'medications', displayName: 'Medications (Problem List for Phil)' },
-          { action: 'investigation-summary', displayName: 'Investigation Summary' },
-          { action: 'background', displayName: 'Background' }
-        ];
+        // Step 2: Proceed with normal insertion logic
+        console.log('✅ Patient validation passed - proceeding with insertion');
 
-        let inserted = false;
-        for (const fieldConfig of quickActionFields) {
+        // Determine target field from agent type if not explicitly provided
+        // For display sessions, use the display session agent
+        const displayData = getCurrentDisplayData();
+
+        // PRIORITY: Check if there's a Quick Action field directly stored in the session
+        const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId) ||
+                              state.patientSessions.find(s => s.id === state.displaySession.displaySessionId);
+        const quickActionField = currentSession?.quickActionField;
+
+        const currentAgentType = targetField ? null : (agentContext || displayData.agent || state.currentAgent || state.ui.activeWorkflow);
+        const field = targetField || quickActionField || getTargetField(currentAgentType);
+
+        console.log('🔍 EMR insertion debug:');
+        console.log('  - agentContext:', agentContext);
+        console.log('  - currentAgent:', state.currentAgent);
+        console.log('  - activeWorkflow:', state.ui.activeWorkflow);
+        console.log('  - displayData.agent:', displayData.agent);
+        console.log('  - currentAgentType:', currentAgentType);
+        console.log('  - targetField:', targetField);
+        console.log('  - quickActionField (from session):', quickActionField);
+        console.log('  - field (final):', field);
+        console.log('  - supportsFieldSpecific:', supportsFieldSpecificInsertion(currentAgentType));
+        console.log('  - isDisplayingSession:', displayData.isDisplayingSession);
+
+        const genericInsertionAgents: AgentType[] = ['angiogram-pci', 'quick-letter'];
+        const shouldForceGenericInsertion = currentAgentType !== null && genericInsertionAgents.includes(currentAgentType);
+
+        if (shouldForceGenericInsertion) {
+          console.log('📝 Agent requires direct cursor insertion - bypassing field mapping.');
+        }
+
+        if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
+          // Field-specific insertion: open field dialog and append content at the end
+          console.log(`📝 Opening ${getFieldDisplayName(field)} field and appending content`);
+
+          // Allow enough time for the Xestro dialog + textarea to appear before considering it a failure
+          const insertionTimeoutMs = 15000;
           try {
-            console.log(`🔍 Attempting ${fieldConfig.displayName}...`);
-            const response = await chrome.runtime.sendMessage({
-              type: 'EXECUTE_ACTION',
-              action: fieldConfig.action,
-              data: {
-                insertMode: 'append',
-                content: text
-              }
-            });
-
-            // Check if the insertion was successful
-            if (response && response.success !== false) {
-              console.log(`✅ Successfully inserted to ${fieldConfig.displayName}`);
-              inserted = true;
-              break;
-            }
+            await Promise.race([
+              chrome.runtime.sendMessage({
+                type: 'EXECUTE_ACTION',
+                action: field, // Use the field name as the action (e.g., 'investigation-summary')
+                data: {
+                  insertMode: 'append',
+                  content: text
+                }
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Insertion timeout')), insertionTimeoutMs))
+            ]);
+            console.log(`✅ Content appended to ${getFieldDisplayName(field)} field`);
           } catch (error) {
-            console.log(`⚠️ ${fieldConfig.displayName} attempt failed, trying next...`);
-            continue;
+            // Even if timeout/error occurs, the content was likely inserted successfully
+            // The timeout just means the content script didn't send a response back
+            console.log(`⚠️ Insertion response delayed/missing for ${getFieldDisplayName(field)}, continuing with auto-check...`, error);
           }
-        }
+        } else if (!shouldForceGenericInsertion && text && text.trim().length > 0) {
+          // Smart fallback: If we have text to insert but no agent type, try Quick Action fields
+          // This handles cases where agent type tracking failed but we know we have processed content
+          console.log('🔍 No agent type but have text to insert - trying Quick Action field detection');
 
-        if (!inserted) {
-          // All Quick Action attempts failed, fall back to generic insertion
-          console.log('📝 All Quick Action fields failed - using generic insertion');
+          // Try each Quick Action field in sequence until one succeeds
+          const quickActionFields = [
+            { action: 'medications', displayName: 'Medications (Problem List for Phil)' },
+            { action: 'investigation-summary', displayName: 'Investigation Summary' },
+            { action: 'background', displayName: 'Background' }
+          ];
+
+          let inserted = false;
+          for (const fieldConfig of quickActionFields) {
+            try {
+              console.log(`🔍 Attempting ${fieldConfig.displayName}...`);
+              const response = await chrome.runtime.sendMessage({
+                type: 'EXECUTE_ACTION',
+                action: fieldConfig.action,
+                data: {
+                  insertMode: 'append',
+                  content: text
+                }
+              });
+
+              // Check if the insertion was successful
+              if (response && response.success !== false) {
+                console.log(`✅ Successfully inserted to ${fieldConfig.displayName}`);
+                inserted = true;
+                break;
+              }
+            } catch (error) {
+              console.log(`⚠️ ${fieldConfig.displayName} attempt failed, trying next...`);
+              continue;
+            }
+          }
+
+          if (!inserted) {
+            // All Quick Action attempts failed, fall back to generic insertion
+            console.log('📝 All Quick Action fields failed - using generic insertion');
+            await chrome.runtime.sendMessage({
+              type: 'EXECUTE_ACTION',
+              action: 'insertText',
+              data: { text }
+            });
+          }
+        } else {
+          // No results or no agent type - use generic insertion
+          console.log('📝 Using generic EMR text insertion (no specific field mapping)');
+
           await chrome.runtime.sendMessage({
             type: 'EXECUTE_ACTION',
             action: 'insertText',
             data: { text }
           });
+
+          console.log('📝 Text inserted to EMR (generic)');
         }
-      } else {
-        // No results or no agent type - use generic insertion
-        console.log('📝 Using generic EMR text insertion (no specific field mapping)');
 
-        await chrome.runtime.sendMessage({
-          type: 'EXECUTE_ACTION',
-          action: 'insertText',
-          data: { text }
-        });
-
-        console.log('📝 Text inserted to EMR (generic)');
-      }
-
-      // Auto-mark session as complete when user inserts to EMR
-      // Check both active recording session AND displayed session (for viewing completed sessions)
-      const sessionToComplete = state.currentSessionId || state.displaySession.displaySessionId;
-      if (sessionToComplete) {
-        const currentSession = state.patientSessions.find(s => s.id === sessionToComplete);
-        if (currentSession && currentSession.status === 'completed' && !currentSession.reviewedAt) {
-          handleMarkSessionComplete(currentSession);
-          console.log('✅ Auto-marked session as complete after EMR insertion:', sessionToComplete);
+        // Auto-mark session as complete when user inserts to EMR
+        // Check both active recording session AND displayed session (for viewing completed sessions)
+        const sessionToComplete = state.currentSessionId || state.displaySession.displaySessionId;
+        if (sessionToComplete) {
+          const currentSession = state.patientSessions.find(s => s.id === sessionToComplete);
+          if (currentSession && currentSession.status === 'completed' && !currentSession.reviewedAt) {
+            handleMarkSessionComplete(currentSession);
+            console.log('✅ Auto-marked session as complete after EMR insertion:', sessionToComplete);
+          }
         }
-      }
 
-      // Auto-check the session in the dropdown after successful EMR insertion
-      // Try multiple sources to find the session ID: currentSessionId (active work), displaySessionId (viewing), or selectedSessionId (fallback)
-      const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId || state.selectedSessionId;
-      if (insertedSessionId) {
-        await markSessionChecked(insertedSessionId);
-        setAutoCheckedSessions(prev => {
-          const next = new Set(prev);
-          next.add(insertedSessionId);
-          return next;
-        });
-        console.log('✅ Auto-checked session in dropdown after EMR insertion:', insertedSessionId);
-      } else {
-        console.warn('⚠️ Could not auto-check session - no session ID found', {
-          currentSessionId: state.currentSessionId,
-          displaySessionId: state.displaySession.displaySessionId,
-          selectedSessionId: state.selectedSessionId
-        });
+        // Auto-check the session in the dropdown after successful EMR insertion
+        // Try multiple sources to find the session ID: currentSessionId (active work), displaySessionId (viewing), or selectedSessionId (fallback)
+        const insertedSessionId = state.currentSessionId || state.displaySession.displaySessionId || state.selectedSessionId;
+        if (insertedSessionId) {
+          await markSessionChecked(insertedSessionId);
+          setAutoCheckedSessions(prev => {
+            const next = new Set(prev);
+            next.add(insertedSessionId);
+            return next;
+          });
+          console.log('✅ Auto-checked session in dropdown after EMR insertion:', insertedSessionId);
+        } else {
+          console.warn('⚠️ Could not auto-check session - no session ID found', {
+            currentSessionId: state.currentSessionId,
+            displaySessionId: state.displaySession.displaySessionId,
+            selectedSessionId: state.selectedSessionId
+          });
+        }
+      } catch (error) {
+        console.error('Failed to insert text to EMR:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('Failed to insert text to EMR:', error);
-      throw error;
+    })();
+
+    insertionInFlightRef.current = insertionOperation;
+    try {
+      await insertionOperation;
+    } finally {
+      insertionInFlightRef.current = null;
     }
-  }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete, markSessionChecked]);
+  }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete, markSessionChecked, validatePatientBeforeInsertion]);
 
   // Memoized status checking for better performance
   // Use a stable reference to avoid recreating the callback every render
@@ -4947,11 +4959,8 @@ const OptimizedAppContent: React.FC = memo(() => {
       return 'summary';
     }
 
-    // If showing edit/train mode
-    if (state.ui.showEditAndTrain) return 'train';
-
     return undefined;
-  }, [recorder.isRecording, state.processingStatus, state.patientSessions, state.currentSessionId, state.currentAgent, state.ui.activeWorkflow, state.ui.showEditAndTrain]);
+  }, [recorder.isRecording, state.processingStatus, state.patientSessions, state.currentSessionId, state.currentAgent, state.ui.activeWorkflow]);
 
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
@@ -5445,9 +5454,9 @@ const OptimizedAppContent: React.FC = memo(() => {
           
           {/* Default State - Ready for Recording with 3D Lanyard */}
           {!state.displaySession.isDisplayingSession && !recorder.isRecording && !state.streaming && !stableSelectedSessionId && !overlayState.patientEducation && !state.isProcessing && !(state.results && state.processingStatus === 'complete') && (
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-between dot-grid-background-light">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center dot-grid-background-light">
               {/* 3D Interactive Lanyard - takes up most of the screen */}
-              <div className="w-full flex-1 flex items-start justify-center">
+              <div className="w-full flex-1 flex items-center justify-center">
                 <Lanyard
                   position={[0, 13, 20]}
                   gravity={[0, -40, 0]}
@@ -5456,32 +5465,6 @@ const OptimizedAppContent: React.FC = memo(() => {
                   cardText=""
                   cardTextureUrl={lanyardTextureUrl || undefined}
                 />
-              </div>
-
-              {/* Instructions and Status - anchored to bottom */}
-              <div className="w-full max-w-md text-center space-y-3 px-8 pb-6">
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    Select a workflow below to start recording for your next patient.
-                    Recordings will process in the background.
-                  </p>
-                </div>
-
-                {/* Background Sessions Status */}
-                {state.patientSessions.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-xs font-medium text-blue-900">Background Processing</span>
-                    </div>
-                    <p className="text-xs text-blue-800">
-                      {state.patientSessions.filter(s => ['transcribing', 'processing'].includes(s.status)).length} processing, {' '}
-                      {state.patientSessions.filter(s => s.status === 'completed').length} completed.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           )}

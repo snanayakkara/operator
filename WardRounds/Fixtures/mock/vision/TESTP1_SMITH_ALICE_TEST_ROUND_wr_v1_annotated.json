@@ -1,0 +1,19 @@
+{
+  "patient_id_from_card": "TESTP1",
+  "round_id_from_card": "TEST_ROUND",
+  "regions": {
+    "obs": "Sat 98% RA, HR 82, BP 110/70",
+    "bloods": "Cr 95 (was 110), K 4.3",
+    "imaging": "CXR improved, less congestion",
+    "meds": "Switched to oral frusemide 40mg bd",
+    "plan": "Wean IV diuretics; repeat bloods tomorrow; consider repeat echo in 48h"
+  },
+  "confidence": {
+    "obs": 0.92,
+    "bloods": 0.88,
+    "imaging": 0.8,
+    "meds": 0.9,
+    "plan": 0.85
+  },
+  "warnings": []
+}

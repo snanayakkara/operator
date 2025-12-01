@@ -1,0 +1,603 @@
+
+# Ward Round Card → Vision → Operator Update Pipeline
+
+## 0. High-level overview
+
+Goal:  
+Enable a workflow where:
+
+1. **Before ward round (MacBook Pro)**  
+   - Operator generates **one “card” image per patient** containing:
+     - Patient identity (ID + name + round ID)
+     - Fixed boxes for ward-round updates (obs, bloods, imaging, meds, plan, etc.)
+   - Those images are written into an **iCloud-backed folder**, synced to the iPad.
+
+2. **During ward round (iPad)**  
+   - Clinician opens each card full-screen.
+   - Uses **Apple Pencil** to handwrite updates inside predefined boxes.
+   - Patients can be done in any order.
+
+3. **After ward round (iPad → iCloud)**  
+   - A **single Apple Shortcut** is run:
+     - Gathers the annotated cards for that round.
+     - Moves/copies them into a dedicated iCloud folder for import.
+
+4. **Back on MacBook Pro (vision pipeline)**  
+   - A Mac-side watcher detects new annotated cards.
+   - For each image:
+     - Uses a **vision LLM (e.g. Qwen-VL-8B)** to read handwriting in known regions.
+     - Uses a **clinical text LLM (MedGemma-27B)** to:
+       - Clean and normalise the text.
+       - Map it to structured fields.
+       - Propose updates to each patient’s:
+         - Issues
+         - Investigations
+         - Tasks
+   - Changes are applied to the Operator ward-round data model with **human-in-the-loop review** and robust conflict detection.
+
+Everything runs **locally on the MacBook Pro**, using iCloud Drive only as a transport/sync mechanism between Mac and iPad. No external cloud services.
+
+---
+
+## 1. Data flow & directories
+
+Assume iCloud Drive root on macOS is:
+
+`~/Library/Mobile Documents/com~apple~CloudDocs/`
+
+Operator keeps ward round assets under its own subfolder:
+
+- `Operator/WardRounds/Exports/` – Mac → iPad (pre-round cards)
+- `Operator/WardRounds/Imports/` – iPad → Mac (annotated cards)
+- `Operator/WardRounds/Archive/` – processed cards
+- `Operator/WardRounds/Logs/` – JSON logs and test artifacts (optional)
+
+### Example structure
+
+```text
+Operator/WardRounds/
+  Exports/
+    2025-11-30_AM_Cardiology_A/
+      round.json
+      123456_SMITH_JANE_2025-11-30_AM_wr_v1.png
+      789012_PATEL_RAVI_2025-11-30_AM_wr_v1.png
+      ...
+  Imports/
+    2025-11-30_AM_Cardiology_A/
+      123456_SMITH_JANE_2025-11-30_AM_wr_v1_annotated.png
+      789012_PATEL_RAVI_2025-11-30_AM_wr_v1_annotated.png
+      round.json
+  Archive/
+    2025-11-30_AM_Cardiology_A/
+      ... (raw + annotated images + parsed JSON snapshots)
+  Logs/
+    2025-11-30_AM_Cardiology_A_import_log.json
+```
+
+### `round.json`
+
+Metadata for a single ward round:
+
+```json
+{
+  "round_id": "2025-11-30_AM_Cardiology_A",
+  "created_at": "2025-11-30T08:12:00+11:00",
+  "ward": "Cardiology A",
+  "consultant": "SN",
+  "patient_count": 14,
+  "template_id": "ward_round_v1",
+  "layout_version": 1
+}
+```
+
+---
+
+## 2. Card template & machine-readable box map
+
+Each card is a **single-page image** (PNG) that:
+
+- Fits on one iPad screen in portrait or landscape (decide & lock).
+- Has:
+  - Clear patient identity section.
+  - Multiple boxed regions for updates.
+
+### Patient identity
+
+At the top:
+
+- Printed text, e.g.:
+
+  `123456 – JANE SMITH – 2025-11-30 AM – Cardiology A`
+
+- Optionally, a small QR or barcode encoding:
+  - `patient_id|round_id|template_id|layout_version`
+
+File naming:
+
+`<PATIENTID>_<SURNAME>_<FIRSTNAME>_<ROUNDID>_<TEMPLATEID>.png`
+
+Example:
+
+`123456_SMITH_JANE_2025-11-30_AM_wr_v1.png`
+
+### Box layout
+
+Each card uses a fixed layout, defined centrally in a **JSON layout map**. This file lives on the Mac, not on the iPad:
+
+`Operator/WardRounds/Layouts/ward_round_v1.json`
+
+Example:
+
+```json
+{
+  "template_id": "ward_round_v1",
+  "layout_version": 1,
+  "image_width": 1668,
+  "image_height": 2388,
+  "regions": {
+    "patient_id": { "x": 80, "y": 60, "width": 1500, "height": 150 },
+    "obs":       { "x": 80, "y": 260, "width": 1500, "height": 260 },
+    "bloods":    { "x": 80, "y": 560, "width": 1500, "height": 260 },
+    "imaging":   { "x": 80, "y": 860, "width": 1500, "height": 260 },
+    "meds":      { "x": 80, "y": 1160, "width": 1500, "height": 260 },
+    "plan":      { "x": 80, "y": 1460, "width": 1500, "height": 360 }
+  }
+}
+```
+
+The visual card must align with these coordinates so:
+
+- The **handwritten text** is inside the target regions.
+- Pre-printed labels (e.g. “Observations”, “Bloods”) are outside or minimal, so they’re easy to ignore.
+
+---
+
+## 3. iPad workflow & Shortcuts
+
+We explicitly **avoid** building a full custom iPad app. Instead, we use:
+
+- iCloud Drive
+- Files / Photos app
+- Apple Pencil Markup
+- Apple Shortcuts
+
+### Shortcut A: “Start Ward Round”
+
+- Triggerable from Lock Screen / Home Screen.
+- Behaviour:
+  1. Determine the most recent folder under `Operator/WardRounds/Exports/`.
+     - Or optionally let the user choose from a list.
+  2. Open that folder in Files app.
+  3. Optionally open the first image in Quick Look automatically.
+
+From this point, user:
+
+- Opens each patient card.
+- Uses **Markup** to write into boxes.
+- Swipes between images as needed.
+- Patients can be done in any order.
+
+### Editing
+
+All editing is done via built-in Markup:
+
+- No extra app or UI.
+- Annotations are persisted directly into the PNG files (or into associated markup metadata–we’ll treat the exported result as an updated PNG).
+
+### Shortcut B: “Send Ward Round to Mac”
+
+- Triggered after the round is finished.
+- Two possible modes:
+  - Work on the known round folder (based on `round.json`).
+  - Or operate on selected images via Share Sheet.
+
+**Folder-based mode:**
+
+1. Identify the active round folder in `Exports/…`.
+2. Filter PNG files in that folder that were **modified today**.
+3. Copy or move them to:
+
+   `Operator/WardRounds/Imports/<ROUNDID>/`
+
+   with updated filenames, e.g.:
+
+   `123456_SMITH_JANE_2025-11-30_AM_wr_v1_annotated.png`
+
+4. Ensure `round.json` is also present in the Imports folder.
+5. Show a confirmation notification:  
+   “Sent 14 ward round cards to Mac at 10:02.”
+
+Once synced, the Mac watcher picks these up.
+
+---
+
+## 4. Mac watcher & processing pipeline
+
+A background process on MacBook Pro:
+
+- Watches `Operator/WardRounds/Imports/` for new round folders.
+- For each round:
+
+  1. Read `round.json`.
+  2. Enumerate `*_annotated.png` files.
+  3. For each file:
+     - Parse filename → `patient_id`, `name`, `round_id`, `template_id`.
+     - Load the corresponding layout map JSON.
+     - Run the **vision + text pipeline** (see next section).
+     - Produce a structured JSON update for that patient.
+
+  4. Aggregate patient-level updates into a round-level result.
+  5. Apply updates to Operator’s data model with human-in-the-loop review.
+  6. Move processed assets to `Operator/WardRounds/Archive/<ROUNDID>/`.
+  7. Create a log in `Operator/WardRounds/Logs/<ROUNDID>_import_log.json`.
+
+The watcher should be:
+
+- Robust to partial failures (some patients parse, others fail).
+- Re-runnable (idempotent, or at least able to skip already processed images).
+- Configurable via a simple config file (paths, model endpoints, thresholds).
+
+---
+
+## 5. Two-stage LLM pipeline
+
+We use **two models**:
+
+- Stage 1: Vision + OCR + region-aware extraction  
+  **Model:** Qwen-VL-8B (or similar vision model available locally)
+- Stage 2: Clinical text structuring & update reasoning  
+  **Model:** MedGemma-27B (or similar clinical LLM available locally)
+
+### 5.1 Stage 1 – Qwen-VL-8B (vision)
+
+Input:
+
+- The full annotated ward round card image.
+- The template layout map (regions with names).
+- A prompt explaining:
+
+  - Which regions exist and what they mean.
+  - That handwriting is inside those boxes.
+  - To ignore printed labels and box borders.
+
+Expected output (strict JSON):
+
+```json
+{
+  "patient_id_from_card": "123456",
+  "round_id_from_card": "2025-11-30_AM_Cardiology_A",
+  "regions": {
+    "obs": "Written text inside obs box...",
+    "bloods": "Written text inside bloods box...",
+    "imaging": "Written text inside imaging box...",
+    "meds": "Written text inside meds box...",
+    "plan": "Written text inside plan box..."
+  },
+  "confidence": {
+    "obs": 0.93,
+    "bloods": 0.88,
+    "imaging": 0.65,
+    "meds": 0.9,
+    "plan": 0.75
+  },
+  "warnings": []
+}
+```
+
+If a region appears blank, it should return an empty string and low confidence.
+
+### 5.2 Stage 2 – MedGemma-27B (clinical text & updates)
+
+Input:
+
+- Patient context from Operator:
+  - Existing issues (with subpoints / timeline).
+  - Existing investigations and results.
+  - Existing tasks.
+- New region text from Qwen (obs/bloods/imaging/meds/plan).
+- Confidence per region.
+- Round metadata (date/time, ward, consultant).
+
+The prompt:
+
+- Explains the Operator data model for a **ward patient**:
+  - `issues`: list of issues, each with subpoints / notes.
+  - `investigations`: imaging, blood tests, etc.
+  - `tasks`: actionable items (what needs to be done).
+- Asks the model to:
+
+  1. Interpret the new notes.
+  2. For each of:
+     - Issues
+     - Investigations
+     - Tasks  
+
+     do **one of**:
+     - Update an existing subpoint in place.
+     - Add a new dated subpoint under an existing issue.
+     - Add a new issue / investigation / task if clearly new.
+
+  3. Return a **proposed update plan**, not direct mutations.
+
+Output JSON shape:
+
+```json
+{
+  "patient_id": "123456",
+  "round_id": "2025-11-30_AM_Cardiology_A",
+  "proposed_changes": {
+    "issues": [
+      {
+        "issue_id": "CHF",
+        "action": "append_subpoint",
+        "subpoint": {
+          "date": "2025-11-30",
+          "text": "Now euvolaemic on oral diuretics; plan to wean IV frusemide.",
+          "source": "ward_round_card",
+          "confidence": 0.9
+        }
+      },
+      {
+        "issue_id": "NEW",
+        "action": "create_issue",
+        "issue_label": "Fever / possible infection",
+        "initial_subpoint": {
+          "date": "2025-11-30",
+          "text": "Febrile overnight 38.3; blood cultures sent.",
+          "source": "ward_round_card",
+          "confidence": 0.86
+        }
+      }
+    ],
+    "investigations": [
+      {
+        "action": "add_result",
+        "investigation_type": "bloods",
+        "detail": "Cr improved from 110 to 95; K 4.3.",
+        "date": "2025-11-30",
+        "confidence": 0.9
+      }
+    ],
+    "tasks": [
+      {
+        "action": "add_task",
+        "task": "Repeat echo in 48 hours.",
+        "due": "2025-12-02",
+        "priority": "normal",
+        "confidence": 0.8
+      }
+    ]
+  },
+  "llm_notes": "Summary of interpretation and any uncertainties.",
+  "overall_confidence": 0.87
+}
+```
+
+---
+
+## 6. Conflict detection & human-in-the-loop
+
+We must handle:
+
+1. **Edits between export and import**
+2. **Low-confidence interpretations**
+
+### 6.1 Edit conflicts
+
+For each patient, we track:
+
+- The timestamp when the card was exported: `exported_at`.
+- The last modification time of the patient record in Operator: `last_modified_at`.
+
+Rules:
+
+- If `patient.last_modified_at > exported_at`:
+  - Do **not** auto-apply changes.
+  - Instead, mark the whole patient as `needs_review_due_to_conflict`.
+
+### 6.2 Confidence thresholds
+
+Define config values:
+
+```json
+{
+  "min_region_confidence": 0.7,
+  "min_overall_confidence": 0.75
+}
+```
+
+Behaviour:
+
+- If any critical region (e.g. meds, plan) has `confidence < min_region_confidence`:
+  - Mark that field as needing review.
+- If `overall_confidence < min_overall_confidence`:
+  - Do not auto-apply; present everything as a suggestion.
+
+### 6.3 Review UI in Operator
+
+For each round import, Operator should show:
+
+- A **“Review imported ward round”** panel:
+
+  Per patient:
+
+  - Thumbnail / link to annotated image.
+  - Old vs proposed values for:
+    - Issues (new subpoints, new issues)
+    - Investigations
+    - Tasks
+  - Clear status: `auto-applied`, `proposed`, `needs review`, `failed`.
+
+Actions:
+
+- Accept all proposed changes for this patient.
+- Accept / reject individual proposed items.
+- Edit proposed text before accepting.
+- Mark as “ignore this round for this patient”.
+
+No changes are silently applied if:
+
+- There was an edit conflict, or
+- Confidence thresholds fail.
+
+---
+
+## 7. Test harness
+
+We need a test harness that runs completely offline with synthetic data.
+
+### Goals
+
+- Validate:
+  - Layout mapping works.
+  - Vision parsing returns structured region text.
+  - MedGemma updates are sensible.
+  - Error handling and logging.
+
+### Design
+
+Provide a CLI or script, e.g.:
+
+`bin/ward_round_test.ts` (or similar)
+
+Features:
+
+1. Use **test fixtures** in `Operator/WardRounds/Fixtures/`:
+
+   ```text
+   Fixtures/
+     layouts/
+       ward_round_v1.json
+     cards/
+       TEST_001_JONES_ALICE_wr_v1_annotated.png
+       TEST_002_BLOGGS_BOB_wr_v1_annotated.png
+     operator_state/
+       TEST_ward_state.json
+   ```
+
+2. Runs the full pipeline on these test images:
+
+   - Loads layout map.
+   - Calls Qwen-VL-8B endpoint (can be mocked in tests).
+   - Calls MedGemma-27B endpoint (can be mocked).
+   - Produces a JSON file with proposed changes.
+
+3. Outputs:
+
+   - `Operator/WardRounds/Logs/test_run_<timestamp>.json`
+   - Optional HTML or markdown preview for side-by-side inspection.
+
+4. Supports a **mock mode**:
+
+   - When enabled, uses static JSON responses in place of real model calls.
+   - Allows testing all plumbing without needing the models running.
+
+---
+
+## 8. Configuration & model abstraction
+
+Abstract LLM calls behind interfaces, so changing models or endpoints only needs config changes.
+
+### Example config
+
+```json
+{
+  "paths": {
+    "icloud_root": "~/Library/Mobile Documents/com~apple~CloudDocs",
+    "ward_round_root": "Operator/WardRounds"
+  },
+  "models": {
+    "vision": {
+      "name": "Qwen-VL-8B",
+      "endpoint": "http://localhost:8001/v1/vision"
+    },
+    "clinical_llm": {
+      "name": "MedGemma-27B",
+      "endpoint": "http://localhost:8002/v1/chat"
+    }
+  },
+  "confidence": {
+    "min_region_confidence": 0.7,
+    "min_overall_confidence": 0.75
+  }
+}
+```
+
+Provide:
+
+- `VisionModelClient` interface.
+- `ClinicalLLMClient` interface.
+
+Implementations:
+
+- Real HTTP client (LM Studio / local server).
+- Mock clients for tests.
+
+---
+
+## 9. Operator integration
+
+We assume an existing **Operator** data model with:
+
+- `Patient` entity
+- `WardRoundSession` or similar
+- Per-patient state:
+
+  ```ts
+  interface WardPatientState {
+    patientId: string;
+    issues: Issue[];
+    investigations: Investigation[];
+    tasks: Task[];
+    lastModifiedAt: string; // ISO
+  }
+  ```
+
+The pipeline should:
+
+1. Map `patient_id` from card → internal `patientId`.
+2. Fetch current `WardPatientState`.
+3. Apply the **proposed changes** from MedGemma as:
+   - Either direct mutations (if safe / high confidence / no conflict).
+   - Or queued proposals for review.
+
+We must **never**:
+- Create a new patient record implicitly.
+- Apply transformations without logging.
+
+For conflicts:
+
+- Store a diff-like structure in a `PendingWardRoundUpdate` entity.
+
+Example:
+
+```ts
+interface PendingWardRoundUpdate {
+  id: string;
+  patientId: string;
+  roundId: string;
+  createdAt: string;
+  proposedChanges: ProposedChanges; // same shape as MedGemma output
+  reason: string; // e.g. "Conflict with newer edits" or "Low confidence"
+}
+```
+
+The Operator UI uses this entity to present a review screen.
+
+---
+
+## 10. Extensibility
+
+This architecture is template-driven:
+
+- `template_id` and `layout_version` define the visual & spatial layout.
+- The same machinery can later support:
+
+  - Clinic lists (`clinic_round_v1`)
+  - Procedure checklists (`theatre_list_v1`)
+  - Research visit forms (`study_form_v1`)
+
+The implementation should:
+
+- Keep ward-round logic in a clearly identified module (e.g. `wardRoundVisionIngest`).
+- Generalise template handling where reasonable.

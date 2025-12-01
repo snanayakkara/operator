@@ -10,7 +10,7 @@ import React, { memo } from 'react';
 export type TagVariant = 'outline' | 'filled' | 'subtle';
 export type TagColor = 'gray' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan';
 
-interface TagProps {
+export interface TagProps {
   children: React.ReactNode;
   variant?: TagVariant;
   color?: TagColor;

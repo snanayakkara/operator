@@ -191,7 +191,9 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Navigate to previous or next active patient
   const navigateToPatient = useCallback((direction: 'prev' | 'next') => {
-    const activePatients = patients.filter(p => p.status === 'active').sort((a, b) => a.roundOrder - b.roundOrder);
+    const activePatients = patients
+      .filter(p => p.status === 'active')
+      .sort((a, b) => (a.roundOrder ?? 0) - (b.roundOrder ?? 0));
     if (activePatients.length === 0) return;
 
     const currentIndex = selectedPatientId

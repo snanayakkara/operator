@@ -40,8 +40,10 @@ const TYPE_OPTIONS: OptionButton[] = [
 ];
 
 const FOLLOWUP_OPTIONS: OptionButton[] = [
+  { value: '1wk', label: '1 Week', sublabel: 'Urgent review', icon: Calendar },
   { value: '6wk', label: '6 Weeks', sublabel: 'Early review', icon: Calendar },
   { value: '3mth', label: '3 Months', sublabel: 'Standard', icon: Calendar },
+  { value: '6mth', label: '6 Months', sublabel: 'Medium-term', icon: Calendar },
   { value: '12mth', label: '12 Months', sublabel: 'Extended', icon: Calendar },
   { value: 'none', label: 'No Follow-up', sublabel: 'Discharged', icon: CalendarX }
 ];
@@ -102,8 +104,8 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
           break;
         }
         case '4': {
-          // Cycle follow-up: 6wk -> 3mth -> 12mth -> none -> 6wk
-          const followUpOrder: FollowUpPeriod[] = ['6wk', '3mth', '12mth', 'none'];
+          // Cycle follow-up: 1wk -> 6wk -> 3mth -> 6mth -> 12mth -> none -> 1wk
+          const followUpOrder: FollowUpPeriod[] = ['1wk', '6wk', '3mth', '6mth', '12mth', 'none'];
           const currentIndex = followUpOrder.indexOf(matrix.followUp);
           const nextIndex = (currentIndex + 1) % followUpOrder.length;
           updateMatrix('followUp', followUpOrder[nextIndex]);
@@ -187,13 +189,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               size="md"
               startIcon={option.icon}
               endIcon={matrix.complexity === option.value ? Check : undefined}
-              className={`
-                flex items-center justify-between
-                ${matrix.complexity === option.value
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-                }
-              `}
+              className="flex items-center justify-between"
             >
               {option.label}
             </Button>
@@ -215,13 +211,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               size="md"
               startIcon={option.icon}
               endIcon={matrix.modality === option.value ? Check : undefined}
-              className={`
-                flex items-center justify-between
-                ${matrix.modality === option.value
-                  ? 'border-emerald-500 bg-emerald-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-                }
-              `}
+              className="flex items-center justify-between"
             >
               {option.label}
             </Button>
@@ -243,13 +233,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               size="md"
               startIcon={option.icon}
               endIcon={matrix.type === option.value ? Check : undefined}
-              className={`
-                flex items-center justify-between
-                ${matrix.type === option.value
-                  ? 'border-purple-500 bg-purple-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-                }
-              `}
+              className="flex items-center justify-between"
             >
               {option.label}
             </Button>
@@ -262,7 +246,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         <label className="block text-xs font-medium text-gray-700 mb-2">
           4. Follow-up Period <span className="text-gray-500 font-normal">(Press 4)</span>
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {FOLLOWUP_OPTIONS.map((option) => (
             <Button
               key={option.value}
@@ -271,13 +255,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               size="md"
               startIcon={option.icon}
               endIcon={matrix.followUp === option.value ? Check : undefined}
-              className={`
-                flex items-center justify-between
-                ${matrix.followUp === option.value
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-                }
-              `}
+              className="flex items-center justify-between"
             >
               {option.label}
             </Button>
@@ -299,13 +277,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               size="md"
               startIcon={option.icon}
               endIcon={matrix.followUpMethod === option.value ? Check : undefined}
-              className={`
-                flex items-center justify-between
-                ${matrix.followUpMethod === option.value
-                  ? 'border-teal-500 bg-teal-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300'
-                }
-              `}
+              className="flex items-center justify-between"
             >
               {option.label}
             </Button>
@@ -375,7 +347,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
         <div className="mb-3">
           <div className="text-xs text-gray-600 mb-1">Timeframe:</div>
           <div className="flex flex-wrap gap-1.5">
-            {['2 weeks', '4 weeks', '6-8 weeks', 'next available'].map((timeframe) => (
+            {['2 weeks', '4 weeks', '6-8 weeks', 'prior to next appointment', 'next available'].map((timeframe) => (
               <Button
                 key={timeframe}
                 onClick={() => {

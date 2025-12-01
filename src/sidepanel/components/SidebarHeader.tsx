@@ -226,8 +226,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
               title="Mobile dictations"
             />
             {unattachedMobileJobs.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-10">
-                {unattachedMobileJobs.length > 9 ? '9+' : unattachedMobileJobs.length}
+              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-10 px-1.5 min-w-[18px] h-4 leading-tight">
+                {unattachedMobileJobs.length}
               </span>
             )}
           </div>
@@ -245,8 +245,8 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
               title={uncheckedCount > 0 ? 'View active sessions' : 'Session history'}
             />
             {uncheckedCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {uncheckedCount > 9 ? '9+' : uncheckedCount}
+              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5 min-w-[18px] h-4 leading-tight">
+                {uncheckedCount}
               </span>
             )}
           </div>

@@ -1,0 +1,37 @@
+{
+  "patient_id": "TESTP1",
+  "round_id": "TEST_ROUND",
+  "proposed_changes": {
+    "issues": [
+      {
+        "issue_id": "CHF",
+        "action": "append_subpoint",
+        "subpoint": {
+          "date": "2025-01-01",
+          "text": "Now euvolaemic on oral diuretics; wean IV frusemide",
+          "confidence": 0.9
+        }
+      }
+    ],
+    "investigations": [
+      {
+        "action": "add_result",
+        "investigation_type": "bloods",
+        "detail": "Cr improved from 110 to 95, K 4.3",
+        "date": "2025-01-01",
+        "confidence": 0.86
+      }
+    ],
+    "tasks": [
+      {
+        "action": "add_task",
+        "task": "Repeat echo in 48 hours",
+        "due": "2025-01-03",
+        "priority": "normal",
+        "confidence": 0.8
+      }
+    ]
+  },
+  "llm_notes": "Plan to wean IV diuretics and monitor renal function.",
+  "overall_confidence": 0.87
+}

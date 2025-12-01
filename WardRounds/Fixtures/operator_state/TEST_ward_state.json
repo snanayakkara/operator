@@ -1,0 +1,30 @@
+{
+  "patients": [
+    {
+      "id": "TESTP1",
+      "name": "Alice Smith",
+      "mrn": "123456",
+      "bed": "1A",
+      "oneLiner": "CHF, AF, IV diuretics",
+      "status": "active",
+      "site": "Test Ward",
+      "createdAt": "2025-01-01T09:00:00Z",
+      "lastUpdatedAt": "2025-01-01T09:00:00Z",
+      "intakeNotes": [],
+      "issues": [
+        {
+          "id": "CHF",
+          "title": "Congestive heart failure",
+          "status": "open",
+          "subpoints": [
+            { "id": "note-1", "timestamp": "2025-01-01T09:00:00Z", "text": "IV frusemide started" }
+          ]
+        }
+      ],
+      "investigations": [],
+      "tasks": [],
+      "wardEntries": []
+    }
+  ],
+  "pending": []
+}

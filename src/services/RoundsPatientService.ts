@@ -3,21 +3,36 @@ import {
   Issue,
   IssueUpdate,
   IssueSubpoint,
+  IssueSubpointNote,
+  IssueSubpointProcedure,
   RoundsPatient,
   Task,
   WardEntry,
   WardUpdateDiff
-} from '@/types/rounds.types';
-import { computeLabTrendString, generateRoundsId, isoNow } from '@/utils/rounds';
+} from '../types/rounds.types';
+import { computeLabTrendString, generateRoundsId, isoNow } from '../utils/rounds';
 
 const normalizeText = (text: string) => text.trim().toLowerCase();
 
-const normalizeSubpoints = (subpoints: IssueSubpoint[] = []): IssueSubpoint[] => subpoints.map(sub => ({
-  ...sub,
-  type: sub.type || 'note',
-  text: 'text' in sub ? (sub as any).text || '' : '',
-  procedure: sub.type === 'procedure' ? sub.procedure : undefined
-}));
+const normalizeSubpoints = (subpoints: IssueSubpoint[] = []): IssueSubpoint[] =>
+  subpoints.map(sub => {
+    if (sub.type === 'procedure' && (sub as IssueSubpointProcedure).procedure) {
+      return {
+        id: sub.id,
+        timestamp: sub.timestamp,
+        type: 'procedure',
+        text: 'text' in sub ? (sub as any).text || '' : undefined,
+        procedure: (sub as IssueSubpointProcedure).procedure!
+      } as IssueSubpointProcedure;
+    }
+
+    return {
+      id: sub.id,
+      timestamp: sub.timestamp,
+      type: 'note',
+      text: 'text' in sub ? (sub as any).text || '' : ''
+    } as IssueSubpointNote;
+  });
 
 const clonePatient = (patient: RoundsPatient): RoundsPatient => ({
   ...patient,
@@ -75,7 +90,8 @@ export const createEmptyPatient = (name: string, options?: {
     issues: [],
     investigations: [],
     tasks: [],
-    wardEntries: []
+    wardEntries: [],
+    roundCompletedDate: undefined
   };
 };
 
@@ -83,12 +99,7 @@ const ensureIssueDefaults = (issue: Issue): Issue => ({
   ...issue,
   id: issue.id || generateRoundsId('issue'),
   status: issue.status || 'open',
-  subpoints: (issue.subpoints || []).map(sub => ({
-    ...sub,
-    type: sub.type || 'note',
-    text: 'text' in sub ? (sub as any).text || '' : '',
-    procedure: sub.type === 'procedure' ? sub.procedure : undefined
-  })),
+  subpoints: normalizeSubpoints(issue.subpoints),
   lastUpdatedAt: issue.lastUpdatedAt || isoNow()
 });
 

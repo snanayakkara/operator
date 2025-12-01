@@ -1,0 +1,136 @@
+{
+  "roundId": "TEST_ROUND",
+  "metadata": {
+    "round_id": "TEST_ROUND",
+    "created_at": "2025-01-01T08:00:00Z",
+    "ward": "Test Ward",
+    "consultant": "SN",
+    "patient_count": 1,
+    "template_id": "ward_round_v1",
+    "layout_version": 1
+  },
+  "patients": [
+    {
+      "patientId": "TESTP1",
+      "roundId": "TEST_ROUND",
+      "imagePath": "/Users/shane/SynologyDrive/Cloud/githubrepo/snanayakkara.github.io/operator/Operator/WardRounds/Imports/TEST_ROUND/TESTP1_SMITH_ALICE_TEST_ROUND_wr_v1_annotated.png",
+      "vision": {
+        "patient_id_from_card": "TESTP1",
+        "round_id_from_card": "TEST_ROUND",
+        "regions": {
+          "obs": "Sat 98% RA, HR 82, BP 110/70",
+          "bloods": "Cr 95 (was 110), K 4.3",
+          "imaging": "CXR improved, less congestion",
+          "meds": "Switched to oral frusemide 40mg bd",
+          "plan": "Wean IV diuretics; repeat bloods tomorrow; consider repeat echo in 48h"
+        },
+        "confidence": {
+          "obs": 0.92,
+          "bloods": 0.88,
+          "imaging": 0.8,
+          "meds": 0.9,
+          "plan": 0.85
+        },
+        "warnings": [],
+        "raw": {
+          "patient_id_from_card": "TESTP1",
+          "round_id_from_card": "TEST_ROUND",
+          "regions": {
+            "obs": "Sat 98% RA, HR 82, BP 110/70",
+            "bloods": "Cr 95 (was 110), K 4.3",
+            "imaging": "CXR improved, less congestion",
+            "meds": "Switched to oral frusemide 40mg bd",
+            "plan": "Wean IV diuretics; repeat bloods tomorrow; consider repeat echo in 48h"
+          },
+          "confidence": {
+            "obs": 0.92,
+            "bloods": 0.88,
+            "imaging": 0.8,
+            "meds": 0.9,
+            "plan": 0.85
+          },
+          "warnings": []
+        }
+      },
+      "clinical": {
+        "patient_id": "TESTP1",
+        "round_id": "TEST_ROUND",
+        "proposed_changes": {
+          "issues": [
+            {
+              "issue_id": "CHF",
+              "action": "append_subpoint",
+              "subpoint": {
+                "date": "2025-01-01",
+                "text": "Now euvolaemic on oral diuretics; wean IV frusemide",
+                "confidence": 0.9
+              }
+            }
+          ],
+          "investigations": [
+            {
+              "action": "add_result",
+              "investigation_type": "bloods",
+              "detail": "Cr improved from 110 to 95, K 4.3",
+              "date": "2025-01-01",
+              "confidence": 0.86
+            }
+          ],
+          "tasks": [
+            {
+              "action": "add_task",
+              "task": "Repeat echo in 48 hours",
+              "due": "2025-01-03",
+              "priority": "normal",
+              "confidence": 0.8
+            }
+          ]
+        },
+        "llm_notes": "Plan to wean IV diuretics and monitor renal function.",
+        "overall_confidence": 0.87,
+        "raw": {
+          "patient_id": "TESTP1",
+          "round_id": "TEST_ROUND",
+          "proposed_changes": {
+            "issues": [
+              {
+                "issue_id": "CHF",
+                "action": "append_subpoint",
+                "subpoint": {
+                  "date": "2025-01-01",
+                  "text": "Now euvolaemic on oral diuretics; wean IV frusemide",
+                  "confidence": 0.9
+                }
+              }
+            ],
+            "investigations": [
+              {
+                "action": "add_result",
+                "investigation_type": "bloods",
+                "detail": "Cr improved from 110 to 95, K 4.3",
+                "date": "2025-01-01",
+                "confidence": 0.86
+              }
+            ],
+            "tasks": [
+              {
+                "action": "add_task",
+                "task": "Repeat echo in 48 hours",
+                "due": "2025-01-03",
+                "priority": "normal",
+                "confidence": 0.8
+              }
+            ]
+          },
+          "llm_notes": "Plan to wean IV diuretics and monitor renal function.",
+          "overall_confidence": 0.87
+        }
+      },
+      "pendingUpdateId": "",
+      "status": "pending",
+      "reason": "conflict"
+    }
+  ],
+  "startedAt": "2025-11-30T04:59:21.126Z",
+  "finishedAt": "2025-11-30T04:59:21.131Z"
+}

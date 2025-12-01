@@ -776,6 +776,37 @@ start_operator_ingest_app() {
     fi
 }
 
+start_wardround_watcher() {
+    info "Checking ward round watcher (TypeScript)..."
+
+    if pgrep -f "wardround:watch" >/dev/null 2>&1; then
+        log "Ward round watcher already running"
+        return 0
+    fi
+
+    if ! command -v npm >/dev/null 2>&1; then
+        warn "Skipping ward round watcher start (npm missing)"
+        return 1
+    fi
+
+    local log_file="/tmp/wardround-watcher-$(date +%s).log"
+    info "Launching ward round watcher (logs: $log_file)"
+
+    local watcher_pid
+    watcher_pid=$(
+        cd "$SCRIPT_DIR" || exit 1
+        nohup npm run wardround:watch >>"$log_file" 2>&1 &
+        echo $!
+    )
+
+    if [ -n "$watcher_pid" ]; then
+        echo "$watcher_pid" > /tmp/wardround-watcher.pid
+        log "Ward round watcher started (pid $watcher_pid)"
+    else
+        warn "Failed to start ward round watcher (see $log_file)"
+    fi
+}
+
 # Display comprehensive service status with model information
 show_service_status() {
     echo
@@ -956,6 +987,7 @@ main() {
     fi
 
     start_operator_ingest_app
+    start_wardround_watcher
 }
 
 # Handle command line arguments
