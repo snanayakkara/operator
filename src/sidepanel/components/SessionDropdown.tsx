@@ -655,6 +655,15 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     }
   }, []);
 
+  // Expand all categories when user starts scrolling
+  const handleListScroll = useCallback(() => {
+    if (!showAllCompleted || !showAllInProgress || !showAllErrored) {
+      setShowAllCompleted(true);
+      setShowAllInProgress(true);
+      setShowAllErrored(true);
+    }
+  }, [showAllCompleted, showAllInProgress, showAllErrored]);
+
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
 
   const filteredSessions = useMemo(() => {
@@ -963,7 +972,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       </div>
 
       {/* Sessions List */}
-      <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
+      <div className="max-h-[calc(100vh-160px)] overflow-y-auto" onScroll={handleListScroll}>
         {matchingSessionsCount === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-gray-500">
             {isSearchActive ? (
