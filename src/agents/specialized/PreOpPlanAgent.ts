@@ -150,23 +150,50 @@ export class PreOpPlanAgent extends MedicalAgent {
 
       // STEP 7: Convert to JSON format
       reportProgress(55, 'Preparing procedure card');
-      const jsonData = this.convertToJSON(finalData);
+      let jsonData = this.convertToJSON(finalData);
+      const extractedFieldsCount = Object.keys(jsonData.fields).length;
       logger.info('PreOpPlanAgent: Converted to JSON format', {
-        fieldCount: Object.keys(jsonData.fields).length
+        fieldCount: extractedFieldsCount
       });
 
-      // STEP 8: Generate card markdown with reasoning model (ONLY after validation passes)
-      reportProgress(60, 'Generating pre-op card');
-      logger.info('PreOpPlanAgent: Generating card with reasoning model using validated data...');
+      // Check if we have meaningful extracted data
+      const hasExtractedData = extractedFieldsCount > 1; // More than just procedureType
 
-      // Create enriched prompt with validated data
-      const enrichedPrompt = `VALIDATED DATA (use this exact data for card generation):
+      // STEP 8: Generate card markdown with reasoning model
+      reportProgress(60, 'Generating pre-op card');
+      logger.info('PreOpPlanAgent: Generating card with reasoning model...', {
+        hasExtractedData,
+        extractedFieldsCount
+      });
+
+      let enrichedPrompt: string;
+      let shouldParseJsonFromResponse = false;
+
+      if (hasExtractedData) {
+        // Use validated data - tell LLM to use it exactly
+        enrichedPrompt = `VALIDATED DATA (use this exact data for card generation):
 ${JSON.stringify(jsonData, null, 2)}
 
 ORIGINAL DICTATION (for context only):
 ${input.trim()}
 
 Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All fields have been verified and corrected. Output ONLY the CARD markdown section, do NOT regenerate JSON.`;
+      } else {
+        // Regex extraction failed - ask LLM to extract AND format
+        shouldParseJsonFromResponse = true;
+        enrichedPrompt = `DICTATION:
+${input.trim()}
+
+DETECTED PROCEDURE TYPE: ${procedureType}
+
+The automated extraction did not capture structured fields. Please:
+1. Extract all procedure details from the dictation
+2. Generate the A5 pre-procedure summary card (CARD section)
+3. Output structured JSON with extracted fields (JSON section)
+
+Format your response with CARD: and JSON: sections as specified in your instructions.`;
+        logger.info('PreOpPlanAgent: Using full extraction mode (regex failed)');
+      }
 
       const response = await this.lmStudioService.processWithAgent(
         this.systemPrompt,
@@ -181,8 +208,21 @@ Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All f
         responseLength: response.length
       });
 
-      // Parse the response - ONLY extract card markdown, use our validated jsonData
-      const { cardMarkdown } = this.parsePreOpResponse(response, jsonData);
+      // Parse the response
+      // If regex extraction failed, parse JSON from LLM response
+      // Otherwise use our validated jsonData
+      let cardMarkdown: string;
+      if (shouldParseJsonFromResponse) {
+        const parsed = this.parsePreOpResponse(response);
+        cardMarkdown = parsed.cardMarkdown;
+        jsonData = parsed.jsonData; // Use LLM-extracted JSON
+        logger.info('PreOpPlanAgent: Using LLM-extracted JSON', {
+          fieldCount: Object.keys(jsonData.fields || {}).length
+        });
+      } else {
+        const parsed = this.parsePreOpResponse(response, jsonData);
+        cardMarkdown = parsed.cardMarkdown;
+      }
 
       // Create report sections
       const sections: ReportSection[] = [
@@ -351,21 +391,28 @@ Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All f
             };
           }
         } else {
-          logger.warn('PreOpPlanAgent: No JSON found in response');
+          logger.warn('PreOpPlanAgent: No JSON found in response, extracting from card markdown');
+          // FALLBACK: Extract structured data from the card markdown itself
+          const extractedFields = this.extractFieldsFromCardMarkdown(cardMarkdown);
+          procedureType = extractedFields.procedureType || procedureType;
+          
           jsonData = {
             procedure_type: procedureType,
-            fields: {
-              procedure: 'Not specified',
-              indication: 'Not specified',
-              parsing_error: 'No JSON section found'
-            }
+            fields: extractedFields.fields
           };
+          
+          logger.info('PreOpPlanAgent: Extracted fields from card markdown', {
+            procedureType,
+            fieldCount: Object.keys(extractedFields.fields).length,
+            fields: Object.keys(extractedFields.fields)
+          });
         }
       }
 
       logger.info('PreOpPlanAgent: Parsing complete', {
         cardLength: cardMarkdown.length,
         hasJsonData: !!jsonData,
+        fieldCount: Object.keys(jsonData?.fields || {}).length,
         procedureType
       });
 
@@ -392,6 +439,193 @@ Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All f
         procedureType: 'ANGIOGRAM_OR_PCI'
       };
     }
+  }
+
+  /**
+   * Extract structured fields from card markdown when JSON is not available
+   * Parses the **Label** — Value format used in card markdown
+   */
+  private extractFieldsFromCardMarkdown(cardMarkdown: string): {
+    procedureType: PreOpProcedureType | null;
+    fields: Record<string, string>;
+  } {
+    const fields: Record<string, string> = {};
+    let procedureType: PreOpProcedureType | null = null;
+
+    // Map of label patterns to field keys
+    const labelToFieldMap: Record<string, string> = {
+      // Common fields
+      'indication': 'indication',
+      'procedure': 'procedure',
+      'allergies': 'allergies',
+      'nok': 'nok_name',
+      'next of kin': 'nok_name',
+      'nok name': 'nok_name',
+      'nok contact': 'nok_contact',
+      'weight': 'weight',
+      'egfr': 'egfr',
+      'height': 'height',
+      
+      // Access fields
+      'primary access': 'primary_access',
+      'access': 'primary_access',
+      'access site': 'access_site',
+      'secondary access': 'secondary_access',
+      'sheath': 'sheath_size_fr',
+      'sheath size': 'sheath_size_fr',
+      
+      // Catheter fields
+      'catheters': 'catheters',
+      'catheter': 'catheters',
+      'guide catheter': 'guide_catheter',
+      'diagnostic catheter': 'diagnostic_catheter',
+      
+      // Wire fields
+      'wire': 'wire',
+      'wires': 'wire',
+      'guidewire': 'wire',
+      
+      // Closure fields
+      'closure': 'closure_plan',
+      'closure plan': 'closure_plan',
+      
+      // Medication fields
+      'antiplatelets': 'antiplatelets',
+      'antiplatelet': 'antiplatelets',
+      'anticoagulation': 'anticoagulation',
+      'anticoag': 'anticoagulation',
+      'sedation': 'sedation',
+      'anesthesia': 'anesthesia',
+      'contrast': 'contrast',
+      
+      // Lab fields
+      'labs': 'labs',
+      'bloods': 'labs',
+      'blood results': 'labs',
+      'hemoglobin': 'hemoglobin',
+      'hb': 'hemoglobin',
+      'creatinine': 'creatinine',
+      'inr': 'inr',
+      
+      // Site prep
+      'site prep': 'site_prep',
+      'site preparation': 'site_prep',
+      'prep': 'site_prep',
+      
+      // Follow-up
+      'follow-up': 'follow_up',
+      'follow up': 'follow_up',
+      'followup': 'follow_up',
+      'f/u': 'follow_up',
+      
+      // TAVI specific
+      'valve type': 'valve_type_size',
+      'valve': 'valve_type_size',
+      'valve type and size': 'valve_type_size',
+      'pacing wire': 'pacing_wire_access',
+      'pacing': 'pacing_wire_access',
+      'protamine': 'protamine',
+      'goals of care': 'goals_of_care',
+      'goals': 'goals_of_care',
+      
+      // RHC specific
+      'co measurement': 'co_measurement',
+      'cardiac output': 'co_measurement',
+      'blood gas': 'blood_gas_samples',
+      'blood gases': 'blood_gas_samples',
+      
+      // Mitral TEER specific
+      'transeptal': 'transeptal_catheter',
+      'transeptal catheter': 'transeptal_catheter',
+      'echo': 'echo_summary',
+      'echo summary': 'echo_summary',
+      'tee': 'echo_summary',
+      
+      // Angio findings
+      'lm': 'lm_findings',
+      'left main': 'lm_findings',
+      'lad': 'lad_findings',
+      'lcx': 'lcx_findings',
+      'rca': 'rca_findings',
+      'grafts': 'grafts_findings',
+      'plan': 'plan'
+    };
+
+    // Detect procedure type from card header/title
+    const lowerCard = cardMarkdown.toLowerCase();
+    if (lowerCard.includes('tavi') || lowerCard.includes('transcatheter aortic') || lowerCard.includes('tavr')) {
+      procedureType = 'TAVI';
+    } else if (lowerCard.includes('right heart') || lowerCard.includes('rhc') || lowerCard.includes('swan')) {
+      procedureType = 'RIGHT_HEART_CATH';
+    } else if (lowerCard.includes('mitral') || lowerCard.includes('teer') || lowerCard.includes('mitraclip')) {
+      procedureType = 'MITRAL_TEER';
+    } else if (lowerCard.includes('angiogram') || lowerCard.includes('pci') || lowerCard.includes('coronary')) {
+      procedureType = 'ANGIOGRAM_OR_PCI';
+    }
+
+    // Extract ALL **Label** — Value pairs (handles multiple per line)
+    // This regex captures each **Label** — Value pair, stopping at the next ** or end of line
+    const fieldPattern = /\*\*([^*]+)\*\*\s*[—\-:]\s*([^*\n]+?)(?=\s*[•·]\s*\*\*|\s*\*\*|$|\n)/g;
+    let match;
+    
+    while ((match = fieldPattern.exec(cardMarkdown)) !== null) {
+      const label = match[1].trim().toLowerCase();
+      let value = match[2].trim();
+      
+      // Clean up trailing bullets or separators
+      value = value.replace(/\s*[•·]\s*$/, '').trim();
+      
+      // Skip empty or "Not specified" values
+      if (!value || value.toLowerCase() === 'not specified' || value === '—' || value === '-') {
+        continue;
+      }
+      
+      // Find matching field key
+      let matched = false;
+      for (const [pattern, fieldKey] of Object.entries(labelToFieldMap)) {
+        if (label === pattern || label.includes(pattern) || pattern.includes(label)) {
+          fields[fieldKey] = value;
+          matched = true;
+          break;
+        }
+      }
+      
+      // Also store with a normalized version of the label as fallback
+      if (!matched) {
+        const normalizedLabel = label.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        if (normalizedLabel.length > 0) {
+          fields[normalizedLabel] = value;
+        }
+      }
+    }
+
+    // Also try bullet point format: • Label: Value or - Label: Value
+    const bulletPattern = /[•*-]\s*([^:]+):\s*([^\n]+)/g;
+    while ((match = bulletPattern.exec(cardMarkdown)) !== null) {
+      const label = match[1].trim().toLowerCase();
+      const value = match[2].trim();
+      
+      if (!value || value.toLowerCase() === 'not specified') {
+        continue;
+      }
+      
+      for (const [pattern, fieldKey] of Object.entries(labelToFieldMap)) {
+        if (label.includes(pattern) || pattern.includes(label)) {
+          if (!fields[fieldKey]) { // Don't overwrite existing fields
+            fields[fieldKey] = value;
+          }
+          break;
+        }
+      }
+    }
+
+    logger.info('PreOpPlanAgent: Extracted fields from markdown', {
+      detectedProcedureType: procedureType,
+      extractedFieldCount: Object.keys(fields).length,
+      extractedFields: Object.keys(fields)
+    });
+
+    return { procedureType, fields };
   }
 
   /**
@@ -478,43 +712,66 @@ Generate the A5 pre-procedure summary card using the VALIDATED DATA above. All f
   /**
    * Extract Pre-Op fields from dictation using regex patterns
    * Step 1 of validation workflow
+   * 
+   * NOTE: These patterns are intentionally flexible to handle natural dictation.
+   * If extraction fails, the LLM will handle full extraction.
    */
   private extractPreOpFields(input: string, procedureType: PreOpProcedureType): PreOpExtractedData {
+    // Core procedure fields - more flexible patterns
+    // Match "for angiogram", "doing a PCI", "procedure is angiogram", etc.
+    const procedureMatch = input.match(/(?:procedure|operation|intervention|doing|for|scheduled for)[:;\s]+(?:a\s+|an\s+)?([^\n.,]+)/i) ||
+                          input.match(/\b(angiogram|pci|coronary angiography|cath(?:eterization)?|right heart cath)\b/i);
+    
+    // Match "indication severe AS", "for severe MR", "because of chest pain"
+    const indicationMatch = input.match(/(?:indication|for|because of|due to)[:;\s]+([^\n.,]+)/i) ||
+                           input.match(/(?:severe|moderate|significant)\s+(aortic stenosis|mitral regurgitation|coronary artery disease|chest pain|angina|cad)/i);
 
-    // Core procedure fields (all types)
-    const procedureMatch = input.match(/(?:procedure|operation|intervention)[:;\s]+([^\n.,]+)/i);
-    const indicationMatch = input.match(/(?:indication|for)[:;\s]+([^\n.,]+)/i);
+    // Access fields - match natural phrases like "right radial approach", "going radial", "via radial"
+    const primaryAccessMatch = input.match(/(?:primary\s+)?access(?:\s+site)?[:;\s]+(?:right\s+|left\s+)?(radial|femoral|brachial)(?:\s+artery)?/i) ||
+                               input.match(/(?:right|left)\s+(radial|femoral|brachial)\s+(?:approach|access|artery)/i) ||
+                               input.match(/(?:via|going|using)\s+(?:right\s+|left\s+)?(radial|femoral)/i);
+    
+    const accessSiteMatch = input.match(/access(?:\s+site)?[:;\s]+(?:right\s+|left\s+)?(basilic|jugular|femoral)(?:\s+vein(?:ous)?)?/i) ||
+                           input.match(/(?:right|left)\s+(?:internal\s+)?(jugular|femoral|basilic)\s+(?:vein|venous|access)/i);
+    
+    // Sheath - match "6 French", "6Fr sheath", "using a 6F"
+    const sheathMatch = input.match(/(\d+)\s*(?:fr(?:ench)?|f)\s*(?:sheath)?/i);
 
-    // Access fields
-    const primaryAccessMatch = input.match(/(?:primary\s+)?access(?:\s+site)?[:;\s]+(?:right\s+|left\s+)?(radial|femoral|brachial)(?:\s+artery)?/i);
-    const accessSiteMatch = input.match(/access(?:\s+site)?[:;\s]+(?:right\s+|left\s+)?(basilic|jugular|femoral)(?:\s+vein(?:ous)?)?/i);
-    const sheathMatch = input.match(/(\d+)\s*(?:fr|french|f)\s*sheath/i);
-
-    // Equipment
-    const cathetersMatch = input.match(/cath(?:eter)?s?[:;\s]+([^\n.,]+)/i);
-    const valveMatch = input.match(/valve(?:\s+type)?[:;\s]+([^\n.,]+)/i);
+    // Equipment - more flexible
+    const cathetersMatch = input.match(/cath(?:eter)?s?[:;\s]+([^\n.,]+)/i) ||
+                          input.match(/(?:using|with)\s+(?:a\s+)?(\w+\s+(?:catheter|guide))/i);
+    const valveMatch = input.match(/valve(?:\s+type)?[:;\s]+([^\n.,]+)/i) ||
+                       input.match(/(sapien|evolut|navitor|acurate)\s*(?:\d+)?(?:\s*mm)?/i);
     const wireMatch = input.match(/wire[:;\s]+([^\n.,]+)/i);
-    const balloonMatch = input.match(/balloon(?:\s+size)?[:;\s]+(\d+)\s*mm/i);
+    const balloonMatch = input.match(/balloon(?:\s+size)?[:;\s]+(\d+)\s*mm/i) ||
+                         input.match(/(\d+)\s*mm\s*balloon/i);
     const transeptalMatch = input.match(/transeptal(?:\s+catheter)?[:;\s]+([^\n.,]+)/i);
 
     // Safety & Planning
-    const closureMatch = input.match(/closure(?:\s+plan)?[:;\s]+([^\n.,]+)/i);
+    const closureMatch = input.match(/closure(?:\s+plan)?[:;\s]+([^\n.,]+)/i) ||
+                         input.match(/(?:using|plan(?:ning)?)\s+(angioseal|proglide|tr band|manual compression)/i);
     const pacingMatch = input.match(/pacing(?:\s+wire)?(?:\s+access)?[:;\s]+([^\n.,]+)/i);
-    const protamineMatch = input.match(/protamine[:;\s]+([^\n.,]+)/i);
+    const protamineMatch = input.match(/protamine[:;\s]+([^\n.,]+)/i) ||
+                           input.match(/(?:give|giving|will give)\s+protamine/i);
     const goalsMatch = input.match(/goals(?:\s+of\s+care)?[:;\s]+([^\n.,]+)/i);
 
     // Clinical Info
-    const anticoagMatch = input.match(/(?:anticoagulation|antiplatelet|antithrombotic)(?:\s+plan)?[:;\s]+([^\n.,]+)/i);
-    const sedationMatch = input.match(/sedation(?:\s+plan)?[:;\s]+([^\n.,]+)/i);
-    const sitePrepMatch = input.match(/(?:site\s+)?prep(?:aration)?[:;\s]+([^\n.,]+)/i);
-    const allergiesMatch = input.match(/allerg(?:y|ies)[:;\s]+([^\n.,]+)/i);
-    const coMeasurementMatch = input.match(/(?:cardiac\s+output|co)(?:\s+measurement)?[:;\s]+([^\n.,]+)/i);
+    const anticoagMatch = input.match(/(?:anticoagulation|antiplatelet|antithrombotic)(?:\s+plan)?[:;\s]+([^\n.,]+)/i) ||
+                          input.match(/(?:on|taking|continue)\s+(aspirin|clopidogrel|plavix|ticagrelor|heparin|warfarin)/i);
+    const sedationMatch = input.match(/sedation(?:\s+plan)?[:;\s]+([^\n.,]+)/i) ||
+                          input.match(/(?:conscious sedation|moderate sedation|mac|local an(?:a)?esthesia|general an(?:a)?esthesia)/i);
+    const sitePrepMatch = input.match(/(?:site\s+)?prep(?:aration)?[:;\s]+([^\n.,]+)/i) ||
+                          input.match(/(?:chlorhexidine|betadine|alcohol)\s*(?:prep)?/i);
+    const allergiesMatch = input.match(/allerg(?:y|ies)[:;\s]+([^\n.,]+)/i) ||
+                           input.match(/(?:allergic to|nkda|no known (?:drug )?allergies)/i);
+    const coMeasurementMatch = input.match(/(?:cardiac\s+output|co)(?:\s+measurement)?[:;\s]+([^\n.,]+)/i) ||
+                               input.match(/(?:fick|thermodilution)\s+(?:method|co)/i);
     const bloodGasMatch = input.match(/(\d+)\s*blood\s*gas\s*sample/i);
     const echoMatch = input.match(/echo(?:\s+summary)?[:;\s]+([^\n.,]+)/i);
 
-    // Labs
-    const hbMatch = input.match(/(?:hb|h(?:ae)?moglobin)[:;\s]+(\d+)/i);
-    const creatMatch = input.match(/creat(?:inine)?[:;\s]+(\d+)/i);
+    // Labs - match "Hb 120", "hemoglobin of 120", "creatinine 85"
+    const hbMatch = input.match(/(?:hb|h(?:ae)?moglobin)(?:\s+(?:of|is|was))?[:;\s]+(\d+)/i);
+    const creatMatch = input.match(/creat(?:inine)?(?:\s+(?:of|is|was))?[:;\s]+(\d+)/i);
 
     // Next of Kin (flexible patterns to handle various formats)
     // Handles: "Next of kin: Andrew (son) 0413571525", "NOK Andrew (son)", "Next-of-kin Andrew son 0413"

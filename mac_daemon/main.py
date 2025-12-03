@@ -18,6 +18,7 @@ from mac_daemon.pipeline import Pipeline  # type: ignore  # noqa: E402
 from mac_daemon.watcher import Watcher  # type: ignore  # noqa: E402
 from mac_daemon.whisper_client import WhisperClient  # type: ignore  # noqa: E402
 from mac_daemon.api_server import JobAPIServer  # type: ignore  # noqa: E402
+from mac_daemon.rounds_backend import RoundsBackend  # type: ignore  # noqa: E402
 
 APP_VERSION = "0.1.0"
 
@@ -27,14 +28,15 @@ class OperatorIngestApp(rumps.App):
         super().__init__("OI", icon=None, template=True, quit_button=None)
         configure_logging()
         self.config: Config = load_config()
+        self.rounds_backend = RoundsBackend(self.config)
         self.whisper = WhisperClient(
             command_template=self.config.whisper_command or None,
             api_url=self.config.whisper_api_url or None,
         )
         self.lm_client = LMClient(self.config.lm_base_url, self.config.lm_model)
-        self.pipeline = Pipeline(self.config, self.whisper, self.lm_client)
+        self.pipeline = Pipeline(self.config, self.whisper, self.lm_client, rounds_backend=self.rounds_backend)
         self.watcher = Watcher(self.config, self.pipeline, on_job_enqueued=self._handle_job_enqueued)
-        self.api_server = JobAPIServer(self.config)
+        self.api_server = JobAPIServer(self.config, rounds_backend=self.rounds_backend)
 
         self.status_item = rumps.MenuItem("Status: Initializing")
         self.queue_item = rumps.MenuItem("Queued jobs: 0")

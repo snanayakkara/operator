@@ -35,6 +35,11 @@ const DICTATION_LABELS: Record<string, string> = {
   unknown: 'Dictation'
 };
 
+const JOB_TYPE_LABELS: Record<string, string> = {
+  phone_call_note: 'Phone Call Note',
+  audio_dictation: 'Dictation'
+};
+
 export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
   jobs,
   isLoading = false,
@@ -96,7 +101,8 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
   };
 
   const renderJobCard = (job: MobileJobSummary) => {
-    const label = DICTATION_LABELS[job.dictation_type] || 'Dictation';
+    const isPhoneNote = job.job_type === 'phone_call_note';
+    const label = JOB_TYPE_LABELS[job.job_type || ''] || DICTATION_LABELS[job.dictation_type] || 'Dictation';
     const attached = Boolean(job.attached_session_id) || attachedLookup.has(job.id);
     const isDeleting = deletingJobId === job.id;
     const isAttaching = attachingJobId === job.id;
@@ -136,8 +142,10 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              {attached && (
-                <span className="text-[11px] text-emerald-600 font-semibold uppercase">Attached</span>
+              {(attached || isPhoneNote) && (
+                <span className="text-[11px] text-emerald-600 font-semibold uppercase">
+                  {isPhoneNote ? 'Saved to rounds' : 'Attached'}
+                </span>
               )}
               <div className="flex items-center gap-2">
                 {onDelete && (
@@ -154,7 +162,7 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
                     Delete
                   </Button>
                 )}
-                {onAttach && (
+                {onAttach && !isPhoneNote && (
                   <Button
                     size="sm"
                     variant={attached ? 'outline' : 'primary'}

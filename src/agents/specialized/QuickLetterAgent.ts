@@ -1352,11 +1352,20 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     _context?: MedicalContext
   ): Promise<any> {
     try {
+      // Check if we have patient info from EMR - if so, don't ask for demographics
+      const hasPatientInfoFromEMR = !!(_context?.patientInfo?.name || _context?.demographics?.name);
       console.log('🕵️ QuickLetter Missing Info: Using analysis prompt (NOT letter generation)');
+      console.log('🕵️ EMR patient info available:', hasPatientInfoFromEMR);
 
       // Load missing info detection prompt dynamically
       const missingInfoSystemPrompt = await systemPromptLoader.loadSystemPrompt('quick-letter', 'missingInfoDetection');
-      const missingInfoPrompt = `${missingInfoSystemPrompt}
+      
+      // Add context about available EMR data to prevent asking for info we already have
+      const emrContext = hasPatientInfoFromEMR 
+        ? '\n\nNOTE: Patient demographics are already available from the EMR system. Do NOT include "Patient demographics or context" in missing items.'
+        : '';
+      
+      const missingInfoPrompt = `${missingInfoSystemPrompt}${emrContext}
 
 DICTATION TO ANALYZE:
 ${input}`;
@@ -1376,22 +1385,33 @@ ${input}`;
       try {
         const missingInfo = JSON.parse(response.replace(/```json|```/g, '').trim());
         console.log('✅ Successfully parsed missing info JSON');
+        
+        // Post-process: Remove demographics-related items if we have EMR data
+        if (hasPatientInfoFromEMR && missingInfo.missing_clinical) {
+          missingInfo.missing_clinical = missingInfo.missing_clinical.filter((item: string) => 
+            !item.toLowerCase().includes('demographics') && 
+            !item.toLowerCase().includes('patient context') &&
+            !item.toLowerCase().includes('patient identification')
+          );
+        }
+        
         return missingInfo;
       } catch (parseError) {
         console.warn('⚠️ Failed to parse missing info JSON, using fallback');
-        return this.fallbackMissingInfoDetection(input, letterType);
+        return this.fallbackMissingInfoDetection(input, letterType, _context);
       }
       
     } catch (error) {
       console.error('❌ Error detecting missing information:', error);
-      return this.fallbackMissingInfoDetection(input, letterType);
+      return this.fallbackMissingInfoDetection(input, letterType, _context);
     }
   }
 
   /**
    * Fallback missing info detection using keyword analysis for Quick Letters
+   * Now context-aware: doesn't ask for info that's already available from EMR
    */
-  private fallbackMissingInfoDetection(input: string, letterType: string): any {
+  private fallbackMissingInfoDetection(input: string, letterType: string, _context?: MedicalContext): any {
     const text = input.toLowerCase();
     const missing = {
       letter_type: letterType,
@@ -1401,16 +1421,33 @@ ${input}`;
       completeness_score: "80%"
     };
 
-    // Check for purpose clarity
-    if (!text.includes('refer') && !text.includes('follow up') && !text.includes('consultation') && 
-        !text.includes('thank you') && letterType === 'general') {
+    // Check if we already have patient demographics from EMR
+    const hasPatientInfoFromEMR = !!(_context?.patientInfo?.name || _context?.demographics?.name);
+
+    // Letter purpose is almost always inferable from content - only flag if truly ambiguous
+    // Common letter purposes: referral, follow-up, thank you, consultation request, results
+    const hasPurposeIndicator = text.includes('refer') || text.includes('follow up') || 
+        text.includes('follow-up') || text.includes('consultation') || text.includes('thank you') ||
+        text.includes('review') || text.includes('assessment') || text.includes('request') ||
+        text.includes('results') || text.includes('recommend') || text.includes('appreciate') ||
+        text.includes('discharge') || text.includes('admission') || text.includes('update');
+    
+    // Only ask for purpose if letter is very short AND has no purpose indicators
+    if (!hasPurposeIndicator && text.length < 50 && letterType === 'general') {
       missing.missing_purpose.push('Letter purpose or reason for correspondence');
     }
 
-    // Check for clinical context
-    if (!text.includes('patient') && !text.includes('gentleman') && !text.includes('lady') && 
-        !text.includes('year old') && !text.includes('age')) {
-      missing.missing_clinical.push('Patient demographics or context');
+    // DON'T ask for demographics if we have them from EMR
+    // Also check if the dictation itself mentions patient context
+    const hasDemographicsInText = text.includes('patient') || text.includes('gentleman') || text.includes('lady') || 
+        text.includes('year old') || text.includes('age') || text.includes('mr ') || text.includes('mrs ') ||
+        text.includes('ms ') || text.includes('miss ');
+    
+    if (!hasPatientInfoFromEMR && !hasDemographicsInText) {
+      // Only flag if neither EMR nor dictation has patient context
+      // But actually, for most correspondence, demographics aren't strictly required
+      // The letter can still be generated without them
+      // missing.missing_clinical.push('Patient demographics or context');
     }
 
     // Check for clinical findings

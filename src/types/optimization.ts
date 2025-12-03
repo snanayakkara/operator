@@ -58,6 +58,7 @@ export interface TranscriptionApprovalState {
 export interface ASRCorrectionsEntry {
   id: string;
   audioId?: string;
+  audioPath?: string;
   rawText: string;
   correctedText: string;
   agentType: AgentType;

@@ -497,6 +497,52 @@ export class OptimizationService {
   }
 
   /**
+   * Export persisted corrections from the DSPy server (backup/restore).
+   */
+  async exportCorrections(): Promise<ASRCorrectionsEntry[]> {
+    try {
+      const response = await this.makeRequest<ApiResponse<{ corrections: ASRCorrectionsEntry[] }>>('/v1/asr/corrections/export', {}, 5000);
+      if (!response.success) {
+        throw new ASROptimizationError(response.error || 'Failed to export corrections');
+      }
+      return response.data?.corrections || [];
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to export corrections from server', {
+        component: 'OptimizationService',
+        error: err.message
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Ingest a single correction with optional audio attachment for persistence.
+   */
+  async ingestCorrectionWithAudio(correction: ASRCorrectionsEntry, audioBlob?: Blob): Promise<void> {
+    const formData = new FormData();
+    formData.append('metadata', JSON.stringify(correction));
+    if (audioBlob) {
+      const filename = `${correction.id || 'audio'}.webm`;
+      formData.append('audio', audioBlob, filename);
+    }
+
+    try {
+      await this.makeRequest<ApiResponse<{ saved: number; audio_saved: boolean }>>('/v1/asr/ingest', {
+        method: 'POST',
+        body: formData
+      }, 10000);
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('ASR ingest failed (will remain local only)', {
+        component: 'OptimizationService',
+        error: err.message,
+        hasAudio: !!audioBlob
+      });
+    }
+  }
+
+  /**
    * Persist clinician revision as a golden pair example for DSPy training
    */
   async saveGoldenPair(request: GoldenPairSaveRequest): Promise<GoldenPairSaveResponse> {

@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Any, Callable, Deque, Dict, Optional, Tuple
 
 from .config import Config, ensure_directories
-from .jobs import Job, JobStatus, create_job, job_processed_dir, list_jobs, save_job
+from .jobs import Job, JobStatus, JobType, create_job, job_processed_dir, list_jobs, save_job
 from .pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
-QueueItem = Tuple[Job, Path, Optional[Dict[str, Any]], Optional[Path]]
+QueueItem = Tuple[Job, Path, Optional[Dict[str, Any]], Optional[Path], Optional[str]]
 
 
 class Watcher:
@@ -87,6 +87,10 @@ class Watcher:
             self._stop_event.wait(self.config.poll_interval_seconds)
 
     def _scan_inbox(self) -> None:
+        self._scan_audio_inbox()
+        self._scan_phone_notes()
+
+    def _scan_audio_inbox(self) -> None:
         allowed = {ext.lower() for ext in self.config.process_extensions}
         try:
             inbox_files = sorted(self.config.inbox_path.glob("*"))
@@ -119,7 +123,7 @@ class Watcher:
                 logger.error("Failed to move %s to working dir: %s", audio_file, exc)
                 continue
             with self._lock:
-                self._queue.append((job, working_target, metadata, staged_sidecar))
+                self._queue.append((job, working_target, metadata, staged_sidecar, None))
             logger.info("Enqueued job %s for %s", job.id, audio_file.name)
             if self._on_job_enqueued:
                 try:
@@ -131,23 +135,25 @@ class Watcher:
         with self._lock:
             if not self._queue:
                 return False
-            job, staged_path, metadata, staged_sidecar = self._queue.popleft()
+            job, staged_path, metadata, staged_sidecar, sidecar_name = self._queue.popleft()
         try:
             self.pipeline.process_job(job, staged_path, metadata=metadata)
-            self._move_staged_sidecar_to_job_dir(job, staged_sidecar)
+            self._move_staged_sidecar_to_job_dir(job, staged_sidecar, sidecar_name)
             self._last_job_summary = f"{job.audio_filename} → {job.status}"
         except Exception as exc:  # pragma: no cover - runtime heavy
             job.status = JobStatus.ERROR
             job.error_message = str(exc)
             save_job(job, self.config.processed_path, self.config.jobs_path)
-            self._move_staged_sidecar_to_job_dir(job, staged_sidecar)
+            self._move_staged_sidecar_to_job_dir(job, staged_sidecar, sidecar_name)
             self._last_job_summary = f"{job.audio_filename} failed"
             logger.exception("Job %s failed: %s", job.id, exc)
             if staged_path.exists():
                 staged_path.unlink(missing_ok=True)  # type: ignore[arg-type]
         return True
 
-    def _move_staged_sidecar_to_job_dir(self, job: Job, staged_sidecar: Optional[Path]) -> None:
+    def _move_staged_sidecar_to_job_dir(
+        self, job: Job, staged_sidecar: Optional[Path], dest_name: Optional[str] = None
+    ) -> None:
         if not staged_sidecar:
             return
         if not staged_sidecar.exists():
@@ -155,7 +161,7 @@ class Watcher:
             return
         job_dir = job_processed_dir(self.config.processed_path, job)
         job_dir.mkdir(parents=True, exist_ok=True)
-        destination = job_dir / "shortcut_metadata.json"
+        destination = job_dir / (dest_name or "shortcut_metadata.json")
         try:
             staged_sidecar.replace(destination)
             logger.info("Moved shortcut sidecar to %s for job %s", destination, job.id)
@@ -186,6 +192,43 @@ class Watcher:
             if candidate.exists():
                 return candidate
         return None
+
+    def _scan_phone_notes(self) -> None:
+        try:
+            json_sidecars = sorted(self.config.inbox_path.glob("*_phone-note.json"))
+        except FileNotFoundError:
+            logger.error("Inbox path missing: %s", self.config.inbox_path)
+            return
+        for metadata_file in json_sidecars:
+            if metadata_file.is_dir():
+                continue
+            text_path = metadata_file.with_suffix(".txt")
+            if not text_path.exists():
+                logger.info("Skipping %s; awaiting matching .txt file", metadata_file.name)
+                continue
+            metadata = parse_shortcut_metadata(metadata_file)
+            if metadata and metadata.get("type") != JobType.PHONE_CALL_NOTE:
+                logger.info(
+                    "Skipping %s with non-phone_call_note type %r", metadata_file.name, metadata.get("type")
+                )
+                continue
+            job = create_job(text_path.name, job_type=JobType.PHONE_CALL_NOTE)
+            staged_metadata = self._stage_sidecar(metadata_file, job)
+            working_note = self.config.working_path / f"{job.id}_phone_note.txt"
+            working_note.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                text_path.replace(working_note)
+            except OSError as exc:
+                logger.error("Failed to move phone note %s to working dir: %s", text_path, exc)
+                continue
+            with self._lock:
+                self._queue.append((job, working_note, metadata, staged_metadata, "phone_note_metadata.json"))
+            logger.info("Enqueued phone call note job %s for %s", job.id, text_path.name)
+            if self._on_job_enqueued:
+                try:
+                    self._on_job_enqueued(job, working_note)
+                except Exception as exc:  # pragma: no cover - callbacks external
+                    logger.error("Job enqueue callback failed: %s", exc)
 
 
 def parse_shortcut_metadata(path: Path) -> Optional[Dict[str, Any]]:

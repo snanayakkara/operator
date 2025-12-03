@@ -134,6 +134,15 @@ export const ASROptimizationSection: React.FC<ASROptimizationSectionProps> = ({
       const corrections = await asrLog.getCorrections({ limit: 1000 });
       setCorrectionsCount(corrections.length);
 
+      // If local store is empty but server is up, restore from server backup
+      if (corrections.length === 0 && serverStatus) {
+        const serverCorrections = await optimizationService.exportCorrections();
+        if (serverCorrections.length > 0) {
+          await asrLog.overwriteCorrections(serverCorrections);
+          setCorrectionsCount(serverCorrections.length);
+        }
+      }
+
       // Only load server-dependent data if server is available
       if (serverStatus) {
         const state = await optimizationService.getCurrentASRState();

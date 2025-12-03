@@ -32,7 +32,7 @@ const pickNameParts = (fullName: string) => {
 const buildFilename = (patient: RoundsPatient, meta: WardRoundExportMeta) => {
   const patientId = patient.mrn?.trim() || patient.id;
   const { first, last } = pickNameParts(patient.name || 'Unknown');
-  const safe = (str: string) => str.replace(/\s+/g, '_').replace(/[^A-Za-z0-9_\-]/g, '');
+  const safe = (str: string) => str.replace(/\s+/g, '_').replace(/[^A-Za-z0-9_-]/g, '');
   return `${safe(patientId)}_${safe(last).toUpperCase()}_${safe(first).toUpperCase()}_${safe(meta.roundId)}_${meta.templateId || 'ward_round_v1'}.png`;
 };
 

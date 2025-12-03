@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Combine, Copy, Trash2, X, ImageIcon, Camera } from 'lucide-react';
+import { Upload, Combine, Copy, Trash2, X, ImageIcon, Camera, Clipboard } from 'lucide-react';
 import {
   modalVariants,
   backdropVariants,
@@ -362,12 +362,41 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
     setCameraPanelIndex(null);
   }, [cameraPanelIndex, importDataUrl]);
 
+  const handlePasteFromClipboard = useCallback(async (index: number) => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        // Find an image type in the clipboard item
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            if (dataUrl) {
+              importDataUrl(dataUrl, index);
+            }
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+      // No image found in clipboard
+      FileToasts.invalidFile();
+    } catch (error) {
+      console.error('Failed to paste from clipboard:', error);
+      // User may have denied permission or clipboard is empty
+      FileToasts.importFailed();
+    }
+  }, [importDataUrl]);
+
   const DropZone: React.FC<{
     index: number;
     screenshot: AnnotatedScreenshot | null;
     onUseCamera: (panelIndex: number) => void;
+    onPaste: (index: number) => void;
     standalone?: boolean;
-  }> = ({ index, screenshot, onUseCamera, standalone = false }) => {
+  }> = ({ index, screenshot, onUseCamera, onPaste, standalone = false }) => {
     const onDropFiles = useCallback((accepted: File[]) => {
       console.log('📥 react-dropzone onDrop accepted:', accepted.map(f => `${f.name} (${f.type || 'unknown'})`));
       if (accepted && accepted.length > 0) {
@@ -394,6 +423,12 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       event.preventDefault();
       event.stopPropagation();
       onUseCamera(index);
+    };
+
+    const handlePasteClick = (event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onPaste(index);
     };
 
     return (
@@ -462,7 +497,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
             </div>
           )}
         </div>
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -470,7 +505,16 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
             className="!h-8 px-3 text-xs font-semibold text-blue-700 border-blue-200 hover:border-blue-300 hover:bg-blue-50"
             onClick={handleCameraClick}
           >
-            Use Camera
+            Camera
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            startIcon={<Clipboard className="w-3.5 h-3.5" />}
+            className="!h-8 px-3 text-xs font-semibold text-green-700 border-green-200 hover:border-green-300 hover:bg-green-50"
+            onClick={handlePasteClick}
+          >
+            Paste
           </Button>
         </div>
       </div>
@@ -583,10 +627,10 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
               </div>
               <div className="flex-1 p-6 lg:p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 auto-rows-fr">
-                  <DropZone index={0} screenshot={screenshots[0]} onUseCamera={openCameraModal} standalone />
-                  <DropZone index={1} screenshot={screenshots[1]} onUseCamera={openCameraModal} standalone />
-                  <DropZone index={2} screenshot={screenshots[2]} onUseCamera={openCameraModal} standalone />
-                  <DropZone index={3} screenshot={screenshots[3]} onUseCamera={openCameraModal} standalone />
+                  <DropZone index={0} screenshot={screenshots[0]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} standalone />
+                  <DropZone index={1} screenshot={screenshots[1]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} standalone />
+                  <DropZone index={2} screenshot={screenshots[2]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} standalone />
+                  <DropZone index={3} screenshot={screenshots[3]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} standalone />
                 </div>
                 <div className="text-center text-sm text-gray-600 space-y-1">
                   <p>Drag screenshots from your desktop or click to browse files.</p>
@@ -704,10 +748,10 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
               </div>
               <div className="flex-1 p-6">
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                  <DropZone index={0} screenshot={screenshots[0]} onUseCamera={openCameraModal} />
-                  <DropZone index={1} screenshot={screenshots[1]} onUseCamera={openCameraModal} />
-                  <DropZone index={2} screenshot={screenshots[2]} onUseCamera={openCameraModal} />
-                  <DropZone index={3} screenshot={screenshots[3]} onUseCamera={openCameraModal} />
+                  <DropZone index={0} screenshot={screenshots[0]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} />
+                  <DropZone index={1} screenshot={screenshots[1]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} />
+                  <DropZone index={2} screenshot={screenshots[2]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} />
+                  <DropZone index={3} screenshot={screenshots[3]} onUseCamera={openCameraModal} onPaste={handlePasteFromClipboard} />
                 </div>
                 <div className="text-center text-sm text-gray-600 space-y-2">
                   <p>Drag screenshots from your desktop or click to browse files.</p>

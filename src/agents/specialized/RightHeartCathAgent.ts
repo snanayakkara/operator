@@ -83,7 +83,16 @@ export class RightHeartCathAgent extends MedicalAgent {
     'thermodilution': 'thermodilution',
     // Common transcription errors
     'thick cardiac': 'Fick cardiac', // "thick" is often mishearing of "Fick"
-    'tick cardiac': 'Fick cardiac'   // "tick" is also common
+    'tick cardiac': 'Fick cardiac',   // "tick" is also common
+    // Vascular access transcription errors
+    'venous axis': 'venous access',
+    'venus axis': 'venous access',
+    'venus access': 'venous access',
+    'brachial axis': 'brachial access',
+    'brakial': 'brachial',
+    'antecubital axis': 'antecubital access',
+    'jugular axis': 'jugular access',
+    'femoral axis': 'femoral access'
   };
 
   constructor() {

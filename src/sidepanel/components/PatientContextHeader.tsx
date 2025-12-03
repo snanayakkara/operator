@@ -64,20 +64,20 @@ const mapToProcessingState = (processingStatus?: ProcessingStatus, isRecording?:
   }
 };
 
-const getStatusBgColor = (processingStatus?: ProcessingStatus, isRecording?: boolean): string => {
+const getStatusColors = (processingStatus?: ProcessingStatus, isRecording?: boolean): { bg: string; text: string; accent: string } => {
   if (isRecording) {
-    return 'bg-gradient-to-r from-red-500 to-rose-600';
+    return { bg: 'bg-rose-50', text: 'text-rose-700', accent: 'text-rose-500' };
   }
 
   switch (processingStatus) {
     case 'transcribing':
-      return 'bg-gradient-to-r from-blue-500 to-cyan-600';
+      return { bg: 'bg-blue-50', text: 'text-blue-700', accent: 'text-blue-500' };
     case 'processing':
-      return 'bg-gradient-to-r from-purple-500 to-violet-600';
+      return { bg: 'bg-purple-50', text: 'text-purple-700', accent: 'text-purple-500' };
     case 'complete':
-      return 'bg-gradient-to-r from-emerald-500 to-teal-600';
+      return { bg: 'bg-slate-50', text: 'text-slate-700', accent: 'text-slate-500' };
     default:
-      return 'bg-gradient-to-r from-blue-500 to-cyan-600';
+      return { bg: 'bg-slate-50', text: 'text-slate-700', accent: 'text-slate-500' };
   }
 };
 
@@ -89,7 +89,7 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   isViewingCompletedSession = false
 }) => {
   const state = mapToProcessingState(processingStatus, isRecording);
-  const bgColor = getStatusBgColor(processingStatus, isRecording);
+  const colors = getStatusColors(processingStatus, isRecording);
   const agentDisplayName = AGENT_DISPLAY_NAMES[agentType] || agentType;
 
   // Format age from DOB if available
@@ -112,18 +112,18 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   const ageDisplay = patientInfo.age || calculateAge(patientInfo.dob);
 
   return (
-    <div className={`${bgColor} text-white px-4 py-3 shadow-sm`}>
+    <div className={`${colors.bg} ${colors.text} px-4 py-3 border-b border-slate-200`}>
       <div className="flex items-center justify-between">
         {/* Left: Patient Info */}
         <div className="flex items-center space-x-3 flex-1 min-w-0">
-          <User className="w-5 h-5 flex-shrink-0 opacity-90" />
+          <User className={`w-5 h-5 flex-shrink-0 ${colors.accent}`} />
           <div className="flex flex-col min-w-0">
             {/* Patient Name */}
             <div className="font-semibold text-base truncate">
               {patientInfo.name}
             </div>
             {/* Patient Details */}
-            <div className="flex items-center space-x-2 text-sm opacity-90">
+            <div className="flex items-center space-x-2 text-sm opacity-75">
               <span className="truncate">ID: {patientInfo.id}</span>
               {patientInfo.dob && (
                 <>
@@ -144,9 +144,9 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
         {/* Right: Agent Type & Status */}
         <div className="flex items-center space-x-3 flex-shrink-0">
           {/* Agent Type */}
-          <div className="hidden sm:flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full">
-            <FileText className="w-4 h-4" />
-            <span className="text-sm font-medium whitespace-nowrap">{agentDisplayName}</span>
+          <div className="hidden sm:flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full">
+            <FileText className="w-4 h-4 text-slate-500" />
+            <span className="text-sm font-medium text-slate-600 whitespace-nowrap">{agentDisplayName}</span>
           </div>
 
           {/* Status Badge or Go To Patient Button */}
@@ -167,12 +167,12 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
               variant="primary"
               size="md"
               startIcon={User}
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-full shadow-sm hover:shadow-md"
+              className="bg-slate-700 hover:bg-slate-800 text-white rounded-full shadow-sm hover:shadow-md"
             >
               Go To Patient
             </Button>
           ) : (
-            <div className="flex items-center space-x-2 bg-white/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
+            <div className="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full">
               {/* Animated pulsing dot */}
               {(isRecording || processingStatus === 'transcribing' || processingStatus === 'processing') && (
                 <StateIndicator state={state} size="sm" withTooltip={false} />

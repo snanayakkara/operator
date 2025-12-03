@@ -10,18 +10,29 @@
 import React, { memo, useState, useMemo, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, FileText, BookOpen, Copy, Download, CheckCircle } from 'lucide-react';
 import { Button, IconButton } from '../buttons';
+import { ActionSegmentedControl } from '../ui/SegmentedControl';
 import type { AgentType } from '@/types/medical.types';
 
 interface ReportDisplayProps {
   results: string;
   agentType: AgentType | null;
   className?: string;
+  onCopy?: (text: string) => void;
+  onInsert?: (text: string) => void;
+  onTrain?: () => void;
+  copiedRecently?: boolean;
+  insertedRecently?: boolean;
 }
 
 const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
   results,
   agentType,
-  className = ''
+  className = '',
+  onCopy,
+  onInsert,
+  onTrain,
+  copiedRecently = false,
+  insertedRecently = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showFullContent, setShowFullContent] = useState(false);
@@ -355,13 +366,23 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
   if (isSimpleCard) {
     return (
       <div className={`relative bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
-        <div
-          className="absolute top-3 right-3 text-gray-500 text-xs flex items-center gap-1"
-          title="AI generation confidence"
-        >
-          <span>95%</span>
-          <CheckCircle className="w-3 h-3" />
-        </div>
+        {/* Action Button Bar at top right */}
+        {(onCopy || onInsert || onTrain) && (
+          <div className="flex justify-end px-3 py-2 border-b border-gray-100">
+            <ActionSegmentedControl
+              onCopy={onCopy ? () => onCopy(results) : undefined}
+              onInsert={onInsert ? () => onInsert(results) : undefined}
+              onTrain={onTrain}
+              copiedRecently={copiedRecently}
+              insertedRecently={insertedRecently}
+              actions={[
+                ...(onCopy ? ['copy' as const] : []),
+                ...(onInsert ? ['insert' as const] : []),
+                ...(onTrain ? ['train' as const] : [])
+              ]}
+            />
+          </div>
+        )}
 
         <div className="p-4 space-y-4">
           {displaySections.length > 0 ? (

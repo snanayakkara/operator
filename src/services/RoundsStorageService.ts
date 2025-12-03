@@ -1,4 +1,5 @@
 import { RoundsPatient } from '@/types/rounds.types';
+import { roundsBackendService } from '@/services/RoundsBackendService';
 
 const STORAGE_KEY = 'operator_rounds_patients_v1';
 const SAVE_DEBOUNCE_MS = 250;
@@ -12,6 +13,7 @@ export class RoundsStorageService {
   private cache: RoundsPatient[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(patients: RoundsPatient[]) => void>();
+  private backendAvailable = false;
 
   private constructor() {
     if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
@@ -42,6 +44,13 @@ export class RoundsStorageService {
   }
 
   public async loadPatients(): Promise<RoundsPatient[]> {
+    const backendPatients = await this.fetchFromBackend();
+    if (backendPatients) {
+      this.cache = backendPatients;
+      this.schedulePersist();
+      return [...backendPatients];
+    }
+
     try {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
         const result = await chrome.storage.local.get(STORAGE_KEY);
@@ -70,8 +79,34 @@ export class RoundsStorageService {
 
   public async savePatients(patients: RoundsPatient[]): Promise<void> {
     this.cache = [...patients];
+    await this.persistToBackend();
     this.schedulePersist();
     this.notify();
+  }
+
+  public async quickAddPatient(payload: { name: string; scratchpad: string; ward?: string }): Promise<RoundsPatient | null> {
+    try {
+      const patient = await roundsBackendService.quickAddPatient(payload);
+      this.backendAvailable = true;
+      this.cache = [...this.cache, patient];
+      this.schedulePersist();
+      this.notify();
+      return patient;
+    } catch (error) {
+      console.warn('⚠️ Failed to quick-add patient via backend, falling back to local storage', error);
+      this.backendAvailable = false;
+      return null;
+    }
+  }
+
+  public async loadPatientsFromBackend(): Promise<RoundsPatient[] | null> {
+    const patients = await this.fetchFromBackend();
+    if (patients && !this.arePatientsEqual(patients, this.cache)) {
+      this.cache = patients;
+      this.notify();
+      this.schedulePersist();
+    }
+    return patients;
   }
 
   private notify(): void {
@@ -98,6 +133,35 @@ export class RoundsStorageService {
     }, SAVE_DEBOUNCE_MS);
   }
 
+  private async fetchFromBackend(): Promise<RoundsPatient[] | null> {
+    try {
+      const patients = await roundsBackendService.fetchPatients();
+      this.backendAvailable = true;
+      return patients;
+    } catch (error) {
+      this.backendAvailable = false;
+      return null;
+    }
+  }
+
+  private async persistToBackend(): Promise<void> {
+    if (!this.backendAvailable) {
+      // still try once in case availability changed
+      try {
+        await roundsBackendService.savePatients(this.cache);
+        this.backendAvailable = true;
+      } catch (error) {
+        this.backendAvailable = false;
+      }
+      return;
+    }
+    try {
+      await roundsBackendService.savePatients(this.cache);
+    } catch (error) {
+      this.backendAvailable = false;
+    }
+  }
+
   private async persist(): Promise<void> {
     const payload = { [STORAGE_KEY]: this.cache };
 
@@ -116,5 +180,10 @@ export class RoundsStorageService {
       console.error('❌ Failed to persist rounds patients to localStorage', error);
       throw error;
     }
+  }
+
+  private arePatientsEqual(a: RoundsPatient[], b: RoundsPatient[]): boolean {
+    if (a.length !== b.length) return false;
+    return JSON.stringify(a) === JSON.stringify(b);
   }
 }

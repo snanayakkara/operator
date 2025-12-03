@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .config import Config
-from .jobs import DictationType, Job, JobStatus, job_processed_dir, save_job
+from .jobs import DictationType, Job, JobStatus, JobType, job_processed_dir, save_job
 from .lm_client import LMClient
+from .rounds_backend import RoundsBackend
 from .whisper_client import WhisperClient
 
 logger = logging.getLogger(__name__)
@@ -54,19 +55,33 @@ DEFAULT_AGENT_PIPELINE = {
 
 
 class Pipeline:
-    def __init__(self, config: Config, whisper: WhisperClient, lm: LMClient):
+    def __init__(
+        self,
+        config: Config,
+        whisper: WhisperClient,
+        lm: LMClient,
+        rounds_backend: Optional[RoundsBackend] = None,
+    ):
         self.config = config
         self.whisper = whisper
         self.lm = lm
+        self.rounds_backend = rounds_backend or RoundsBackend(config)
 
-    def process_job(self, job: Job, staged_audio: Path, metadata: Optional[Dict[str, Any]] = None) -> Job:
+    def process_job(
+        self,
+        job: Job,
+        staged_input: Path,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Job:
+        if job.job_type == JobType.PHONE_CALL_NOTE:
+            return self._process_phone_call_note(job, staged_input, metadata)
         if metadata:
             self._apply_shortcut_metadata(job, metadata)
         job_dir = job_processed_dir(self.config.processed_path, job)
         job_dir.mkdir(parents=True, exist_ok=True)
         audio_dest = job_dir / job.audio_filename
-        if staged_audio.exists():
-            staged_audio.replace(audio_dest)
+        if staged_input.exists():
+            staged_input.replace(audio_dest)
         job.audio_path = str(audio_dest)
         self._persist(job)
 
@@ -201,3 +216,39 @@ class Pipeline:
         if not workflow_code:
             return None
         return WORKFLOW_HINTS.get(workflow_code)
+
+    def _process_phone_call_note(
+        self, job: Job, staged_note: Path, metadata: Optional[Dict[str, Any]]
+    ) -> Job:
+        if not metadata:
+            raise ValueError("Phone call note missing metadata")
+        note_type = metadata.get("type")
+        if note_type != JobType.PHONE_CALL_NOTE:
+            raise ValueError(f"Unsupported phone note type {note_type!r}")
+        if not staged_note.exists():
+            raise FileNotFoundError(f"Note text missing for job {job.id}: {staged_note}")
+
+        note_text = staged_note.read_text(encoding="utf-8")
+        patient_name = (metadata.get("patient_name") or metadata.get("patient_hint") or "").strip()
+        if not patient_name:
+            raise ValueError("phone_call_note metadata missing patient name or hint")
+        ward = (metadata.get("ward") or "").strip() or self.config.default_rounds_ward
+
+        job_dir = job_processed_dir(self.config.processed_path, job)
+        job_dir.mkdir(parents=True, exist_ok=True)
+        note_dest = job_dir / "note.txt"
+        staged_note.replace(note_dest)
+
+        job.audio_path = str(note_dest)
+        job.transcript_path = str(note_dest)
+        job.dictation_type = DictationType.NOTE
+        job.header_text = self._extract_header(note_text)
+        job.triage_metadata = dict(metadata)
+        job.confidence = 1.0
+        job.status = JobStatus.COMPLETED
+
+        patient = self.rounds_backend.quick_add_patient(patient_name, note_text, ward)
+        job.triage_metadata["rounds_patient_id"] = patient.get("id")
+        job.triage_metadata["rounds_patient_site"] = patient.get("site")
+        self._persist(job)
+        return job

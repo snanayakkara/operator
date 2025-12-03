@@ -12,7 +12,7 @@ import React, { memo, useState, useEffect } from 'react';
 import { ResultsContainer } from './ResultsContainer';
 import { PreOpCardLayout } from './PreOpCardLayout';
 import { FieldValidationPrompt } from './FieldValidationPrompt';
-import { Printer, Download, ChevronDown, ChevronRight, ClipboardList, Clipboard, AlertCircle } from 'lucide-react';
+import { Printer, Download, ChevronDown, ChevronRight, Clipboard, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../buttons';
 import type { PatientSession, PreOpProcedureType } from '@/types/medical.types';
@@ -352,20 +352,14 @@ export const PreOpPlanDisplay: React.FC<PreOpPlanDisplayProps> = memo(({
     >
       {/* Card Content */}
       <div className="space-y-6">
-        {/* Procedure Type Badge + Completeness */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-${procedureInfo.color}-50 border border-${procedureInfo.color}-200`}>
-            <ClipboardList className={`w-4 h-4 text-${procedureInfo.color}-600`} />
-            <span className={`text-sm font-medium text-${procedureInfo.color}-700`}>
-              {procedureInfo.emoji} {procedureInfo.label}
-            </span>
-          </div>
-          {completenessScore && (
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">Completeness:</span> {completenessScore}
+        {/* Completeness indicator - subtle, no duplicate procedure badge */}
+        {completenessScore && (
+          <div className="flex items-center justify-end">
+            <div className="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">
+              {completenessScore}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Warnings */}
         {warningMessages.length > 0 && (

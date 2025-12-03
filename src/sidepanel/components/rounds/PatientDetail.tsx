@@ -57,6 +57,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [expanded, setExpanded] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -1223,15 +1224,35 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
           </div>
         )}
         <div className="space-y-2">
-          {[...openTasks, ...doneTasks].map(task => (
+          {openTasks.map(task => (
             <div key={task.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2">
-                <input type="checkbox" checked={task.status === 'done'} onChange={() => toggleTask(task.id)} />
-                <span className={`${task.status === 'done' ? 'line-through text-gray-500' : 'text-gray-800'}`}>{task.text}</span>
+                <input type="checkbox" checked={false} onChange={() => toggleTask(task.id)} />
+                <span className="text-gray-800">{task.text}</span>
               </div>
-              {task.status === 'done' && <span className="text-xs text-gray-400">Done</span>}
             </div>
           ))}
+          {doneTasks.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowCompletedTasks(v => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 py-1"
+              >
+                <ChevronDown className={`w-3 h-3 transition-transform ${showCompletedTasks ? 'rotate-0' : '-rotate-90'}`} />
+                {doneTasks.length} completed {doneTasks.length === 1 ? 'task' : 'tasks'}
+              </button>
+              {showCompletedTasks && doneTasks.map(task => (
+                <div key={task.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={true} onChange={() => toggleTask(task.id)} />
+                    <span className="line-through text-gray-500">{task.text}</span>
+                  </div>
+                  <span className="text-xs text-gray-400">Done</span>
+                </div>
+              ))}
+            </>
+          )}
           {patient.tasks.length === 0 && <p className="text-sm text-gray-500">No tasks yet.</p>}
         </div>
       </div>

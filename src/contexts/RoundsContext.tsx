@@ -85,6 +85,16 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [storage]);
 
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const remote = await storage.loadPatientsFromBackend();
+      if (!selectedPatientId && remote && remote.length > 0) {
+        setSelectedPatientId(remote[0].id);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [selectedPatientId, storage]);
+
   const persistPatients = useCallback((producer: (current: RoundsPatient[]) => RoundsPatient[]) => {
     setPatients(prev => {
       const next = producer(prev);
@@ -122,7 +132,18 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [llm, persistPatients]);
 
   const quickAddPatient = useCallback(async (name: string, scratchpad: string, ward?: string): Promise<RoundsPatient | null> => {
-    const patient = createEmptyPatient(name, { intakeNoteText: scratchpad, site: ward || activeWard });
+    const payloadWard = ward || activeWard;
+    const backendPatient = await storage.quickAddPatient({ name, scratchpad, ward: payloadWard });
+    // Backend success already updates storage + notifies subscribers; avoid double-add
+    if (backendPatient) {
+      setSelectedPatientId(backendPatient.id);
+      if (scratchpad.trim()) {
+        triggerIntakeParse(backendPatient.id, scratchpad, backendPatient);
+      }
+      return backendPatient;
+    }
+
+    const patient = createEmptyPatient(name, { intakeNoteText: scratchpad, site: payloadWard });
     await addPatient(patient);
     setSelectedPatientId(patient.id);
 
@@ -131,7 +152,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     return patient;
-  }, [addPatient, triggerIntakeParse]);
+  }, [activeWard, addPatient, storage, triggerIntakeParse]);
 
   const updatePatient = useCallback(async (id: string, updater: (patient: RoundsPatient) => RoundsPatient) => {
     persistPatients(prev => prev.map(p => p.id === id ? updater(p) : p));

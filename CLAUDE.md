@@ -340,12 +340,18 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.32.0**
-**Last Updated**: November 2025
+**Current Version**: **3.40.0**
+**Last Updated**: December 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.40.0 (Dec 2025)**
+- **Single-Page Optimization Workflow**: Replaces 5 tabs with guided step cards + status header covering ASR corrections, Whisper LoRA training commands, DevSet creation, evaluation, GEPA optimization, and validation retests; ASR corrections manager embedded in Step 1.
+- **Pre-Op Plan Validation Checkpoint**: Regex extraction + quick-model validation with missing-field gate, user-provided merge, completeness scoring, and upgraded card layout/export so pre-op runs don’t proceed with critical gaps.
+- **Rounds Backend + Phone Notes**: Local HTTP API + storage service syncing rounds patients across extension/daemon; macOS daemon ingests Shortcut phone-call notes into rounds (quick-add) with tests; rounds storage service polls backend and avoids double-adds on quick add.
+- **Canvas & Media Polish**: Screenshot annotation canvas now boots via React entry; audio scrubber renders waveform/progress with drag handling; results/validation UI refreshed.
 
 **v3.39.0 (Dec 2025)**
 - **Rounds Ward Grouping**: Patients grouped by ward with divider headers; drag-and-drop reordering within each ward section

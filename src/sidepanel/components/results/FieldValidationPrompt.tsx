@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Modal } from '../modals';
 import { FormInput, FormTextarea } from '../forms';
 import { Button, ButtonGroup } from '../buttons';
-import { AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Info, AlertTriangle, Edit3, Check } from 'lucide-react';
 
 type ValidationCorrection = {
   field: string;
@@ -99,6 +99,11 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 }: FieldValidationPromptProps<TValidation>) => {
   const [userFields, setUserFields] = useState<Record<string, unknown>>({});
   const [acceptedCorrections, setAcceptedCorrections] = useState<Set<string>>(new Set());
+  // Track which corrections are being edited by the user
+  const [editingCorrections, setEditingCorrections] = useState<Set<string>>(new Set());
+  // Track user-edited values for corrections (separate from accepted corrections)
+  const [editedCorrectionValues, setEditedCorrectionValues] = useState<Record<string, string>>({});
+  
   const hasAnySuggestions = useMemo(() => {
     const missingWithSuggestions = [...validation.missingCritical, ...validation.missingOptional]
       .some(m => m.suggestedValue !== undefined || /suggest(ed|ion)\s*[:-]\s*([^\s]+)/i.test(m.reason));
@@ -181,13 +186,22 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
   };
 
   const handleCorrectionToggle = (correction: ValidationCorrection, accept: boolean) => {
+    // Clear editing state when accepting/rejecting
+    setEditingCorrections(prev => {
+      const updated = new Set(prev);
+      updated.delete(correction.field);
+      return updated;
+    });
+    
     setAcceptedCorrections(prev => {
       const updated = new Set(prev);
       if (accept) {
         updated.add(correction.field);
+        // Use edited value if available, otherwise use suggested correction
+        const valueToUse = editedCorrectionValues[correction.field] ?? correction.correctValue;
         setUserFields(existing => ({
           ...existing,
-          [correction.field]: correction.correctValue
+          [correction.field]: valueToUse
         }));
       } else {
         updated.delete(correction.field);
@@ -197,6 +211,43 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
           return next;
         });
       }
+      return updated;
+    });
+  };
+
+  // Toggle editing mode for a correction field
+  const handleStartEditing = (correction: ValidationCorrection) => {
+    setEditingCorrections(prev => {
+      const updated = new Set(prev);
+      updated.add(correction.field);
+      return updated;
+    });
+    // Initialize with the current best value (edited, suggested, or original)
+    const currentValue = editedCorrectionValues[correction.field] 
+      ?? String(correction.correctValue ?? correction.regexValue ?? '');
+    setEditedCorrectionValues(prev => ({
+      ...prev,
+      [correction.field]: currentValue
+    }));
+  };
+
+  // Apply the user's edited value
+  const handleApplyEdit = (correction: ValidationCorrection) => {
+    const editedValue = editedCorrectionValues[correction.field];
+    if (editedValue !== undefined) {
+      setAcceptedCorrections(prev => {
+        const updated = new Set(prev);
+        updated.add(correction.field);
+        return updated;
+      });
+      setUserFields(existing => ({
+        ...existing,
+        [correction.field]: editedValue
+      }));
+    }
+    setEditingCorrections(prev => {
+      const updated = new Set(prev);
+      updated.delete(correction.field);
       return updated;
     });
   };
@@ -337,38 +388,86 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
                 const config = fieldConfig[correction.field];
                 const label = config?.label ?? formatFieldPath(correction.field);
                 const isAccepted = acceptedCorrections.has(correction.field);
+                const isEditing = editingCorrections.has(correction.field);
+                const inputType = config?.inputType ?? 'text';
 
                 return (
                   <div key={correction.field} className="border border-gray-200 rounded-lg p-4 space-y-3">
                     <div className="text-sm font-medium text-gray-700">
                       {label}
                     </div>
-                    <div className="text-sm text-gray-600">
-                      {correction.regexValue !== null && correction.regexValue !== undefined ? (
-                        <>Regex found: <strong>{String(correction.regexValue)}</strong> → Suggested: <strong>{String(correction.correctValue)}</strong></>
-                      ) : (
-                        <>Suggested: <strong>{String(correction.correctValue)}</strong></>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {correction.reason}
-                    </div>
-                    <ButtonGroup spacing="sm">
-                      <Button
-                        variant={isAccepted ? 'success' : 'outline'}
-                        size="sm"
-                        onClick={() => handleCorrectionToggle(correction, true)}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        variant={!isAccepted ? 'primary' : 'outline'}
-                        size="sm"
-                        onClick={() => handleCorrectionToggle(correction, false)}
-                      >
-                        Keep Original
-                      </Button>
-                    </ButtonGroup>
+                    
+                    {/* Show edit input when in editing mode */}
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-500 mb-1">
+                          Original: <span className="font-mono bg-gray-100 px-1 rounded">{String(correction.regexValue ?? 'none')}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type={inputType}
+                            value={editedCorrectionValues[correction.field] ?? ''}
+                            onChange={(e) => setEditedCorrectionValues(prev => ({
+                              ...prev,
+                              [correction.field]: e.target.value
+                            }))}
+                            placeholder={config?.placeholder ?? 'Enter corrected value'}
+                            className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            autoFocus
+                          />
+                          <Button
+                            variant="success"
+                            size="sm"
+                            onClick={() => handleApplyEdit(correction)}
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        {config?.helperText && (
+                          <div className="text-xs text-gray-400">{config.helperText}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-sm text-gray-600">
+                          {correction.regexValue !== null && correction.regexValue !== undefined ? (
+                            <>Transcription: <strong className="font-mono bg-amber-50 px-1 rounded">{String(correction.regexValue)}</strong> → Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{String(correction.correctValue)}</strong></>
+                          ) : (
+                            <>Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{String(correction.correctValue)}</strong></>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {correction.reason}
+                        </div>
+                      </>
+                    )}
+                    
+                    {!isEditing && (
+                      <ButtonGroup spacing="sm">
+                        <Button
+                          variant={isAccepted ? 'success' : 'outline'}
+                          size="sm"
+                          onClick={() => handleCorrectionToggle(correction, true)}
+                        >
+                          Accept Suggestion
+                        </Button>
+                        <Button
+                          variant={!isAccepted ? 'primary' : 'outline'}
+                          size="sm"
+                          onClick={() => handleCorrectionToggle(correction, false)}
+                        >
+                          Keep Original
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleStartEditing(correction)}
+                        >
+                          <Edit3 className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                      </ButtonGroup>
+                    )}
                     <div className="text-xs text-gray-400">
                       Confidence: {(correction.confidence * 100).toFixed(0)}%
                     </div>

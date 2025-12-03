@@ -11,16 +11,14 @@
 import React, { memo, useState } from 'react';
 import {
   FileTextIcon,
-  CheckIcon,
-  SquareIcon,
   ChevronDownIcon,
   ChevronUpIcon
 } from '../icons/OptimizedIcons';
-import AnimatedCopyIcon from '../../components/AnimatedCopyIcon';
-import { RefreshCw, ThumbsUp, Edit3, SkipForward } from 'lucide-react';
+import { ThumbsUp, Edit3, SkipForward } from 'lucide-react';
 import { AudioPlayback } from '../AudioPlayback';
 import { AudioScrubber } from '../ui/AudioScrubber';
-import { Button, IconButton } from '../buttons';
+import { Button } from '../buttons';
+import { ActionSegmentedControl } from '../ui/SegmentedControl';
 import { StatusBadge } from '../status';
 import type { AgentType } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus, TranscriptionApprovalState } from '@/types/optimization';
@@ -187,13 +185,33 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
     }
   };
 
-  // Available agents for reprocessing
+  // Available agents for reprocessing - grouped by category
   const availableAgents = [
-    { id: 'tavi', label: 'TAVI', icon: '🫀' },
-    { id: 'angiogram-pci', label: 'Angiogram/PCI', icon: '🩺' },
+    // Letters & Correspondence
     { id: 'quick-letter', label: 'Quick Letter', icon: '📝' },
     { id: 'consultation', label: 'Consultation', icon: '👨‍⚕️' },
-    { id: 'investigation-summary', label: 'Investigation', icon: '🔬' }
+    { id: 'patient-education', label: 'Patient Education', icon: '📚' },
+    // Clinical Data
+    { id: 'background', label: 'Background', icon: '📋' },
+    { id: 'investigation-summary', label: 'Investigation', icon: '🔬' },
+    { id: 'medication', label: 'Medications', icon: '💊' },
+    { id: 'bloods', label: 'Bloods', icon: '🩸' },
+    { id: 'imaging', label: 'Imaging', icon: '🖼️' },
+    // Procedures - Structural
+    { id: 'tavi', label: 'TAVI', icon: '🫀' },
+    { id: 'tavi-workup', label: 'TAVI Workup', icon: '📊' },
+    { id: 'mteer', label: 'mTEER', icon: '🔧' },
+    { id: 'tteer', label: 'tTEER', icon: '🔩' },
+    { id: 'pfo-closure', label: 'PFO Closure', icon: '🩹' },
+    { id: 'asd-closure', label: 'ASD Closure', icon: '🫁' },
+    { id: 'pvl-plug', label: 'PVL Plug', icon: '🔌' },
+    // Procedures - Coronary
+    { id: 'angiogram-pci', label: 'Angiogram/PCI', icon: '🩺' },
+    { id: 'bypass-graft', label: 'Bypass Graft', icon: '🔀' },
+    // Procedures - Diagnostic
+    { id: 'right-heart-cath', label: 'Right Heart Cath', icon: '💓' },
+    // Planning
+    { id: 'pre-op-plan', label: 'Pre-Op Plan', icon: '📑' },
   ] as const;
 
   const handleTranscriptionCopy = async () => {
@@ -233,7 +251,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
       <Button
         onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
         variant="ghost"
-        className={`w-full p-4 text-left transition-colors flex items-center justify-between rounded-none ${
+        className={`w-full px-4 py-3 text-left transition-colors flex items-center justify-between rounded-none ${
           isProcessing
             ? 'hover:bg-blue-50/60'
             : 'hover:bg-gray-50/50'
@@ -244,56 +262,12 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
           <span className={`font-medium text-sm ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
             Original Transcription
           </span>
-          <span className="text-xs text-gray-500">
-            {(editedTranscription || '').split(' ').filter(w => w.trim()).length} words
-            {editedTranscription !== originalTranscription && (
-              <span className="text-blue-600 ml-1">(edited)</span>
-            )}
-          </span>
+          {editedTranscription !== originalTranscription && (
+            <span className="text-xs text-blue-600">(edited)</span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Transcription Actions - Enhanced during processing */}
-          {onTranscriptionCopy && (
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                handleTranscriptionCopy();
-              }}
-              variant="ghost"
-              size="sm"
-              icon={transcriptionCopied ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <AnimatedCopyIcon className="w-3.5 h-3.5 text-blue-600" title="Copy transcription" />}
-              aria-label={isProcessing ? "Copy raw transcription" : "Copy transcription"}
-              title={isProcessing ? "Copy raw transcription" : "Copy transcription"}
-            />
-          )}
-
-          {onTranscriptionInsert && (
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                handleTranscriptionInsert();
-              }}
-              variant="ghost"
-              size="sm"
-              icon={transcriptionInserted ? <CheckIcon className="w-3.5 h-3.5 text-green-600" /> : <SquareIcon className="w-3.5 h-3.5 text-blue-500" />}
-              aria-label="Insert transcription to EMR"
-              title="Insert transcription to EMR"
-            />
-          )}
-
-          {/* Reprocess indicator */}
-          {onAgentReprocess && (
-            <IconButton
-              onClick={(e) => e.stopPropagation()}
-              variant="ghost"
-              size="sm"
-              icon={<RefreshCw className={`w-3.5 h-3.5 text-purple-500 ${isProcessing ? 'animate-spin' : ''}`} />}
-              aria-label="Reprocess available"
-              title="Expand to reprocess with different agent"
-            />
-          )}
-
           {transcriptionExpanded ? (
             <ChevronUpIcon className="w-3.5 h-3.5 text-gray-400" />
           ) : (
@@ -302,10 +276,37 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
         </div>
       </Button>
 
+      {/* Action Button Bar - Positioned at top right of card for consistency with letter/summary cards */}
+      <div className="px-4 pb-2 -mt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end">
+          <ActionSegmentedControl
+            onCopy={onTranscriptionCopy ? handleTranscriptionCopy : undefined}
+            onInsert={onTranscriptionInsert ? handleTranscriptionInsert : undefined}
+            onReprocess={onAgentReprocess ? () => {
+              // If transcription is collapsed, expand it first then toggle reprocess
+              if (!transcriptionExpanded) {
+                setTranscriptionExpanded(true);
+                setReprocessExpanded(true);
+              } else {
+                setReprocessExpanded(!reprocessExpanded);
+              }
+            } : undefined}
+            copiedRecently={transcriptionCopied}
+            insertedRecently={transcriptionInserted}
+            actions={[
+              ...(onTranscriptionCopy ? ['copy' as const] : []),
+              ...(onTranscriptionInsert ? ['insert' as const] : []),
+              ...(onAgentReprocess ? ['reprocess' as const] : [])
+            ]}
+          />
+        </div>
+      </div>
+
       {/* Collapsed Audio Scrubber - shows when collapsed and audio available */}
       {!transcriptionExpanded && audioBlob && audioUrl && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-3 -mt-1">
           <AudioScrubber
+            audioBlob={audioBlob}
             currentTime={audioCurrentTime}
             duration={audioDuration}
             isPlaying={isAudioPlaying}
@@ -313,7 +314,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
             onSeek={handleAudioSeek}
             onPlayPause={handleAudioPlayPause}
             onMuteToggle={handleAudioMuteToggle}
-            className="bg-gray-50/50 rounded px-2 py-1"
+            className="bg-gray-50/50 rounded-lg px-2 py-1.5"
           />
         </div>
       )}

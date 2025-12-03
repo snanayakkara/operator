@@ -6,7 +6,7 @@ interface IconButtonProps {
   onClick: () => void;
   tooltip: string;
   size?: 'xs' | 'sm';
-  variant?: 'default' | 'danger';
+  variant?: 'default' | 'subtle' | 'danger';
   disabled?: boolean;
   loading?: boolean;
   className?: string;
@@ -34,6 +34,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
 
   const variantClasses = {
     default: 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
+    subtle: 'text-gray-400 hover:bg-gray-50 hover:text-gray-600',
     danger: 'text-rose-600 hover:bg-rose-50 hover:text-rose-700'
   };
 

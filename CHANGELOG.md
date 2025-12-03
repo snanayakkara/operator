@@ -7,9 +7,36 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 ## [Unreleased]
 
-- Rename Phase 4 branding to Advanced Intelligence across UI, docs, and agent plumbing; stats helpers updated to `getIntelligencePerformanceStats`.
-- DSPy now auto-enables when the local optimizer is healthy (overridable via `USE_DSPY`); defaults and messaging adjusted for “DSPy by default” vision with LM Studio fallback.
+- No unreleased changes yet.
+
+## [3.40.0] - 2025-12-04
+
+### Added
+
+- **Unified optimization workflow**
+  - Single-page pipeline with status header + numbered step cards replacing the 5-tab UI; embeds ASR corrections manager, DevSet/Evaluation/GEPA sections, and validation retests in one flow.
+  - Whisper LoRA training panel with dataset health counters, copyable start/resume/tail/cleanup commands, and guidance for overnight runs.
+- **Pre-Op plan validation**
+  - Regex extraction → quick-model validation → checkpoint modal (critical gaps + low-confidence corrections) before running the reasoning model.
+  - User-provided field merge, completeness scoring, and upgraded card layout/export so pre-op runs don’t proceed with missing critical data.
+- **Rounds backend + daemon ingestion**
+  - New local HTTP API + storage service syncing rounds patients between extension and macOS daemon (debounced persistence + change listeners).
+  - macOS daemon ingests Shortcut phone-call notes into rounds via quick-add (with tests) and exposes rounds endpoints on the API server.
+- **Canvas/media polish**
+  - Screenshot annotation canvas now boots via a React entry (`src/canvas/index.tsx` + `CanvasApp`), and audio scrubber renders waveform/progress with drag + touch support.
+
+### Changed
+
+- Phase 4 branding renamed to **Advanced Intelligence** across UI/docs; stats helpers updated to `getIntelligencePerformanceStats`.
+- DSPy now auto-enables when the local optimizer is healthy (overridable via `USE_DSPY`); defaults/messaging tuned for “DSPy by default” with LM Studio fallback.
+- ASR corrections manager moved inline into Step 1 of the optimization workflow; options page header now highlights the unified pipeline.
+- Pre-Op results display/validation prompt refreshed with clearer status chips, transcription section alignment, and structured data export tweaks.
 - Lint cleanup: removed unused vars/imports, tightened regex escapes, added DOM globals, and ignored the Python ingest venv for ESLint noise.
+
+### Fixed
+
+- Rounds quick add no longer double-adds patients when backend quick-add succeeds; intake parsing still runs when scratchpads are provided.
+- Phone-call note ingestion handles missing/malformed sidecars gracefully and marks jobs error-only when backend persistence fails.
 
 ## [3.39.0] - 2025-12-01
 

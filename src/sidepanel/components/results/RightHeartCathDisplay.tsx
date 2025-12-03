@@ -1029,7 +1029,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       {/* Field Editor Modal */}
       {isEditingFields && effectiveRHCData && (
         <RHCFieldEditor
-          rhcReport={rhcReport || effectiveRHCData}
+          key={`field-editor-${effectiveRHCData.id || Date.now()}`}
+          rhcReport={effectiveRHCData}
           onSave={handleFieldEditorSave}
           onCancel={handleFieldEditorCancel}
         />

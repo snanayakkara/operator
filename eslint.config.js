@@ -98,7 +98,8 @@ export default [
         cancelIdleCallback: 'readonly',
         Audio: 'readonly',
         HTMLFormElement: 'readonly',
-        PointerEvent: 'readonly'
+        PointerEvent: 'readonly',
+        TouchEvent: 'readonly'
       }
     },
     plugins: {

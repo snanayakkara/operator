@@ -51,7 +51,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
 
   return (
     <div
-      className={`inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5 ${fullWidth ? 'w-full' : ''} ${className}`}
+      className={`inline-flex gap-0.5 ${fullWidth ? 'w-full' : ''} ${className}`}
       role={multiSelect ? 'group' : 'radiogroup'}
     >
       {options.map((option) => {
@@ -69,23 +69,23 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
             onClick={() => onChange?.(option.id)}
             className={`
               inline-flex items-center justify-center ${fullWidth ? 'flex-1' : ''}
-              rounded transition-all duration-150
+              rounded-md transition-all duration-200 ease-out
               font-medium whitespace-nowrap
               ${sizeClasses[size]}
               ${isSelected && !multiSelect
-                ? 'bg-white text-gray-900 shadow-sm'
+                ? 'bg-white/80 text-gray-900 shadow-sm'
                 : isSuccess
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+                  ? 'bg-emerald-100/80 text-emerald-700'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 hover:shadow-sm active:scale-95'
               }
               ${option.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-              focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1
             `}
           >
             {isSuccess ? (
-              <Check className={iconSizes[size]} />
+              <Check className={`${iconSizes[size]} transition-transform duration-200`} />
             ) : Icon && (
-              <Icon className={iconSizes[size]} />
+              <Icon className={`${iconSizes[size]} transition-transform duration-200 group-hover:scale-110`} />
             )}
             <span>{option.label}</span>
           </button>

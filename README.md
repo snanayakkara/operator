@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.39.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.40.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.39.0 adds rounds ward grouping with drag-and-drop reordering, "done today" patient checkboxes, next of kin fields with click-to-call, delete issue/investigation actions, ward round PNG export, and pending updates review for import workflows.
+> **Latest:** v3.40.0 introduces a single-page optimization workflow (ASR corrections + Whisper LoRA panel + GEPA flow), pre-op plan validation checkpoints with user-provided fields, and a shared rounds backend (API + daemon ingestion for phone call notes).
 
 ## 🏥 Overview
 
@@ -616,6 +616,13 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v3.40.0 (December 2025) — Optimization Workflow + Rounds Backend
+- **Single-page optimization workflow**: Replaces 5 tabs with guided step cards (status header, plain-English context) covering ASR corrections, Whisper LoRA commands, DevSet, evaluation, GEPA optimization, and validation retests.
+- **ASR corrections manager**: Inline corrections/backup UI plus overnight Whisper LoRA training panel with copyable commands, resume + cleanup helpers, and dataset health metrics.
+- **Pre-op plan validation**: Regex + quick-model checkpoint with missing-field gate, user-provided field merge, and updated card layout/export so pre-op runs don’t proceed with critical gaps.
+- **Shared rounds backend**: Local HTTP API + storage service that syncs rounds patients between the extension and daemon, including auto quick-add from phone call notes ingested via macOS Shortcut sidecars (tested flow).
+- **Canvas & media polish**: Screenshot annotation canvas now ships as a React app entry, audio scrubber gets waveform rendering and drag-resize polish, and results panels gain improved status chips/validation UX.
+
 ### v3.39.0 (December 2025) — Rounds Ward Grouping Release
 - **Ward grouping & reorder**: Rounds list now groups patients by ward with drag-and-drop reordering within each ward section.
 - **Done today checkbox**: Per-patient completion tracking for daily rounds with visual dimming of completed patients.
@@ -682,7 +689,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.39.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Ward Grouping & Export
+**Version**: 3.40.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Unified Optimization Workflow & Rounds Backend
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

@@ -185,6 +185,9 @@ const MOBILE_AGENT_LABELS = MOBILE_AGENT_OPTIONS.reduce<Record<AgentType, string
 
 // Maps a mobile job to the appropriate agent with fallback chain
 const mapMobileJobToAgent = (job: MobileJobSummary): AgentType => {
+  if (job.job_type === 'phone_call_note') {
+    return 'background';
+  }
   // Priority 1: User's explicit workflow_code choice from mobile menu
   if (job.workflow_code && WORKFLOW_CODE_AGENT_MAP[job.workflow_code]) {
     return WORKFLOW_CODE_AGENT_MAP[job.workflow_code];
@@ -493,6 +496,9 @@ const OptimizedAppContent: React.FC = memo(() => {
       let processingActive = false;
       try {
         const job = await mobileJobsService.getJob(jobId);
+        if (job.job_type === 'phone_call_note') {
+          throw new Error('Phone call notes are already saved to rounds.');
+        }
         if (!job.transcript_text) {
           throw new Error('Transcript not available yet. Try again in a moment.');
         }
@@ -706,6 +712,10 @@ const OptimizedAppContent: React.FC = memo(() => {
   );
 
   const handleRequestAttachMobileJob = useCallback((job: MobileJobSummary) => {
+    if (job.job_type === 'phone_call_note') {
+      ToastService.getInstance().info('Already saved', 'Phone call notes are added to rounds automatically.');
+      return;
+    }
     setPendingMobileJob(job);
     setPendingMobileAgent(mapMobileJobToAgent(job));
   }, []);
@@ -1785,39 +1795,55 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         // Detect missing information for QuickLetter during streaming completion
+        // Now context-aware: checks EMR data and doesn't ask for info we already have
         if (agent === 'quick-letter') {
           console.log('🔍 Streaming completion: detecting missing information for QuickLetter');
           // Use a simple async function to detect missing info without blocking UI
           (async () => {
             try {
-              // Import QuickLetterAgent for missing info detection
-              const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
-              const _quickLetterAgent = new QuickLetterAgent();
-              // Call the missing info detection method directly (we need to make it public or create a wrapper)
-              // For now, use a basic fallback detection
               const text = input.toLowerCase();
+              
+              // Check if we have patient info from EMR (available in current session)
+              const currentSession = state.patientSessions.find(s => s.id === sessionId);
+              const hasPatientInfoFromEMR = !!(currentSession?.patient?.name || state.currentPatientInfo?.name);
+              console.log('🔍 EMR patient info available:', hasPatientInfoFromEMR);
+              
               const missing = {
                 letter_type: 'general',
                 missing_purpose: [] as string[],
                 missing_clinical: [] as string[],
                 missing_recommendations: [] as string[],
-                completeness_score: "80%"
+                completeness_score: "90%"
               };
 
-              // Basic missing information detection logic (simplified version of QuickLetterAgent's fallback)
-              if (!text.includes('refer') && !text.includes('follow up') && !text.includes('consultation') &&
-                  !text.includes('thank you')) {
+              // Letter purpose detection - much more relaxed, purpose is usually inferable from content
+              // Common letter purposes: referral, follow-up, thank you, consultation, review, assessment, results
+              const hasPurposeIndicator = text.includes('refer') || text.includes('follow up') || 
+                  text.includes('follow-up') || text.includes('consultation') || text.includes('thank you') ||
+                  text.includes('review') || text.includes('assessment') || text.includes('request') ||
+                  text.includes('results') || text.includes('recommend') || text.includes('appreciate') ||
+                  text.includes('discharge') || text.includes('admission') || text.includes('update');
+              
+              // Only flag purpose if letter is very short AND has no purpose indicators
+              if (!hasPurposeIndicator && text.length < 50) {
                 missing.missing_purpose.push('Letter purpose or reason for correspondence');
               }
 
-              if (!text.includes('patient') && !text.includes('gentleman') && !text.includes('lady') &&
-                  !text.includes('year old') && !text.includes('age')) {
-                missing.missing_clinical.push('Patient demographics or context');
-              }
+              // Only flag demographics if we have NO source of patient info (neither EMR nor dictation)
+              // But actually, demographics aren't strictly required for correspondence
+              // So we skip this check entirely - the letter can be generated without it
+              // if (!hasPatientInfoFromEMR && !hasDemographicsInText) { ... }
 
+              // Clinical examination findings - only flag if there's discussion of tests/exams without results
               if (!text.includes('examination') && !text.includes('found') && !text.includes('shows') &&
-                  !text.includes('revealed') && !text.includes('noted') && text.length > 100) {
-                missing.missing_clinical.push('Clinical examination findings');
+                  !text.includes('revealed') && !text.includes('noted') && text.length > 200) {
+                // Only flag for longer dictations where clinical findings would be expected
+                // For short letters (thank you notes, referrals), clinical exam isn't always needed
+                const expectsClinicalFindings = text.includes('assess') || text.includes('exam') || 
+                    text.includes('review') || text.includes('consult');
+                if (expectsClinicalFindings) {
+                  missing.missing_clinical.push('Clinical examination findings');
+                }
               }
 
               // Only set missing info if there are actually missing items
@@ -2508,6 +2534,27 @@ const OptimizedAppContent: React.FC = memo(() => {
               status: 'awaiting_validation',
               extractedData: mteerResult.extractedData ?? null
             });
+            actions.setProcessingProgress(0);
+            actions.clearPipelineProgress();
+            return;
+          }
+
+          case 'pre-op-plan': {
+            console.log('⚠️ Pre-Op Plan validation required - pausing workflow');
+
+            const preOpResult = result as any;
+            actions.updatePatientSession(sessionId, {
+              results: preOpResult.content,
+              preOpPlanData: preOpResult.preOpPlanData,
+              preOpValidationResult: preOpResult.validationResult ?? null,
+              preOpValidationStatus: 'awaiting_validation',
+              preOpExtractedData: preOpResult.extractedData,
+              status: 'awaiting_validation',
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+
+            actions.setPreOpPlanData(preOpResult.preOpPlanData);
             actions.setProcessingProgress(0);
             actions.clearPipelineProgress();
             return;
@@ -3703,6 +3750,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Determine if this was originally perfect or corrected
         const wasEdited = approvalState.hasBeenEdited;
         const originalText = approvalState.originalText || currentTranscription;
+
+        // Try to associate the right audio blob with this correction
+        let audioBlobForCorrection: Blob | undefined;
+        const sessionIdForAudio = state.selectedSessionId || state.currentSessionId;
+        if (sessionIdForAudio) {
+          const session = state.patientSessions.find(s => s.id === sessionIdForAudio);
+          audioBlobForCorrection = session?.audioBlob || undefined;
+        }
+        if (!audioBlobForCorrection && currentAudioBlobRef.current) {
+          audioBlobForCorrection = currentAudioBlobRef.current;
+        }
         
         await ASRCorrectionsLog.getInstance().addCorrection({
           rawText: originalText,
@@ -3713,7 +3771,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           userExplicitlyApproved: true,
           approvalTimestamp: Date.now(),
           editTimestamp: wasEdited ? (approvalState.editTimestamp || Date.now()) : undefined
-        });
+        }, { audioBlob: audioBlobForCorrection, backupToServer: true });
         
         // Show appropriate feedback
         const message = wasEdited 
@@ -3747,12 +3805,27 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Handle reprocessing transcription with different agent
   const handleAgentReprocess = useCallback(async (newAgentType: AgentType) => {
-    const targetSessionId = state.selectedSessionId || state.currentSessionId;
+    // When viewing a historical session, use displaySession data; otherwise use current state
+    const isViewingSession = state.displaySession.isDisplayingSession;
+    const targetSessionId = isViewingSession 
+      ? state.displaySession.displaySessionId 
+      : (state.selectedSessionId || state.currentSessionId);
+    
+    // Get transcription from the appropriate source
+    const transcriptionToUse = isViewingSession 
+      ? state.displaySession.displayTranscription 
+      : state.transcription;
 
     try {
-      console.log('🔄 Reprocessing transcription with agent:', newAgentType);
+      console.log('🔄 Reprocessing transcription with agent:', {
+        newAgentType,
+        isViewingSession,
+        targetSessionId,
+        hasTranscription: !!transcriptionToUse,
+        transcriptionLength: transcriptionToUse?.length || 0
+      });
 
-      if (!state.transcription || state.transcription.trim().length === 0) {
+      if (!transcriptionToUse || transcriptionToUse.trim().length === 0) {
         console.error('❌ No transcription available for reprocessing');
         actions.setErrors(['No transcription available for reprocessing']);
         return;
@@ -3761,6 +3834,14 @@ const OptimizedAppContent: React.FC = memo(() => {
       if (state.isProcessing) {
         console.warn('⚠️ Already processing, ignoring reprocess request');
         return;
+      }
+
+      // If viewing a session, exit session view to show reprocessing results in main view
+      if (isViewingSession) {
+        console.log('📤 Exiting session view to show reprocessing results');
+        actions.clearDisplaySession();
+        // Copy the transcription to current state for reprocessing
+        actions.setTranscription(transcriptionToUse);
       }
 
       // Clear previous results and warnings
@@ -3801,7 +3882,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       const { AgentFactory } = await import('@/services/AgentFactory');
       const result = await AgentFactory.processWithAgent(
         newAgentType,
-        state.transcription,
+        transcriptionToUse,
         { isReprocessing: true }, // Add context to indicate reprocessing
         processingAbortRef.current?.signal
       );
@@ -3888,7 +3969,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setErrors([error.message || 'Reprocessing failed']);
       }
     }
-  }, [state.transcription, state.isProcessing, state.selectedSessionId, state.currentSessionId, actions]);
+  }, [state.transcription, state.isProcessing, state.selectedSessionId, state.currentSessionId, state.displaySession.isDisplayingSession, state.displaySession.displaySessionId, state.displaySession.displayTranscription, actions]);
 
   // Reprocess with user-provided answers for missing information
   const handleReprocessWithMissingInfo = useCallback(async (answers: Record<string, string>) => {
@@ -5421,6 +5502,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 taviValidationStatus={displayData.isDisplayingSession ? displayData.taviValidationStatus : state.taviValidationStatus}
                 onTAVIReprocessWithValidation={!displayData.isDisplayingSession ? handleTAVIReprocessWithValidation : undefined}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
+                preOpPlanData={displayData.isDisplayingSession ? displayData.preOpPlanData : state.preOpPlanData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
                 rhcReport={displayData.isDisplayingSession ? displayData.rhcReport : state.rhcReport}
                 onUpdateRhcReport={displayData.isDisplayingSession && stableSelectedSessionId

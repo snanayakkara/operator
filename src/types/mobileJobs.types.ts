@@ -12,6 +12,7 @@ export interface MobileJobSummary {
   id: string;
   created_at: string;
   audio_filename: string;
+  job_type?: 'audio_dictation' | 'phone_call_note';
   dictation_type: string;
   status: string;
   confidence: number;

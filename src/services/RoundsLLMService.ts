@@ -220,10 +220,12 @@ export class RoundsLLMService {
             'Return the full revised letter.'
           ].join(' ')
         },
-        { role: 'assistant', content: currentLetter },
         {
           role: 'user',
           content: [
+            'Current letter:',
+            currentLetter,
+            '',
             'Patient context (for consistency, do not restate all):',
             JSON.stringify({
               name: patient.name,
@@ -232,6 +234,7 @@ export class RoundsLLMService {
               site: patient.site,
               oneLiner: patient.oneLiner
             }),
+            '',
             'Edit request:',
             instruction
           ].join('\n')

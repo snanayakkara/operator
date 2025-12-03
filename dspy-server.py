@@ -1387,6 +1387,122 @@ def asr_corrections_endpoint():
         log_request('asr/corrections', success=False, error=error_msg)
         return jsonify(response), 500
 
+@app.route('/v1/asr/corrections/export', methods=['GET'])
+def asr_corrections_export():
+    """
+    Export persisted ASR corrections (best-effort) so the extension can restore
+    them after reloads or ID changes.
+    """
+    try:
+        corrections_file = Path('data/asr/uploaded_corrections.json')
+        corrections = []
+        if corrections_file.exists():
+            with open(corrections_file, 'r') as f:
+                corrections = json.load(f)
+
+        response = {
+            'success': True,
+            'data': {'corrections': corrections},
+            'timestamp': now_melbourne_iso()
+        }
+
+        log_request('asr/corrections/export', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"ASR corrections export failed: {str(e)}"
+        logger.error(error_msg)
+
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+
+        log_request('asr/corrections/export', success=False, error=error_msg)
+        return jsonify(response), 500
+
+@app.route('/v1/asr/ingest', methods=['POST'])
+def asr_ingest_with_audio():
+    """
+    Ingest a single correction with optional audio attachment.
+
+    Accepts multipart/form-data with:
+      - metadata: JSON string containing the correction entry
+      - audio: optional audio file (any extension)
+    """
+    try:
+        if 'metadata' not in request.form:
+            raise DSPyServerError("Missing 'metadata' field")
+
+        metadata_str = request.form['metadata']
+        try:
+            metadata = json.loads(metadata_str)
+        except json.JSONDecodeError:
+            raise DSPyServerError("Invalid metadata JSON")
+
+        # Basic validation
+        if 'id' not in metadata or not metadata['id']:
+            raise DSPyServerError("metadata.id is required")
+        if 'rawText' not in metadata or 'correctedText' not in metadata:
+            raise DSPyServerError("metadata.rawText and metadata.correctedText are required")
+
+        asr_data_dir = Path('data/asr')
+        asr_audio_dir = asr_data_dir / 'audio'
+        asr_data_dir.mkdir(parents=True, exist_ok=True)
+        asr_audio_dir.mkdir(parents=True, exist_ok=True)
+
+        # Load existing corrections
+        corrections_file = asr_data_dir / 'uploaded_corrections.json'
+        existing = []
+        if corrections_file.exists():
+            with open(corrections_file, 'r') as f:
+                existing = json.load(f)
+
+        # Save audio if present
+        audio_file = request.files.get('audio')
+        if audio_file:
+            ext = Path(audio_file.filename).suffix or '.webm'
+            audio_filename = f"{metadata['id']}{ext}"
+            audio_path = asr_audio_dir / audio_filename
+            audio_file.save(audio_path)
+            metadata['audioPath'] = str(audio_path)
+
+        # Upsert correction
+        updated = False
+        for i, entry in enumerate(existing):
+            if entry.get('id') == metadata['id']:
+                existing[i] = {**entry, **metadata}
+                updated = True
+                break
+        if not updated:
+            existing.append(metadata)
+
+        with open(corrections_file, 'w') as f:
+            json.dump(existing, f, indent=2)
+
+        response = {
+            'success': True,
+            'data': {'saved': 1, 'audio_saved': bool(audio_file)},
+            'timestamp': now_melbourne_iso()
+        }
+
+        log_request('asr/ingest', success=True)
+        return jsonify(response)
+
+    except Exception as e:
+        error_msg = f"ASR ingest failed: {str(e)}"
+        logger.error(error_msg)
+
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+
+        log_request('asr/ingest', success=False, error=error_msg)
+        return jsonify(response), 500
+
 # Enhanced GEPA Optimization Endpoints
 
 @app.route('/v1/dspy/optimize/preview', methods=['POST'])

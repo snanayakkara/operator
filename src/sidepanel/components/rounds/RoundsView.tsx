@@ -160,6 +160,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
             icon={Link2}
             onClick={handleGoToPatient}
             tooltip="Go To Patient"
+            variant="subtle"
           />
           <IconButton
             icon={Mic}

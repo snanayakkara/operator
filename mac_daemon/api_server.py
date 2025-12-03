@@ -7,11 +7,12 @@ import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .config import Config
 from .jobs import Job, load_job, list_jobs, save_job, job_processed_dir
+from .rounds_backend import RoundsBackend
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def _job_summary(job: Job) -> Dict[str, object]:
         "id": job.id,
         "created_at": job.created_at,
         "audio_filename": job.audio_filename,
+        "job_type": getattr(job, "job_type", None),
         "status": job.status,
         "dictation_type": job.dictation_type,
         "confidence": job.confidence,
@@ -62,8 +64,9 @@ def _job_summary(job: Job) -> Dict[str, object]:
 class JobAPIServer:
     """Exposes processed job metadata on a localhost HTTP endpoint."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, rounds_backend: Optional[RoundsBackend] = None):
         self.config = config
+        self.rounds_backend = rounds_backend or RoundsBackend(config)
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -111,6 +114,9 @@ class JobAPIServer:
                     self._set_headers()
                     self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
                     return
+                if parsed.path == "/rounds/patients":
+                    self._handle_list_patients()
+                    return
                 if parsed.path == "/jobs":
                     self._handle_list_jobs()
                     return
@@ -124,6 +130,12 @@ class JobAPIServer:
 
             def do_POST(self):  # noqa: N802
                 parsed = urlparse(self.path)
+                if parsed.path == "/rounds/patients":
+                    self._handle_save_patients()
+                    return
+                if parsed.path == "/rounds/patients/quick_add":
+                    self._handle_quick_add_patient()
+                    return
                 if parsed.path.startswith("/jobs/") and parsed.path.endswith("/attach"):
                     job_id = parsed.path.split("/jobs/")[-1].rsplit("/attach", 1)[0]
                     self._handle_attach_job(job_id)
@@ -179,6 +191,67 @@ class JobAPIServer:
                 save_job(job, server.config.processed_path, server.config.jobs_path)
                 self._set_headers(200)
                 self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+
+            def _read_json_body(self) -> Dict[str, Any]:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not length:
+                    return {}
+                try:
+                    raw = self.rfile.read(length)
+                    return json.loads(raw.decode("utf-8"))
+                except Exception:
+                    return {}
+
+            def _handle_list_patients(self) -> None:
+                try:
+                    patients = server.rounds_backend.load_patients()
+                except Exception as exc:  # pragma: no cover - runtime heavy
+                    logger.error("Failed to load rounds patients: %s", exc)
+                    self._set_headers(500)
+                    self.wfile.write(json.dumps({"error": "Failed to load patients"}).encode("utf-8"))
+                    return
+                self._set_headers()
+                self.wfile.write(json.dumps({"patients": patients}).encode("utf-8"))
+
+            def _handle_save_patients(self) -> None:
+                payload = self._read_json_body()
+                patients = payload.get("patients")
+                if not isinstance(patients, list):
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "patients must be a list"}).encode("utf-8"))
+                    return
+                try:
+                    server.rounds_backend.save_patients(patients)
+                except Exception as exc:  # pragma: no cover - runtime heavy
+                    logger.error("Failed to save rounds patients: %s", exc)
+                    self._set_headers(500)
+                    self.wfile.write(json.dumps({"error": "Failed to save patients"}).encode("utf-8"))
+                    return
+                self._set_headers(200)
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+
+            def _handle_quick_add_patient(self) -> None:
+                payload = self._read_json_body()
+                name = (payload.get("name") or "").strip()
+                scratchpad = payload.get("scratchpad") or ""
+                ward = payload.get("ward")
+                if not name:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": "name is required"}).encode("utf-8"))
+                    return
+                try:
+                    patient = server.rounds_backend.quick_add_patient(name, scratchpad, ward)
+                except ValueError as exc:
+                    self._set_headers(400)
+                    self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+                    return
+                except Exception as exc:  # pragma: no cover - runtime heavy
+                    logger.error("Quick add patient failed: %s", exc)
+                    self._set_headers(500)
+                    self.wfile.write(json.dumps({"error": "Failed to add patient"}).encode("utf-8"))
+                    return
+                self._set_headers(200)
+                self.wfile.write(json.dumps({"patient": patient}).encode("utf-8"))
 
             def do_DELETE(self):  # noqa: N802
                 parsed = urlparse(self.path)

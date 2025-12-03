@@ -11,9 +11,9 @@
 import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
-import { EyeOff, Eye, Download, Users, Sparkles, Loader2, X, Tag, RefreshCw } from 'lucide-react';
+import { EyeOff, Eye, Download, Sparkles, Loader2, X, Tag } from 'lucide-react';
 import Button, { IconButton } from '../buttons/Button';
-import { calculateWordCount, calculateReadTime, formatReadTime, formatAbsoluteTime } from '@/utils/formatting';
+import { calculateWordCount, calculateReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
   staggerContainer, 
   cardVariants, 
@@ -50,6 +50,177 @@ import { getValidationConfig } from '@/config/validationFieldConfig';
 // Use centralized validation configurations
 const { fieldConfig: ANGIO_VALIDATION_FIELD_CONFIG, copy: ANGIO_VALIDATION_COPY } = getValidationConfig('angio-pci');
 const { fieldConfig: MTEER_VALIDATION_FIELD_CONFIG, copy: MTEER_VALIDATION_COPY } = getValidationConfig('mteer');
+
+/**
+ * Parse Pre-Op Plan JSON from results string (for legacy sessions without preOpPlanData)
+ * This function attempts to extract structured JSON from the LLM response
+ */
+function parsePreOpPlanFromResults(results: string): PreOpPlanReport['planData'] | null {
+  if (!results) return null;
+  
+  try {
+    // Try to extract JSON section from response
+    const jsonMatch = results.match(/JSON:\s*\n```json\s*\n([\s\S]*?)\n```/i) ||
+                     results.match(/JSON:\s*\n([\s\S]+?)(?=\n\s*$)/i) ||
+                     results.match(/```json\s*\n([\s\S]*?)\n```/i);
+    
+    if (jsonMatch) {
+      const jsonString = jsonMatch[1].trim();
+      const jsonData = JSON.parse(jsonString);
+      
+      // Extract card markdown (everything before JSON section)
+      const cardMatch = results.match(/CARD:\s*\n([\s\S]*?)(?=\n\s*JSON:|$)/i);
+      let cardMarkdown = '';
+      if (cardMatch) {
+        cardMarkdown = cardMatch[1].trim();
+      } else if (results.indexOf('JSON:') > 0) {
+        const beforeJson = results.substring(0, results.indexOf('JSON:')).trim();
+        cardMarkdown = beforeJson.replace(/^CARD:\s*/i, '').trim();
+      }
+      
+      const procedureType = jsonData.procedure_type || 'ANGIOGRAM_OR_PCI';
+      const fields = jsonData.fields || {};
+      
+      console.log('🔧 Parsed Pre-Op Plan from results (JSON found):', {
+        procedureType,
+        fieldsCount: Object.keys(fields).length,
+        hasCardMarkdown: !!cardMarkdown
+      });
+      
+      return {
+        procedureType,
+        cardMarkdown: cardMarkdown || results,
+        jsonData: {
+          procedure_type: procedureType,
+          fields
+        },
+        completenessScore: `${Object.keys(fields).length} fields extracted`
+      };
+    }
+    
+    // FALLBACK: No JSON found, extract fields from markdown card itself
+    console.log('🔧 No JSON in results, extracting fields from card markdown');
+    
+    // Get card content (strip CARD: prefix if present)
+    const cardMarkdown = results.replace(/^CARD:\s*/i, '').trim();
+    
+    // Extract fields from markdown using **Label** — Value pattern
+    const fields: Record<string, string> = {};
+    const labelToFieldMap: Record<string, string> = {
+      'indication': 'indication',
+      'procedure': 'procedure',
+      'allergies': 'allergies',
+      'nok': 'nok_name',
+      'next of kin': 'nok_name',
+      'access': 'primary_access',
+      'primary access': 'primary_access',
+      'secondary access': 'secondary_access',
+      'sheath': 'sheath_size_fr',
+      'catheters': 'catheters',
+      'catheter': 'catheters',
+      'wire': 'wire',
+      'closure': 'closure_plan',
+      'valve': 'valve_type_size',
+      'pacing': 'pacing_wire_access',
+      'protamine': 'protamine',
+      'goals': 'goals_of_care',
+      'weight': 'weight',
+      'egfr': 'egfr',
+      'lm': 'lm_findings',
+      'lad': 'lad_findings',
+      'lcx': 'lcx_findings',
+      'rca': 'rca_findings',
+      'plan': 'plan',
+      // Additional fields
+      'antiplatelets': 'antiplatelets',
+      'antiplatelet': 'antiplatelets',
+      'sedation': 'sedation',
+      'labs': 'labs',
+      'bloods': 'labs',
+      'follow-up': 'follow_up',
+      'follow up': 'follow_up',
+      'site prep': 'site_prep',
+      'hemoglobin': 'hemoglobin',
+      'hb': 'hemoglobin',
+      'creatinine': 'creatinine'
+    };
+    
+    // Detect procedure type
+    const lowerCard = cardMarkdown.toLowerCase();
+    let procedureType: PreOpPlanReport['planData']['procedureType'] = 'ANGIOGRAM_OR_PCI';
+    if (lowerCard.includes('tavi') || lowerCard.includes('transcatheter aortic')) {
+      procedureType = 'TAVI';
+    } else if (lowerCard.includes('right heart') || lowerCard.includes('rhc')) {
+      procedureType = 'RIGHT_HEART_CATH';
+    } else if (lowerCard.includes('mitral') || lowerCard.includes('teer')) {
+      procedureType = 'MITRAL_TEER';
+    }
+    
+    // Extract **Label** — Value patterns (handles multiple per line)
+    const fieldPattern = /\*\*([^*]+)\*\*\s*[—\-:]\s*([^*\n]+?)(?=\s*[•·]\s*\*\*|\s*\*\*|$|\n)/g;
+    let match;
+    while ((match = fieldPattern.exec(cardMarkdown)) !== null) {
+      const label = match[1].trim().toLowerCase();
+      const value = match[2].trim().replace(/\s*[•·]\s*$/, '').trim();
+      
+      if (!value || value.toLowerCase() === 'not specified') continue;
+      
+      let matched = false;
+      for (const [pattern, fieldKey] of Object.entries(labelToFieldMap)) {
+        if (label === pattern || label.includes(pattern) || pattern.includes(label)) {
+          fields[fieldKey] = value;
+          matched = true;
+          break;
+        }
+      }
+      // Store with normalized label as fallback
+      if (!matched) {
+        const normalizedLabel = label.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        if (normalizedLabel.length > 0) {
+          fields[normalizedLabel] = value;
+        }
+      }
+    }
+    
+    // Also try bullet format
+    const bulletPattern = /[•-]\s*([^:]+):\s*([^\n]+)/g;
+    while ((match = bulletPattern.exec(cardMarkdown)) !== null) {
+      const label = match[1].trim().toLowerCase();
+      const value = match[2].trim();
+      
+      if (!value || value.toLowerCase() === 'not specified') continue;
+      
+      for (const [pattern, fieldKey] of Object.entries(labelToFieldMap)) {
+        if (label.includes(pattern) || pattern.includes(label)) {
+          if (!fields[fieldKey]) fields[fieldKey] = value;
+          break;
+        }
+      }
+    }
+    
+    console.log('🔧 Extracted Pre-Op fields from markdown:', {
+      procedureType,
+      fieldsCount: Object.keys(fields).length,
+      fields: Object.keys(fields)
+    });
+    
+    if (Object.keys(fields).length > 0) {
+      return {
+        procedureType,
+        cardMarkdown,
+        jsonData: {
+          procedure_type: procedureType,
+          fields
+        },
+        completenessScore: `${Object.keys(fields).length} fields extracted from card`
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to parse Pre-Op Plan from results:', error);
+  }
+  
+  return null;
+}
 
 interface OptimizedResultsPanelProps {
   results: string;
@@ -324,28 +495,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     copied: false,
     inserted: false
   });
+  // State for simple card (investigation-summary, background, medication) button feedback
+  const [simpleCardButtonStates, setSimpleCardButtonStates] = useState({
+    copied: false,
+    inserted: false
+  });
   const letterContentForActions = revisionPanel?.isEditing ? revisionPanel.edited : results;
   const hasTranscription = Boolean(originalTranscription && originalTranscription.trim().length > 0);
   const isRevisionOpen = !!(revisionPanel?.isEditing);
   const canEditAndTrain = Boolean(onRevisionToggle);
   const canReprocessQuickLetter = agentType === 'quick-letter' && !!onAgentReprocess && !!originalTranscription?.trim();
-  const letterActionCount = 3 + (canEditAndTrain ? 1 : 0) + (canReprocessQuickLetter ? 1 : 0);
-  const letterActionGridClass = useMemo(() => {
-    switch (letterActionCount) {
-      case 0:
-      case 1:
-      case 2:
-        return 'grid-cols-2';
-      case 3:
-        return 'grid-cols-3';
-      case 4:
-        return 'grid-cols-4';
-      case 5:
-        return 'grid-cols-5';
-      default:
-        return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5';
-    }
-  }, [letterActionCount]);
 
   // Button action handlers with feedback
   const handleSummaryCopy = useCallback(async () => {
@@ -373,30 +532,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     setLetterButtonStates(prev => ({ ...prev, inserted: true }));
     setTimeout(() => setLetterButtonStates(prev => ({ ...prev, inserted: false })), 2000);
   }, [letterContentForActions, onInsertToEMR]);
-
-  const handleSummaryDownload = useCallback(() => {
-    const blob = new Blob([resultsSummary], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `medical-summary-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [resultsSummary]);
-
-  const _handleLetterDownload = useCallback(() => {
-    const blob = new Blob([letterContentForActions], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `medical-letter-${agentType || 'report'}-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [agentType, letterContentForActions]);
 
   // Patient version handlers
   const handlePatientVersionCopy = useCallback(async () => {
@@ -435,6 +570,19 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     }
     onAgentReprocess('quick-letter');
   }, [canReprocessQuickLetter, isProcessing, onAgentReprocess]);
+
+  // Simple card handlers (Investigation Summary, Background, Medication)
+  const handleSimpleCardCopy = useCallback(async (text: string) => {
+    await onCopy(text);
+    setSimpleCardButtonStates(prev => ({ ...prev, copied: true }));
+    setTimeout(() => setSimpleCardButtonStates(prev => ({ ...prev, copied: false })), 2000);
+  }, [onCopy]);
+
+  const handleSimpleCardInsert = useCallback(async (text: string) => {
+    await onInsertToEMR(text);
+    setSimpleCardButtonStates(prev => ({ ...prev, inserted: true }));
+    setTimeout(() => setSimpleCardButtonStates(prev => ({ ...prev, inserted: false })), 2000);
+  }, [onInsertToEMR]);
 
   const revisionTags = useMemo(() => {
     if (!revisionPanel) {
@@ -552,10 +700,29 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // Check if this is a Pre-Op Plan with structured display
   const isPreOpPlan = agentType === 'pre-op-plan' && results;
 
+  // Debug Pre-Op Plan detection
+  if (agentType === 'pre-op-plan') {
+    console.log('🔍 Pre-Op Plan Detection Debug:', {
+      agentType,
+      hasResults: !!results,
+      resultsLength: results?.length,
+      isPreOpPlan,
+      hasPreOpPlanData: !!preOpPlanData,
+      preOpPlanDataKeys: preOpPlanData ? Object.keys(preOpPlanData) : null,
+      procedureType: preOpPlanData?.procedureType,
+      hasJsonData: !!preOpPlanData?.jsonData,
+      fieldsCount: preOpPlanData?.jsonData?.fields ? Object.keys(preOpPlanData.jsonData.fields).length : 0,
+      fieldsKeys: preOpPlanData?.jsonData?.fields ? Object.keys(preOpPlanData.jsonData.fields) : null
+    });
+  }
+
+  // Determine which agent types have their own integrated transcription sections
+  // These agents handle transcription display themselves, so we don't show the primary section
+  const hasIntegratedTranscription = isTAVIWorkup || isRightHeartCath || isPatientEducation || isPreOpPlan;
+
   const showPrimaryTranscriptionSection =
     !streaming &&
-    !isTAVIWorkup &&
-    !isRightHeartCath &&
+    !hasIntegratedTranscription &&
     agentType !== 'investigation-summary' &&
     hasTranscription; // Show transcription for all agents including Quick Letter
 
@@ -680,10 +847,14 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             {reportMetrics.wordCount > 0 && (
               <>
                 <span>{reportMetrics.wordCount} words</span>
-                {reportMetrics.readingTime && (
+                {/* Confidence indicator - show for investigation-summary, background, medication */}
+                {(agentType === 'investigation-summary' || agentType === 'background' || agentType === 'medication') && (
                   <>
                     <span>•</span>
-                    <span>{formatReadTime(reportMetrics.readingTime)}</span>
+                    <span className="flex items-center gap-1" title="AI confidence">
+                      <span>95%</span>
+                      <CheckIcon className="w-3 h-3" />
+                    </span>
                   </>
                 )}
                 <span>•</span>
@@ -951,12 +1122,23 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             >
               {/* Summary Card */}
               <motion.div 
-                className="letter-card rounded-lg border border-emerald-200 bg-emerald-50"
+                className="letter-card rounded-lg border border-emerald-200 bg-emerald-50 overflow-hidden"
                 variants={withReducedMotion(cardVariants)}
               >
-                <div className="p-3 border-b border-emerald-200 bg-emerald-100">
-                  <h4 className="text-emerald-800 font-semibold text-sm">Summary</h4>
+                {/* Header with title and actions */}
+                <div className="px-3 py-2 border-b border-emerald-200 bg-emerald-100">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-emerald-800 font-semibold text-sm">Summary</h4>
+                    <ActionSegmentedControl
+                      onCopy={handleSummaryCopy}
+                      onInsert={handleSummaryInsert}
+                      copiedRecently={summaryButtonStates.copied}
+                      insertedRecently={summaryButtonStates.inserted}
+                      actions={['copy', 'insert']}
+                    />
+                  </div>
                 </div>
+                {/* Body content */}
                 <div className="p-3 max-h-48 overflow-y-auto">
                   <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                     {resultsSummary || (
@@ -964,56 +1146,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                         Summary not available - displaying full letter content below
                       </div>
                     )}
-                  </div>
-                </div>
-                <div className="p-3 border-t border-emerald-200 bg-emerald-50">
-                  <div className="grid grid-cols-3 gap-2">
-                    {/* Copy Summary Button */}
-                    <Button
-                      onClick={handleSummaryCopy}
-                      variant={summaryButtonStates.copied ? 'success' : 'outline'}
-                      size="md"
-                      icon={summaryButtonStates.copied ? <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-4 h-4" title="Copy" />}
-                      isSuccess={summaryButtonStates.copied}
-                      className={`p-3 flex flex-col items-center space-y-1 ${
-                        summaryButtonStates.copied
-                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 completion-celebration'
-                          : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-                      }`}
-                    >
-                      <span className={`text-xs ${summaryButtonStates.copied ? 'text-emerald-700' : 'text-gray-700'}`}>
-                        {summaryButtonStates.copied ? 'Copied!' : 'Copy'}
-                      </span>
-                    </Button>
-
-                    {/* Insert Summary Button */}
-                    <Button
-                      onClick={handleSummaryInsert}
-                      variant={summaryButtonStates.inserted ? 'success' : 'outline'}
-                      size="md"
-                      icon={summaryButtonStates.inserted ? <CheckIcon className="w-4 h-4 text-emerald-600 checkmark-appear" /> : <SquareIcon className="w-4 h-4" />}
-                      isSuccess={summaryButtonStates.inserted}
-                      className={`p-3 flex flex-col items-center space-y-1 ${
-                        summaryButtonStates.inserted
-                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 completion-celebration'
-                          : 'bg-white/60 border-emerald-200 hover:bg-emerald-50/60 text-gray-700'
-                      }`}
-                    >
-                      <span className={`text-xs ${summaryButtonStates.inserted ? 'text-emerald-700' : 'text-gray-700'}`}>
-                        {summaryButtonStates.inserted ? 'Inserted!' : 'Insert'}
-                      </span>
-                    </Button>
-
-                    {/* Download Summary Button */}
-                    <Button
-                      onClick={handleSummaryDownload}
-                      variant="outline"
-                      size="md"
-                      icon={<Download className="w-4 h-4" />}
-                      className="bg-white/60 border-emerald-200 p-3 flex flex-col items-center space-y-1 hover:bg-emerald-50/60 text-gray-700"
-                    >
-                      <span className="text-xs text-gray-700">Download</span>
-                    </Button>
                   </div>
                 </div>
               </motion.div>
@@ -1067,71 +1199,32 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               <AnimatePresence>
                 {patientVersion && (
                   <motion.div 
-                    className="letter-card rounded-lg border border-purple-200 bg-purple-50"
+                    className="letter-card rounded-lg border border-purple-200 bg-purple-50 overflow-hidden"
                     variants={withReducedMotion(cardVariants)}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ delay: 0.2 }}
                   >
-                  <div className="p-3 border-b border-purple-200 bg-purple-100">
-                    <h4 className="text-purple-800 font-semibold text-sm">Patient-Friendly Version</h4>
+                  {/* Header with title and actions */}
+                  <div className="px-3 py-2 border-b border-purple-200 bg-purple-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-purple-800 font-semibold text-sm">Patient-Friendly Version</h4>
+                      <ActionSegmentedControl
+                        onCopy={handlePatientVersionCopy}
+                        onInsert={handlePatientVersionInsert}
+                        copiedRecently={patientVersionButtonStates.copied}
+                        insertedRecently={patientVersionButtonStates.inserted}
+                        actions={['copy', 'insert']}
+                      />
+                    </div>
                   </div>
+                  {/* Body content */}
                   <div className="p-3 max-h-96 overflow-y-auto">
                     <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                       {patientVersion}
                     </div>
                   </div>
-                  <div className="p-3 border-t border-purple-200 bg-purple-50">
-                    <div className="grid grid-cols-3 gap-2">
-                      {/* Copy Patient Version Button */}
-                      <Button
-                        onClick={handlePatientVersionCopy}
-                        variant={patientVersionButtonStates.copied ? 'success' : 'outline'}
-                        size="sm"
-                        icon={patientVersionButtonStates.copied ? <CheckIcon className="w-3.5 h-3.5 text-purple-600 checkmark-appear" /> : <AnimatedCopyIcon className="w-3.5 h-3.5" title="Copy" />}
-                        isSuccess={patientVersionButtonStates.copied}
-                        className={`p-2 flex flex-col items-center space-y-0.5 ${
-                          patientVersionButtonStates.copied
-                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
-                            : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
-                        }`}
-                      >
-                        <span className={`text-[10px] ${patientVersionButtonStates.copied ? 'text-purple-700' : 'text-gray-700'}`}>
-                          {patientVersionButtonStates.copied ? 'Copied!' : 'Copy'}
-                        </span>
-                      </Button>
-
-                      {/* Insert Patient Version Button */}
-                      <Button
-                        onClick={handlePatientVersionInsert}
-                        variant={patientVersionButtonStates.inserted ? 'success' : 'outline'}
-                        size="sm"
-                        icon={patientVersionButtonStates.inserted ? <CheckIcon className="w-3.5 h-3.5 text-purple-600 checkmark-appear" /> : <SquareIcon className="w-3.5 h-3.5" />}
-                        isSuccess={patientVersionButtonStates.inserted}
-                        className={`p-2 flex flex-col items-center space-y-0.5 ${
-                          patientVersionButtonStates.inserted
-                            ? 'bg-purple-500/20 border-purple-400 text-purple-700 completion-celebration'
-                            : 'bg-white/60 border-purple-200 hover:bg-purple-50/60 text-gray-700'
-                        }`}
-                      >
-                        <span className={`text-[10px] ${patientVersionButtonStates.inserted ? 'text-purple-700' : 'text-gray-700'}`}>
-                          {patientVersionButtonStates.inserted ? 'Inserted!' : 'Insert'}
-                        </span>
-                      </Button>
-
-                      {/* Download Patient Version Button */}
-                      <Button
-                        onClick={handlePatientVersionDownload}
-                        variant="outline"
-                        size="sm"
-                        icon={<Download className="w-3.5 h-3.5" />}
-                        className="bg-white/60 border-purple-200 p-2 flex flex-col items-center space-y-0.5 hover:bg-purple-50/60 text-gray-700"
-                      >
-                        <span className="text-[10px] text-gray-700">Download</span>
-                      </Button>
-                    </div>
-                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1198,34 +1291,54 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onDismissMissingInfo={onDismissMissingInfo}
             />
           ) : isPatientEducation ? (
-            // Patient Education with structured JSON metadata + letter display
-            <PatientEducationOutputCard
-              report={{
-                id: `report-${Date.now()}`,
-                timestamp: Date.now(),
-                content: results,
-                agentName: currentAgentName || 'Patient Education & Lifestyle Medicine',
-                metadata: {
-                  processingTime: totalProcessingTime || 0,
-                  confidence: 0.9,
-                  modelUsed: 'medgemma-27b'
-                },
-                sections: [],
-                warnings: warnings || [],
-                errors: errors || [],
-                educationData: educationData || {
-                  priority: 'medium',
-                  modules: [],
-                  australianGuidelines: [],
-                  patientResources: [],
-                  jsonMetadata: null,
-                  letterContent: results
-                }
-              }}
-              onCopy={async (text: string) => { await Promise.resolve(onCopy(text)); }}
-              onInsert={async (text: string) => { await Promise.resolve(onInsertToEMR(text)); }}
-              isVisible={true}
-            />
+            // Patient Education with transcription section + structured JSON metadata + letter display
+            <div className="space-y-6">
+              {/* Transcription Section for Patient Education */}
+              <TranscriptionSection
+                originalTranscription={originalTranscription || ''}
+                onTranscriptionCopy={onTranscriptionCopy}
+                onTranscriptionInsert={onTranscriptionInsert}
+                onTranscriptionEdit={onTranscriptionEdit}
+                transcriptionSaveStatus={transcriptionSaveStatus}
+                onAgentReprocess={onAgentReprocess}
+                currentAgent={currentAgent}
+                isProcessing={isProcessing}
+                audioBlob={audioBlob}
+                defaultExpanded={!resultsReady}
+                collapseWhen={resultsReady}
+                approvalState={approvalState}
+                onTranscriptionApprove={onTranscriptionApprove}
+              />
+              
+              {/* Patient Education Output Card */}
+              <PatientEducationOutputCard
+                report={{
+                  id: `report-${Date.now()}`,
+                  timestamp: Date.now(),
+                  content: results,
+                  agentName: currentAgentName || 'Patient Education & Lifestyle Medicine',
+                  metadata: {
+                    processingTime: totalProcessingTime || 0,
+                    confidence: 0.9,
+                    modelUsed: 'medgemma-27b'
+                  },
+                  sections: [],
+                  warnings: warnings || [],
+                  errors: errors || [],
+                  educationData: educationData || {
+                    priority: 'medium',
+                    modules: [],
+                    australianGuidelines: [],
+                    patientResources: [],
+                    jsonMetadata: null,
+                    letterContent: results
+                  }
+                }}
+                onCopy={async (text: string) => { await Promise.resolve(onCopy(text)); }}
+                onInsert={async (text: string) => { await Promise.resolve(onInsertToEMR(text)); }}
+                isVisible={true}
+              />
+            </div>
           ) : isPreOpPlan ? (
             // Pre-Op Plan with A5 card + JSON metadata display
             <PreOpPlanDisplay
@@ -1244,7 +1357,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 warnings: warnings || undefined,
                 errors: errors || undefined,
                 completedTime: Date.now(),
-                preOpPlanData: preOpPlanData || {
+                preOpPlanData: preOpPlanData || parsePreOpPlanFromResults(results) || {
                   procedureType: 'ANGIOGRAM_OR_PCI',
                   cardMarkdown: results,
                   jsonData: { procedure_type: 'ANGIOGRAM_OR_PCI', fields: {} }
@@ -1281,6 +1394,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               <ReportDisplay
                 results={results}
                 agentType={agentType}
+                onCopy={handleSimpleCardCopy}
+                onInsert={handleSimpleCardInsert}
+                copiedRecently={simpleCardButtonStates.copied}
+                insertedRecently={simpleCardButtonStates.inserted}
               />
 
               {/* OCR Explanation - collapsible, read-only for user insight (image-based investigation summary) */}

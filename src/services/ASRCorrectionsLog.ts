@@ -14,6 +14,7 @@
 import { logger } from '@/utils/Logger';
 import { toError } from '@/utils/errorHelpers';
 import { PhrasebookService } from '@/services/PhrasebookService';
+import { OptimizationService } from '@/services/OptimizationService';
 import type {
   ASRCorrectionsEntry,
   OptimizationSettings,
@@ -67,7 +68,10 @@ export class ASRCorrectionsLog {
   /**
    * Add a correction entry to the log
    */
-  async addCorrection(entry: Omit<ASRCorrectionsEntry, 'id' | 'timestamp'>): Promise<void> {
+  async addCorrection(
+    entry: Omit<ASRCorrectionsEntry, 'id' | 'timestamp'>,
+    options?: { audioBlob?: Blob; backupToServer?: boolean }
+  ): Promise<void> {
     try {
       const id = this.generateEntryId();
       const timestamp = Date.now();
@@ -90,6 +94,16 @@ export class ASRCorrectionsLog {
       await this.saveStoredData(stored);
       this.invalidateCache();
 
+      // Best-effort backup to DSPy server for persistence + audio pairing
+      if (options?.backupToServer) {
+        const optimizationService = OptimizationService.getInstance();
+        optimizationService.ingestCorrectionWithAudio(correctionEntry, options.audioBlob)
+          .catch(err => logger.warn('ASR backup failed', {
+            component: 'ASRCorrectionsLog',
+            error: err instanceof Error ? err.message : String(err)
+          }));
+      }
+
       logger.debug('ASR correction added', {
         component: 'ASRCorrectionsLog',
         id,
@@ -106,6 +120,19 @@ export class ASRCorrectionsLog {
       });
       throw err;
     }
+  }
+
+  /**
+   * Replace all stored corrections (used for restore from server backup).
+   */
+  async overwriteCorrections(entries: ASRCorrectionsEntry[]): Promise<void> {
+    const stored: StoredCorrections = {
+      entries,
+      lastCleanup: Date.now(),
+      totalSize: this.calculateApproxSize(entries)
+    };
+    await this.saveStoredData(stored);
+    this.invalidateCache();
   }
 
   /**
@@ -695,5 +722,11 @@ export class ASRCorrectionsLog {
     const snippet = text.substring(start, end);
     
     return start > 0 ? '...' + snippet : snippet;
+  }
+
+  private calculateApproxSize(entries: ASRCorrectionsEntry[]): number {
+    return entries.reduce((total, entry) => {
+      return total + entry.rawText.length + entry.correctedText.length + 200; // rough overhead estimate
+    }, 0);
   }
 }

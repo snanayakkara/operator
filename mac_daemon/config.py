@@ -70,6 +70,8 @@ class Config:
     working_path: Path = CONFIG_DIR / "working"
     processed_path: Path = CONFIG_DIR / "processed"
     jobs_path: Path = CONFIG_DIR / "jobs"
+    rounds_patients_path: Path = CONFIG_DIR / "rounds_patients.json"
+    default_rounds_ward: str = "1 South"
     lm_base_url: str = "http://localhost:1234/v1/chat/completions"
     lm_model: str = "local-operator-triage"
     process_extensions: List[str] = field(default_factory=_default_extensions)
@@ -87,7 +89,7 @@ class Config:
     def to_dict(self) -> dict:
         data = asdict(self)
         # Convert Paths to strings for serialization
-        for key in ("inbox_path", "working_path", "processed_path", "jobs_path"):
+        for key in ("inbox_path", "working_path", "processed_path", "jobs_path", "rounds_patients_path"):
             data[key] = str(data[key])
         return data
 
@@ -107,6 +109,8 @@ class Config:
             working_path=get_path("working_path", CONFIG_DIR / "working"),
             processed_path=get_path("processed_path", CONFIG_DIR / "processed"),
             jobs_path=get_path("jobs_path", CONFIG_DIR / "jobs"),
+            rounds_patients_path=get_path("rounds_patients_path", CONFIG_DIR / "rounds_patients.json"),
+            default_rounds_ward=str(data.get("default_rounds_ward", "1 South")),
             lm_base_url=data.get("lm_base_url", "http://localhost:1234/v1/chat/completions"),
             lm_model=data.get("lm_model", "local-operator-triage"),
             process_extensions=data.get("process_extensions") or _default_extensions(),
@@ -135,6 +139,7 @@ def ensure_directories(config: Config) -> None:
         config.working_path,
         config.processed_path,
         config.jobs_path,
+        config.rounds_patients_path.parent,
     ]:
         path.expanduser().mkdir(parents=True, exist_ok=True)
 

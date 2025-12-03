@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Plus, AlertCircle, Activity, BedDouble, Users, GripVertical, Download } from 'lucide-react';
+import { CheckCircle2, Plus, BedDouble, Users, GripVertical, Download } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { createEmptyPatient } from '@/services/RoundsPatientService';
@@ -84,7 +84,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       }));
   }, [activePatients, wardOptions]);
 
-  const openTasksIndicator = (patient: RoundsPatient) => patient.tasks.filter(t => t.status === 'open').length;
   const updatedRecently = (patient: RoundsPatient) => patient.wardEntries.some(entry =>
     Date.now() - new Date(entry.timestamp).getTime() < 24 * 60 * 60 * 1000
   );
@@ -146,18 +145,15 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   };
 
   const renderCard = (patient: RoundsPatient) => {
-    const needsDetails = !patient.mrn || !patient.bed;
     const parsing = intakeParsing[patient.id] === 'running';
     const wardLabel = patient.site?.trim() || 'Unassigned';
     const completed = isCompletedToday(patient);
     const isSelected = selectedPatient?.id === patient.id;
-    const cardClasses = `
-      w-full text-left rounded-lg border p-3 shadow-sm transition
-      ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}
-      ${completed ? 'opacity-70 bg-gray-50 border-gray-200' : ''}
-      ${draggingPatientId === patient.id ? 'ring-2 ring-blue-200' : ''}
-      hover:border-blue-400
-    `;
+    
+    // Collapsed card for completed patients - more faded and minimal
+    const cardClasses = completed
+      ? `w-full text-left rounded-lg border px-3 py-2 shadow-sm transition opacity-50 bg-gray-100 border-gray-200 hover:opacity-70 hover:border-gray-300`
+      : `w-full text-left rounded-lg border p-3 shadow-sm transition ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} ${draggingPatientId === patient.id ? 'ring-2 ring-blue-200' : ''} hover:border-blue-400`;
 
     const handlePatientSelect = () => {
       setSelectedPatientId(patient.id);
@@ -167,6 +163,46 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       }
     };
 
+    // Collapsed view for completed patients
+    if (completed) {
+      return (
+        <button
+          key={patient.id}
+          onClick={handlePatientSelect}
+          className={cardClasses}
+          draggable
+          onDragStart={(e) => { e.stopPropagation(); handleDragStart(patient.id); }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); handleDrop(wardLabel, patient.id); }}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <label
+                className="flex items-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={completed}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    toggleCompleted(patient);
+                  }}
+                  className="w-3.5 h-3.5"
+                />
+              </label>
+              <span className="text-sm font-medium text-gray-600 truncate">{patient.name}</span>
+              <span className="text-xs text-gray-400">•</span>
+              <span className="text-xs text-gray-500">{wardLabel}{patient.bed ? ` • ${patient.bed}` : ''}</span>
+            </div>
+            <GripVertical className="w-3.5 h-3.5 text-gray-300 cursor-grab flex-shrink-0" />
+          </div>
+        </button>
+      );
+    }
+
+    // Full card for non-completed patients
     return (
       <button
         key={patient.id}
@@ -206,19 +242,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
                 parsing intake…
               </span>
             )}
-            {openTasksIndicator(patient) > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded-full">
-                <Activity className="w-3 h-3" /> {openTasksIndicator(patient)} open
-              </span>
-            )}
             {updatedRecently(patient) && (
               <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
                 <CheckCircle2 className="w-3 h-3" /> updated
-              </span>
-            )}
-            {needsDetails && (
-              <span className="inline-flex items-center gap-1 text-xs text-rose-700 bg-rose-50 px-2 py-1 rounded-full">
-                <AlertCircle className="w-3 h-3" /> needs details
               </span>
             )}
           </div>

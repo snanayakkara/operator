@@ -20,6 +20,11 @@ class JobStatus:
     ERROR = "error"
 
 
+class JobType:
+    AUDIO_DICTATION = "audio_dictation"
+    PHONE_CALL_NOTE = "phone_call_note"
+
+
 class DictationType:
     CLINIC_LETTER = "clinic_letter"
     PROCEDURE_REPORT = "procedure_report"
@@ -34,6 +39,7 @@ class Job:
     id: str
     created_at: str
     audio_filename: str
+    job_type: str = JobType.AUDIO_DICTATION
     status: str = JobStatus.PENDING
     dictation_type: str = DictationType.UNKNOWN
     confidence: float = 0.0
@@ -55,14 +61,16 @@ class Job:
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Job":
+        if "job_type" not in data:
+            data = {**data, "job_type": JobType.AUDIO_DICTATION}
         return Job(**data)
 
 
-def create_job(audio_filename: str, job_id: str | None = None) -> Job:
+def create_job(audio_filename: str, job_id: str | None = None, job_type: str = JobType.AUDIO_DICTATION) -> Job:
     if job_id is None:
         job_id = _generate_job_id()
     timestamp = datetime.utcnow().strftime(ISO_FORMAT)
-    return Job(id=job_id, created_at=timestamp, audio_filename=audio_filename)
+    return Job(id=job_id, created_at=timestamp, audio_filename=audio_filename, job_type=job_type)
 
 
 def _generate_job_id() -> str:

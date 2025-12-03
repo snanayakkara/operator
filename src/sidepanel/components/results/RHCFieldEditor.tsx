@@ -36,11 +36,29 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
   onCancel,
   onLiveUpdate
 }) => {
-  // Local state for editable fields
-  const [pressures, setPressures] = useState<HaemodynamicPressures>(rhcReport.haemodynamicPressures);
-  const [cardiacOutput, setCardiacOutput] = useState<CardiacOutput>(rhcReport.cardiacOutput);
-  const [rhcData, setRhcData] = useState<RightHeartCathData>(rhcReport.rhcData);
-  const [patientData, setPatientData] = useState<RHCPatientData>(rhcReport.patientData || {});
+  // Local state for editable fields - initialize with deep copies to avoid reference issues
+  const [pressures, setPressures] = useState<HaemodynamicPressures>(() => 
+    JSON.parse(JSON.stringify(rhcReport.haemodynamicPressures))
+  );
+  const [cardiacOutput, setCardiacOutput] = useState<CardiacOutput>(() => 
+    JSON.parse(JSON.stringify(rhcReport.cardiacOutput))
+  );
+  const [rhcData, setRhcData] = useState<RightHeartCathData>(() => 
+    JSON.parse(JSON.stringify(rhcReport.rhcData))
+  );
+  const [patientData, setPatientData] = useState<RHCPatientData>(() => 
+    JSON.parse(JSON.stringify(rhcReport.patientData || {}))
+  );
+
+  // Debug: Log initial data on mount
+  useEffect(() => {
+    console.log('🔧 RHCFieldEditor mounted with data:', {
+      patientData: rhcReport.patientData,
+      hasPressures: !!rhcReport.haemodynamicPressures,
+      hasCardiacOutput: !!rhcReport.cardiacOutput,
+      hasRhcData: !!rhcReport.rhcData
+    });
+  }, []);
 
   // Custom fields state
   const [showAddCustomField, setShowAddCustomField] = useState(false);
@@ -50,12 +68,13 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
   // Ref for modal container to control scroll position
   const modalRef = React.useRef<HTMLDivElement>(null);
 
-  // Reset state when rhcReport changes
+  // Reset state when rhcReport changes (use JSON stringification for deep comparison)
   useEffect(() => {
-    setPressures(rhcReport.haemodynamicPressures);
-    setCardiacOutput(rhcReport.cardiacOutput);
-    setRhcData(rhcReport.rhcData);
-    setPatientData(rhcReport.patientData || {});
+    console.log('🔄 RHCFieldEditor: rhcReport prop changed, resetting state');
+    setPressures(JSON.parse(JSON.stringify(rhcReport.haemodynamicPressures)));
+    setCardiacOutput(JSON.parse(JSON.stringify(rhcReport.cardiacOutput)));
+    setRhcData(JSON.parse(JSON.stringify(rhcReport.rhcData)));
+    setPatientData(JSON.parse(JSON.stringify(rhcReport.patientData || {})));
   }, [rhcReport]);
 
   // Scroll modal to top when it opens

@@ -340,7 +340,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
           <div className="grid grid-cols-5 gap-0.5">
             {/* Record Button */}
             {onStartWorkflow && (
-              <div style={{ position: 'relative', zIndex: 100 }}>
+              <div className="flex items-center justify-center" style={{ position: 'relative', zIndex: 100 }}>
                 <RecordPanel
                   onWorkflowSelect={onStartWorkflow}
                   activeWorkflow={activeWorkflow}
@@ -384,7 +384,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
           <div className="grid grid-cols-5 gap-0.5">
             {/* Record Button */}
             {onStartWorkflow && (
-              <div style={{ position: 'relative', zIndex: 100 }}>
+              <div className="flex items-center justify-center" style={{ position: 'relative', zIndex: 100 }}>
                 <RecordPanel
                   onWorkflowSelect={onStartWorkflow}
                   activeWorkflow={activeWorkflow}

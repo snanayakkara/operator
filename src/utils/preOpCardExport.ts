@@ -6,8 +6,9 @@
  * Supports both clipboard copy and file download.
  *
  * Technical Specifications:
- * - Card Size: 14.8cm × 21cm (A5 portrait, 557px × 791px at 96 DPI)
- * - Export Resolution: 300 DPI (1748px × 2480px)
+ * - Card Size: 148mm × 210mm (A5 portrait, 559px × 794px at 96 DPI)
+ * - 1cm border/padding on all sides
+ * - Export Resolution: 300 DPI (1754px × 2492px)
  * - Scale Factor: 3.14 (300 DPI / 96 DPI)
  * - File Format: PNG with optimal compression
  *
@@ -96,8 +97,8 @@ export async function copyPreOpCardToClipboard(
           }
 
           // Capture at 300 DPI (scale factor: 3.14)
-          // A5 at 96 DPI = 557px × 791px
-          // A5 at 300 DPI = 1748px × 2480px
+          // A5 at 96 DPI = 559px × 794px (148mm × 210mm)
+          // A5 at 300 DPI = 1754px × 2492px
           // Scale factor = 300 / 96 ≈ 3.14
           const canvas = await html2canvas(cardElement, {
             scale: 3.14, // 300 DPI resolution
@@ -105,8 +106,8 @@ export async function copyPreOpCardToClipboard(
             logging: false,
             useCORS: true,
             allowTaint: false,
-            width: 557, // 14.8cm at 96 DPI
-            height: 791 // 21cm at 96 DPI
+            width: 559, // 148mm at 96 DPI
+            height: 794 // 210mm at 96 DPI
           });
 
           logger.info('PreOpCardExport: Canvas captured successfully', {
@@ -225,8 +226,8 @@ export async function downloadPreOpCard(
             logging: false,
             useCORS: true,
             allowTaint: false,
-            width: 557,
-            height: 791
+            width: 559,
+            height: 794
           });
 
           // 4. Convert canvas to blob
@@ -404,8 +405,8 @@ export async function previewPreOpCard(
             logging: false,
             useCORS: true,
             allowTaint: false,
-            width: 557,
-            height: 791
+            width: 559,
+            height: 794
           });
 
           // Convert to data URL for preview
