@@ -15,16 +15,24 @@ interface PatientsViewProps {
 }
 
 export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) => {
-  const { patients, selectedPatient, setSelectedPatientId, addPatient, markDischarged, intakeParsing, updatePatient, isPatientListCollapsed, togglePatientList } = useRounds();
+  const { patients, selectedPatient, setSelectedPatientId, addPatient, markDischarged, intakeParsing, updatePatient, isPatientListCollapsed, togglePatientList, clinicians } = useRounds();
   const wardOptions = ['1 South', '1 West', 'ICU', '3 Central', '1 Central', 'Other'];
   const [showManualForm, setShowManualForm] = useState(false);
+  const [groupBy, setGroupBy] = useState<'ward' | 'clinician'>('ward');
   const [manualName, setManualName] = useState('');
   const [manualMrn, setManualMrn] = useState('');
   const [manualBed, setManualBed] = useState('');
   const [manualOneLiner, setManualOneLiner] = useState('');
   const [manualWard, setManualWard] = useState(wardOptions[0]);
   const [draggingPatientId, setDraggingPatientId] = useState<string | null>(null);
-  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // Helper to get today's LOCAL date key (YYYY-MM-DD) - not UTC
+  const getTodayKey = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   const [roundIdInput, setRoundIdInput] = useState(() => {
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
@@ -84,12 +92,53 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       }));
   }, [activePatients, wardOptions]);
 
+  const activePatientsByClinician = useMemo(() => {
+    const buckets = new Map<string, RoundsPatient[]>();
+
+    activePatients.forEach(p => {
+      if (!p.clinicianIds || p.clinicianIds.length === 0) {
+        const list = buckets.get('Unassigned') || [];
+        list.push(p);
+        buckets.set('Unassigned', list);
+      } else {
+        p.clinicianIds.forEach(clinicianId => {
+          const list = buckets.get(clinicianId) || [];
+          list.push(p);
+          buckets.set(clinicianId, list);
+        });
+      }
+    });
+
+    const clinicianOrder = [
+      ...clinicians.map(c => c.id),
+      'Unassigned'
+    ];
+
+    return clinicianOrder
+      .filter(id => buckets.has(id))
+      .map(id => {
+        const clinician = clinicians.find(c => c.id === id);
+        return {
+          clinicianId: id,
+          clinicianName: clinician?.name || 'Unassigned',
+          clinicianRole: clinician?.role,
+          patients: (buckets.get(id) || []).sort((a, b) => {
+            const aOrder = a.roundOrder ?? Number.MAX_SAFE_INTEGER;
+            const bOrder = b.roundOrder ?? Number.MAX_SAFE_INTEGER;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime();
+          })
+        };
+      });
+  }, [activePatients, clinicians]);
+
   const updatedRecently = (patient: RoundsPatient) => patient.wardEntries.some(entry =>
     Date.now() - new Date(entry.timestamp).getTime() < 24 * 60 * 60 * 1000
   );
-  const isCompletedToday = (patient: RoundsPatient) => patient.roundCompletedDate === todayKey;
+  const isCompletedToday = (patient: RoundsPatient) => patient.roundCompletedDate === getTodayKey();
 
   const toggleCompleted = (patient: RoundsPatient) => {
+    const todayKey = getTodayKey();
     const nextValue = isCompletedToday(patient) ? undefined : todayKey;
     updatePatient(patient.id, p => ({ ...p, roundCompletedDate: nextValue, lastUpdatedAt: isoNow() }));
   };
@@ -148,12 +197,11 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
     const parsing = intakeParsing[patient.id] === 'running';
     const wardLabel = patient.site?.trim() || 'Unassigned';
     const completed = isCompletedToday(patient);
-    const isSelected = selectedPatient?.id === patient.id;
     
     // Collapsed card for completed patients - more faded and minimal
     const cardClasses = completed
       ? `w-full text-left rounded-lg border px-3 py-2 shadow-sm transition opacity-50 bg-gray-100 border-gray-200 hover:opacity-70 hover:border-gray-300`
-      : `w-full text-left rounded-lg border p-3 shadow-sm transition ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} ${draggingPatientId === patient.id ? 'ring-2 ring-blue-200' : ''} hover:border-blue-400`;
+      : `w-full text-left rounded-lg border p-3 shadow-sm transition border-gray-200 bg-white ${draggingPatientId === patient.id ? 'ring-2 ring-blue-200' : ''} hover:border-blue-400`;
 
     const handlePatientSelect = () => {
       setSelectedPatientId(patient.id);
@@ -332,13 +380,32 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
         <div className="fixed inset-0 z-40 flex">
           <div className="flex-1 bg-black/30" onClick={togglePatientList} />
           <div className="relative w-full max-w-md bg-white h-full shadow-2xl border-l border-gray-200 flex flex-col">
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-3 py-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
-                  Add patient
-                </Button>
-                <Button variant="ghost" size="xs" onClick={togglePatientList}>Close</Button>
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-3 py-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="xs" onClick={() => setShowManualForm(prev => !prev)} startIcon={Plus}>
+                    Add patient
+                  </Button>
+                  <Button variant="ghost" size="xs" onClick={togglePatientList}>Close</Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-gray-600">Group by:</span>
+                <button
+                  type="button"
+                  onClick={() => setGroupBy('ward')}
+                  className={`px-2 py-1 rounded ${groupBy === 'ward' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  Ward
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupBy('clinician')}
+                  className={`px-2 py-1 rounded ${groupBy === 'clinician' ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  Clinician
+                </button>
               </div>
             </div>
 
@@ -362,10 +429,22 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
               )}
 
               <div className="space-y-4">
-                {activePatientsByWard.map(group => (
+                {groupBy === 'ward' && activePatientsByWard.map(group => (
                   <div key={group.ward} className="space-y-2">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase text-gray-500 px-1">
                       <span>{group.ward}</span>
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                    <div className="space-y-2">
+                      {group.patients.map(renderCard)}
+                    </div>
+                  </div>
+                ))}
+                {groupBy === 'clinician' && activePatientsByClinician.map(group => (
+                  <div key={group.clinicianId} className="space-y-2">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase text-gray-500 px-1">
+                      <span>{group.clinicianName}</span>
+                      {group.clinicianRole && <span className="text-gray-400 normal-case">({group.clinicianRole})</span>}
                       <div className="flex-1 h-px bg-gray-200" />
                     </div>
                     <div className="space-y-2">

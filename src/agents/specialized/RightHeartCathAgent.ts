@@ -1365,9 +1365,32 @@ Note: This report was generated with limited AI processing. Clinical review is r
 
       const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       const jsonString = jsonMatch ? jsonMatch[1] : response;
+      
+      // Capture any reasoning text outside the JSON block
+      let modelReasoning: string | undefined;
+      if (jsonMatch) {
+        // Text before and after JSON block is reasoning
+        const beforeJson = response.substring(0, jsonMatch.index || 0).trim();
+        const afterJson = response.substring((jsonMatch.index || 0) + jsonMatch[0].length).trim();
+        const reasoning = [beforeJson, afterJson].filter(Boolean).join('\n\n');
+        if (reasoning) {
+          modelReasoning = reasoning;
+        }
+      }
 
       try {
         validationResult = JSON.parse(jsonString);
+        
+        // Ensure required fields have defaults (LLM may omit them)
+        validationResult.corrections = validationResult.corrections ?? [];
+        validationResult.missingCritical = validationResult.missingCritical ?? [];
+        validationResult.missingOptional = validationResult.missingOptional ?? [];
+        validationResult.confidence = validationResult.confidence ?? 0.8;
+        
+        // Attach model reasoning to the result
+        if (modelReasoning) {
+          validationResult.modelReasoning = modelReasoning;
+        }
       } catch (parseError) {
         console.error('❌ Failed to parse validation JSON:', parseError);
         console.log('Raw response:', response);
@@ -1385,7 +1408,7 @@ Note: This report was generated with limited AI processing. Clinical review is r
       console.log(`   - Corrections: ${validationResult.corrections.length}`);
       console.log(`   - Missing critical: ${validationResult.missingCritical.length}`);
       console.log(`   - Missing optional: ${validationResult.missingOptional.length}`);
-      console.log(`   - Confidence: ${validationResult.confidence.toFixed(2)}`);
+      console.log(`   - Confidence: ${(validationResult.confidence ?? 0.5).toFixed(2)}`);
 
       return validationResult;
 
@@ -1420,13 +1443,14 @@ Note: This report was generated with limited AI processing. Clinical review is r
     const result = JSON.parse(JSON.stringify(extracted)) as RHCExtractedData;
 
     for (const correction of corrections) {
-      if (correction.confidence >= confidenceThreshold) {
+      const confidence = correction.confidence ?? 0.5;
+      if (confidence >= confidenceThreshold) {
         // Auto-apply high-confidence corrections
         this.setNestedField(result, correction.field, correction.correctValue);
-        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue} (confidence: ${correction.confidence.toFixed(2)})`);
+        console.log(`✅ Auto-corrected ${correction.field}: ${correction.regexValue} → ${correction.correctValue} (confidence: ${confidence.toFixed(2)})`);
       } else {
         // Low confidence - will be shown to user for review
-        console.log(`⚠️ Low-confidence correction for ${correction.field} (${correction.confidence.toFixed(2)}), requiring user review`);
+        console.log(`⚠️ Low-confidence correction for ${correction.field} (${confidence.toFixed(2)}), requiring user review`);
       }
     }
 

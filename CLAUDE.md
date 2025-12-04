@@ -340,12 +340,19 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.40.0**
+**Current Version**: **3.41.0**
 **Last Updated**: December 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.41.0 (Dec 2025)**
+- **Clinician Rosters + Assignments**: Persist clinician directory, quick-add/assign per patient, and manage clinician chips inline on the patient card.
+- **LLM Ward Updates**: Generate 280-character ward updates from recent events (issues, labs, tasks, ward entries) with selectable time windows and copy action.
+- **Rounds Sync Safety**: Backend polling merges local vs remote patients by `lastUpdatedAt` to avoid overwriting recent edits; prev/next navigation helper for active patients.
+- **RHC Safety Hardening**: Pre-applies ASR corrections, filters validation checkpoints to ignore auto-corrected fields, and uses a stricter plain-text prompt that bans markdown/tables and reinforces anti-hallucination rules.
+- **Validation UX Polish**: Validation modal clarifies suggestions vs corrections; haemodynamics display gains empty-state guidance.
 
 **v3.40.0 (Dec 2025)**
 - **Single-Page Optimization Workflow**: Replaces 5 tabs with guided step cards + status header covering ASR corrections, Whisper LoRA training commands, DevSet creation, evaluation, GEPA optimization, and validation retests; ASR corrections manager embedded in Step 1.

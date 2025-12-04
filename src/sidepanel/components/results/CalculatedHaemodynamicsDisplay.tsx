@@ -11,7 +11,6 @@
 
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Activity, Heart, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
-import Button from '../buttons/Button';
 import type { CalculatedHaemodynamics } from '@/types/medical.types';
 
 interface CalculatedHaemodynamicsDisplayProps {
@@ -217,23 +216,20 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 1: Essential Calculations */}
       {hasTier1Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <Button
+          <button
             type="button"
             onClick={() => toggleTier('tier1')}
-            variant="ghost"
-            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
+            className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg text-left bg-transparent border-none cursor-pointer"
           >
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <h3 className="text-base font-semibold text-gray-900">Essential Haemodynamics</h3>
-              <span className="text-xs text-gray-500">(Tier 1)</span>
-            </div>
+            <TrendingUp className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <h3 className="text-base font-semibold text-gray-900">Essential Haemodynamics</h3>
+            <span className="text-xs text-gray-500">(Tier 1)</span>
             {expandedTiers.has('tier1') ? (
-              <ChevronUp className="w-5 h-5 text-gray-400" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             )}
-          </Button>
+          </button>
 
           {expandedTiers.has('tier1') && (
             <div className="px-4 pb-4 space-y-3">
@@ -342,23 +338,20 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 2: High-Value Calculations */}
       {hasTier2Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <Button
+          <button
             type="button"
             onClick={() => toggleTier('tier2')}
-            variant="ghost"
-            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
+            className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg text-left bg-transparent border-none cursor-pointer"
           >
-            <div className="flex items-center space-x-2">
-              <Activity className="w-5 h-5 text-purple-600" />
-              <h3 className="text-base font-semibold text-gray-900">Advanced Metrics)</h3>
-              <span className="text-xs text-gray-500">(Tier 2)</span>
-            </div>
+            <Activity className="w-5 h-5 text-purple-600 flex-shrink-0" />
+            <h3 className="text-base font-semibold text-gray-900">Advanced Metrics</h3>
+            <span className="text-xs text-gray-500">(Tier 2)</span>
             {expandedTiers.has('tier2') ? (
-              <ChevronUp className="w-5 h-5 text-gray-400" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             )}
-          </Button>
+          </button>
 
           {expandedTiers.has('tier2') && (
             <div className="px-4 pb-4 space-y-3">
@@ -441,23 +434,20 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
       {/* TIER 3: Advanced Calculations */}
       {hasTier3Values && (
         <div className="border border-gray-200 rounded-lg bg-white">
-          <Button
+          <button
             type="button"
             onClick={() => toggleTier('tier3')}
-            variant="ghost"
-            className="w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg rounded-b-none justify-between"
+            className="flex items-center gap-2 w-full px-4 py-3 hover:bg-gray-50 rounded-t-lg text-left bg-transparent border-none cursor-pointer"
           >
-            <div className="flex items-center space-x-2">
-              <Heart className="w-5 h-5 text-blue-600" />
-              <h3 className="text-base font-semibold text-gray-900">Specialized Calculations</h3>
-              <span className="text-xs text-gray-500">(Tier 3)</span>
-            </div>
+            <Heart className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            <h3 className="text-base font-semibold text-gray-900">Specialized Calculations</h3>
+            <span className="text-xs text-gray-500">(Tier 3)</span>
             {expandedTiers.has('tier3') ? (
-              <ChevronUp className="w-5 h-5 text-gray-400" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             )}
-          </Button>
+          </button>
 
           {expandedTiers.has('tier3') && (
             <div className="px-4 pb-4 space-y-3">

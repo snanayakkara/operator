@@ -128,6 +128,17 @@ export interface NextOfKin {
   phone: string;
 }
 
+export interface Clinician {
+  id: string;
+  name: string;
+  role?: string; // e.g., "Cardiologist", "HF nurse", "Surgeon"
+  service?: string; // Optional team/service label
+  contact?: string; // Optional phone/email
+  color?: string; // Optional tag color for UI
+  createdAt: string; // ISO timestamp
+  lastUpdatedAt: string; // ISO timestamp
+}
+
 export interface RoundsPatient {
   id: string;
   name: string;
@@ -143,6 +154,7 @@ export interface RoundsPatient {
   markedForTeaching?: boolean;
   tags?: string[];
   nextOfKin?: NextOfKin;
+  clinicianIds?: string[]; // References to Clinician.id
   intakeNotes: IntakeNote[];
   issues: Issue[];
   investigations: Investigation[];
@@ -189,3 +201,6 @@ export interface IntakeParserResult {
   investigations: Investigation[];
   tasks: Task[];
 }
+
+// Message update time window options
+export type MessageTimeWindow = '6h' | '12h' | '24h' | '48h' | 'today6am' | 'lastRound';

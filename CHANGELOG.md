@@ -9,6 +9,22 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [3.41.0] - 2025-12-04
+
+### Added
+
+- **Rounds clinicians + LLM updates**
+  - Persist clinician roster, quick-add/assign clinicians per patient, and show clinician chips inline; backend merge now respects `lastUpdatedAt` to avoid overwriting local edits.
+  - Generate 280-character ward update messages from recent patient events (issues, labs, tasks, ward entries) with selectable time windows and copy-to-clipboard.
+- **RHC agent hardening**
+  - Pre-applies ASR corrections, filters validation checkpoints to ignore auto-corrected fields, and tightens the procedural prompt (plain text only, no tables/markdown, reinforced anti-hallucination rules).
+- **Validation/UX polish**
+  - Validation modal clarifies suggestions vs corrections; haemodynamics display gains empty-state guidance.
+
+### Fixed
+
+- Backend polling now merges remote/local rounds data by latest `lastUpdatedAt` to prevent regressions; navigation helper added for previous/next active patient selection.
+
 ## [3.40.0] - 2025-12-04
 
 ### Added

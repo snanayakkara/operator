@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardCopy, Loader2, Play, RefreshCw, ShieldCheck, Trash2, HardDrive, AlertTriangle } from 'lucide-react';
+import { ClipboardCopy, Loader2, RefreshCw, ShieldCheck, Trash2, HardDrive, AlertTriangle } from 'lucide-react';
 import { OptimizationService } from '@/services/OptimizationService';
 import type { ASRCorrectionsEntry } from '@/types/optimization';
 

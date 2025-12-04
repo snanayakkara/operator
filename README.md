@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.40.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.41.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.40.0 introduces a single-page optimization workflow (ASR corrections + Whisper LoRA panel + GEPA flow), pre-op plan validation checkpoints with user-provided fields, and a shared rounds backend (API + daemon ingestion for phone call notes).
+> **Latest:** v3.41.0 adds clinician rosters + per-patient assignments with LLM-generated update messages, smarter rounds sync/merge logic, and a tightened Right Heart Cath agent (ASR pre-corrections, safer validation, plain-text prompts).
 
 ## 🏥 Overview
 
@@ -616,6 +616,13 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v3.41.0 (December 2025) — Rounds Clinicians + RHC Safety
+- **Clinician rosters & assignments**: Persist clinicians, quick-add/assign per patient, and manage chips inline on the patient card.
+- **LLM ward updates**: Generate 280-character update messages from recent ward events (issues, labs, tasks, ward entries) with selectable time windows and copy action.
+- **Safer rounds sync**: Backend polling now merges local/remote patients by `lastUpdatedAt` to avoid overwriting recent edits; added prev/next patient navigation helper.
+- **RHC hardening**: Pre-applies ASR corrections, filters validation checkpoints to ignore auto-corrected fields, and uses a stricter plain-text procedural prompt that bans markdown/tables and reinforces anti-hallucination rules.
+- **Validation UX polish**: Validation modal clarifies suggestions vs corrections, and haemodynamics display shows empty-state guidance.
+
 ### v3.40.0 (December 2025) — Optimization Workflow + Rounds Backend
 - **Single-page optimization workflow**: Replaces 5 tabs with guided step cards (status header, plain-English context) covering ASR corrections, Whisper LoRA commands, DevSet, evaluation, GEPA optimization, and validation retests.
 - **ASR corrections manager**: Inline corrections/backup UI plus overnight Whisper LoRA training panel with copyable commands, resume + cleanup helpers, and dataset health metrics.
@@ -689,7 +696,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.40.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Unified Optimization Workflow & Rounds Backend
+**Version**: 3.41.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Clinician Roster & RHC Safety
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

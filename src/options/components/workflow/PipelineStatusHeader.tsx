@@ -8,7 +8,6 @@
 
 import React from 'react';
 import { Info } from 'lucide-react';
-import { StepStatus } from './StatusBadge';
 
 interface StepSummary {
   number: number;

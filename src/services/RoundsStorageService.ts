@@ -1,7 +1,8 @@
-import { RoundsPatient } from '@/types/rounds.types';
+import { Clinician, RoundsPatient } from '@/types/rounds.types';
 import { roundsBackendService } from '@/services/RoundsBackendService';
 
 const STORAGE_KEY = 'operator_rounds_patients_v1';
+const CLINICIANS_STORAGE_KEY = 'operator_rounds_clinicians_v1';
 const SAVE_DEBOUNCE_MS = 250;
 
 /**
@@ -11,7 +12,9 @@ const SAVE_DEBOUNCE_MS = 250;
 export class RoundsStorageService {
   private static instance: RoundsStorageService | null = null;
   private cache: RoundsPatient[] = [];
+  private cliniciansCache: Clinician[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private cliniciansSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(patients: RoundsPatient[]) => void>();
   private backendAvailable = false;
 
@@ -101,12 +104,47 @@ export class RoundsStorageService {
 
   public async loadPatientsFromBackend(): Promise<RoundsPatient[] | null> {
     const patients = await this.fetchFromBackend();
-    if (patients && !this.arePatientsEqual(patients, this.cache)) {
-      this.cache = patients;
-      this.notify();
-      this.schedulePersist();
+    if (patients) {
+      // Merge backend data with local cache, preferring whichever has the newer lastUpdatedAt
+      const merged = this.mergePatients(this.cache, patients);
+      if (!this.arePatientsEqual(merged, this.cache)) {
+        this.cache = merged;
+        this.notify();
+        this.schedulePersist();
+      }
     }
     return patients;
+  }
+
+  /**
+   * Merge local and remote patient arrays, preferring the version with the newer lastUpdatedAt
+   * for each patient. This prevents backend polling from reverting recent local changes.
+   */
+  private mergePatients(local: RoundsPatient[], remote: RoundsPatient[]): RoundsPatient[] {
+    const localMap = new Map(local.map(p => [p.id, p]));
+    const remoteMap = new Map(remote.map(p => [p.id, p]));
+    const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+    
+    const merged: RoundsPatient[] = [];
+    for (const id of allIds) {
+      const localPatient = localMap.get(id);
+      const remotePatient = remoteMap.get(id);
+      
+      if (localPatient && remotePatient) {
+        // Both exist - prefer the one with newer lastUpdatedAt
+        const localTime = new Date(localPatient.lastUpdatedAt).getTime();
+        const remoteTime = new Date(remotePatient.lastUpdatedAt).getTime();
+        merged.push(localTime >= remoteTime ? localPatient : remotePatient);
+      } else if (localPatient) {
+        // Only exists locally (new patient not yet synced, or deleted from remote)
+        merged.push(localPatient);
+      } else if (remotePatient) {
+        // Only exists remotely (new patient from another device)
+        merged.push(remotePatient);
+      }
+    }
+    
+    return merged;
   }
 
   private notify(): void {
@@ -185,5 +223,71 @@ export class RoundsStorageService {
   private arePatientsEqual(a: RoundsPatient[], b: RoundsPatient[]): boolean {
     if (a.length !== b.length) return false;
     return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  // Clinician management methods
+  public async loadClinicians(): Promise<Clinician[]> {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        const result = await chrome.storage.local.get(CLINICIANS_STORAGE_KEY);
+        const clinicians = (result?.[CLINICIANS_STORAGE_KEY] as Clinician[]) || [];
+        this.cliniciansCache = clinicians;
+        return [...clinicians];
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to load clinicians from chrome.storage.local, falling back to localStorage', error);
+    }
+
+    try {
+      const raw = localStorage.getItem(CLINICIANS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Clinician[];
+        this.cliniciansCache = parsed;
+        return [...parsed];
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to load clinicians from localStorage', error);
+    }
+
+    this.cliniciansCache = [];
+    return [];
+  }
+
+  public async saveClinicians(clinicians: Clinician[]): Promise<void> {
+    this.cliniciansCache = [...clinicians];
+    this.scheduleCliniciansPersist();
+  }
+
+  private scheduleCliniciansPersist(): void {
+    if (this.cliniciansSaveTimer) {
+      clearTimeout(this.cliniciansSaveTimer);
+    }
+
+    this.cliniciansSaveTimer = setTimeout(() => {
+      this.cliniciansSaveTimer = null;
+      this.persistClinicians().catch(error => {
+        console.error('❌ Failed to persist clinicians', error);
+      });
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  private async persistClinicians(): Promise<void> {
+    const payload = { [CLINICIANS_STORAGE_KEY]: this.cliniciansCache };
+
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        await chrome.storage.local.set(payload);
+        return;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to persist clinicians to chrome.storage.local, attempting localStorage', error);
+    }
+
+    try {
+      localStorage.setItem(CLINICIANS_STORAGE_KEY, JSON.stringify(this.cliniciansCache));
+    } catch (error) {
+      console.error('❌ Failed to persist clinicians to localStorage', error);
+      throw error;
+    }
   }
 }

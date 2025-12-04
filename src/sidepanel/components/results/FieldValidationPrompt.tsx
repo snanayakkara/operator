@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Modal } from '../modals';
 import { FormInput, FormTextarea } from '../forms';
 import { Button, ButtonGroup } from '../buttons';
-import { AlertCircle, Info, AlertTriangle, Edit3, Check } from 'lucide-react';
+import { AlertCircle, Info, AlertTriangle, Edit3, Check, Brain, ChevronDown, ChevronRight } from 'lucide-react';
 
 type ValidationCorrection = {
   field: string;
@@ -25,6 +25,7 @@ export interface ValidationPromptData {
   missingCritical: ValidationMissingField[];
   missingOptional: ValidationMissingField[];
   confidence: number;
+  modelReasoning?: string; // Optional raw reasoning from LLM
 }
 
 export interface FieldDisplayConfig {
@@ -76,15 +77,13 @@ const DEFAULT_COPY: Required<Pick<ValidationPromptCopy,
 };
 
 const formatFieldPath = (path: string): string => {
-  return path
-    .split('.')
-    .map(segment =>
-      segment
-        .replace(/_/g, ' ')
-        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-        .replace(/\b([a-z])/g, char => char.toUpperCase())
-    )
-    .join(' › ');
+  // Only use the last segment of the path (the actual field name)
+  const segments = path.split('.');
+  const lastSegment = segments[segments.length - 1];
+  return lastSegment
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b([a-z])/g, char => char.toUpperCase());
 };
 
 export const FieldValidationPrompt = <TValidation extends ValidationPromptData>({
@@ -103,13 +102,8 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
   const [editingCorrections, setEditingCorrections] = useState<Set<string>>(new Set());
   // Track user-edited values for corrections (separate from accepted corrections)
   const [editedCorrectionValues, setEditedCorrectionValues] = useState<Record<string, string>>({});
-  
-  const hasAnySuggestions = useMemo(() => {
-    const missingWithSuggestions = [...validation.missingCritical, ...validation.missingOptional]
-      .some(m => m.suggestedValue !== undefined || /suggest(ed|ion)\s*[:-]\s*([^\s]+)/i.test(m.reason));
-    const unacceptedCorrections = validation.corrections.some(c => !acceptedCorrections.has(c.field));
-    return missingWithSuggestions || unacceptedCorrections;
-  }, [validation.missingCritical, validation.missingOptional, validation.corrections, acceptedCorrections]);
+  // Toggle for showing model reasoning
+  const [showReasoning, setShowReasoning] = useState(false);
 
   const mergedCopy = useMemo(() => ({
     heading: copy.heading ?? `${agentLabel} Validation Required`,
@@ -183,6 +177,9 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 
     setAcceptedCorrections(nextAccepted);
     setUserFields(nextFields);
+    
+    // Immediately continue with the collected fields
+    onContinue(nextFields);
   };
 
   const handleCorrectionToggle = (correction: ValidationCorrection, accept: boolean) => {
@@ -313,37 +310,32 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
       size="lg"
       title={mergedCopy.heading}
       footer={
-        <div className="flex items-center gap-3 w-full">
-          {hasAnySuggestions && (
-            <Button
-              variant="success"
-              size="md"
-              onClick={handleAcceptAll}
-            >
-              Accept All Suggestions
-            </Button>
-          )}
-          <div className="flex-1" />
-          <Button
-            variant="outline"
-            onClick={onCancel}
-          >
-            {mergedCopy.cancelLabel}
-          </Button>
+        <div className="flex items-center justify-end gap-2 w-full">
           {onSkip && (
             <Button
-              variant="outline"
+              variant="ghost"
+              size="sm"
+              className="text-xs text-gray-500 hover:text-gray-700"
               onClick={onSkip}
             >
-              {mergedCopy.skipLabel}
+              Skip
             </Button>
           )}
           <Button
-            variant="primary"
-            onClick={() => onContinue(userFields)}
-            disabled={validation.missingCritical.length > 0 && Object.keys(userFields).length === 0}
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={onCancel}
           >
-            {mergedCopy.continueLabel}
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            size="sm"
+            className="text-xs"
+            onClick={handleAcceptAll}
+          >
+            Save & Continue
           </Button>
         </div>
       }
@@ -360,6 +352,32 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
             {mergedCopy.confidenceLabel}: <span className="font-semibold text-gray-800">{Math.round(validation.confidence * 100)}%</span>
           </div>
         </div>
+
+        {/* Model Reasoning Toggle (if available) */}
+        {validation.modelReasoning && (
+          <section className="border border-purple-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowReasoning(!showReasoning)}
+              className="w-full flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 transition-colors text-left"
+            >
+              <Brain className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium text-purple-700">Model Reasoning</span>
+              {showReasoning ? (
+                <ChevronDown className="w-4 h-4 text-purple-500 ml-auto" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-purple-500 ml-auto" />
+              )}
+            </button>
+            {showReasoning && (
+              <div className="p-4 bg-purple-50/50">
+                <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                  {validation.modelReasoning}
+                </pre>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Critical Missing Fields */}
         {validation.missingCritical.length > 0 && (

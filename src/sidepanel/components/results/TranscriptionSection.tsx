@@ -132,6 +132,13 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
     });
     audio.addEventListener('ended', () => {
       setIsAudioPlaying(false);
+      setAudioCurrentTime(0);
+    });
+    audio.addEventListener('play', () => {
+      setIsAudioPlaying(true);
+    });
+    audio.addEventListener('pause', () => {
+      setIsAudioPlaying(false);
     });
     setAudioElement(audio);
 
@@ -248,37 +255,31 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
     <div className={`border-b border-gray-200/50 ${className} ${
       isProcessing ? 'bg-blue-50/30 border-b-blue-200/50' : ''
     }`}>
-      <Button
-        onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
-        variant="ghost"
-        className={`w-full px-4 py-3 text-left transition-colors flex items-center justify-between rounded-none ${
-          isProcessing
-            ? 'hover:bg-blue-50/60'
-            : 'hover:bg-gray-50/50'
-        }`}
-      >
-        <div className="flex items-center gap-2 min-w-0">
+      {/* Header row with title, chevron, and action buttons all on same line */}
+      <div className={`flex items-center justify-between px-4 py-3 ${
+        isProcessing ? 'hover:bg-blue-50/60' : 'hover:bg-gray-50/50'
+      }`}>
+        {/* Left side: clickable header with icon, title, and chevron */}
+        <button
+          onClick={() => setTranscriptionExpanded(!transcriptionExpanded)}
+          className="flex items-center gap-2 min-w-0 text-left bg-transparent border-none cursor-pointer p-0"
+        >
           <FileTextIcon className={`w-4 h-4 flex-shrink-0 ${isProcessing ? 'text-blue-600' : 'text-gray-600'}`} />
           <span className={`font-medium text-sm ${isProcessing ? 'text-blue-900' : 'text-gray-900'}`}>
-            Original Transcription
+            Transcription
           </span>
           {editedTranscription !== originalTranscription && (
             <span className="text-xs text-blue-600">(edited)</span>
           )}
-        </div>
-
-        <div className="flex items-center gap-1 flex-shrink-0">
           {transcriptionExpanded ? (
-            <ChevronUpIcon className="w-3.5 h-3.5 text-gray-400" />
+            <ChevronUpIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
           ) : (
-            <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400" />
+            <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
           )}
-        </div>
-      </Button>
+        </button>
 
-      {/* Action Button Bar - Positioned at top right of card for consistency with letter/summary cards */}
-      <div className="px-4 pb-2 -mt-1" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-end">
+        {/* Right side: action buttons */}
+        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <ActionSegmentedControl
             onCopy={onTranscriptionCopy ? handleTranscriptionCopy : undefined}
             onInsert={onTranscriptionInsert ? handleTranscriptionInsert : undefined}

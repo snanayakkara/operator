@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
+  Clinician,
   HudPatientState,
   RoundsPatient,
   WardUpdateDiff
@@ -24,6 +25,7 @@ interface RoundsContextValue {
   intakeParsing: Record<string, IntakeStatus>;
   activeWard: string;
   isPatientListCollapsed: boolean;
+  clinicians: Clinician[];
   setSelectedPatientId: (id: string | null) => void;
   addPatient: (patient: RoundsPatient) => Promise<void>;
   quickAddPatient: (name: string, scratchpad: string, ward?: string) => Promise<RoundsPatient | null>;
@@ -37,6 +39,11 @@ interface RoundsContextValue {
   deletePatient: (id: string) => Promise<void>;
   togglePatientList: () => void;
   navigateToPatient: (direction: 'prev' | 'next') => void;
+  addClinician: (clinician: Clinician) => Promise<void>;
+  updateClinician: (id: string, updates: Partial<Clinician>) => Promise<void>;
+  removeClinician: (id: string) => Promise<void>;
+  assignClinicianToPatient: (patientId: string, clinicianId: string) => Promise<void>;
+  unassignClinicianFromPatient: (patientId: string, clinicianId: string) => Promise<void>;
 }
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
@@ -55,6 +62,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const llm = useMemo(() => RoundsLLMService.getInstance(), []);
 
   const [patients, setPatients] = useState<RoundsPatient[]>([]);
+  const [clinicians, setClinicians] = useState<Clinician[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [intakeParsing, setIntakeParsing] = useState<Record<string, IntakeStatus>>({});
@@ -62,15 +70,19 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [activeWard, setActiveWard] = useState<string>('1 South');
   const [isPatientListCollapsed, setIsPatientListCollapsed] = useState(false);
 
-  // Load patients on mount
+  // Load patients and clinicians on mount
   useEffect(() => {
     let mounted = true;
-    storage.loadPatients().then((loaded) => {
+    Promise.all([
+      storage.loadPatients(),
+      storage.loadClinicians()
+    ]).then(([loadedPatients, loadedClinicians]) => {
       if (mounted) {
-        setPatients(loaded);
+        setPatients(loadedPatients);
+        setClinicians(loadedClinicians);
         setLoading(false);
-        if (!selectedPatientId && loaded.length > 0) {
-          setSelectedPatientId(loaded[0].id);
+        if (!selectedPatientId && loadedPatients.length > 0) {
+          setSelectedPatientId(loadedPatients[0].id);
         }
       }
     });
@@ -83,7 +95,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       mounted = false;
       unsubscribe();
     };
-  }, [storage]);
+  }, [storage, selectedPatientId]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -99,6 +111,14 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setPatients(prev => {
       const next = producer(prev);
       storage.savePatients(next);
+      return next;
+    });
+  }, [storage]);
+
+  const persistClinicians = useCallback((producer: (current: Clinician[]) => Clinician[]) => {
+    setClinicians(prev => {
+      const next = producer(prev);
+      storage.saveClinicians(next);
       return next;
     });
   }, [storage]);
@@ -236,6 +256,62 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSelectedPatientId(activePatients[nextIndex].id);
   }, [patients, selectedPatientId]);
 
+  // Clinician management functions
+  const addClinician = useCallback(async (clinician: Clinician) => {
+    persistClinicians(prev => [...prev, clinician]);
+  }, [persistClinicians]);
+
+  const updateClinician = useCallback(async (id: string, updates: Partial<Clinician>) => {
+    const timestamp = isoNow();
+    persistClinicians(prev => prev.map(c =>
+      c.id === id ? { ...c, ...updates, lastUpdatedAt: timestamp } : c
+    ));
+  }, [persistClinicians]);
+
+  const removeClinician = useCallback(async (id: string) => {
+    // Remove clinician from the list
+    persistClinicians(prev => prev.filter(c => c.id !== id));
+
+    // Remove this clinician ID from all patients
+    persistPatients(prev => prev.map(p => ({
+      ...p,
+      clinicianIds: p.clinicianIds?.filter(cid => cid !== id),
+      lastUpdatedAt: isoNow()
+    })));
+  }, [persistClinicians, persistPatients]);
+
+  const assignClinicianToPatient = useCallback(async (patientId: string, clinicianId: string) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p => {
+      if (p.id === patientId) {
+        const currentIds = p.clinicianIds || [];
+        // Only add if not already present
+        if (currentIds.includes(clinicianId)) {
+          return p;
+        }
+        return {
+          ...p,
+          clinicianIds: [...currentIds, clinicianId],
+          lastUpdatedAt: timestamp
+        };
+      }
+      return p;
+    }));
+  }, [persistPatients]);
+
+  const unassignClinicianFromPatient = useCallback(async (patientId: string, clinicianId: string) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            clinicianIds: (p.clinicianIds || []).filter(cid => cid !== clinicianId),
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
   // Persist HUD projection for external consumers (e.g., smart glasses bridge)
   useEffect(() => {
     const persistHud = async () => {
@@ -261,6 +337,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     intakeParsing,
     activeWard,
     isPatientListCollapsed,
+    clinicians,
     setSelectedPatientId,
     addPatient,
     quickAddPatient,
@@ -273,7 +350,12 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setActiveWard,
     deletePatient,
     togglePatientList,
-    navigateToPatient
+    navigateToPatient,
+    addClinician,
+    updateClinician,
+    removeClinician,
+    assignClinicianToPatient,
+    unassignClinicianFromPatient
   };
 
   return (

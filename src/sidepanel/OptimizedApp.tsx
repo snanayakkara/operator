@@ -5091,7 +5091,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         )}
         
         {/* Main Content */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto" ref={resultsRef} id="results-section">
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto px-4" ref={resultsRef} id="results-section">
 
           {/* Patient Context Header - Show during recording/processing AND when viewing completed sessions */}
           {shouldShowPatientContextHeader && derivedPatientInfo && derivedAgent && (
@@ -5430,7 +5430,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
           {/* Main Results Panel - Show when session selected, streaming, processing, or completed with results */}
           {(stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto py-4">
               {(() => {
                 const displayData = getCurrentDisplayData();
 
@@ -5553,7 +5553,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         </div>
         
         {/* Footer - Quick Actions */}
-        <div className="flex-shrink-0 bg-white  border-t border-gray-200 p-4">
+        <div className="flex-shrink-0 bg-white border-t border-gray-200 p-4 relative z-10">
           <QuickActionsGrouped
             onQuickAction={async (actionId, data?: any) => {
               console.log('🔧 Quick action triggered:', actionId, data);

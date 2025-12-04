@@ -7,6 +7,7 @@ import {
   WardUpdateDiff
 } from '@/types/rounds.types';
 import type { LMStudioRequest } from '@/types/medical.types';
+import type { RecentPatientEvent } from '@/utils/rounds';
 
 const emptyIntakeResult: IntakeParserResult = {
   issues: [],
@@ -244,5 +245,57 @@ export class RoundsLLMService {
 
     const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-gp-letter');
     return typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  public async generatePatientUpdateMessage(
+    patient: RoundsPatient,
+    events: RecentPatientEvent[]
+  ): Promise<string> {
+    // Early return if no events
+    if (events.length === 0) {
+      return 'No significant changes.';
+    }
+
+    // Build prompt
+    const eventsList = events.map(e => `- ${e.text}`).join('\n');
+
+    const request: LMStudioRequest = {
+      model: MODEL_CONFIG.QUICK_MODEL,
+      temperature: 0.3,
+      max_tokens: 150,
+      context_length: 2000,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are a clinical assistant.',
+            'You will receive a list of changes for a ward patient over the last 24 hours.',
+            'Produce a single concise message, maximum 280 characters.',
+            'The audience is another clinician who already knows the patient.',
+            'Use plain English, no bullet points, no headings.',
+            'Do NOT explicitly mention "in the last 24 hours"; just describe what changed.',
+            'If there are no meaningful changes, respond exactly with "No significant changes."',
+            'Use Australian spelling.'
+          ].join(' ')
+        },
+        {
+          role: 'user',
+          content: `Patient: ${patient.name}\nWard: ${patient.site || 'Unknown'}\nBed: ${patient.bed}\n\nRecent changes:\n${eventsList}\n\nGenerate a concise update message (≤280 chars):`
+        }
+      ]
+    };
+
+    try {
+      const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-message-update');
+      const trimmed = raw.trim();
+
+      // Truncate if over 280 chars (safety)
+      return trimmed.length > 280 ? trimmed.substring(0, 277) + '...' : trimmed;
+    } catch (error) {
+      logger.error('[RoundsLLMService] generatePatientUpdateMessage error', {
+        error: error instanceof Error ? error.message : error
+      });
+      return 'Could not generate update.';
+    }
   }
 }

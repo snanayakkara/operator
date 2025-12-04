@@ -459,6 +459,7 @@ export class SessionPersistenceService {
       completedTime: session.completedTime,
       quickActionField: session.quickActionField,
       completed: session.completed, // Processing completion status
+      rhcReport: session.rhcReport, // Right Heart Cath structured report
       persistedAt: now,
       lastAccessedAt: now,
       markedCompleteAt: session.markedCompleteAt // Only set when user explicitly marks complete, not when processing finishes
@@ -488,6 +489,7 @@ export class SessionPersistenceService {
       completedTime: persisted.completedTime,
       quickActionField: persisted.quickActionField,
       completed: persisted.completed || false, // Processing completion status
+      rhcReport: persisted.rhcReport, // Right Heart Cath structured report
       markedCompleteAt: persisted.markedCompleteAt // User-initiated completion timestamp
       // audioBlob not restored (was not persisted)
     };

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Star, ChevronDown, Phone } from 'lucide-react';
+import { Plus, Star, ChevronDown, Phone, X, Copy, Check } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
-import { IssueSubpoint, RoundsPatient } from '@/types/rounds.types';
-import { computeDayCount, computeLabTrendString, generateRoundsId, isoNow } from '@/utils/rounds';
+import { IssueSubpoint, RoundsPatient, Clinician, MessageTimeWindow } from '@/types/rounds.types';
+import { computeDayCount, computeLabTrendString, generateRoundsId, isoNow, collectRecentPatientEvents, computeMessageWindowIso } from '@/utils/rounds';
 import { WardUpdateModal } from './WardUpdateModal';
 import { PROCEDURE_CHECKLISTS, ProcedureChecklistKey } from '@/config/procedureChecklists';
+import { RoundsLLMService } from '@/services/RoundsLLMService';
 
 type ProcedureDraft = {
   name: string;
@@ -28,7 +29,7 @@ interface PatientDetailProps {
 }
 
 export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
-  const { updatePatient } = useRounds();
+  const { updatePatient, clinicians, addClinician, assignClinicianToPatient, unassignClinicianFromPatient } = useRounds();
   const [mrn, setMrn] = useState(patient.mrn);
   const [bed, setBed] = useState(patient.bed);
   const [oneLiner, setOneLiner] = useState(patient.oneLiner);
@@ -72,6 +73,17 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [isInvestigationEditMode, setIsInvestigationEditMode] = useState(false);
   const [investigationEdits, setInvestigationEdits] = useState<Record<string, { name: string; summary?: string; date: string }>>({});
   const [openInvestigationMenuId, setOpenInvestigationMenuId] = useState<string | null>(null);
+
+  // Clinicians state
+  const [newClinicianName, setNewClinicianName] = useState('');
+  const [selectedClinicianId, setSelectedClinicianId] = useState('');
+
+  // Message update state
+  const [isGeneratingUpdate, setIsGeneratingUpdate] = useState(false);
+  const [messageUpdateText, setMessageUpdateText] = useState('');
+  const [messageCopied, setMessageCopied] = useState(false);
+  const [messageTimeWindow, setMessageTimeWindow] = useState<MessageTimeWindow>('24h');
+
   const toggleExpanded = () => setExpanded(prev => !prev);
   const ensureExpanded = () => setExpanded(true);
 
@@ -516,6 +528,60 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
     setNewImagingSummary('');
   };
 
+  // Clinician handlers
+  const handleAssignClinician = async () => {
+    if (!selectedClinicianId) return;
+    await assignClinicianToPatient(patient.id, selectedClinicianId);
+    setSelectedClinicianId('');
+  };
+
+  const handleQuickAddClinician = async () => {
+    if (!newClinicianName.trim()) return;
+    const timestamp = isoNow();
+    const newClinician: Clinician = {
+      id: generateRoundsId('clin'),
+      name: newClinicianName.trim(),
+      createdAt: timestamp,
+      lastUpdatedAt: timestamp
+    };
+    await addClinician(newClinician);
+    await assignClinicianToPatient(patient.id, newClinician.id);
+    setNewClinicianName('');
+  };
+
+  const handleRemoveClinician = async (clinicianId: string) => {
+    await unassignClinicianFromPatient(patient.id, clinicianId);
+  };
+
+  // Message update handlers
+  const handleGenerateMessageUpdate = async () => {
+    setIsGeneratingUpdate(true);
+    setMessageUpdateText('');
+    try {
+      const sinceIso = computeMessageWindowIso(messageTimeWindow, patient);
+      const events = collectRecentPatientEvents(patient, sinceIso);
+      const llmService = RoundsLLMService.getInstance();
+      const message = await llmService.generatePatientUpdateMessage(patient, events);
+      setMessageUpdateText(message);
+    } catch (error) {
+      console.error('Failed to generate message update:', error);
+      setMessageUpdateText('Error generating update. Please try again.');
+    } finally {
+      setIsGeneratingUpdate(false);
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    if (!messageUpdateText) return;
+    try {
+      await navigator.clipboard.writeText(messageUpdateText);
+      setMessageCopied(true);
+      setTimeout(() => setMessageCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+    }
+  };
+
   const sortedIssues = useMemo(() => {
     const open = patient.issues.filter(i => i.status === 'open');
     const resolved = patient.issues.filter(i => i.status === 'resolved');
@@ -691,6 +757,79 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                 </div>
               </div>
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900">Clinicians</h4>
+                <div className="flex flex-wrap gap-2">
+                  {patient.clinicianIds?.map(clinicianId => {
+                    const clinician = clinicians.find(c => c.id === clinicianId);
+                    if (!clinician) return null;
+                    return (
+                      <div key={clinician.id} className="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs">
+                        <span>{clinician.name}</span>
+                        {clinician.role && <span className="text-blue-600">({clinician.role})</span>}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveClinician(clinician.id)}
+                          className="ml-1 hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                          title={`Remove ${clinician.name}`}
+                          aria-label={`Remove ${clinician.name}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {(!patient.clinicianIds || patient.clinicianIds.length === 0) && (
+                    <span className="text-sm text-gray-500">No clinicians assigned</span>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    className="flex-1 rounded-md border px-2 py-1 text-sm"
+                    value={selectedClinicianId}
+                    onChange={(e) => setSelectedClinicianId(e.target.value)}
+                    aria-label="Select clinician to assign"
+                  >
+                    <option value="">Select existing clinician</option>
+                    {clinicians
+                      .filter(c => !patient.clinicianIds?.includes(c.id))
+                      .map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{c.role ? ` (${c.role})` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <Button
+                    size="xs"
+                    onClick={handleAssignClinician}
+                    disabled={!selectedClinicianId}
+                  >
+                    Assign
+                  </Button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-gray-200">
+                  <input
+                    className="flex-1 rounded-md border px-2 py-1 text-sm"
+                    placeholder="Quick add new clinician"
+                    value={newClinicianName}
+                    onChange={(e) => setNewClinicianName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleQuickAddClinician();
+                      }
+                    }}
+                  />
+                  <Button
+                    size="xs"
+                    startIcon={Plus}
+                    onClick={handleQuickAddClinician}
+                    disabled={!newClinicianName.trim()}
+                  >
+                    Add & Assign
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900">Intake notes</h4>
@@ -733,6 +872,52 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                       {patient.intakeNotes.length === 0 && <p className="text-sm text-gray-500">No intake notes yet.</p>}
                     </div>
                   </>
+                )}
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900">Message Update</h4>
+                <p className="text-xs text-gray-500">Generate a brief update based on recent changes</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    className="rounded-md border px-2 py-1 text-sm"
+                    value={messageTimeWindow}
+                    onChange={(e) => setMessageTimeWindow(e.target.value as MessageTimeWindow)}
+                    aria-label="Select time window for update"
+                  >
+                    <option value="6h">Last 6 hours</option>
+                    <option value="12h">Last 12 hours</option>
+                    <option value="24h">Last 24 hours</option>
+                    <option value="48h">Last 48 hours</option>
+                    <option value="today6am">Since 6am today</option>
+                    <option value="lastRound">Since last round</option>
+                  </select>
+                  <Button
+                    size="xs"
+                    onClick={handleGenerateMessageUpdate}
+                    disabled={isGeneratingUpdate}
+                  >
+                    {isGeneratingUpdate ? 'Generating...' : 'Generate'}
+                  </Button>
+                </div>
+                {messageUpdateText && (
+                  <div className="space-y-2">
+                    <div className="border border-gray-200 rounded-lg p-3 bg-white">
+                      <div className="text-sm text-gray-800">{messageUpdateText}</div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        {messageUpdateText.length}/280 characters
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        size="xs"
+                        startIcon={messageCopied ? Check : Copy}
+                        onClick={handleCopyMessage}
+                        variant={messageCopied ? 'ghost' : 'secondary'}
+                      >
+                        {messageCopied ? 'Copied!' : 'Copy'}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             </>
@@ -804,13 +989,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
             </div>
           )}
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-gray-100">
           {sortedIssues.map((issue) => (
-            <div key={issue.id} className="py-2">
-              <div className="flex items-start justify-between gap-3">
+            <div key={issue.id} className="py-3">
+              <div className="flex items-start justify-between gap-3 pb-2 border-b border-gray-100">
                 {isEditMode ? (
                   <input
-                    className="flex-1 rounded-md border px-2 py-1 text-sm font-bold"
+                    className="flex-1 rounded-md border px-2 py-1.5 text-sm font-semibold"
                     value={editingValues[`issue-${issue.id}`] || ''}
                     onChange={(e) => updateEditValue(`issue-${issue.id}`, e.target.value)}
                     placeholder="Issue title"
@@ -819,9 +1004,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   <button
                     type="button"
                     onClick={() => setOpenIssueMenuId(prev => (prev === issue.id ? null : issue.id))}
-                    className="flex-1 flex items-center justify-between rounded-md px-2 py-1 hover:bg-gray-50 transition-colors"
+                    className="flex-1 flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-gray-50 transition-colors -ml-2"
                   >
-                    <span className={`font-bold text-left ${issue.status === 'resolved' ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <span className={`font-semibold text-[15px] text-left ${issue.status === 'resolved' ? 'text-gray-400' : 'text-gray-900'}`}>
                       {issue.title}
                     </span>
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openIssueMenuId === issue.id ? 'rotate-180' : ''}`} />
@@ -855,7 +1040,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   </button>
                 </div>
               )}
-              <div className="mt-1 space-y-2">
+              <div className="mt-2 ml-1 space-y-1.5">
                 {issue.subpoints.map(sub => {
                   const isProcedure = sub.type === 'procedure' && sub.procedure;
                   if (isProcedure) {
@@ -919,8 +1104,8 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   }
 
                   return (
-                    <div key={sub.id} className="text-sm text-gray-700 flex items-start">
-                      <span className="mr-2 flex-shrink-0">•</span>
+                    <div key={sub.id} className="text-[13px] text-gray-600 flex items-start pl-1">
+                      <span className="mr-2 flex-shrink-0 text-gray-400">•</span>
                       {isEditMode ? (
                         <input
                           className="flex-1 rounded-md border px-2 py-1 text-sm"

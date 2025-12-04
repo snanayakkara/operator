@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, Info } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { StatusBadge, StepStatus } from './StatusBadge';
 
 interface OptimizationStepCardProps {

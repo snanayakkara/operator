@@ -93,7 +93,7 @@ export const CardWithActions: React.FC<CardWithActionsProps> = memo(({
   return (
     <div className={`bg-white rounded-lg border ${styles.border} overflow-hidden ${className}`}>
       {/* Header */}
-      <div className={`px-3 py-2 ${styles.header} ${!noBorder ? 'border-b ' + styles.border : ''}`}>
+      <div className={`px-4 py-3 ${styles.header} ${!noBorder ? 'border-b ' + styles.border : ''}`}>
         <div className="flex items-center justify-between gap-2">
           {/* Title section */}
           <div className="min-w-0 flex-1">
@@ -124,7 +124,7 @@ export const CardWithActions: React.FC<CardWithActionsProps> = memo(({
 
       {/* Body */}
       <div
-        className={`p-3 ${maxBodyHeight ? 'overflow-y-auto' : ''}`}
+        className={`p-4 ${maxBodyHeight ? 'overflow-y-auto' : ''}`}
         style={maxBodyHeight ? { maxHeight: maxBodyHeight } : undefined}
       >
         {children}
@@ -160,11 +160,11 @@ export const SimpleCard: React.FC<SimpleCardProps> = memo(({
   return (
     <div className={`bg-white rounded-lg border ${styles.border} overflow-hidden ${className}`}>
       {title && (
-        <div className={`px-3 py-2 ${styles.header} border-b ${styles.border}`}>
+        <div className={`px-4 py-3 ${styles.header} border-b ${styles.border}`}>
           <h3 className="text-sm font-medium text-gray-900">{title}</h3>
         </div>
       )}
-      <div className={noPadding ? '' : 'p-3'}>
+      <div className={noPadding ? '' : 'p-4'}>
         {children}
       </div>
     </div>

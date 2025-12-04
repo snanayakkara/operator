@@ -133,7 +133,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
   return (
     <div className="h-full flex flex-col bg-white max-w-full">
       {/* Compact Main Header - h-10, text-xs */}
-      <div className="h-10 px-2 flex items-center justify-between gap-2 border-b border-gray-200 sticky top-0 z-10 bg-white">
+      <div className="h-10 px-4 flex items-center justify-between gap-2 border-b border-gray-200 sticky top-0 z-10 bg-white">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <IconButton
             icon={ArrowLeft}
@@ -151,7 +151,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
 
       {/* Compact Patient Action Bar - h-8, icons only */}
       {selectedActivePatient && (
-        <div className="h-8 px-2 flex items-center gap-1 border-b border-gray-200 sticky top-10 z-10 bg-white">
+        <div className="h-8 px-4 flex items-center gap-1 border-b border-gray-200 sticky top-10 z-10 bg-white">
           {/* Patient selector - takes most space */}
           <PatientSelectorHeader className="flex-1 min-w-0" />
 

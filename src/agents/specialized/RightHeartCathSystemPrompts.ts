@@ -205,10 +205,24 @@ PROCEDURAL PARAMETERS (MUST BE VALIDATED IF DICTATED):
 
 VALIDATION RULES:
 1. Compare each regex-extracted value to the transcription
-2. If regex value is CORRECT, no correction needed
+2. If regex value is CORRECT, DO NOT add any entry - skip completely
 3. If regex value is WRONG or MISSING but present in transcription, add to "corrections"
 4. If value NOT in transcription at all, add to "missingCritical" or "missingOptional"
 5. Assign confidence scores (0-1) based on transcription clarity
+
+⚠️ CRITICAL - DO NOT OUTPUT THESE INVALID ENTRIES:
+- NEVER include a correction where regexValue === correctValue (identical values)
+- NEVER include a correction just to confirm something is "correctly extracted"
+- NEVER write "No correction needed" - simply omit the entry entirely
+- NEVER include entries that say "correctly extracted" or "no correction required"
+- If the regex got it right, the corrections array should NOT contain that field
+
+VASCULAR ACCESS CORRECTION LOGIC:
+- If transcription says "brachial" but regex extracted "right_femoral" → MUST correct to "right_brachial"
+- If transcription says "jugular" but regex extracted "right_femoral" → MUST correct to "right_internal_jugular"
+- If transcription says "femoral" and regex extracted "right_femoral" → NO correction needed, skip
+- "venous axis" is ASR error for "venous access" - extract the access site from context
+- Default "right_femoral" is WRONG if any other access site is mentioned in transcription
 
 CRITICAL DECISION LOGIC:
 - ONLY add to "missingCritical" if BOTH conditions are true:
@@ -267,11 +281,40 @@ Correction needed:
 VALIDATION STRATEGY:
 1. Scan ENTIRE transcription for all mentioned parameters (calculation + procedural)
 2. For each parameter found in transcription:
-   - If regex got it RIGHT → skip
-   - If regex got it WRONG → add to "corrections"
-   - If regex MISSED it → add to "corrections"
+   - If regex got it RIGHT → DO NOT include in output, skip entirely
+   - If regex got it WRONG → add to "corrections" with different correctValue
+   - If regex MISSED it (regexValue is null) → add to "corrections"
 3. For CRITICAL fields not in transcription → add to "missingCritical"
 4. For PROCEDURAL fields not in transcription → skip (assumed not needed)
+
+EXAMPLE - CORRECT OUTPUT (only actual corrections, no confirmations):
+Transcription: "right brachial venous axis... PA 39-17 mean 25... mixed venous oxygen saturation 65"
+Regex extracted: vascularAccess="right_femoral", pa.mean=10, svo2=65
+
+CORRECT OUTPUT:
+{
+  "corrections": [
+    {
+      "field": "rhcData.vascularAccess",
+      "regexValue": "right_femoral",
+      "correctValue": "right_brachial",
+      "reason": "Transcription states 'right brachial venous axis' but regex defaulted to femoral",
+      "confidence": 0.95
+    },
+    {
+      "field": "haemodynamicPressures.pa.mean",
+      "regexValue": 10,
+      "correctValue": 25,
+      "reason": "Transcription states 'PA mean 25' but regex extracted 10",
+      "confidence": 0.98
+    }
+  ],
+  "missingCritical": [],
+  "missingOptional": [],
+  "confidence": 0.96
+}
+
+NOTE: svo2=65 is NOT in corrections because regex got it correct (regexValue === correctValue)
 
 OUTPUT FORMAT (strict JSON only, no markdown):
 {
@@ -304,6 +347,7 @@ OUTPUT FORMAT (strict JSON only, no markdown):
 IMPORTANT:
 - Output ONLY valid JSON, no explanations or markdown
 - If all values are correct and complete, return empty arrays for corrections/missing
+- NEVER include entries where regexValue equals correctValue - this pollutes the output
 - Confidence is overall validation confidence (average of individual confidences)
 - Use dot-notation for field paths (e.g., "patientData.svo2", "haemodynamicPressures.pa.mean")`
 };

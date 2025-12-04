@@ -1126,7 +1126,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 variants={withReducedMotion(cardVariants)}
               >
                 {/* Header with title and actions */}
-                <div className="px-3 py-2 border-b border-emerald-200 bg-emerald-100">
+                <div className="px-4 py-3 border-b border-emerald-200 bg-emerald-100">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-emerald-800 font-semibold text-sm">Summary</h4>
                     <ActionSegmentedControl
@@ -1139,7 +1139,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   </div>
                 </div>
                 {/* Body content */}
-                <div className="p-3 max-h-48 overflow-y-auto">
+                <div className="p-4 max-h-48 overflow-y-auto">
                   <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                     {resultsSummary || (
                       <div className="text-gray-500 italic">
@@ -1156,7 +1156,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 variants={withReducedMotion(cardVariants)}
               >
                 {/* Header with title and actions */}
-                <div className="px-3 py-2 border-b border-blue-200 bg-blue-100">
+                <div className="px-4 py-3 border-b border-blue-200 bg-blue-100">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-blue-800 font-semibold text-sm">{isRevisionOpen ? 'Letter (Editing)' : 'Letter'}</h4>
                     <ActionSegmentedControl
@@ -1178,7 +1178,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   </div>
                 </div>
                 {/* Body content */}
-                <div className="p-3 max-h-96 overflow-y-auto">
+                <div className="p-4 max-h-96 overflow-y-auto">
                   {isRevisionOpen && revisionPanel ? (
                     <textarea
                       value={revisionPanel.edited}
@@ -1207,7 +1207,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     transition={{ delay: 0.2 }}
                   >
                   {/* Header with title and actions */}
-                  <div className="px-3 py-2 border-b border-purple-200 bg-purple-100">
+                  <div className="px-4 py-3 border-b border-purple-200 bg-purple-100">
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="text-purple-800 font-semibold text-sm">Patient-Friendly Version</h4>
                       <ActionSegmentedControl
@@ -1220,7 +1220,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                     </div>
                   </div>
                   {/* Body content */}
-                  <div className="p-3 max-h-96 overflow-y-auto">
+                  <div className="p-4 max-h-96 overflow-y-auto">
                     <div className="text-gray-900 text-sm leading-relaxed whitespace-pre-wrap">
                       {patientVersion}
                     </div>

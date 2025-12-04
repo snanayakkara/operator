@@ -1096,6 +1096,7 @@ export interface RHCValidationResult {
   missingCritical: RHCMissingField[]; // Missing fields required for calculations
   missingOptional: RHCMissingField[]; // Missing fields that would improve accuracy
   confidence: number; // Overall validation confidence 0-1
+  modelReasoning?: string; // Optional raw reasoning/explanation from the LLM
 }
 
 /**
@@ -1140,6 +1141,7 @@ export interface ValidationResult {
   missingCritical: MissingField[]; // Missing fields required for complete report
   missingOptional: MissingField[]; // Missing fields that would improve accuracy
   confidence: number; // Overall validation confidence 0-1
+  modelReasoning?: string; // Optional raw reasoning/explanation from the LLM
 }
 
 // ============================================================

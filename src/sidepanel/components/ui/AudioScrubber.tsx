@@ -175,9 +175,23 @@ export const AudioScrubber: React.FC<AudioScrubberProps> = memo(({
 
   // Redraw waveform when dependencies change - use requestAnimationFrame for smooth updates
   useEffect(() => {
-    const animationId = requestAnimationFrame(drawWaveform);
-    return () => cancelAnimationFrame(animationId);
+    // Immediate draw for responsiveness
+    drawWaveform();
   }, [drawWaveform]);
+
+  // Animation loop for smooth playhead updates during playback
+  useEffect(() => {
+    if (!isPlaying) return;
+    
+    let animationId: number;
+    const animate = () => {
+      drawWaveform();
+      animationId = requestAnimationFrame(animate);
+    };
+    animationId = requestAnimationFrame(animate);
+    
+    return () => cancelAnimationFrame(animationId);
+  }, [isPlaying, drawWaveform]);
 
   // Handle window resize
   useEffect(() => {
@@ -287,9 +301,8 @@ export const AudioScrubber: React.FC<AudioScrubberProps> = memo(({
       {/* Waveform/Slider area */}
       <div
         ref={sliderRef}
-        className={`flex-1 h-8 cursor-pointer relative select-none ${
-          isDragging ? 'cursor-grabbing' : 'cursor-pointer'
-        }`}
+        className="flex-1 h-8 relative select-none"
+        style={{ cursor: isDragging ? 'grabbing' : 'pointer' }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         role="slider"

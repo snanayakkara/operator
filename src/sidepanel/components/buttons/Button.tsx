@@ -106,8 +106,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     // Size classes
     const sizeClasses = {
-      xs: 'h-7 px-2 text-xs gap-1',
-      sm: 'h-8 px-3 text-sm gap-1.5',
+      xs: 'h-7 px-2.5 text-xs gap-1',
+      sm: 'h-8 px-4 text-sm gap-1.5',
       md: 'h-10 px-4 text-base gap-2',
       lg: 'h-12 px-6 text-lg gap-2.5',
     } as const;

@@ -8,7 +8,7 @@
  * - Provides formatted output for clinical documentation
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HeartIcon,
@@ -141,6 +141,20 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldValue, setNewFieldValue] = useState('');
 
+  // Sync with fresh rhcReport prop (e.g., after validation reprocessing)
+  useEffect(() => {
+    if (rhcReport && editedRHCReport) {
+      // Only clear if rhcReport is fresher (timestamp comparison)
+      const propTimestamp = rhcReport.timestamp || 0;
+      const editedTimestamp = editedRHCReport.timestamp || 0;
+
+      if (propTimestamp > editedTimestamp) {
+        console.log('🔄 RHC Display: Fresh rhcReport prop detected, clearing stale editedRHCReport');
+        setEditedRHCReport(null);
+      }
+    }
+  }, [rhcReport]); // Dependency: rhcReport prop only
+
   // Parse RHC report data or fall back to results string
   // Use edited data if available, otherwise use original rhcReport
   const effectiveRHCData = useMemo(() => {
@@ -162,13 +176,27 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       console.log('🎯 Has JSON marker:', hasJsonMarker);
     }
 
-    if (editedRHCReport) {
-      console.log('✅ Using editedRHCReport');
-      return editedRHCReport;
-    }
+    // FIXED PRIORITY: Fresh prop → fresher edited state → parsed fallback
     if (rhcReport) {
+      // If we have edited data, only use it if it's genuinely fresher
+      if (editedRHCReport) {
+        const propTimestamp = rhcReport.timestamp || 0;
+        const editedTimestamp = editedRHCReport.timestamp || 0;
+
+        if (editedTimestamp > propTimestamp) {
+          console.log('✅ Using editedRHCReport (fresher than prop)');
+          return editedRHCReport;
+        }
+      }
+
       console.log('✅ Using rhcReport prop');
       return rhcReport;
+    }
+
+    // Fallback to editedRHCReport if no prop exists
+    if (editedRHCReport) {
+      console.log('✅ Using editedRHCReport (no prop available)');
+      return editedRHCReport;
     }
 
     // Try to parse JSON from results field for backward compatibility
@@ -653,12 +681,18 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
       calculations: updatedReport.calculations
     });
 
-    setEditedRHCReport(updatedReport);
+    // Add fresh timestamp to mark this as new manual edit
+    const timestampedReport = {
+      ...updatedReport,
+      timestamp: Date.now()
+    };
+
+    setEditedRHCReport(timestampedReport);
     setIsEditingFields(false);
 
     // Persist edited data to session storage
     if (onUpdateRhcReport) {
-      onUpdateRhcReport(updatedReport);
+      onUpdateRhcReport(timestampedReport);
     }
   }, [onUpdateRhcReport]);
 
@@ -947,24 +981,22 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
             return (
               <div key={key}>
-                <Button
+                <button
                   type="button"
                   onClick={() => toggleSection(key)}
-                  variant="ghost"
-                  fullWidth
-                  className="px-4 py-3 text-left flex items-center justify-between hover:bg-gray-50 max-w-full overflow-hidden rounded-none"
+                  className="w-full px-4 py-3 flex flex-row items-center justify-between hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                  <div className="flex flex-row items-center gap-2 min-w-0">
                     <IconComponent className={`w-4 h-4 text-${color}-600 flex-shrink-0`} />
-                    <span className="font-medium text-gray-900 truncate">{title}</span>
+                    <span className="font-medium text-gray-900 truncate text-left">{title}</span>
                   </div>
 
                   {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
+                    <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
+                    <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   )}
-                </Button>
+                </button>
 
                 <AnimatePresence>
                   {isExpanded && (
@@ -973,7 +1005,7 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="px-4 pb-4"
+                      className="px-4 py-3 pb-4"
                     >
                       {renderSectionContent(
                         key,
@@ -990,38 +1022,36 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
 
       </motion.div>
 
-      {/* Sticky Footer - Always Visible Edit Button */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-white via-white/95 to-transparent pt-8 pb-4 px-4 pointer-events-none shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
-        <div className="max-w-full pointer-events-auto">
-          <div className="bg-white/95 backdrop-blur-sm shadow-lg border border-gray-200 rounded-lg p-3">
-            <div className="relative">
-              <Button
-                type="button"
-                onClick={() => setIsEditingFields(true)}
-                disabled={!effectiveRHCData}
-                variant="outline"
-                size="md"
-                fullWidth
-                startIcon={<Edit3 />}
-                className="border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400"
-                title={missingOptionalCount > 0
-                  ? `Edit all fields - ${missingOptionalCount} optional field${missingOptionalCount > 1 ? 's' : ''} available: ${missingFieldNames.join(', ')}`
-                  : "Edit all fields including patient data, haemodynamics, access, catheter details, and add custom fields"
-                }
-              >
-                Edit All Fields
-              </Button>
+      {/* Edit All Fields Button - Normal flow, not fixed */}
+      <div className="mt-6 mb-4 px-4">
+        <div className="bg-white shadow-lg border border-gray-200 rounded-lg p-3">
+          <div className="relative">
+            <Button
+              type="button"
+              onClick={() => setIsEditingFields(true)}
+              disabled={!effectiveRHCData}
+              variant="outline"
+              size="md"
+              fullWidth
+              startIcon={<Edit3 />}
+              className="border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-400"
+              title={missingOptionalCount > 0
+                ? `Edit all fields - ${missingOptionalCount} optional field${missingOptionalCount > 1 ? 's' : ''} available: ${missingFieldNames.join(', ')}`
+                : "Edit all fields including patient data, haemodynamics, access, catheter details, and add custom fields"
+              }
+            >
+              Edit All Fields
+            </Button>
 
-              {/* Badge for missing optional fields */}
-              {missingOptionalCount > 0 && (
-                <span
-                  className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-blue-500 rounded-full border-2 border-white shadow-sm"
-                  aria-label={`${missingOptionalCount} optional fields available`}
-                >
-                  {missingOptionalCount}
-                </span>
-              )}
-            </div>
+            {/* Badge for missing optional fields */}
+            {missingOptionalCount > 0 && (
+              <span
+                className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-blue-500 rounded-full border-2 border-white shadow-sm"
+                aria-label={`${missingOptionalCount} optional fields available`}
+              >
+                {missingOptionalCount}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1064,6 +1094,11 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           }}
           onContinue={(userFields) => {
             console.log('✅ RHC Display: Validation complete, user fields:', userFields);
+
+            // Clear stale edited state before reprocessing
+            // This ensures fresh validated data flows cleanly
+            setEditedRHCReport(null);
+
             rhcValidation.handleValidationContinue(userFields);
             // Re-process with user-provided fields
             if (onReprocessWithValidation) {
