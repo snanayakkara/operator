@@ -340,12 +340,24 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.41.0**
+**Current Version**: **3.42.0**
 **Last Updated**: December 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v3.42.0 (Dec 2025)**
+- **Ward Conversation Engine**: Multi-turn conversational ward rounds with structured checklist flow (issues → results → plan → EDD) and condition-specific items (ADHF, aortic stenosis, HFpEF, AF).
+  - `WardConversationService` manages sessions with incremental diff merging; once-per-admission flags (DVT prophylaxis, follow-up arranged) and checklist skips tracked per admission.
+  - Ward update modal now shows assistant messages and accumulated human summary; apply/discard actions persist or discard session state.
+- **Keyboard Shortcuts for Results**: `Shift+C` to copy and `Shift+I` to insert for Investigation Summary, Background, and Medication agents; hints shown inline in action buttons.
+- **Transcription Retry Banner**: When Whisper fails (server offline), a retry banner appears in transcription section allowing re-transcription once server is available.
+- **Storage Management Options Panel**: New settings section showing browser and server storage usage; bulk delete by age (7/30/90 days) and per-category server cleanup (pending audio, training audio, corrections, jobs).
+- **Extension Dark Mode**: CSS utility classes for `operator-extension-dark` toggle; results container and header surfaces adapt to dark palette.
+- **Design System Refresh (Sera UI-inspired)**: New CSS tokens for primary violet accent, standardized shadows (`shadow-card`, `shadow-modal`), and border radii (`rounded-card`, `rounded-modal`); Button, Modal, Dropdown, and SegmentedControl components updated with violet focus rings and consistent elevation.
+- **Rounds Types Extended**: `RoundsPatient` gains `expectedDischargeDate`, `admissionFlags`, `checklistSkips`; `WardUpdateDiff` supports `eddUpdate`, `admissionFlags`, `checklistSkips`; `Task` type adds optional `linkedIssueId`.
+- **No-dock Python Wrapper**: `no-dock-python.py` hides Python processes from macOS dock; Whisper and DSPy startup scripts now use it automatically.
 
 **v3.41.0 (Dec 2025)**
 - **Clinician Rosters + Assignments**: Persist clinician directory, quick-add/assign per patient, and manage clinician chips inline on the patient card.
