@@ -239,7 +239,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
       className={`
         fixed
         bg-white border border-gray-200
-        rounded-xl shadow-lg
+        rounded-card shadow-modal
         py-1
         overflow-y-auto
         animate-in fade-in slide-in-from-top-2

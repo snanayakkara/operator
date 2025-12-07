@@ -131,7 +131,7 @@ export const AudioDeviceSelector: React.FC<AudioDeviceSelectorProps> = ({
           />
           
           {/* Dropdown */}
-          <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden min-w-64">
+          <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-white border border-gray-200 rounded-card shadow-modal overflow-hidden min-w-64">
             {/* Tab Headers */}
             <div className="flex border-b border-gray-200">
               <Button

@@ -16,12 +16,10 @@
 import React, { useRef, useState } from 'react';
 import { Settings, ChevronRight, Bell, Smartphone, Plus } from 'lucide-react';
 import type { ProcessingStatus, AgentType, ModelStatus, PatientSession } from '@/types/medical.types';
-import type { StorageStats } from '@/types/persistence.types';
 import { StateChip } from './StateChip';
 import { DevicePopover } from './DevicePopover';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
-import { PipelineStrip, PipelineStageId } from './ui/PipelineStrip';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
 import { formatDeviceSummary } from '@/utils/deviceNameUtils';
 import Button from './buttons/Button';
@@ -35,9 +33,6 @@ export interface SidebarHeaderProps {
   status: ProcessingStatus;
   isRecording?: boolean;
   currentAgent?: AgentType | null;
-
-  // Pipeline stage for PipelineStrip
-  pipelineStage?: PipelineStageId;
 
   // Model/Services
   modelStatus: ModelStatus;
@@ -55,11 +50,6 @@ export interface SidebarHeaderProps {
   checkedSessionIds?: Set<string>; // All checked sessions (manual + auto-checked)
   onToggleSessionCheck?: (sessionId: string) => void; // Toggle session check state
   persistedSessionIds?: Set<string>; // IDs of sessions stored in local storage
-
-  // Storage management
-  storageStats?: StorageStats | null;
-  onDeleteAllChecked?: () => Promise<void>;
-  onDeleteOldSessions?: (daysOld: number) => Promise<void>;
 
   // Actions (none currently needed - settings opens extension options page)
   onTitleClick?: () => void;
@@ -81,7 +71,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   status,
   isRecording = false,
   currentAgent: _currentAgent,
-  pipelineStage,
   modelStatus,
   onRefreshServices: _onRefreshServices,
   patientSessions = [],
@@ -95,9 +84,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   checkedSessionIds,
   onToggleSessionCheck,
   persistedSessionIds,
-  storageStats,
-  onDeleteAllChecked,
-  onDeleteOldSessions,
   onTitleClick,
   mobileJobs = [],
   mobileJobsLoading = false,
@@ -165,7 +151,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   const unattachedMobileJobs = mobileJobs.filter(job => !job.attached_session_id);
 
   return (
-    <header className="flex-shrink-0 bg-white border-b border-gray-200">
+    <header className="flex-shrink-0 bg-white border-b border-gray-200/80">
       {/* Row 1: Primary header (≤ 40px) */}
       <div className="flex items-center justify-between h-10 px-2.5">
         {/* Left: App name + State chip */}
@@ -287,12 +273,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
       )}
 
-      {/* Pipeline Strip - shows current workflow stage */}
-      <PipelineStrip
-        activeStage={pipelineStage}
-        className="border-t border-gray-100"
-      />
-
       {/* Device Popover */}
       <DevicePopover
         isOpen={devicePopoverOpen}
@@ -349,9 +329,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
           checkedSessionIds={checkedSessionIds}
           onToggleSessionCheck={onToggleSessionCheck}
           persistedSessionIds={persistedSessionIds}
-          storageStats={storageStats}
-          onDeleteAllChecked={onDeleteAllChecked}
-          onDeleteOldSessions={onDeleteOldSessions}
         />
       )}
     </header>

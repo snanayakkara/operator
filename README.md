@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.41.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.42.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.41.0 adds clinician rosters + per-patient assignments with LLM-generated update messages, smarter rounds sync/merge logic, and a tightened Right Heart Cath agent (ASR pre-corrections, safer validation, plain-text prompts).
+> **Latest:** v3.42.0 adds multi-turn ward conversation engine with structured checklists, keyboard shortcuts for results (⇧C/⇧I), transcription retry for failed Whisper calls, UI design system refresh (Sera-inspired tokens), extension dark mode, and storage management panel.
 
 ## 🏥 Overview
 

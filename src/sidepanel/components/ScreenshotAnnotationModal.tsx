@@ -588,7 +588,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
       {isStandalone ? (
         <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-100 flex items-center justify-center px-4 py-10">
           <div className="w-full max-w-5xl mx-auto">
-            <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl w-full flex flex-col min-h-[75vh] border border-slate-100">
+            <div className="bg-white/95 backdrop-blur-sm rounded-modal shadow-modal w-full flex flex-col min-h-[75vh] border border-slate-100">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -702,7 +702,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
             }}
           >
             <motion.div
-              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col"
+              className="bg-white rounded-modal shadow-modal max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col"
               variants={withReducedMotion(modalVariants)}
               initial="hidden"
               animate="visible"

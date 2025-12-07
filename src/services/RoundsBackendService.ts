@@ -16,6 +16,16 @@ export class RoundsBackendService {
     this.apiBase = apiBase;
   }
 
+  private async requestWithTimeout<T>(path: string, init?: RequestInit, timeoutMs = 3000): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await this.request<T>(path, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   public static getInstance(): RoundsBackendService {
     if (!RoundsBackendService.instance) {
       RoundsBackendService.instance = new RoundsBackendService();
@@ -42,23 +52,50 @@ export class RoundsBackendService {
   }
 
   public async fetchPatients(): Promise<RoundsPatient[]> {
-    const data = await this.request<{ patients: RoundsPatient[] }>('/rounds/patients');
+    const data = await this.requestWithTimeout<{ patients: RoundsPatient[] }>('/rounds/patients');
     return data.patients || [];
   }
 
   public async savePatients(patients: RoundsPatient[]): Promise<void> {
-    await this.request('/rounds/patients', {
+    await this.requestWithTimeout('/rounds/patients', {
       method: 'POST',
       body: JSON.stringify({ patients })
     });
   }
 
   public async quickAddPatient(payload: QuickAddPayload): Promise<RoundsPatient> {
-    const data = await this.request<{ patient: RoundsPatient }>('/rounds/patients/quick_add', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    return data.patient;
+    try {
+      // First attempt with 3s timeout
+      const data = await this.requestWithTimeout<{ patient: RoundsPatient }>(
+        '/rounds/patients/quick_add',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        },
+        3000
+      );
+      return data.patient;
+    } catch (error) {
+      // Single retry with extended timeout on AbortError
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('[RoundsBackend] Quick Add timed out, retrying with 6s timeout...');
+        try {
+          const data = await this.requestWithTimeout<{ patient: RoundsPatient }>(
+            '/rounds/patients/quick_add',
+            {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            },
+            6000 // Extended timeout for retry
+          );
+          return data.patient;
+        } catch (retryError) {
+          console.warn('[RoundsBackend] Quick Add retry failed, falling back to local-only');
+          throw retryError; // Propagate to storage layer for local fallback
+        }
+      }
+      throw error;
+    }
   }
 }
 

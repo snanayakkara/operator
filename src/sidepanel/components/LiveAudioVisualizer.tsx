@@ -9,11 +9,11 @@ import {
   ANIMATION_DURATIONS as _ANIMATION_DURATIONS
 } from '@/utils/animations';
 
-// Simplified theme - monochrome with subtle accent
+// Simplified theme - monochrome with subtle accent (using CSS variables for consistency)
 const VISUALIZER_THEME = {
-  accentPrimary: '#64748b',   // slate-500
-  accentSecondary: '#94a3b8', // slate-400
-  accentGlow: 'rgba(100, 116, 139, 0.3)'
+  accentPrimary: 'var(--fluent-text-secondary, #64748b)',   // slate-500
+  accentSecondary: 'var(--fluent-border-subtle, #94a3b8)', // slate-400
+  accentGlow: 'var(--fluent-glow-slate, rgba(100, 116, 139, 0.3))'
 } as const;
 
 const STATUS_STYLES = {
@@ -277,7 +277,7 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
 
   return (
     <motion.div
-      className={`relative flex-1 w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm ${className}`}
+      className={`relative flex-1 w-full max-w-xl overflow-hidden rounded-card border border-gray-200 bg-white p-6 shadow-card ${className}`}
       variants={withReducedMotion(_cardVariants)}
       initial="hidden"
       animate="visible"
@@ -597,7 +597,7 @@ export const LiveAudioVisualizer: React.FC<LiveAudioVisualizerProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
               transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="relative w-full overflow-hidden rounded-[20px] border border-rose-200 bg-rose-50 p-4 shadow-[0_30px_80px_-70px_rgba(244,63,94,0.6)]"
+              className="relative w-full overflow-hidden rounded-card border border-rose-200 bg-rose-50 p-4 shadow-card"
             >
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(244,63,94,0.12),_transparent_65%)]" />
               <div className="relative z-[1] flex flex-col gap-3">

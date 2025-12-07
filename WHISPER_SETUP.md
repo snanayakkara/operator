@@ -21,14 +21,14 @@ pip install mlx-whisper flask flask-cors
 ### 2. Start the Transcription Server
 
 ```bash
-# Option 1: Use the convenience script
+# Option 1: Use the consolidated startup script (RECOMMENDED - starts all services)
+./dev
+
+# Option 2: Start Whisper server only
 ./start-whisper-server.sh
 
-# Option 2: Run directly
+# Option 3: Run directly
 python3 whisper-server.py
-
-# Option 3: Auto-start monitoring (keeps server running automatically)
-./auto-start-whisper.sh
 ```
 
 The server will start on `http://localhost:8001` and automatically use your existing model at:
@@ -70,18 +70,20 @@ With your Apple Silicon Mac, you can expect:
 
 ## Auto-Start Feature
 
-The extension now includes automatic server monitoring:
+### Consolidated Startup
+The `./dev` script provides the recommended way to start all services:
+- Starts LMStudio with model loading
+- Starts MLX Whisper server (without dock appearance on macOS)
+- Starts DSPy optimization server
+- Launches support daemons (Operator Ingest, Ward Round watcher)
+- Provides health checks and status dashboard
 
-### Auto-Start Script
 ```bash
-# Run the auto-start monitor (keeps server running in background)
-./auto-start-whisper.sh
+# Start all services
+./dev
 
-# Check if auto-start is running
-ps aux | grep auto-start-whisper
-
-# Stop auto-start monitor
-kill $(cat whisper-auto-start.pid)
+# Check service status
+./dev --status
 ```
 
 ### Extension Auto-Detection

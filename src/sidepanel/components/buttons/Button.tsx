@@ -8,7 +8,7 @@
 import React, { forwardRef, ButtonHTMLAttributes } from 'react';
 import { Loader2, Check } from 'lucide-react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
+export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success' | 'accent';
 export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 type IconRenderable =
   | React.ReactNode
@@ -155,6 +155,13 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         text-white
         shadow-sm hover:shadow
       `,
+      accent: `
+        bg-violet-600
+        hover:bg-violet-700
+        active:bg-violet-800
+        text-white
+        shadow-sm hover:shadow
+      `,
     };
 
     // Disabled styles
@@ -167,7 +174,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       inline-flex items-center justify-center
       font-medium rounded-lg
       transition-all duration-150
-      focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1
+      focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:ring-offset-1
       ${fullWidth ? 'w-full' : ''}
       ${sizeClasses[size]}
       ${variantClasses[variant]}
@@ -291,6 +298,12 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         text-white
         shadow-sm hover:shadow
       `,
+      accent: `
+        bg-violet-600
+        hover:bg-violet-700
+        text-white
+        shadow-sm hover:shadow
+      `,
     };
 
     const disabledClasses = disabled || isLoading
@@ -301,7 +314,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       inline-flex items-center justify-center
       rounded-lg
       transition-all duration-150
-      focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1
+      focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:ring-offset-1
       ${sizeClasses[size]}
       ${variantClasses[variant]}
       ${disabledClasses}

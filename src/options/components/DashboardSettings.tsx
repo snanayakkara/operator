@@ -7,6 +7,7 @@ import { logger } from '@/utils/Logger';
 import { PerformanceMetricsSection } from './PerformanceMetricsSection';
 import { UIPreferencesSection } from './UIPreferencesSection';
 import { LanyardPreferencesSection } from './LanyardPreferencesSection';
+import { StorageManagementSection } from './StorageManagementSection';
 
 export const DashboardSettings: React.FC = () => {
   const lmStudioService = useMemo(() => LMStudioService.getInstance(), []);
@@ -211,6 +212,9 @@ export const DashboardSettings: React.FC = () => {
 
       {/* UI Preferences Section */}
       <UIPreferencesSection />
+
+      {/* Storage Management Section */}
+      <StorageManagementSection />
 
       <LanyardPreferencesSection />
 

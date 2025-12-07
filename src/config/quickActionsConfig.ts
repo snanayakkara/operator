@@ -24,6 +24,7 @@ import {
   Activity,
   Droplet,
   ClipboardList,
+  Moon,
   type LucideIcon
 } from 'lucide-react';
 
@@ -172,6 +173,16 @@ export const SECONDARY_ACTIONS: QuickActionConfig[] = [
     group: 'secondary',
     category: 'emr',
     colorTheme: 'cyan' // Media/Visual tools
+  },
+  {
+    id: 'xestro-dark-mode',
+    label: 'Dark Mode',
+    alias: 'Dark',
+    icon: Moon,
+    description: 'Toggle a darker Xestro workspace',
+    group: 'secondary',
+    category: 'emr',
+    colorTheme: 'cyan' // Visual tools
   },
   {
     id: 'bp-diary-importer',

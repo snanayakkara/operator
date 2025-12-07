@@ -1,23 +1,90 @@
 #!/bin/bash
 # Medical AI Development Environment Startup
 #
-# Ultra-short startup script for the complete medical AI development stack:
-# - LMStudio Server (localhost:1234) with dual model loading
-# - MLX Whisper Server (localhost:8001) - Audio transcription  
-# - DSPy Server (localhost:8002) - Prompt optimization and evaluation
-# 
-# Usage:
-#   ./dev
+# ═══════════════════════════════════════════════════════════════════════════
+# SINGLE CONSOLIDATED ENTRY POINT FOR OPERATOR EXTENSION
+# ═══════════════════════════════════════════════════════════════════════════
 #
-# This script will:
-# 1. Start LMStudio server and load both medical models via CLI
-# 2. Start MLX Whisper server for transcription
-# 3. Start DSPy server for optimization
-# 4. Verify all services are healthy
-# 5. Display comprehensive status dashboard
-
+# This is the ONLY script you need to run to start the complete development
+# environment. All other startup scripts have been deprecated or are called
+# automatically by this script.
+#
+# SERVICES STARTED:
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. LMStudio Server (localhost:1234)
+#    - Interactive model selection for Reasoning + Quick models
+#    - Parallel model loading for faster startup
+#    - Automatic health checking and retry logic
+#
+# 2. MLX Whisper Server (localhost:8001)
+#    - Python virtual environment management (venv-whisper)
+#    - Automatic dependency installation
+#    - Runs in background without macOS dock appearance
+#    - Called via: ./start-whisper-server.sh
+#
+# 3. DSPy Server (localhost:8002)
+#    - Prompt optimization and evaluation server
+#    - LM Studio SDK integration for streaming
+#    - PID-based lifecycle management
+#    - Called via: ./start-dspy-server.sh
+#
+# 4. Operator Ingest Daemon (macOS menubar app)
+#    - Processes mobile/Shortcut audio ingestion
+#    - Python virtual environment (mac_daemon/.venv-ingest)
+#    - Runs via: python -m mac_daemon.main
+#
+# 5. Ward Round Watcher (TypeScript)
+#    - Monitors ward round data changes
+#    - Runs via: npm run wardround:watch
+#
+# USAGE:
+# ─────────────────────────────────────────────────────────────────────────────
+#   ./dev              # Start all services (interactive model selection)
+#   ./dev --status     # Check service health without starting
+#   ./dev --help       # Show help message
+#
+# DEPENDENCIES:
+# ─────────────────────────────────────────────────────────────────────────────
+# - LM Studio CLI (lms) - Install: https://lmstudio.ai/docs/cli
+# - Python 3.8+ - For Whisper and DSPy servers
+# - Node.js & npm - For TypeScript ward round watcher
+# - ffmpeg - For audio conversion (brew install ffmpeg)
+#
+# INDIVIDUAL SERVICE MANAGEMENT:
+# ─────────────────────────────────────────────────────────────────────────────
+# If you need to manage services individually:
+#   ./start-whisper-server.sh        # Start Whisper only
+#   ./start-dspy-server.sh start     # Start DSPy only
+#   ./start-dspy-server.sh stop      # Stop DSPy
+#   ./start-dspy-server.sh restart   # Restart DSPy
+#   ./start-dspy-server.sh logs      # View DSPy logs
+#
+# Or via npm scripts:
+#   npm run dev:start                # Same as ./dev
+#   npm run dspy:server:start        # Start DSPy only
+#   npm run dspy:server:stop         # Stop DSPy only
+#   npm run dspy:server:logs         # View DSPy logs
+#
+# TROUBLESHOOTING:
+# ─────────────────────────────────────────────────────────────────────────────
+# Port conflicts:
+#   lsof -i :1234  # Check what's using LMStudio port
+#   lsof -i :8001  # Check what's using Whisper port
+#   lsof -i :8002  # Check what's using DSPy port
+#
+# Service health checks:
+#   curl http://localhost:1234/v1/models  # LMStudio
+#   curl http://localhost:8001/v1/health  # Whisper
+#   curl http://localhost:8002/v1/health  # DSPy
+#
+# Reset virtual environments:
+#   rm -rf venv-whisper dspy-env mac_daemon/.venv-ingest
+#   ./dev  # Will recreate environments
+#
+# ═══════════════════════════════════════════════════════════════════════════
 # Note: set -e removed to allow graceful degradation when services fail
 # Each service failure is handled explicitly to allow partial success
+# ═══════════════════════════════════════════════════════════════════════════
 
 # macOS-compatible timeout function
 run_with_timeout() {
@@ -762,6 +829,8 @@ start_operator_ingest_app() {
     info "Launching Operator Ingest menubar app (logs: $log_file)"
 
     local app_pid
+    # Note: mac_daemon is a menubar app, so we let it show its menubar icon
+    # It won't show a dock icon because it's designed as a status bar app
     app_pid=$(
         cd "$SCRIPT_DIR" || exit 1
         nohup "$venv_python" -m mac_daemon.main >>"$log_file" 2>&1 &

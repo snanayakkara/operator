@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX, Plus, X, Activity, Building2, ClipboardList } from 'lucide-react';
-import Button, { IconButton } from './buttons/Button';
+import { Check, Sparkles, Clock, Zap, User, Video, Phone, UserPlus, RotateCcw, Calendar, CalendarX, Plus, X } from 'lucide-react';
+import { IconButton } from './buttons/Button';
+import { SegmentedControl } from './ui/SegmentedControl';
 import type {
   AppointmentMatrix,
   AppointmentComplexity,
@@ -24,28 +25,28 @@ interface OptionButton {
 }
 
 const COMPLEXITY_OPTIONS: OptionButton[] = [
-  { value: 'simple', label: 'Simple', sublabel: 'Standard consult', icon: Clock },
-  { value: 'complex', label: 'Complex', sublabel: 'Extended time', icon: Zap }
+  { value: 'simple', label: 'Simple', icon: Clock },
+  { value: 'complex', label: 'Complex', icon: Zap }
 ];
 
 const MODALITY_OPTIONS: OptionButton[] = [
-  { value: 'f2f', label: 'F2F', sublabel: 'In-person', icon: User },
-  { value: 'telehealth', label: 'Telehealth', sublabel: 'Video call', icon: Video },
-  { value: 'phone', label: 'Phone', sublabel: 'Voice only', icon: Phone }
+  { value: 'f2f', label: 'F2F', icon: User },
+  { value: 'telehealth', label: 'Telehealth', icon: Video },
+  { value: 'phone', label: 'Phone', icon: Phone }
 ];
 
 const TYPE_OPTIONS: OptionButton[] = [
-  { value: 'new', label: 'New', sublabel: 'First visit', icon: UserPlus },
-  { value: 'review', label: 'Review', sublabel: 'Follow-up visit', icon: RotateCcw }
+  { value: 'new', label: 'New', icon: UserPlus },
+  { value: 'review', label: 'Review', icon: RotateCcw }
 ];
 
 const FOLLOWUP_OPTIONS: OptionButton[] = [
-  { value: '1wk', label: '1 Week', sublabel: 'Urgent review', icon: Calendar },
-  { value: '6wk', label: '6 Weeks', sublabel: 'Early review', icon: Calendar },
-  { value: '3mth', label: '3 Months', sublabel: 'Standard', icon: Calendar },
-  { value: '6mth', label: '6 Months', sublabel: 'Medium-term', icon: Calendar },
-  { value: '12mth', label: '12 Months', sublabel: 'Extended', icon: Calendar },
-  { value: 'none', label: 'No Follow-up', sublabel: 'Discharged', icon: CalendarX }
+  { value: '1wk', label: '1 Week', icon: Calendar },
+  { value: '6wk', label: '6 Weeks', icon: Calendar },
+  { value: '3mth', label: '3 Months', icon: Calendar },
+  { value: '6mth', label: '6 Months', icon: Calendar },
+  { value: '12mth', label: '12 Months', icon: Calendar },
+  { value: 'none', label: 'No Follow-up', icon: CalendarX }
 ];
 
 export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> = ({ onGenerate }) => {
@@ -74,6 +75,14 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
   // Keyboard navigation - cycle through options (1-5)
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
+      // Ignore if user is typing in input/textarea
+      const target = event.target as HTMLElement;
+      const isTyping = target.tagName === 'INPUT' ||
+                       target.tagName === 'TEXTAREA' ||
+                       target.isContentEditable;
+
+      if (isTyping) return; // Let user type freely
+
       // Only handle numeric keys 1-5
       if (!['1', '2', '3', '4', '5'].includes(event.key)) {
         return;
@@ -174,151 +183,155 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
   const taskMessage = getTaskMessageFromMatrix(matrix);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {/* Step 1: Complexity */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          1. Complexity <span className="text-gray-500 font-normal">(Press 1)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          1. Complexity <span className="text-xs text-gray-500 font-normal">(Press 1)</span>
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          {COMPLEXITY_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              onClick={() => updateMatrix('complexity', option.value as AppointmentComplexity)}
-              variant={matrix.complexity === option.value ? 'primary' : 'outline'}
-              size="md"
-              startIcon={option.icon}
-              endIcon={matrix.complexity === option.value ? Check : undefined}
-              className="flex items-center justify-between"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={COMPLEXITY_OPTIONS.map(opt => ({
+            id: opt.value,
+            label: opt.label,
+            icon: opt.icon
+          }))}
+          value={matrix.complexity}
+          onChange={(value) => updateMatrix('complexity', value as AppointmentComplexity)}
+          size="sm"
+          accentColor="blue"
+          fullWidth
+        />
       </div>
 
       {/* Step 2: Modality */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          2. Modality <span className="text-gray-500 font-normal">(Press 2)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          2. Modality <span className="text-xs text-gray-500 font-normal">(Press 2)</span>
         </label>
-        <div className="grid grid-cols-3 gap-2">
-          {MODALITY_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              onClick={() => updateMatrix('modality', option.value as AppointmentModality)}
-              variant={matrix.modality === option.value ? 'success' : 'outline'}
-              size="md"
-              startIcon={option.icon}
-              endIcon={matrix.modality === option.value ? Check : undefined}
-              className="flex items-center justify-between"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={MODALITY_OPTIONS.map(opt => ({
+            id: opt.value,
+            label: opt.label,
+            icon: opt.icon
+          }))}
+          value={matrix.modality}
+          onChange={(value) => updateMatrix('modality', value as AppointmentModality)}
+          size="sm"
+          accentColor="blue"
+          fullWidth
+        />
       </div>
+
+      {/* Gradient separator (blue → purple) */}
+      <div className="h-0.5 bg-gradient-to-r from-blue-200 via-purple-100 to-purple-200 rounded-full" />
 
       {/* Step 3: Type */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          3. Appointment Type <span className="text-gray-500 font-normal">(Press 3)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          3. Appointment Type <span className="text-xs text-gray-500 font-normal">(Press 3)</span>
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          {TYPE_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              onClick={() => updateMatrix('type', option.value as AppointmentType)}
-              variant={matrix.type === option.value ? 'primary' : 'outline'}
-              size="md"
-              startIcon={option.icon}
-              endIcon={matrix.type === option.value ? Check : undefined}
-              className="flex items-center justify-between"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={TYPE_OPTIONS.map(opt => ({
+            id: opt.value,
+            label: opt.label,
+            icon: opt.icon
+          }))}
+          value={matrix.type}
+          onChange={(value) => updateMatrix('type', value as AppointmentType)}
+          size="sm"
+          accentColor="purple"
+          fullWidth
+        />
       </div>
 
       {/* Step 4: Follow-up Period */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          4. Follow-up Period <span className="text-gray-500 font-normal">(Press 4)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          4. Follow-up Period <span className="text-xs text-gray-500 font-normal">(Press 4)</span>
         </label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5">
           {FOLLOWUP_OPTIONS.map((option) => (
-            <Button
+            <button
               key={option.value}
+              type="button"
               onClick={() => updateMatrix('followUp', option.value as FollowUpPeriod)}
-              variant={matrix.followUp === option.value ? 'primary' : 'outline'}
-              size="md"
-              startIcon={option.icon}
-              endIcon={matrix.followUp === option.value ? Check : undefined}
-              className="flex items-center justify-between"
+              className={`
+                h-7 px-2 text-xs rounded-md font-medium transition-all
+                inline-flex items-center justify-between gap-1 border-2
+                ${matrix.followUp === option.value
+                  ? 'bg-purple-50 text-purple-900 border-purple-200 shadow-sm'
+                  : 'bg-white border-purple-100 text-gray-700 hover:border-purple-200 hover:bg-purple-50/30'
+                }
+              `}
             >
-              {option.label}
-            </Button>
+              <option.icon className="w-3 h-3 flex-shrink-0" />
+              <span className="flex-1 text-left">{option.label}</span>
+              {matrix.followUp === option.value && <Check className="w-3 h-3 flex-shrink-0 text-purple-600" />}
+            </button>
           ))}
         </div>
       </div>
 
+      {/* Gradient separator (purple → emerald) */}
+      <div className="h-0.5 bg-gradient-to-r from-purple-200 via-emerald-100 to-emerald-200 rounded-full" />
+
       {/* Step 5: Follow Up Method */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          5. Follow Up Method <span className="text-gray-500 font-normal">(Press 5)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          5. Follow Up Method <span className="text-xs text-gray-500 font-normal">(Press 5)</span>
         </label>
-        <div className="grid grid-cols-3 gap-2">
-          {MODALITY_OPTIONS.map((option) => (
-            <Button
-              key={option.value}
-              onClick={() => updateMatrix('followUpMethod', option.value as AppointmentModality)}
-              variant={matrix.followUpMethod === option.value ? 'success' : 'outline'}
-              size="md"
-              startIcon={option.icon}
-              endIcon={matrix.followUpMethod === option.value ? Check : undefined}
-              className="flex items-center justify-between"
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={MODALITY_OPTIONS.map(opt => ({
+            id: opt.value,
+            label: opt.label,
+            icon: opt.icon
+          }))}
+          value={matrix.followUpMethod}
+          onChange={(value) => updateMatrix('followUpMethod', value as AppointmentModality)}
+          size="sm"
+          accentColor="emerald"
+          fullWidth
+        />
       </div>
 
       {/* Step 6: Follow-Up Tasks */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-2">
-          6. Follow-up Tasks <span className="text-gray-500 font-normal">(Optional)</span>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          6. Follow-up Tasks <span className="text-xs text-gray-500 font-normal">(Optional)</span>
         </label>
 
         {/* Quick-select buttons for tests */}
-        <div className="mb-3">
-          <div className="text-xs text-gray-600 mb-1">Tests:</div>
-          <div className="flex flex-wrap gap-1.5">
-            {['TTE', 'CTCA', 'Stress Echo', 'Holter', 'HeartBug', 'Respiratory Function Tests', 'Review Bloods'].map((test) => (
-              <Button
+        <div className="mb-2">
+          <div className="text-xs text-gray-600 mb-0.5">Tests:</div>
+          <div className="flex flex-wrap gap-1">
+            {['TTE', 'CTCA', 'Stress Echo', 'Holter', 'HeartBug', 'RFT', 'Bloods'].map((test) => (
+              <button
                 key={test}
-                onClick={() => addTask(test)}
-                variant="outline"
-                size="sm"
-                startIcon={Activity}
-                className="text-xs py-1 px-2 hover:border-blue-400 hover:bg-blue-50"
+                type="button"
+                onClick={() => addTask(test === 'RFT' ? 'Respiratory Function Tests' : test === 'Bloods' ? 'Review Bloods' : test)}
+                className="text-xs py-0.5 px-1.5 border border-amber-200 rounded-md bg-white hover:border-amber-300 hover:bg-amber-50/30 transition-colors"
               >
                 + {test}
-              </Button>
+              </button>
             ))}
           </div>
         </div>
 
         {/* Quick-select buttons for locations */}
-        <div className="mb-3">
-          <div className="text-xs text-gray-600 mb-1">Locations:</div>
-          <div className="flex flex-wrap gap-1.5">
-            {['The Alfred', 'Capital Radiology Carlton', 'Bayside Heart', 'Vision Radiology Shepparton', 'Cabrini'].map((location) => (
-              <Button
-                key={location}
+        <div className="mb-2">
+          <div className="text-xs text-gray-600 mb-0.5">Locations:</div>
+          <div className="flex flex-wrap gap-1">
+            {[
+              { short: 'Alfred', full: 'The Alfred' },
+              { short: 'Cap Rad', full: 'Capital Radiology Carlton' },
+              { short: 'Bayside', full: 'Bayside Heart' },
+              { short: 'Vision Rad', full: 'Vision Radiology Shepparton' },
+              { short: 'Cabrini', full: 'Cabrini' }
+            ].map(({ short, full }) => (
+              <button
+                key={full}
+                type="button"
                 onClick={() => {
-                  // Add location to last task if it doesn't have one
                   if (matrix.followUpTasks.length > 0) {
                     const lastTask = matrix.followUpTasks[matrix.followUpTasks.length - 1];
                     if (!lastTask.location) {
@@ -326,72 +339,71 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
                         ...prev,
                         followUpTasks: [
                           ...prev.followUpTasks.slice(0, -1),
-                          { ...lastTask, location }
+                          { ...lastTask, location: full }
                         ]
                       }));
                     }
                   }
                 }}
-                variant="outline"
-                size="sm"
-                startIcon={Building2}
-                className="text-xs py-1 px-2 hover:border-emerald-400 hover:bg-emerald-50"
+                className="text-xs py-0.5 px-1.5 border border-amber-200 rounded-md bg-white hover:border-amber-300 hover:bg-amber-50/30 transition-colors"
               >
-                @ {location}
-              </Button>
+                @ {short}
+              </button>
             ))}
           </div>
         </div>
 
         {/* Timeframe selection */}
-        <div className="mb-3">
-          <div className="text-xs text-gray-600 mb-1">Timeframe:</div>
-          <div className="flex flex-wrap gap-1.5">
-            {['2 weeks', '4 weeks', '6-8 weeks', 'prior to next appointment', 'next available'].map((timeframe) => (
-              <Button
-                key={timeframe}
+        <div className="mb-2">
+          <div className="text-xs text-gray-600 mb-0.5">Timeframe:</div>
+          <div className="flex flex-wrap gap-1">
+            {[
+              { short: '2wk', full: '2 weeks' },
+              { short: '4wk', full: '4 weeks' },
+              { short: '6-8wk', full: '6-8 weeks' },
+              { short: 'Before appt', full: 'prior to next appointment' },
+              { short: 'ASAP', full: 'next available' }
+            ].map(({ short, full }) => (
+              <button
+                key={full}
+                type="button"
                 onClick={() => {
                   if (matrix.followUpTasks.length > 0) {
-                    updateTask(matrix.followUpTasks.length - 1, 'timeframe', timeframe);
+                    updateTask(matrix.followUpTasks.length - 1, 'timeframe', full);
                   }
                 }}
-                variant="outline"
-                size="sm"
-                startIcon={Clock}
-                className="text-xs py-1 px-2 hover:border-indigo-400 hover:bg-indigo-50"
+                className="text-xs py-0.5 px-1.5 border border-amber-200 rounded-md bg-white hover:border-amber-300 hover:bg-amber-50/30 transition-colors"
               >
-                {timeframe}
-              </Button>
+                {short}
+              </button>
             ))}
           </div>
         </div>
 
         {/* Notes/Indication selection */}
-        <div className="mb-3">
-          <div className="text-xs text-gray-600 mb-1">Notes/Indication:</div>
-          <div className="flex flex-wrap gap-1.5">
+        <div className="mb-2">
+          <div className="text-xs text-gray-600 mb-0.5">Notes:</div>
+          <div className="flex flex-wrap gap-1">
             {['chest discomfort', 'worsening dyspnoea'].map((notes) => (
-              <Button
+              <button
                 key={notes}
+                type="button"
                 onClick={() => {
                   if (matrix.followUpTasks.length > 0) {
                     updateTask(matrix.followUpTasks.length - 1, 'notes', notes);
                   }
                 }}
-                variant="outline"
-                size="sm"
-                startIcon={ClipboardList}
-                className="text-xs py-1 px-2 hover:border-pink-400 hover:bg-pink-50"
+                className="text-xs py-0.5 px-1.5 border border-amber-200 rounded-md bg-white hover:border-amber-300 hover:bg-amber-50/30 transition-colors"
               >
                 {notes}
-              </Button>
+              </button>
             ))}
           </div>
         </div>
 
         {/* Task list display */}
         {matrix.followUpTasks.length > 0 && (
-          <div className="mb-3 space-y-1.5 max-h-40 overflow-y-auto">
+          <div className="mb-2 space-y-1 max-h-24 overflow-y-auto">
             {matrix.followUpTasks.map((task, index) => (
               <div key={index} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-md p-2 text-xs">
                 <span className="text-gray-900 flex-1">
@@ -440,8 +452,8 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
       </div>
 
       {/* Preview & Generate */}
-      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200">
-        <div className="flex items-start space-x-2 mb-3">
+      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-2.5 border border-blue-200">
+        <div className="flex items-start space-x-2 mb-2">
           <Sparkles className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <div className="text-xs font-medium text-gray-700 mb-2">Preview</div>

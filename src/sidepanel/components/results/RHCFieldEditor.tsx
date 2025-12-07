@@ -389,7 +389,7 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
           animate={{ scale: 1 }}
           exit={{ scale: 0.95 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-modal shadow-modal max-w-4xl w-full max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">

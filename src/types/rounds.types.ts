@@ -84,6 +84,7 @@ export interface Task {
   origin?: TaskOrigin;
   procedureId?: string;
   scheduledDayOffset?: number; // Days from procedure date (0-based) when task should appear
+  linkedIssueId?: string;
 }
 
 export interface IssueUpdate {
@@ -113,6 +114,14 @@ export interface WardUpdateDiff {
   tasksUpdated: TaskUpdate[];
   tasksCompletedById: string[];
   tasksCompletedByText?: string[];
+  eddUpdate?: {
+    oldDate?: string | null;
+    newDate?: string | null;
+  };
+  admissionFlags?: WardAdmissionFlagsUpdate;
+  checklistSkips?: AdmissionChecklistSkip[];
+  patientId?: string;
+  admissionId?: string;
 }
 
 export interface WardEntry {
@@ -126,6 +135,23 @@ export interface NextOfKin {
   name: string;
   relation: string;
   phone: string;
+}
+
+export interface WardAdmissionFlags {
+  dvtProphylaxisConsidered?: boolean;
+  followupArranged?: boolean;
+  lastUpdatedAt?: string;
+}
+
+export interface WardAdmissionFlagsUpdate {
+  dvtProphylaxisConsidered?: boolean;
+  followupArranged?: boolean;
+}
+
+export interface AdmissionChecklistSkip {
+  condition?: string;
+  itemId: string;
+  reason?: string;
 }
 
 export interface Clinician {
@@ -147,6 +173,7 @@ export interface RoundsPatient {
   oneLiner: string;
   status: PatientStatus;
   site?: string;
+  admissionId?: string;
   createdAt: string;
   lastUpdatedAt: string;
   roundOrder?: number;
@@ -160,6 +187,9 @@ export interface RoundsPatient {
   investigations: Investigation[];
   tasks: Task[];
   wardEntries: WardEntry[];
+  expectedDischargeDate?: string;
+  admissionFlags?: WardAdmissionFlags;
+  checklistSkips?: AdmissionChecklistSkip[];
   roundCompletedDate?: string;
 }
 

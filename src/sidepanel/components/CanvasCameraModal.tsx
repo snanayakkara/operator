@@ -401,7 +401,7 @@ export const CanvasCameraModal: React.FC<CanvasCameraModalProps> = ({
           }}
         >
           <motion.div
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mx-4"
+            className="bg-white rounded-modal shadow-modal max-w-2xl w-full mx-4"
             variants={withReducedMotion(modalVariants)}
             initial="hidden"
             animate="visible"

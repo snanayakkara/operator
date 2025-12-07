@@ -155,7 +155,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   // Investigation Options - FULL PANEL TAKEOVER
   if (showInvestigationOptions) {
     return (
-      <div className="bg-white rounded-2xl overflow-hidden" style={{ zIndex: 20 }}>
+      <div className="bg-white rounded-modal overflow-hidden shadow-card" style={{ zIndex: 20 }}>
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
@@ -251,7 +251,7 @@ export const QuickActionsGrouped: React.FC<QuickActionsGroupedProps> = memo(({
   // Appointment Wrap-Up - FULL PANEL TAKEOVER
   if (showAppointmentBuilder) {
     return (
-      <div className="bg-white rounded-2xl overflow-hidden flex flex-col" style={{ zIndex: 20, maxHeight: 'calc(100vh - 100px)' }}>
+      <div className="bg-white rounded-modal overflow-hidden flex flex-col shadow-card" style={{ zIndex: 20, maxHeight: 'calc(100vh - 100px)' }}>
         {/* Header - Fixed */}
         <div className="flex-shrink-0 p-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">

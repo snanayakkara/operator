@@ -91,6 +91,128 @@
   }
 }
 
+/* Extension-level dark mode (toggled via quick action) */
+html.operator-extension-dark,
+body.operator-extension-dark {
+  background-color: #0b1220;
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.operator-extension-dark .bg-white,
+.operator-extension-dark .bg-gray-50,
+.operator-extension-dark .bg-gray-100 {
+  background-color: #0f172a !important;
+}
+
+/* Override translucent light surfaces in dark mode */
+.operator-extension-dark [class*="bg-white/"],
+.operator-extension-dark [class*="bg-gray-50/"],
+.operator-extension-dark [class*="bg-gray-100/"] {
+  background-color: #0f172a !important;
+}
+
+.operator-extension-dark [class*="border-gray-100"],
+.operator-extension-dark [class*="border-gray-200"],
+.operator-extension-dark [class*="border-gray-300"] {
+  border-color: #1f2937 !important;
+}
+
+.operator-extension-dark .operator-results-container {
+  background-color: #0f172a !important;
+  border-color: #1f2937 !important;
+  color: #e5e7eb;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45) !important;
+}
+
+.operator-extension-dark .operator-results-header {
+  background: linear-gradient(135deg, #0b1220, #0f172a) !important;
+  border-color: #1f2937 !important;
+}
+
+.operator-extension-dark .operator-results-container .bg-white,
+.operator-extension-dark .operator-results-container .bg-gray-50,
+.operator-extension-dark .operator-results-container .bg-gray-100,
+.operator-extension-dark .operator-results-container .bg-white\/80,
+.operator-extension-dark .operator-results-container .bg-white\/90,
+.operator-extension-dark .operator-results-container .bg-white\/95,
+.operator-extension-dark .operator-results-container [class*="bg-white/"],
+.operator-extension-dark .operator-results-container [class*="bg-gray-50/"],
+.operator-extension-dark .operator-results-container [class*="bg-gray-100/"] {
+  background-color: #0f172a !important;
+}
+
+.operator-extension-dark .operator-results-container .border-gray-100,
+.operator-extension-dark .operator-results-container .border-gray-200,
+.operator-extension-dark .operator-results-container .border-gray-300,
+.operator-extension-dark .operator-results-container [class*="border-gray-100"],
+.operator-extension-dark .operator-results-container [class*="border-gray-200"],
+.operator-extension-dark .operator-results-container [class*="border-gray-300"] {
+  border-color: #1f2937 !important;
+}
+
+.operator-extension-dark .operator-results-container .text-gray-900,
+.operator-extension-dark .operator-results-container .text-gray-800 {
+  color: #f3f4f6 !important;
+}
+
+.operator-extension-dark .operator-results-container .text-gray-700,
+.operator-extension-dark .operator-results-container .text-gray-600,
+.operator-extension-dark .operator-results-container .text-gray-500,
+.operator-extension-dark .operator-results-container .text-gray-400,
+.operator-extension-dark .operator-results-container .text-gray-300,
+.operator-extension-dark .operator-results-container .text-gray-200 {
+  color: #cbd5e1 !important;
+}
+
+.operator-extension-dark .bg-surface-primary,
+.operator-extension-dark .bg-surface-secondary,
+.operator-extension-dark .bg-surface-tertiary,
+.operator-extension-dark .bg-surface-elevated,
+.operator-extension-dark #results-section {
+  background-color: #0b1220 !important;
+}
+
+.operator-extension-dark .text-gray-700,
+.operator-extension-dark .text-gray-600,
+.operator-extension-dark .text-gray-500,
+.operator-extension-dark .text-gray-400,
+.operator-extension-dark .text-gray-300,
+.operator-extension-dark .text-gray-200 {
+  color: #cbd5e1 !important;
+}
+
+.operator-extension-dark .dot-grid-background-light {
+  background-color: #0b1220;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+.operator-extension-dark .border-gray-100,
+.operator-extension-dark .border-gray-200,
+.operator-extension-dark .border-gray-300 {
+  border-color: #1f2937 !important;
+}
+
+.operator-extension-dark .text-gray-900,
+.operator-extension-dark .text-gray-800 {
+  color: #f3f4f6 !important;
+}
+
+.operator-extension-dark .text-gray-700,
+.operator-extension-dark .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+.operator-extension-dark .dot-grid-background-light {
+  background-color: #0b1220;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+.operator-extension-dark .glass {
+  background: rgba(17, 24, 39, 0.35);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
 /* Fluent Design Components */
 @layer components {
   /* Base surfaces - stroke separation only */
@@ -406,6 +528,63 @@
     height: 1rem;
     display: inline-block;
     vertical-align: middle;
+  }
+
+  /* ===== Standardized Shadow Utilities (Sera UI-inspired) ===== */
+  .shadow-card {
+    box-shadow: var(--shadow-card, 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04));
+  }
+
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover, 0 4px 12px rgba(0, 0, 0, 0.1));
+  }
+
+  .shadow-modal {
+    box-shadow: var(--shadow-modal, 0 20px 40px rgba(0, 0, 0, 0.15));
+  }
+
+  /* ===== Standardized Border Radius Utilities ===== */
+  .rounded-button {
+    border-radius: var(--radius-button, 8px);
+  }
+
+  .rounded-card {
+    border-radius: var(--radius-card, 12px);
+  }
+
+  .rounded-modal {
+    border-radius: var(--radius-modal, 16px);
+  }
+
+  /* ===== Primary Accent Utilities ===== */
+  .bg-accent-primary {
+    background-color: var(--fluent-accent-primary, #8B5CF6);
+  }
+
+  .bg-accent-primary-hover {
+    background-color: var(--fluent-accent-primary-hover, #7C3AED);
+  }
+
+  .bg-accent-primary-subtle {
+    background-color: var(--fluent-accent-primary-subtle, rgba(139, 92, 246, 0.08));
+  }
+
+  .text-accent-primary {
+    color: var(--fluent-accent-primary, #8B5CF6);
+  }
+
+  .border-accent-primary {
+    border-color: var(--fluent-accent-primary, #8B5CF6);
+  }
+
+  .ring-accent-primary {
+    --tw-ring-color: var(--fluent-accent-primary-ring, rgba(139, 92, 246, 0.25));
+  }
+
+  /* Focus ring utility for primary accent */
+  .focus-ring-primary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--fluent-surface-primary, #fff), 0 0 0 4px var(--fluent-accent-primary, #8B5CF6);
   }
 
 }

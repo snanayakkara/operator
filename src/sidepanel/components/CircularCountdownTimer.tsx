@@ -63,23 +63,25 @@ function formatCountdown(ms: number): string {
 
 /**
  * Extract primary color from gradient definition
- * Gradients are in format: "from-red-500 to-red-600" -> extract red-500
+ * Uses CSS custom properties for consistency with design system
+ * Gradients are in format: "from-red-500 to-red-600" -> map to CSS var
  */
 function extractPrimaryColorFromGradient(gradient: string): string {
-  // Map Tailwind gradient classes to more muted hex colors for clinical clarity
+  // Map Tailwind gradient classes to CSS custom properties for design system consistency
+  // Using muted tones for clinical clarity while maintaining semantic meaning
   const colorMap: Record<string, string> = {
-    'from-red-500': '#64748b',     // slate-500 for recording
-    'from-blue-500': '#64748b',    // slate-500 for transcribing
-    'from-purple-500': '#64748b',  // slate-500 for AI analysis
-    'from-emerald-500': '#059669', // emerald-600 for generation
-    'from-indigo-500': '#64748b',  // slate-500 default
-    'from-rose-500': '#64748b',    // slate-500
-    'from-teal-500': '#0d9488'     // teal-600 for completed
+    'from-red-500': 'var(--fluent-text-secondary, #64748b)',      // Recording: muted slate
+    'from-blue-500': 'var(--fluent-text-secondary, #64748b)',     // Transcribing: muted slate
+    'from-purple-500': 'var(--fluent-accent-primary, #8B5CF6)',   // AI analysis: primary accent
+    'from-emerald-500': 'var(--fluent-accent-emerald, #10b981)',  // Generation: success
+    'from-indigo-500': 'var(--fluent-accent-primary, #8B5CF6)',   // Default: primary accent
+    'from-rose-500': 'var(--fluent-accent-red, #f43f5e)',         // Error: red
+    'from-teal-500': 'var(--fluent-accent-teal, #14b8a6)'         // Completed: teal
   };
 
   // Extract the "from-*" class
   const fromClass = gradient.split(' ').find(c => c.startsWith('from-'));
-  return fromClass && colorMap[fromClass] ? colorMap[fromClass] : '#64748b'; // Default slate
+  return fromClass && colorMap[fromClass] ? colorMap[fromClass] : 'var(--fluent-text-secondary, #64748b)';
 }
 
 export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
@@ -138,7 +140,7 @@ export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
           cx={center}
           cy={center}
           r={radius}
-          stroke="#e5e7eb"
+          stroke="var(--fluent-border-subtle, #e5e7eb)"
           strokeWidth={strokeWidth}
           fill="none"
           className="opacity-30"
@@ -187,7 +189,7 @@ export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
             className="text-gray-600"
             style={{
               fontSize: size * 0.07, // Smaller font for label
-              fill: '#4b5563',
+              fill: 'var(--fluent-text-secondary, #4b5563)',
               fontFamily: 'system-ui, -apple-system, sans-serif'
             }}
           >

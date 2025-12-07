@@ -35,6 +35,15 @@ interface TranscriptionSectionProps {
     timestamp?: Date;
   };
   onAgentReprocess?: (agentType: AgentType) => void;
+  /**
+   * Retry transcription from stored audio when Whisper server was unavailable.
+   * Only shown when transcription failed and audioBlob is available.
+   */
+  onRetryTranscription?: () => void;
+  /**
+   * Whether transcription retry is currently in progress
+   */
+  isRetryingTranscription?: boolean;
   currentAgent?: AgentType | null;
   isProcessing?: boolean;
   className?: string;
@@ -89,6 +98,8 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   onTranscriptionEdit,
   transcriptionSaveStatus,
   onAgentReprocess,
+  onRetryTranscription,
+  isRetryingTranscription = false,
   currentAgent,
   isProcessing = false,
   className = '',
@@ -147,6 +158,24 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
       URL.revokeObjectURL(url);
     };
   }, [audioBlob]);
+
+  // Detect if transcription is an error/failure message that can be retried
+  const isTranscriptionError = React.useMemo(() => {
+    if (!originalTranscription) return false;
+    const lowerText = originalTranscription.toLowerCase();
+    const isPlaceholder = originalTranscription.startsWith('[') && originalTranscription.endsWith(']');
+    const hasErrorKeywords = lowerText.includes('server not running') ||
+                             lowerText.includes('transcription failed') ||
+                             lowerText.includes('whisper server') ||
+                             lowerText.includes('server unavailable') ||
+                             lowerText.includes('timeout') ||
+                             lowerText.includes('can be reprocessed');
+    return isPlaceholder && hasErrorKeywords;
+  }, [originalTranscription]);
+
+  // Show retry button if: transcription failed and retry callback provided
+  // Audio may be in memory (audioBlob) or persisted to disk (will be retrieved by retry handler)
+  const canRetryTranscription = isTranscriptionError && !!onRetryTranscription;
 
   const handleAudioPlayPause = () => {
     if (!audioElement) return;
@@ -323,7 +352,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
       {/* Expanded Transcription Content */}
       {transcriptionExpanded && (
         <div className="px-4 pb-4">
-          <div className="bg-gray-50/80 rounded-lg p-2 border border-gray-200/50">
+          <div className="bg-gray-50/80 rounded-card p-2 border border-gray-200/50">
             {/* Save Status Feedback */}
             {transcriptionSaveStatus && transcriptionSaveStatus.status !== 'idle' && (
               <div className={`flex items-center space-x-2 mb-2 p-2 rounded text-xs ${
@@ -439,7 +468,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                 value={editedTranscription}
                 onChange={(e) => handleTranscriptionChange(e.target.value)}
                 disabled={!onTranscriptionEdit}
-                className={`w-full h-32 p-2 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-relaxed ${
+                className={`w-full h-32 p-2 text-sm text-gray-900 bg-white border border-gray-200 rounded resize-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 leading-relaxed ${
                   !onTranscriptionEdit ? 'opacity-60 cursor-not-allowed' : ''
                 }`}
                 placeholder={onTranscriptionEdit
@@ -453,6 +482,43 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
               />
             </div>
           </div>
+
+          {/* Retry Transcription Banner - shown when transcription failed but audio is available */}
+          {canRetryTranscription && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-card">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 text-amber-600">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800">
+                    Transcription Failed - Audio Available
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    The Whisper server wasn't running when this was recorded. Your audio is still available and can be re-transcribed.
+                  </p>
+                  <Button
+                    onClick={onRetryTranscription}
+                    disabled={isRetryingTranscription || isProcessing}
+                    variant="primary"
+                    size="sm"
+                    className="mt-2 bg-amber-600 hover:bg-amber-700"
+                  >
+                    {isRetryingTranscription ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                        Retrying Transcription...
+                      </>
+                    ) : (
+                      <>🔄 Retry Transcription</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
 
           {/* Audio Playback Component with Quality Bar */}

@@ -89,6 +89,10 @@ export default {
           violet: '#a855f7',       // Processing/active states (enriched from #8b5cf6)
           amber: '#f59e0b',        // Warnings/caution
           red: '#f43f5e',          // Errors/critical states (enriched rose from #ef4444)
+          // Primary accent (Sera UI-inspired violet)
+          primary: '#8B5CF6',
+          'primary-hover': '#7C3AED',
+          'primary-active': '#6D28D9',
         },
         // Legacy medical colors (deprecated - for gradual migration)
         medical: {
@@ -137,6 +141,10 @@ export default {
         'fluent-lg': '12px',   // Major containers, session cards
         'bright': '16px',      // Bright card design (macOS Big Sur style)
         'bright-sm': '12px',   // Smaller bright cards
+        // Standardized radii (Sera UI-inspired)
+        'button': '8px',       // All buttons and inputs
+        'card': '12px',        // All cards and panels
+        'modal': '16px',       // Modals and overlays
       },
       borderWidth: {
         'fluent': '1px',       // Stroke-based layer separation
@@ -148,6 +156,10 @@ export default {
         'fluent-flyout': '0 8px 16px rgba(0, 0, 0, 0.14)',     // Dialogs, menus, tooltips only
         'bright-card': '0 1px 3px rgba(0, 0, 0, 0.08)',        // Minimal shadow for bright cards
         'bright-elevated': '0 4px 12px rgba(0, 0, 0, 0.1)',    // Elevated bright cards
+        // Standardized shadows (Sera UI-inspired)
+        'card': '0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04)',
+        'card-hover': '0 4px 12px rgba(0, 0, 0, 0.1)',
+        'modal': '0 20px 40px rgba(0, 0, 0, 0.15)',
       },
       backgroundImage: {
         // Bright card gradient backgrounds (subtle, light)

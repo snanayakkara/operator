@@ -41,6 +41,14 @@ interface ResultsContainerProps {
     timestamp?: Date;
   };
   onAgentReprocess?: (agentType: AgentType) => void;
+  /**
+   * Retry transcription from stored audio when Whisper server was unavailable.
+   */
+  onRetryTranscription?: () => void;
+  /**
+   * Whether transcription retry is currently in progress
+   */
+  isRetryingTranscription?: boolean;
   isProcessing?: boolean;
   audioBlob?: Blob | null;
   transcriptionApprovalState?: TranscriptionApprovalState;
@@ -78,6 +86,8 @@ export const ResultsContainer: React.FC<ResultsContainerProps> = memo(({
   onTranscriptionEdit,
   transcriptionSaveStatus,
   onAgentReprocess,
+  onRetryTranscription,
+  isRetryingTranscription = false,
   isProcessing = false,
   audioBlob,
   transcriptionApprovalState,
@@ -106,14 +116,14 @@ export const ResultsContainer: React.FC<ResultsContainerProps> = memo(({
 
   return (
     <motion.div
-      className={`bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 overflow-hidden ${className}`}
+      className={`operator-results-container bg-white/95 backdrop-blur-sm rounded-card shadow-card border border-gray-200 overflow-hidden ${className}`}
       variants={withReducedMotion(cardVariants)}
       initial="hidden"
       animate="visible"
       exit="exit"
     >
       {/* Standard Header */}
-      <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/60 p-4 border-b border-emerald-200/50">
+      <div className="operator-results-header bg-gradient-to-br from-emerald-50/80 to-teal-50/60 p-4 border-b border-emerald-200/50">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
             <div className="flex-shrink-0">
@@ -194,6 +204,8 @@ export const ResultsContainer: React.FC<ResultsContainerProps> = memo(({
           onTranscriptionEdit={onTranscriptionEdit}
           transcriptionSaveStatus={transcriptionSaveStatus}
           onAgentReprocess={onAgentReprocess}
+          onRetryTranscription={onRetryTranscription}
+          isRetryingTranscription={isRetryingTranscription}
           currentAgent={agentType}
           isProcessing={isProcessing}
           audioBlob={audioBlob}

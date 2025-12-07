@@ -308,7 +308,7 @@ export const LipidProfileImporter: React.FC<LipidProfileImporterProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2">
-      <div className="bg-white rounded-2xl w-full max-h-[92vh] overflow-hidden shadow-xl flex flex-col">
+      <div className="bg-white rounded-modal w-full max-h-[92vh] overflow-hidden shadow-modal flex flex-col">
         <header className="flex items-start justify-between px-3 py-2.5 border-b border-gray-200">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Lipid Profile Importer</h2>

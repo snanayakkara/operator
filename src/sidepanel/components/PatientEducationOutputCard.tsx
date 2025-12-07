@@ -582,8 +582,8 @@ export const PatientEducationOutputCard: React.FC<PatientEducationOutputCardProp
   };
 
   return (
-    <div className="w-full bg-white border border-gray-200 rounded-xl shadow-lg">
-      <div className="bg-white w-full overflow-hidden rounded-xl">
+    <div className="w-full bg-white border border-gray-200 rounded-card shadow-card">
+      <div className="bg-white w-full overflow-hidden rounded-card">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-4 py-3">
           <div className="flex items-center justify-between">

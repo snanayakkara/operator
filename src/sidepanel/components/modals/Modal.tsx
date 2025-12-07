@@ -173,7 +173,7 @@ const Modal: React.FC<ModalProps> = ({
         ref={modalRef}
         className={`
           relative w-full ${sizeClasses[size]}
-          bg-white rounded-2xl shadow-2xl
+          bg-white rounded-modal shadow-modal border border-gray-200
           flex flex-col
           ${size === 'full' ? 'h-[95vh]' : 'max-h-[90vh]'}
           transform transition-all
@@ -207,7 +207,7 @@ const Modal: React.FC<ModalProps> = ({
                 variant="ghost"
                 size="sm"
                 aria-label="Close modal"
-                className="ml-4 text-gray-400 hover:text-gray-600"
+                className="ml-4 text-gray-400 hover:text-gray-600 focus:ring-violet-500/30"
               />
             )}
           </div>

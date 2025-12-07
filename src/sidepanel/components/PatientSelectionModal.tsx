@@ -159,7 +159,7 @@ export const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
         onClick={onClose}
       >
         <motion.div
-          className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden mx-4"
+          className="bg-gradient-to-br from-white to-slate-50/50 rounded-modal shadow-modal max-w-2xl w-full max-h-[90vh] overflow-hidden mx-4"
           variants={withReducedMotion(modalVariants)}
           initial="hidden"
           animate="visible"

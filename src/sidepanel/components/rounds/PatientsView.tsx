@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Plus, BedDouble, Users, GripVertical, Download } from 'lucide-react';
+import { CheckCircle2, Plus, BedDouble, Users, GripVertical, Download, ChevronUp, ChevronDown } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { createEmptyPatient } from '@/services/RoundsPatientService';
@@ -47,19 +47,23 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   const [exportErrors, setExportErrors] = useState<string[]>([]);
   const [pendingUpdates, setPendingUpdates] = useState<PendingWardRoundUpdate[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
+  const [showExportSection, setShowExportSection] = useState(false);
   const { applyWardDiff } = useRounds();
   const exportFolder = useMemo(
     () => getWardExportsRoot(roundIdInput || '<round id>', { icloudRoot: '', wardRoundRoot: DEFAULT_WARD_ROUND_ROOT }),
     [roundIdInput]
   );
 
-  const activePatients = useMemo(() =>
-    [...patients].filter(p => p.status === 'active').sort((a, b) => {
+  const activePatients = useMemo(() => {
+    const active = [...patients].filter(p => p.status === 'active').sort((a, b) => {
       const aOrder = a.roundOrder ?? Number.MAX_SAFE_INTEGER;
       const bOrder = b.roundOrder ?? Number.MAX_SAFE_INTEGER;
       if (aOrder !== bOrder) return aOrder - bOrder;
       return new Date(b.lastUpdatedAt).getTime() - new Date(a.lastUpdatedAt).getTime();
-    }), [patients]);
+    });
+    console.log(`[PatientsView] activePatients recalculated - Total patients: ${patients.length}, Active: ${active.length}, Discharged: ${patients.filter(p => p.status === 'discharged').length}`);
+    return active;
+  }, [patients]);
 
   const dischargedPatients = useMemo(() =>
     [...patients].filter(p => p.status === 'discharged').sort((a, b) =>
@@ -379,7 +383,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
       {!isPatientListCollapsed && (
         <div className="fixed inset-0 z-40 flex">
           <div className="flex-1 bg-black/30" onClick={togglePatientList} />
-          <div className="relative w-full max-w-md bg-white h-full shadow-2xl border-l border-gray-200 flex flex-col">
+          <div className="relative w-full max-w-md bg-white h-full shadow-modal border-l border-gray-200 flex flex-col">
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-3 py-2 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap">Ward list</h3>
@@ -486,79 +490,109 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
               )}
             </div>
 
-            <div className="border-t border-gray-200 px-3 py-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">Export ward round cards</div>
-                  <div className="text-xs text-gray-600">Saves PNGs + round.json into {exportFolder}</div>
-                </div>
-                <Button size="sm" startIcon={Download} isLoading={exporting} onClick={handleExportRound}>
-                  Export
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <input
-                  className="rounded-md border px-2 py-1 text-sm col-span-2"
-                  placeholder="Round ID"
-                  value={roundIdInput}
-                  onChange={(e) => setRoundIdInput(e.target.value)}
-                />
-                <input
-                  className="rounded-md border px-2 py-1 text-sm"
-                  placeholder="Ward"
-                  value={roundWard}
-                  onChange={(e) => setRoundWard(e.target.value)}
-                />
-                <input
-                  className="rounded-md border px-2 py-1 text-sm"
-                  placeholder="Consultant"
-                  value={roundConsultant}
-                  onChange={(e) => setRoundConsultant(e.target.value)}
-                />
-              </div>
-              {exportMessage && (
-                <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-2">
-                  {exportMessage}
-                  {exportErrors.length > 0 && (
-                    <ul className="list-disc pl-4 mt-1 text-rose-600">
-                      {exportErrors.map(err => <li key={err}>{err}</li>)}
-                    </ul>
-                  )}
-                </div>
+            <div className="border-t border-gray-200">
+              {/* Collapsed state: just a button */}
+              {!showExportSection && (
+                <button
+                  onClick={() => setShowExportSection(true)}
+                  className="w-full px-3 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    <span>Export &amp; Import</span>
+                  </div>
+                  <ChevronUp className="w-4 h-4" />
+                </button>
               )}
 
-              <div className="flex items-center justify-between pt-2">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">Pending ward round updates</div>
-                  <div className="text-xs text-gray-600">Review imports that need approval</div>
-                </div>
-                <Button size="xs" variant="outline" onClick={refreshPending} isLoading={loadingPending}>
-                  Refresh
-                </Button>
-              </div>
-              {pendingUpdates.length === 0 && (
-                <div className="text-xs text-gray-500">No pending updates.</div>
-              )}
-              {pendingUpdates.length > 0 && (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {pendingUpdates.map(pu => (
-                    <div key={pu.id} className="border border-gray-200 rounded-md p-2">
-                      <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
-                        <span>{pu.patientId}</span>
-                        <span className="text-xs text-gray-500">{pu.reason}</span>
-                      </div>
-                      <div className="text-xs text-gray-700 mt-1">{pu.llmNotes || 'Proposed changes ready for review.'}</div>
-                      <div className="text-xs text-gray-800 mt-2 space-y-1">
-                        {pu.proposedChanges.issues?.length > 0 && <div>Issues: {pu.proposedChanges.issues.length}</div>}
-                        {pu.proposedChanges.investigations?.length > 0 && <div>Investigations: {pu.proposedChanges.investigations.length}</div>}
-                        {pu.proposedChanges.tasks?.length > 0 && <div>Tasks: {pu.proposedChanges.tasks.length}</div>}
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <Button size="xs" onClick={() => handleApplyPending(pu)}>Apply</Button>
-                        <Button size="xs" variant="outline" onClick={() => handleRejectPending(pu)}>Reject</Button>
-                      </div>
+              {/* Expanded state: full export/import section */}
+              {showExportSection && (
+                <div className="px-3 py-3 space-y-3">
+                  <button
+                    onClick={() => setShowExportSection(false)}
+                    className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-900 transition -mt-1 mb-1"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Download className="w-4 h-4" />
+                      <span className="font-medium">Export &amp; Import</span>
                     </div>
-                  ))}
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Export ward round cards</div>
+                      <div className="text-xs text-gray-600">Saves PNGs + round.json into {exportFolder}</div>
+                    </div>
+                    <Button size="sm" startIcon={Download} isLoading={exporting} onClick={handleExportRound}>
+                      Export
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <input
+                      className="rounded-md border px-2 py-1 text-sm col-span-2"
+                      placeholder="Round ID"
+                      value={roundIdInput}
+                      onChange={(e) => setRoundIdInput(e.target.value)}
+                    />
+                    <input
+                      className="rounded-md border px-2 py-1 text-sm"
+                      placeholder="Ward"
+                      value={roundWard}
+                      onChange={(e) => setRoundWard(e.target.value)}
+                    />
+                    <input
+                      className="rounded-md border px-2 py-1 text-sm"
+                      placeholder="Consultant"
+                      value={roundConsultant}
+                      onChange={(e) => setRoundConsultant(e.target.value)}
+                    />
+                  </div>
+                  {exportMessage && (
+                    <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-md p-2">
+                      {exportMessage}
+                      {exportErrors.length > 0 && (
+                        <ul className="list-disc pl-4 mt-1 text-rose-600">
+                          {exportErrors.map(err => <li key={err}>{err}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Pending ward round updates</div>
+                      <div className="text-xs text-gray-600">Review imports that need approval</div>
+                    </div>
+                    <Button size="xs" variant="outline" onClick={refreshPending} isLoading={loadingPending}>
+                      Refresh
+                    </Button>
+                  </div>
+                  {pendingUpdates.length === 0 && (
+                    <div className="text-xs text-gray-500">No pending updates.</div>
+                  )}
+                  {pendingUpdates.length > 0 && (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {pendingUpdates.map(pu => (
+                        <div key={pu.id} className="border border-gray-200 rounded-md p-2">
+                          <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                            <span>{pu.patientId}</span>
+                            <span className="text-xs text-gray-500">{pu.reason}</span>
+                          </div>
+                          <div className="text-xs text-gray-700 mt-1">{pu.llmNotes || 'Proposed changes ready for review.'}</div>
+                          <div className="text-xs text-gray-800 mt-2 space-y-1">
+                            {pu.proposedChanges.issues?.length > 0 && <div>Issues: {pu.proposedChanges.issues.length}</div>}
+                            {pu.proposedChanges.investigations?.length > 0 && <div>Investigations: {pu.proposedChanges.investigations.length}</div>}
+                            {pu.proposedChanges.tasks?.length > 0 && <div>Tasks: {pu.proposedChanges.tasks.length}</div>}
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <Button size="xs" onClick={() => handleApplyPending(pu)}>Apply</Button>
+                            <Button size="xs" variant="outline" onClick={() => handleRejectPending(pu)}>Reject</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

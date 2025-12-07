@@ -207,7 +207,7 @@ export const MobileJobsPanel: React.FC<MobileJobsPanelProps> = ({
   };
 
   return (
-    <div className="w-[340px] max-h-[720px] overflow-y-auto bg-white rounded-xl shadow-2xl border border-gray-200 p-4 space-y-3">
+    <div className="w-[340px] max-h-[720px] overflow-y-auto bg-white rounded-card shadow-modal border border-gray-200 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="bg-gray-100 rounded-full p-1.5">

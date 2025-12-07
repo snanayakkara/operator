@@ -81,7 +81,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
   const agents = Object.entries(AGENT_CONFIGS) as [AgentType, typeof AGENT_CONFIGS[keyof typeof AGENT_CONFIGS]][];
 
   return (
-    <div className="glass rounded-2xl p-4">
+    <div className="glass rounded-card p-4">
       <h3 className="text-gray-900 font-medium text-sm mb-3">Medical Agent</h3>
       
       <div className="relative dropdown-reset-context">
@@ -141,7 +141,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
         >
           <div 
             data-dropdown-menu
-            className="glass rounded-lg border border-gray-200 overflow-hidden overflow-y-auto shadow-2xl"
+            className="glass rounded-card border border-gray-200 overflow-hidden overflow-y-auto shadow-modal"
             style={{
               position: 'fixed',
               top: position.top,

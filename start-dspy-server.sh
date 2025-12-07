@@ -159,12 +159,19 @@ check_server_health() {
 # Start the DSPy server
 start_server() {
     local attempt=1
-    
+
     while [ $attempt -le $MAX_RETRIES ]; do
         log "Starting DSPy server (attempt $attempt/$MAX_RETRIES)..."
-        
+
         # Start server in background with USE_DSPY environment variable
-        nohup env USE_DSPY=true $PYTHON_CMD "$SERVER_FILE" --host 127.0.0.1 --port 8002 > "$LOG_FILE" 2>&1 &
+        # Use no-dock wrapper to prevent Python from appearing in macOS dock
+        if [ -f "no-dock-python.py" ]; then
+            info "Using no-dock wrapper to prevent macOS dock icon"
+            nohup env USE_DSPY=true $PYTHON_CMD no-dock-python.py "$SERVER_FILE" --host 127.0.0.1 --port 8002 > "$LOG_FILE" 2>&1 &
+        else
+            warn "no-dock wrapper not found, Python may appear in dock"
+            nohup env USE_DSPY=true $PYTHON_CMD "$SERVER_FILE" --host 127.0.0.1 --port 8002 > "$LOG_FILE" 2>&1 &
+        fi
         local server_pid=$!
         
         # Save PID

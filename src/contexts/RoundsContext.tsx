@@ -1,10 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clinician,
   HudPatientState,
   RoundsPatient,
   WardUpdateDiff
 } from '@/types/rounds.types';
+import {
+  WardConversationMode,
+  WardConversationSession,
+  WardConversationTurnResult
+} from '@/types/wardConversation.types';
 import { buildHudPatientState, isoNow } from '@/utils/rounds';
 import { RoundsStorageService } from '@/services/RoundsStorageService';
 import {
@@ -13,6 +18,7 @@ import {
   mergeIntakeParserResult
 } from '@/services/RoundsPatientService';
 import { RoundsLLMService } from '@/services/RoundsLLMService';
+import { WardConversationService } from '@/services/WardConversationService';
 
 type IntakeStatus = 'idle' | 'running' | 'error';
 
@@ -44,6 +50,12 @@ interface RoundsContextValue {
   removeClinician: (id: string) => Promise<void>;
   assignClinicianToPatient: (patientId: string, clinicianId: string) => Promise<void>;
   unassignClinicianFromPatient: (patientId: string, clinicianId: string) => Promise<void>;
+  startWardConversation: (patientId: string, mode?: WardConversationMode, userInput?: string | null) => Promise<{ session: WardConversationSession; turn: WardConversationTurnResult; }>;
+  continueWardConversation: (sessionId: string, userInput: string) => Promise<WardConversationTurnResult>;
+  applyWardConversation: (sessionId: string, transcript?: string) => Promise<void>;
+  discardWardConversation: (sessionId: string) => void;
+  runWardDictation: (patientId: string, text: string, sessionId?: string) => Promise<{ session: WardConversationSession; turn: WardConversationTurnResult; }>;
+  getWardConversationSession: (sessionId: string) => WardConversationSession | undefined;
 }
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
@@ -60,6 +72,7 @@ export const useRounds = (): RoundsContextValue => {
 export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const storage = useMemo(() => RoundsStorageService.getInstance(), []);
   const llm = useMemo(() => RoundsLLMService.getInstance(), []);
+  const wardConversation = useMemo(() => WardConversationService.getInstance(), []);
 
   const [patients, setPatients] = useState<RoundsPatient[]>([]);
   const [clinicians, setClinicians] = useState<Clinician[]>([]);
@@ -69,6 +82,7 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [lastWardSnapshots, setLastWardSnapshots] = useState<Record<string, RoundsPatient | null>>({});
   const [activeWard, setActiveWard] = useState<string>('1 South');
   const [isPatientListCollapsed, setIsPatientListCollapsed] = useState(false);
+  const quickAddInProgressRef = useRef(false);
 
   // Load patients and clinicians on mount
   useEffect(() => {
@@ -99,6 +113,12 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const interval = setInterval(async () => {
+      // Skip polling if Quick Add is in progress
+      if (quickAddInProgressRef.current) {
+        console.log('[RoundsContext] Skipping backend poll - Quick Add in progress');
+        return;
+      }
+
       const remote = await storage.loadPatientsFromBackend();
       if (!selectedPatientId && remote && remote.length > 0) {
         setSelectedPatientId(remote[0].id);
@@ -152,26 +172,32 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [llm, persistPatients]);
 
   const quickAddPatient = useCallback(async (name: string, scratchpad: string, ward?: string): Promise<RoundsPatient | null> => {
-    const payloadWard = ward || activeWard;
-    const backendPatient = await storage.quickAddPatient({ name, scratchpad, ward: payloadWard });
-    // Backend success already updates storage + notifies subscribers; avoid double-add
-    if (backendPatient) {
-      setSelectedPatientId(backendPatient.id);
-      if (scratchpad.trim()) {
-        triggerIntakeParse(backendPatient.id, scratchpad, backendPatient);
+    quickAddInProgressRef.current = true; // Block polling
+    try {
+      const payloadWard = ward || activeWard;
+      const backendPatient = await storage.quickAddPatient({ name, scratchpad, ward: payloadWard });
+      // Backend success already updates storage + notifies subscribers; avoid double-add
+      if (backendPatient) {
+        setSelectedPatientId(backendPatient.id);
+        if (scratchpad.trim()) {
+          triggerIntakeParse(backendPatient.id, scratchpad, backendPatient);
+        }
+        return backendPatient;
       }
-      return backendPatient;
+
+      const patient = createEmptyPatient(name, { intakeNoteText: scratchpad, site: payloadWard });
+      await addPatient(patient);
+      setSelectedPatientId(patient.id);
+
+      if (scratchpad.trim()) {
+        triggerIntakeParse(patient.id, scratchpad, patient);
+      }
+
+      return patient;
+    } finally {
+      // Always resume polling after Quick Add completes/fails
+      quickAddInProgressRef.current = false;
     }
-
-    const patient = createEmptyPatient(name, { intakeNoteText: scratchpad, site: payloadWard });
-    await addPatient(patient);
-    setSelectedPatientId(patient.id);
-
-    if (scratchpad.trim()) {
-      triggerIntakeParse(patient.id, scratchpad, patient);
-    }
-
-    return patient;
   }, [activeWard, addPatient, storage, triggerIntakeParse]);
 
   const updatePatient = useCallback(async (id: string, updater: (patient: RoundsPatient) => RoundsPatient) => {
@@ -196,6 +222,61 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setLastWardSnapshots(current => ({ ...current, [id]: null }));
   }, [lastWardSnapshots, persistPatients]);
 
+  const startWardConversation = useCallback(async (
+    patientId: string,
+    mode: WardConversationMode = 'ward_round',
+    userInput?: string | null
+  ) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) {
+      throw new Error(`Patient ${patientId} not found for ward conversation`);
+    }
+    return wardConversation.startSession(patient, mode, userInput ?? null);
+  }, [patients, wardConversation]);
+
+  const continueWardConversation = useCallback(async (
+    sessionId: string,
+    userInput: string
+  ) => {
+    const session = wardConversation.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Ward conversation session ${sessionId} not found`);
+    }
+    const patient = patients.find(p => p.id === session.patientId);
+    if (!patient) {
+      throw new Error(`Patient ${session.patientId} not found for ward conversation`);
+    }
+    return wardConversation.continueSession(sessionId, patient, userInput);
+  }, [patients, wardConversation]);
+
+  const runWardDictation = useCallback(async (
+    patientId: string,
+    text: string,
+    sessionId?: string
+  ) => {
+    const patient = patients.find(p => p.id === patientId);
+    if (!patient) {
+      throw new Error(`Patient ${patientId} not found for ward dictation`);
+    }
+    return wardConversation.runDictation(patient, text, sessionId);
+  }, [patients, wardConversation]);
+
+  const applyWardConversation = useCallback(async (sessionId: string, transcript?: string) => {
+    const session = wardConversation.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Ward conversation session ${sessionId} not found`);
+    }
+    const conversationTranscript = transcript || session.humanSummary.join(' | ') || session.lastAssistantMessage || 'Ward conversation update';
+    await applyWardDiff(session.patientId, session.pendingDiff, conversationTranscript);
+    wardConversation.discardSession(sessionId);
+  }, [applyWardDiff, wardConversation]);
+
+  const discardWardConversation = useCallback((sessionId: string) => {
+    wardConversation.discardSession(sessionId);
+  }, [wardConversation]);
+
+  const getWardConversationSession = useCallback((sessionId: string) => wardConversation.getSession(sessionId), [wardConversation]);
+
   const refresh = useCallback(async () => {
     const fresh = await storage.loadPatients();
     setPatients(fresh);
@@ -203,7 +284,12 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const markDischarged = useCallback(async (id: string, status: 'active' | 'discharged') => {
     const timestamp = isoNow();
-    persistPatients(prev => prev.map(p => p.id === id ? { ...p, status, lastUpdatedAt: timestamp } : p));
+    console.log(`[RoundsContext] markDischarged: ${id} -> ${status}`);
+    persistPatients(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, status, lastUpdatedAt: timestamp } : p);
+      console.log(`[RoundsContext] After markDischarged - Total: ${updated.length}, Active: ${updated.filter(p => p.status === 'active').length}, Discharged: ${updated.filter(p => p.status === 'discharged').length}`);
+      return updated;
+    });
     if (status === 'discharged' && selectedPatientId === id) {
       setSelectedPatientId(null);
       setIsPatientListCollapsed(false);
@@ -211,7 +297,12 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [persistPatients, selectedPatientId]);
 
   const deletePatient = useCallback(async (id: string) => {
-    persistPatients(prev => prev.filter(p => p.id !== id));
+    console.log(`[RoundsContext] deletePatient: ${id}`);
+    persistPatients(prev => {
+      const filtered = prev.filter(p => p.id !== id);
+      console.log(`[RoundsContext] After deletePatient - Remaining: ${filtered.length}`);
+      return filtered;
+    });
     if (selectedPatientId === id) {
       setSelectedPatientId(null);
       setIsPatientListCollapsed(false);
@@ -344,6 +435,12 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updatePatient,
     applyWardDiff,
     undoLastWardUpdate,
+    startWardConversation,
+    continueWardConversation,
+    applyWardConversation,
+    discardWardConversation,
+    runWardDictation,
+    getWardConversationSession,
     refresh,
     markDischarged,
     addIntakeNote,

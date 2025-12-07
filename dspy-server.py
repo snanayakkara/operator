@@ -35,7 +35,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 try:
-    from flask import Flask, request, jsonify, Response
+    from flask import Flask, request, jsonify, Response, send_file
     from flask_cors import CORS
     import dspy
     from llm.dspy_config import get_config, configure_lm, is_dspy_enabled
@@ -1502,6 +1502,382 @@ def asr_ingest_with_audio():
 
         log_request('asr/ingest', success=False, error=error_msg)
         return jsonify(response), 500
+
+
+# Pending Audio Endpoints (for failed transcriptions that can be retried)
+
+@app.route('/v1/asr/pending/save', methods=['POST'])
+def save_pending_audio():
+    """
+    Save audio from a failed transcription for later retry.
+    
+    Accepts multipart/form-data with:
+      - audio: the audio file
+      - metadata: JSON with sessionId, agentType, patientName, timestamp, failureReason
+    """
+    try:
+        if 'audio' not in request.files:
+            raise DSPyServerError("Missing 'audio' file")
+        if 'metadata' not in request.form:
+            raise DSPyServerError("Missing 'metadata' field")
+        
+        metadata_str = request.form['metadata']
+        try:
+            metadata = json.loads(metadata_str)
+        except json.JSONDecodeError:
+            raise DSPyServerError("Invalid metadata JSON")
+        
+        session_id = metadata.get('sessionId')
+        if not session_id:
+            raise DSPyServerError("metadata.sessionId is required")
+        
+        # Create pending audio directory
+        pending_dir = Path('data/asr/pending')
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save audio file
+        audio_file = request.files['audio']
+        ext = Path(audio_file.filename).suffix or '.webm'
+        audio_filename = f"{session_id}{ext}"
+        audio_path = pending_dir / audio_filename
+        audio_file.save(audio_path)
+        
+        # Save metadata
+        metadata_file = pending_dir / f"{session_id}.json"
+        metadata['audioPath'] = str(audio_path)
+        metadata['savedAt'] = now_melbourne_iso()
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        response = {
+            'success': True,
+            'data': {'audioPath': str(audio_path)},
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/save', success=True)
+        return jsonify(response)
+    
+    except Exception as e:
+        error_msg = f"Failed to save pending audio: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/save', success=False, error=error_msg)
+        return jsonify(response), 500
+
+
+@app.route('/v1/asr/pending/list', methods=['GET'])
+def list_pending_audio():
+    """
+    List all pending audio files available for retry.
+    """
+    try:
+        pending_dir = Path('data/asr/pending')
+        pending = []
+        
+        if pending_dir.exists():
+            for metadata_file in pending_dir.glob('*.json'):
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    # Check if audio file still exists
+                    audio_path = Path(metadata.get('audioPath', ''))
+                    if audio_path.exists():
+                        pending.append({
+                            'sessionId': metadata.get('sessionId'),
+                            'audioPath': str(audio_path),
+                            'agentType': metadata.get('agentType'),
+                            'patientName': metadata.get('patientName'),
+                            'timestamp': metadata.get('timestamp'),
+                            'failureReason': metadata.get('failureReason'),
+                            'savedAt': metadata.get('savedAt')
+                        })
+        
+        response = {
+            'success': True,
+            'data': {'pending': pending},
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/list', success=True)
+        return jsonify(response)
+    
+    except Exception as e:
+        error_msg = f"Failed to list pending audio: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/list', success=False, error=error_msg)
+        return jsonify(response), 500
+
+
+@app.route('/v1/asr/pending/audio/<session_id>', methods=['GET'])
+def get_pending_audio(session_id: str):
+    """
+    Retrieve a pending audio file for retry.
+    """
+    try:
+        pending_dir = Path('data/asr/pending')
+        metadata_file = pending_dir / f"{session_id}.json"
+        
+        if not metadata_file.exists():
+            raise DSPyServerError(f"No pending audio found for session: {session_id}")
+        
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+        
+        audio_path = Path(metadata.get('audioPath', ''))
+        if not audio_path.exists():
+            raise DSPyServerError(f"Audio file not found: {audio_path}")
+        
+        log_request('asr/pending/audio', success=True)
+        return send_file(
+            audio_path,
+            mimetype='audio/webm',
+            as_attachment=True,
+            download_name=audio_path.name
+        )
+    
+    except Exception as e:
+        error_msg = f"Failed to get pending audio: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/audio', success=False, error=error_msg)
+        return jsonify(response), 500
+
+
+@app.route('/v1/asr/pending/delete/<session_id>', methods=['DELETE'])
+def delete_pending_audio(session_id: str):
+    """
+    Delete a pending audio file after successful transcription retry.
+    """
+    try:
+        pending_dir = Path('data/asr/pending')
+        metadata_file = pending_dir / f"{session_id}.json"
+        
+        deleted = False
+        
+        if metadata_file.exists():
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            
+            # Delete audio file
+            audio_path = Path(metadata.get('audioPath', ''))
+            if audio_path.exists():
+                audio_path.unlink()
+                deleted = True
+            
+            # Delete metadata file
+            metadata_file.unlink()
+            deleted = True
+        
+        response = {
+            'success': True,
+            'data': {'deleted': deleted},
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/delete', success=True)
+        return jsonify(response)
+    
+    except Exception as e:
+        error_msg = f"Failed to delete pending audio: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('asr/pending/delete', success=False, error=error_msg)
+        return jsonify(response), 500
+
+
+@app.route('/v1/storage/stats', methods=['GET'])
+def get_storage_stats():
+    """
+    Get storage usage breakdown for the data directory.
+    
+    Returns breakdown by category:
+      - pendingAudio: Failed transcriptions awaiting retry
+      - trainingAudio: Audio saved for Whisper training  
+      - corrections: ASR correction data
+      - jobs: Background job data
+      - gepa: GEPA optimization data
+      - total: Total usage
+    """
+    try:
+        data_dir = Path('data')
+        
+        def get_dir_size(path: Path) -> tuple[int, int]:
+            """Returns (total_bytes, file_count)"""
+            total = 0
+            count = 0
+            if path.exists():
+                for f in path.rglob('*'):
+                    if f.is_file():
+                        total += f.stat().st_size
+                        count += 1
+            return total, count
+        
+        # Calculate sizes for each category
+        pending_bytes, pending_count = get_dir_size(data_dir / 'asr' / 'pending')
+        training_bytes, training_count = get_dir_size(data_dir / 'asr' / 'audio')
+        corrections_bytes, corrections_count = get_dir_size(data_dir / 'asr')
+        # Subtract pending and training from corrections since they're subdirs
+        corrections_bytes -= (pending_bytes + training_bytes)
+        corrections_count -= (pending_count + training_count)
+        # Ensure non-negative
+        corrections_bytes = max(0, corrections_bytes)
+        corrections_count = max(0, corrections_count)
+        
+        jobs_bytes, jobs_count = get_dir_size(data_dir / 'jobs')
+        gepa_bytes, gepa_count = get_dir_size(data_dir / 'gepa')
+        
+        total_bytes, total_count = get_dir_size(data_dir)
+        
+        response = {
+            'success': True,
+            'data': {
+                'pendingAudio': {
+                    'bytes': pending_bytes,
+                    'fileCount': pending_count,
+                    'label': 'Pending Transcriptions'
+                },
+                'trainingAudio': {
+                    'bytes': training_bytes,
+                    'fileCount': training_count,
+                    'label': 'Training Audio'
+                },
+                'corrections': {
+                    'bytes': corrections_bytes,
+                    'fileCount': corrections_count,
+                    'label': 'ASR Corrections'
+                },
+                'jobs': {
+                    'bytes': jobs_bytes,
+                    'fileCount': jobs_count,
+                    'label': 'Background Jobs'
+                },
+                'gepa': {
+                    'bytes': gepa_bytes,
+                    'fileCount': gepa_count,
+                    'label': 'Optimization Data'
+                },
+                'total': {
+                    'bytes': total_bytes,
+                    'fileCount': total_count,
+                    'label': 'Total Storage'
+                }
+            },
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('storage/stats', success=True)
+        return jsonify(response)
+    
+    except Exception as e:
+        error_msg = f"Failed to get storage stats: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request('storage/stats', success=False, error=error_msg)
+        return jsonify(response), 500
+
+
+@app.route('/v1/storage/clear/<category>', methods=['DELETE'])
+def clear_storage_category(category):
+    """
+    Clear storage for a specific category.
+    
+    Categories:
+      - pendingAudio: data/asr/pending/
+      - trainingAudio: data/asr/audio/
+      - corrections: data/asr/uploaded_corrections.json
+      - jobs: data/jobs/
+    """
+    import shutil
+    
+    try:
+        data_dir = Path('data')
+        deleted_bytes = 0
+        deleted_count = 0
+        
+        category_paths = {
+            'pendingAudio': data_dir / 'asr' / 'pending',
+            'trainingAudio': data_dir / 'asr' / 'audio',
+            'jobs': data_dir / 'jobs'
+        }
+        
+        if category == 'corrections':
+            # Just delete the corrections file, not the whole asr dir
+            corrections_file = data_dir / 'asr' / 'uploaded_corrections.json'
+            if corrections_file.exists():
+                deleted_bytes = corrections_file.stat().st_size
+                deleted_count = 1
+                corrections_file.unlink()
+        elif category in category_paths:
+            target_dir = category_paths[category]
+            if target_dir.exists():
+                # Calculate size before deletion
+                for f in target_dir.rglob('*'):
+                    if f.is_file():
+                        deleted_bytes += f.stat().st_size
+                        deleted_count += 1
+                # Delete directory contents
+                shutil.rmtree(target_dir)
+                target_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            raise DSPyServerError(f"Unknown category: {category}")
+        
+        response = {
+            'success': True,
+            'data': {
+                'deletedBytes': deleted_bytes,
+                'deletedCount': deleted_count,
+                'category': category
+            },
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request(f'storage/clear/{category}', success=True)
+        return jsonify(response)
+    
+    except Exception as e:
+        error_msg = f"Failed to clear storage category {category}: {str(e)}"
+        logger.error(error_msg)
+        
+        response = {
+            'success': False,
+            'error': error_msg,
+            'timestamp': now_melbourne_iso()
+        }
+        
+        log_request(f'storage/clear/{category}', success=False, error=error_msg)
+        return jsonify(response), 500
+
 
 # Enhanced GEPA Optimization Endpoints
 

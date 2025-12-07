@@ -366,9 +366,14 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
   if (isSimpleCard) {
     return (
       <div className={`relative bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
-        {/* Action Button Bar at top right */}
-        {(onCopy || onInsert || onTrain) && (
-          <div className="flex justify-end px-3 py-2 border-b border-gray-100">
+        {/* Header with title and action buttons */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+          {/* Title on the left */}
+          <h4 className="text-sm font-medium text-gray-700">
+            {getAgentDisplayName(agentType)}
+          </h4>
+          {/* Action buttons on the right */}
+          {(onCopy || onInsert || onTrain) && (
             <ActionSegmentedControl
               onCopy={onCopy ? () => onCopy(results) : undefined}
               onInsert={onInsert ? () => onInsert(results) : undefined}
@@ -380,9 +385,10 @@ const ReportDisplay: React.FC<ReportDisplayProps> = memo(({
                 ...(onInsert ? ['insert' as const] : []),
                 ...(onTrain ? ['train' as const] : [])
               ]}
+              showKeyboardHints
             />
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="p-4 space-y-4">
           {displaySections.length > 0 ? (

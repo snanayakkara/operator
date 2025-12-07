@@ -36,6 +36,8 @@ const normalizeSubpoints = (subpoints: IssueSubpoint[] = []): IssueSubpoint[] =>
 
 const clonePatient = (patient: RoundsPatient): RoundsPatient => ({
   ...patient,
+  admissionFlags: patient.admissionFlags ? { ...patient.admissionFlags } : undefined,
+  checklistSkips: patient.checklistSkips ? [...patient.checklistSkips] : [],
   intakeNotes: [...patient.intakeNotes],
   issues: patient.issues.map(issue => ({
     ...issue,
@@ -64,6 +66,7 @@ export const createEmptyPatient = (name: string, options?: {
   intakeNoteText?: string;
 }): RoundsPatient => {
   const timestamp = isoNow();
+  const patientId = generateRoundsId('patient');
   const intakeNote = options?.intakeNoteText
     ? [{
         id: generateRoundsId('intake'),
@@ -73,13 +76,14 @@ export const createEmptyPatient = (name: string, options?: {
     : [];
 
   return {
-    id: generateRoundsId('patient'),
+    id: patientId,
     name,
     mrn: options?.mrn || '',
     bed: options?.bed || '',
     oneLiner: options?.oneLiner || '',
     status: 'active',
     site: options?.site || 'Cabrini',
+    admissionId: patientId,
     createdAt: timestamp,
     lastUpdatedAt: timestamp,
     roundOrder: undefined,
@@ -91,6 +95,13 @@ export const createEmptyPatient = (name: string, options?: {
     investigations: [],
     tasks: [],
     wardEntries: [],
+    expectedDischargeDate: undefined,
+    admissionFlags: {
+      dvtProphylaxisConsidered: false,
+      followupArranged: false,
+      lastUpdatedAt: timestamp
+    },
+    checklistSkips: [],
     roundCompletedDate: undefined
   };
 };
@@ -167,7 +178,7 @@ const applyIssueUpdates = (issues: Issue[], updates: IssueUpdate[]): Issue[] => 
     const update = updates.find(u => u.issueId === issue.id);
     if (!update) return issue;
 
-  const mergedSubpoints = update.newSubpoints?.length
+    const mergedSubpoints = update.newSubpoints?.length
       ? [...(issue.subpoints || []), ...normalizeSubpoints(update.newSubpoints)]
       : issue.subpoints;
 
@@ -256,6 +267,37 @@ export const applyWardUpdateDiff = (
       task.completedAt = task.completedAt || now;
     }
   });
+
+  // Expected discharge date updates
+  if (diff.eddUpdate) {
+    if (diff.eddUpdate.newDate !== undefined) {
+      next.expectedDischargeDate = diff.eddUpdate.newDate || undefined;
+    }
+  }
+
+  // Admission flags (once-per-admission items)
+  if (diff.admissionFlags) {
+    next.admissionFlags = {
+      ...(next.admissionFlags || {}),
+      ...diff.admissionFlags,
+      lastUpdatedAt: now
+    };
+  }
+
+  // Checklist skips for this admission
+  if (diff.checklistSkips?.length) {
+    const existing = next.checklistSkips || [];
+    const merged = new Map<string, { condition?: string; itemId: string; reason?: string }>();
+    existing.forEach(skip => {
+      const key = `${skip.condition || 'base'}::${skip.itemId}`;
+      merged.set(key, skip);
+    });
+    diff.checklistSkips.forEach(skip => {
+      const key = `${skip.condition || 'base'}::${skip.itemId}`;
+      merged.set(key, skip);
+    });
+    next.checklistSkips = Array.from(merged.values());
+  }
 
   next.lastUpdatedAt = now;
 

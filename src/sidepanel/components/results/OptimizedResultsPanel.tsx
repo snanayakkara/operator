@@ -46,6 +46,7 @@ import { UnifiedPipelineProgress } from '../UnifiedPipelineProgress';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
 import { useValidationCheckpoint } from '@/hooks/useValidationCheckpoint';
 import { getValidationConfig } from '@/config/validationFieldConfig';
+import { useResultsKeyboardShortcuts } from '@/hooks/useResultsKeyboardShortcuts';
 
 // Use centralized validation configurations
 const { fieldConfig: ANGIO_VALIDATION_FIELD_CONFIG, copy: ANGIO_VALIDATION_COPY } = getValidationConfig('angio-pci');
@@ -245,6 +246,14 @@ interface OptimizedResultsPanelProps {
   };
   currentAgent?: AgentType | null;
   onAgentReprocess?: (agentType: AgentType) => void;
+  /**
+   * Retry transcription from stored audio when Whisper server was unavailable.
+   */
+  onRetryTranscription?: () => void;
+  /**
+   * Whether transcription retry is currently in progress
+   */
+  isRetryingTranscription?: boolean;
   // Missing info interactive completion
   missingInfo?: any | null;
   onReprocessWithAnswers?: (answers: Record<string, string>) => void;
@@ -347,6 +356,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   transcriptionSaveStatus,
   currentAgent,
   onAgentReprocess,
+  onRetryTranscription,
+  isRetryingTranscription = false,
   missingInfo,
   onReprocessWithAnswers,
   onDismissMissingInfo,
@@ -583,6 +594,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     setSimpleCardButtonStates(prev => ({ ...prev, inserted: true }));
     setTimeout(() => setSimpleCardButtonStates(prev => ({ ...prev, inserted: false })), 2000);
   }, [onInsertToEMR]);
+
+  // Keyboard shortcuts for simple card agents (Investigation Summary, Background, Medication)
+  const isSimpleCardAgent = agentType === 'investigation-summary' || agentType === 'background' || agentType === 'medication';
+  const resultsAvailable = !!results && !streaming && !isProcessing;
+  
+  useResultsKeyboardShortcuts({
+    onCopy: isSimpleCardAgent && resultsAvailable ? () => handleSimpleCardCopy(results) : undefined,
+    onInsert: isSimpleCardAgent && resultsAvailable ? () => handleSimpleCardInsert(results) : undefined,
+    enabled: isSimpleCardAgent && resultsAvailable
+  });
 
   const revisionTags = useMemo(() => {
     if (!revisionPanel) {
@@ -950,6 +971,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 onTranscriptionEdit={onTranscriptionEdit}
                 transcriptionSaveStatus={transcriptionSaveStatus}
                 onAgentReprocess={onAgentReprocess}
+                onRetryTranscription={onRetryTranscription}
+                isRetryingTranscription={isRetryingTranscription}
                 currentAgent={currentAgent}
                 isProcessing={isProcessing}
                 audioBlob={audioBlob}
@@ -992,6 +1015,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   onTranscriptionEdit={onTranscriptionEdit}
                   transcriptionSaveStatus={transcriptionSaveStatus}
                   onAgentReprocess={onAgentReprocess}
+                  onRetryTranscription={onRetryTranscription}
+                  isRetryingTranscription={isRetryingTranscription}
                   currentAgent={currentAgent}
                   isProcessing={true}
                   audioBlob={audioBlob}
@@ -1242,6 +1267,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 onTranscriptionEdit={onTranscriptionEdit}
                 transcriptionSaveStatus={transcriptionSaveStatus}
                 onAgentReprocess={onAgentReprocess}
+                onRetryTranscription={onRetryTranscription}
+                isRetryingTranscription={isRetryingTranscription}
                 currentAgent={currentAgent}
                 isProcessing={isProcessing}
                 audioBlob={audioBlob}
@@ -1301,6 +1328,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                 onTranscriptionEdit={onTranscriptionEdit}
                 transcriptionSaveStatus={transcriptionSaveStatus}
                 onAgentReprocess={onAgentReprocess}
+                onRetryTranscription={onRetryTranscription}
+                isRetryingTranscription={isRetryingTranscription}
                 currentAgent={currentAgent}
                 isProcessing={isProcessing}
                 audioBlob={audioBlob}
@@ -1437,6 +1466,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   onTranscriptionEdit={onTranscriptionEdit}
                   transcriptionSaveStatus={transcriptionSaveStatus}
                   onAgentReprocess={onAgentReprocess}
+                  onRetryTranscription={onRetryTranscription}
+                  isRetryingTranscription={isRetryingTranscription}
                   currentAgent={currentAgent}
                   isProcessing={isProcessing}
                   audioBlob={audioBlob}
@@ -1527,9 +1558,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
         )}
       </AnimatePresence>
 
-      {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, or TAVI workup, and NOT while processing */}
+      {/* Actions - Only for regular reports, not AI Review, Quick Letter dual cards, TAVI workup, RHC, or simple cards, and NOT while processing */}
       <AnimatePresence>
-        {!isProcessing && !isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && !isRightHeartCath && (
+        {!isProcessing && !isAIReview && !isQuickLetterDualCards && !isTAVIWorkup && !isRightHeartCath && 
+         agentType !== 'investigation-summary' && agentType !== 'background' && agentType !== 'medication' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

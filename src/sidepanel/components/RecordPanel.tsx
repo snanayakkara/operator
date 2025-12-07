@@ -426,7 +426,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
   };
 
   const getWorkflowButtonClasses = (workflow: WorkflowConfig, isActive: boolean) => {
-    const baseClasses = "relative w-full aspect-square min-h-[96px] min-w-[96px] flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all duration-200 hover:shadow-md";
+    const baseClasses = "relative w-full aspect-square min-h-[96px] min-w-[96px] flex flex-col items-center justify-center p-3 rounded-card border-2 transition-all duration-200 hover:shadow-card-hover";
 
     if (disabled || !whisperServerRunning) {
       return `${baseClasses} bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed`;
@@ -678,7 +678,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
           onKeyDown={handleDialogKeyDown}
           onMouseEnter={handleCardMouseEnter}
           onMouseLeave={handleCardMouseLeave}
-          className="record-card glass rounded-xl p-3 w-[340px] bg-white border border-gray-200 shadow-xl pointer-events-auto"
+          className="record-card glass rounded-card p-3 w-[340px] bg-white border border-gray-200 shadow-modal pointer-events-auto"
           style={{
             position: 'fixed',
             top: position.top,

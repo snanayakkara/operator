@@ -58,7 +58,7 @@ export const PasteReviewPanel: React.FC<PasteReviewPanelProps> = ({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className={`bg-white rounded-2xl shadow-xl max-w-4xl w-full border-2 ${
+        className={`bg-white rounded-modal shadow-modal max-w-4xl w-full border-2 ${
           isHighRisk ? 'border-red-300' : 'border-amber-200'
         } max-h-[90vh] overflow-hidden flex flex-col`}
         onClick={(e) => e.stopPropagation()}

@@ -133,7 +133,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl max-h-[90vh] overflow-hidden w-full">
+      <div className="bg-white rounded-modal shadow-modal max-w-6xl max-h-[90vh] overflow-hidden w-full">
         {/* Header */}
         <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
           <div className="flex items-center justify-between">

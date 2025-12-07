@@ -23,7 +23,8 @@ const emptyWardDiff: WardUpdateDiff = {
   tasksAdded: [],
   tasksUpdated: [],
   tasksCompletedById: [],
-  tasksCompletedByText: []
+  tasksCompletedByText: [],
+  checklistSkips: []
 };
 
 const extractJson = (raw: string): string => {

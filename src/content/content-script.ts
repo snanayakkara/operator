@@ -2,7 +2,7 @@
 // Handles EMR interaction and field manipulation
 /* global HTMLVideoElement, HTMLSelectElement */
 
-const CONTENT_SCRIPT_VERSION = '2.6.1-session-name-fix';
+const CONTENT_SCRIPT_VERSION = '2.7.0-xestro-dark-mode';
 console.log('🏥 Operator Chrome Extension Content Script Loading...', window.location.href);
 console.log('📝 Content Script Version:', CONTENT_SCRIPT_VERSION);
 console.log('⏰ Load Time:', new Date().toISOString());
@@ -36,6 +36,10 @@ class ContentScriptHandler {
   private emrSystem: EMRSystem | null = null;
   private currentTabId: number | null = null;
   private blockGlobalFileDrop = false;
+  private pathologyOverlayObserver: MutationObserver | null = null;
+  private saveAndSendRunning = false;
+  private darkModeStyleElement: HTMLStyleElement | null = null;
+  private darkModeEnabled = false;
 
   constructor() {
     this.initialize();
@@ -51,6 +55,8 @@ class ContentScriptHandler {
       if (this.emrSystem) {
         console.log(`🏥 Operator Chrome Extension: Detected ${this.emrSystem.name}`);
         this.setupEventListeners();
+        this.setupPathologyOverlayWatcher();
+        this.applyPersistedDarkModePreference();
         this.isInitialized = true;
         console.log('🏥 Content script initialized successfully');
       } else {
@@ -734,6 +740,17 @@ class ContentScriptHandler {
           sendResponse({ success: true });
           break;
 
+        case 'message-patient':
+          if (!data?.message || typeof data.message !== 'string') {
+            throw new Error('Message text is required for patient messaging');
+          }
+          await this.openMessagingWithPrefill(
+            typeof data.subject === 'string' ? data.subject : null,
+            data.message
+          );
+          sendResponse({ success: true });
+          break;
+
         case 'extract-patient-data': {
           const patientData = this.extractPatientData();
           if (patientData) {
@@ -763,6 +780,16 @@ class ContentScriptHandler {
           await this.handleProfilePhoto(data);
           sendResponse({ success: true });
           break;
+
+        case 'xestro-dark-mode': {
+          const enabled = this.toggleXestroDarkMode(typeof data?.force === 'boolean' ? data.force : undefined);
+          if (enabled === null) {
+            sendResponse({ success: false, error: 'Dark mode is only available on my.xestro.com' });
+          } else {
+            sendResponse({ success: true, enabled });
+          }
+          break;
+        }
 
         case 'save':
           await this.saveNote();
@@ -876,6 +903,73 @@ class ContentScriptHandler {
     } catch (error) {
       console.error('Content script message handling error:', error);
       sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  }
+
+  private ensureDarkModeStyles() {
+    if (this.darkModeStyleElement) return;
+
+    const style = document.createElement('style');
+    style.id = '__operator_xestro_dark_mode__';
+    style.textContent = `
+      html.operator-xestro-dark-mode {
+        filter: invert(0.92) hue-rotate(180deg) saturate(0.9);
+        color-scheme: dark;
+        transition: filter 0.2s ease;
+      }
+
+      html.operator-xestro-dark-mode img,
+      html.operator-xestro-dark-mode video,
+      html.operator-xestro-dark-mode picture,
+      html.operator-xestro-dark-mode canvas,
+      html.operator-xestro-dark-mode iframe {
+        filter: invert(1) hue-rotate(180deg) saturate(1);
+      }
+
+      html.operator-xestro-dark-mode ::selection {
+        background: rgba(125, 211, 252, 0.35);
+      }
+    `;
+
+    document.head.appendChild(style);
+    this.darkModeStyleElement = style;
+  }
+
+  private toggleXestroDarkMode(forceState?: boolean): boolean | null {
+    if (!this.emrSystem || this.emrSystem.name !== 'Xestro') {
+      console.warn('🌙 Dark mode toggle ignored: Xestro EMR not detected');
+      return null;
+    }
+
+    this.ensureDarkModeStyles();
+
+    const currentlyEnabled = this.darkModeEnabled || document.documentElement.classList.contains('operator-xestro-dark-mode');
+    const nextState = typeof forceState === 'boolean' ? forceState : !currentlyEnabled;
+
+    document.documentElement.classList.toggle('operator-xestro-dark-mode', nextState);
+    this.darkModeEnabled = nextState;
+
+    try {
+      localStorage.setItem('operator-xestro-dark-mode', nextState ? 'true' : 'false');
+    } catch (error) {
+      console.debug('Unable to persist dark mode preference:', error);
+    }
+
+    console.log(`🌙 Xestro dark mode ${nextState ? 'enabled' : 'disabled'}`);
+    return nextState;
+  }
+
+  private applyPersistedDarkModePreference() {
+    if (!this.emrSystem || this.emrSystem.name !== 'Xestro') return;
+
+    try {
+      const stored = localStorage.getItem('operator-xestro-dark-mode');
+      if (stored === 'true') {
+        console.log('🌙 Restoring Xestro dark mode from previous session');
+        this.toggleXestroDarkMode(true);
+      }
+    } catch (error) {
+      console.debug('Skipping dark mode restore:', error);
     }
   }
 
@@ -1485,6 +1579,239 @@ class ContentScriptHandler {
     await this.openCustomField('Social & Family History');
   }
 
+  private async openPatientConversation() {
+    const messageButton = await this.findElement('.MessageButton', 5000);
+    if (!messageButton) {
+      throw new Error('Message button not found');
+    }
+
+    console.log('💬 Opening messaging panel');
+    messageButton.click();
+    await this.wait(800);
+
+    const patientConversationButton = await this.findElement('.CreateConversationButton[data-conversationtype="Patient"]', 5000);
+    if (!patientConversationButton) {
+      throw new Error('Patient conversation button not found');
+    }
+
+    console.log('👤 Selecting patient conversation');
+    patientConversationButton.click();
+    await this.wait(500);
+  }
+
+  private setupPathologyOverlayWatcher() {
+    if (this.emrSystem?.name !== 'Xestro') return;
+    if (this.pathologyOverlayObserver) return;
+
+    // Try immediately in case the overlay is already open
+    this.tryEnhancePathologyOverlay(document.body);
+
+    this.pathologyOverlayObserver = new MutationObserver(mutations => {
+      for (const mutation of mutations) {
+        if (mutation.type !== 'childList') continue;
+
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (this.tryEnhancePathologyOverlay(node)) {
+            return;
+          }
+        }
+      }
+    });
+
+    this.pathologyOverlayObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  private tryEnhancePathologyOverlay(root: Element | Document | null): boolean {
+    if (!root) return false;
+
+    const overlay = (root instanceof HTMLElement && root.id === 'Clinical_Investigations_Edit'
+      ? root
+      : root.querySelector?.('#Clinical_Investigations_Edit')) as HTMLElement | null;
+
+    if (overlay && !overlay.hasAttribute('data-operator-save-send')) {
+      console.log('🩸 Pathology overlay detected - injecting Save and Send button');
+      this.injectSaveAndSendButton(overlay);
+      return true;
+    }
+
+    return false;
+  }
+
+  private injectSaveAndSendButton(overlay: HTMLElement) {
+    const footerInner = overlay.querySelector('.footer .inner');
+    if (!footerInner) {
+      console.warn('⚠️ Pathology overlay footer not found - cannot inject Save and Send button');
+      return;
+    }
+
+    const saveAndSendButton = document.createElement('button');
+    saveAndSendButton.type = 'button';
+    saveAndSendButton.className = 'btn btn-default full operator-save-and-send';
+    saveAndSendButton.textContent = 'Save and Send';
+    saveAndSendButton.style.display = 'inline-block';
+
+    // Position after Save (Button2) and before Print if possible
+    const printButton = footerInner.querySelector('.Button1');
+    if (printButton && printButton.parentElement === footerInner) {
+      footerInner.insertBefore(saveAndSendButton, printButton);
+    } else {
+      footerInner.appendChild(saveAndSendButton);
+    }
+
+    overlay.setAttribute('data-operator-save-send', 'true');
+
+    saveAndSendButton.addEventListener('click', () => {
+      this.handleSaveAndSendFlow(overlay, saveAndSendButton);
+    });
+  }
+
+  private async handleSaveAndSendFlow(overlay: HTMLElement, triggerButton: HTMLButtonElement) {
+    if (this.saveAndSendRunning) {
+      console.log('ℹ️ Save and Send already running, ignoring duplicate click');
+      return;
+    }
+
+    this.saveAndSendRunning = true;
+    const originalText = triggerButton.textContent || 'Save and Send';
+    triggerButton.disabled = true;
+    triggerButton.textContent = 'Working...';
+
+    try {
+      const saveButton = overlay.querySelector<HTMLButtonElement>('.Button2');
+      if (!saveButton) {
+        throw new Error('Save button not found in pathology overlay');
+      }
+
+      console.log('💾 Clicking Save before messaging flow');
+      saveButton.click();
+      await this.wait(800);
+
+      await this.openMessagingAndAttachLatestRequest();
+      this.showSuccessMessage('Saved and prepared patient message with latest pathology slip.');
+    } catch (error) {
+      console.error('❌ Save and Send workflow failed:', error);
+      this.showErrorMessage('Save and Send failed. Please complete manually.');
+    } finally {
+      triggerButton.disabled = false;
+      triggerButton.textContent = originalText;
+      this.saveAndSendRunning = false;
+    }
+  }
+
+  private async openMessagingAndAttachLatestRequest() {
+    await this.openPatientConversation();
+
+    const attachDropdown = await this.findElement('#dropdownMenuExisting', 5000);
+    if (!attachDropdown) {
+      throw new Error('Attach dropdown not found');
+    }
+
+    console.log('📎 Opening attach dropdown');
+    attachDropdown.click();
+    await this.wait(300);
+
+    const investigationMenuItem = await this.findElement('.AttachFiles[data-type="REQUEST"]', 5000);
+    if (!investigationMenuItem) {
+      throw new Error('Investigation request attach option not found');
+    }
+
+    console.log('🧪 Choosing Investigation Requests attach option');
+    investigationMenuItem.click();
+    await this.wait(500);
+
+    const investigationCheckbox = await this.findElement('input[name="PrimaryKey[]"]', 5000) as HTMLInputElement | null;
+    if (!investigationCheckbox) {
+      throw new Error('No investigation request available to attach');
+    }
+
+    if (!investigationCheckbox.checked) {
+      console.log('✅ Selecting newest investigation request');
+      investigationCheckbox.click();
+    }
+
+    const attachButton = this.findNearestAttachButton(investigationCheckbox);
+    if (attachButton) {
+      console.log('📎 Confirming attach action');
+      attachButton.click();
+    } else {
+      console.warn('⚠️ Attach button not found after selecting investigation');
+    }
+
+    await this.wait(400);
+    await this.populateConversationFields();
+  }
+
+  private findNearestAttachButton(startElement: HTMLElement): HTMLButtonElement | null {
+    const candidateSelectors = [
+      'button.AttachSelected',
+      'button.AttachFilesSubmit',
+      'button.attach-button',
+      'button.btn-primary',
+      'button.btn-success'
+    ];
+
+    let container: HTMLElement | null = startElement.closest('.modal, .dialog, form, .dropdown-menu') as HTMLElement | null;
+    const visited = new Set<HTMLElement>();
+
+    while (container && !visited.has(container)) {
+      visited.add(container);
+
+      for (const selector of candidateSelectors) {
+        const btn = container.querySelector(selector) as HTMLButtonElement;
+        if (btn && btn.textContent?.toLowerCase().includes('attach')) {
+          return btn;
+        }
+      }
+
+      const textMatch = Array.from(container.querySelectorAll('button')) as HTMLButtonElement[];
+      const attachByText = textMatch.find(btn => btn.textContent?.toLowerCase().includes('attach'));
+      if (attachByText) {
+        return attachByText;
+      }
+
+      container = container.parentElement;
+    }
+
+    const globalAttach = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
+    return globalAttach.find(btn => btn.textContent?.toLowerCase().includes('attach') && btn.offsetParent !== null) || null;
+  }
+
+  private async populateConversationFields(subjectText?: string | null, messageText?: string | null, useDefaults = true) {
+    const subjectToUse = subjectText ?? (useDefaults ? 'Blood Test Form' : null);
+    const messageToUse = messageText ?? (useDefaults ? 'Your blood test slip is attached here.' : null);
+
+    const subjectInput = await this.findElement('#Subject', 5000) as HTMLInputElement | null;
+    if (subjectInput && subjectToUse !== null) {
+      subjectInput.focus();
+      subjectInput.value = subjectToUse;
+      this.triggerAllEvents(subjectInput, subjectToUse);
+    } else if (!subjectInput) {
+      console.warn('⚠️ Subject field not found in conversation');
+    }
+
+    let messageTextarea = await this.findElement('#Message', 5000) as HTMLTextAreaElement | null;
+    if (!messageTextarea) {
+      messageTextarea = await this.findElement('textarea.conversation-message', 3000) as HTMLTextAreaElement | null;
+    }
+
+    if (messageTextarea && messageToUse !== null) {
+      messageTextarea.focus();
+      messageTextarea.value = messageToUse;
+      this.triggerAllEvents(messageTextarea, messageToUse);
+    } else if (!messageTextarea) {
+      console.warn('⚠️ Message field not found in conversation');
+    }
+  }
+
+  private async openMessagingWithPrefill(subjectText: string | null, messageText: string) {
+    await this.openPatientConversation();
+    await this.populateConversationFields(subjectText, messageText, false);
+  }
+
   private async clickPathologyButton() {
     console.log('🩸 Clicking Order Pathology icon in Xestro');
     
@@ -1525,7 +1852,7 @@ class ContentScriptHandler {
   }
 
   private async setupLabField() {
-    console.log('🩸 Setting up Lab field - typing "Generic Pathology Request" and pressing Enter');
+    console.log('🩸 Setting up Lab field - typing "Generic Pathology Request" and selecting from dropdown');
     
     // Target the specific #Lab field for setup (not the tagit field)
     // XPath: /html/body/div[2]/div[7]/div/div[3]/div/div[1]/form/div/div[1]/div[2]/div/input[1]
@@ -1566,27 +1893,89 @@ class ContentScriptHandler {
       // Clear any existing value
       labElement.value = '';
       
-      // Type "Generic Pathology Request"
+      // Type "Generic Pathology Request" to trigger autocomplete
       labElement.value = 'Generic Pathology Request';
       
-      // Trigger input events to ensure proper form handling
+      // Trigger input events to show autocomplete dropdown
       labElement.dispatchEvent(new Event('input', { bubbles: true }));
       labElement.dispatchEvent(new Event('change', { bubbles: true }));
       
-      // Press Enter to trigger autocomplete selection
-      labElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      labElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
-      labElement.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true }));
+      // Also trigger keyup to ensure autocomplete activates
+      labElement.dispatchEvent(new KeyboardEvent('keyup', { key: 't', bubbles: true }));
       
-      // Small delay then blur to ensure selection is processed
-      setTimeout(() => {
+      console.log('⏳ Waiting for autocomplete dropdown to appear...');
+      
+      // Wait for autocomplete dropdown to appear and click the menu item
+      const menuItemClicked = await this.waitForAndClickAutocompleteItem('Generic Pathology Request');
+      
+      if (menuItemClicked) {
+        console.log('✅ Lab field setup completed: selected "Generic Pathology Request" from dropdown');
+      } else {
+        // Fallback: try pressing Enter if dropdown didn't appear
+        console.log('⚠️ Dropdown not found, trying Enter key fallback...');
+        labElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        labElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
+        await this.wait(100);
         labElement.blur();
-      }, 100);
-      
-      console.log('✅ Lab field setup completed: typed "Generic Pathology Request" and pressed Enter');
+        console.log('✅ Lab field setup completed with Enter key fallback');
+      }
     } else {
       console.warn('⚠️ Lab field (#Lab) not found - user may need to navigate manually');
     }
+  }
+
+  private async waitForAndClickAutocompleteItem(itemText: string, maxWaitMs: number = 3000): Promise<boolean> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < maxWaitMs) {
+      // Look for visible ui-autocomplete dropdown menus
+      const autocompleteMenus = document.querySelectorAll('ul.ui-autocomplete.ui-menu');
+      
+      for (const menu of autocompleteMenus) {
+        const menuEl = menu as HTMLElement;
+        
+        // Check if menu is visible (display: block and has dimensions)
+        if (menuEl.style.display === 'none' || menuEl.offsetWidth === 0) {
+          continue;
+        }
+        
+        console.log('🔍 Found visible autocomplete menu, searching for item...');
+        
+        // Look for menu items containing the target text
+        const menuItems = menuEl.querySelectorAll('li.ui-menu-item');
+        
+        for (const item of menuItems) {
+          const itemEl = item as HTMLElement;
+          const itemTextContent = itemEl.textContent || '';
+          
+          // Check if this item contains "Generic Pathology Request" but NOT "(start typing to search)"
+          if (itemTextContent.includes(itemText) && !itemTextContent.includes('start typing to search')) {
+            console.log('✅ Found matching autocomplete item:', itemTextContent.substring(0, 50));
+            
+            // Find the clickable anchor element inside the menu item
+            const anchor = itemEl.querySelector('a');
+            if (anchor) {
+              console.log('🖱️ Clicking autocomplete menu item...');
+              anchor.click();
+              await this.wait(200);
+              return true;
+            } else {
+              // Click the li element directly if no anchor
+              console.log('🖱️ Clicking menu item directly (no anchor)...');
+              itemEl.click();
+              await this.wait(200);
+              return true;
+            }
+          }
+        }
+      }
+      
+      // Wait a bit before checking again
+      await this.wait(100);
+    }
+    
+    console.warn('⚠️ Autocomplete dropdown with matching item not found within timeout');
+    return false;
   }
 
   private async insertIntoLabField(content: string) {
@@ -2792,6 +3181,43 @@ class ContentScriptHandler {
 
           // Trigger comprehensive events
           this.triggerAllEvents(itemCodesInput, preset.itemCode);
+
+          // Trigger input event for framework reactivity
+          itemCodesInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+          // Simulate Enter key to activate autocomplete (opens dropdown)
+          setTimeout(() => {
+            const enterEvent = new KeyboardEvent('keydown', {
+              key: 'Enter',
+              code: 'Enter',
+              keyCode: 13,
+              which: 13,
+              bubbles: true,
+              cancelable: true
+            });
+            itemCodesInput.dispatchEvent(enterEvent);
+            console.log('🎯 Triggered Enter key to open autocomplete dropdown');
+
+            // Wait for dropdown to open, then click the matching menu item
+            setTimeout(() => {
+              // Find the menu item with matching item-code class
+              const menuItemSelector = `.item-code-${preset.itemCode}`;
+              const menuItemDiv = document.querySelector(menuItemSelector);
+
+              if (menuItemDiv) {
+                // Click the parent <li> element
+                const menuItem = menuItemDiv.closest('li.ui-menu-item');
+                if (menuItem) {
+                  (menuItem as HTMLElement).click();
+                  console.log(`🎯 Clicked menu item with item code ${preset.itemCode}`);
+                } else {
+                  console.warn(`⚠️ Found item-code div but couldn't find parent li.ui-menu-item`);
+                }
+              } else {
+                console.warn(`⚠️ Could not find menu item with selector: ${menuItemSelector}`);
+              }
+            }, 100); // Wait 100ms for dropdown to open before clicking
+          }, 50); // 50ms ensures value propagates to DOM
 
           // Wait briefly for code to register, then click Appointment Notes to accept
           await this.wait(200);

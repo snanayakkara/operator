@@ -155,7 +155,7 @@ const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
       ${endIcon ? '!pr-10' : ''}
       border rounded-lg
       transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-violet-100
+      focus:outline-none focus:ring-2 focus:ring-violet-500/20
       placeholder-gray-400
       ${className}
     `.trim();
@@ -284,7 +284,7 @@ export const FormTextarea = forwardRef<HTMLTextAreaElement, FormTextareaProps>(
       ${disabledClasses}
       border rounded-lg
       transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-violet-100
+      focus:outline-none focus:ring-2 focus:ring-violet-500/20
       placeholder-gray-400
       resize-y
       ${className}
@@ -408,7 +408,7 @@ export const FormSelect = forwardRef<HTMLSelectElement, FormSelectProps>(
       ${disabledClasses}
       border rounded-lg
       transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-violet-100
+      focus:outline-none focus:ring-2 focus:ring-violet-500/20
       ${className}
     `.trim();
 

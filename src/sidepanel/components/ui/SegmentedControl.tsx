@@ -15,6 +15,35 @@ export interface SegmentOption {
   disabled?: boolean;
 }
 
+type AccentColor = 'blue' | 'purple' | 'emerald' | 'amber' | 'gray' | 'violet';
+
+const accentColors: Record<AccentColor, { selected: string; unselected: string }> = {
+  blue: {
+    selected: 'bg-blue-50 text-blue-900 border-blue-200',
+    unselected: 'bg-white border-blue-100 text-gray-700 hover:border-blue-200 hover:bg-blue-50/30',
+  },
+  purple: {
+    selected: 'bg-purple-50 text-purple-900 border-purple-200',
+    unselected: 'bg-white border-purple-100 text-gray-700 hover:border-purple-200 hover:bg-purple-50/30',
+  },
+  emerald: {
+    selected: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+    unselected: 'bg-white border-emerald-100 text-gray-700 hover:border-emerald-200 hover:bg-emerald-50/30',
+  },
+  amber: {
+    selected: 'bg-amber-50 text-amber-900 border-amber-200',
+    unselected: 'bg-white border-amber-100 text-gray-700 hover:border-amber-200 hover:bg-amber-50/30',
+  },
+  gray: {
+    selected: 'bg-gray-900 text-white border-gray-900',
+    unselected: 'bg-white border-gray-200 text-gray-700 hover:border-gray-400 hover:bg-gray-50',
+  },
+  violet: {
+    selected: 'bg-violet-50 text-violet-900 border-violet-200',
+    unselected: 'bg-white border-violet-100 text-gray-700 hover:border-violet-200 hover:bg-violet-50/30',
+  },
+};
+
 interface SegmentedControlProps {
   options: SegmentOption[];
   value?: string;
@@ -27,6 +56,8 @@ interface SegmentedControlProps {
   multiSelect?: boolean;
   /** Stretch control to fill available horizontal space */
   fullWidth?: boolean;
+  /** Accent color for borders and backgrounds */
+  accentColor?: AccentColor;
 }
 
 export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
@@ -37,8 +68,10 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
   className = '',
   successId,
   multiSelect = false,
-  fullWidth = false
+  fullWidth = false,
+  accentColor = 'gray'
 }) => {
+  const colors = accentColors[accentColor];
   const sizeClasses = {
     sm: 'h-7 text-xs gap-1 px-2',
     md: 'h-8 text-sm gap-1.5 px-3'
@@ -73,13 +106,13 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = memo(({
               font-medium whitespace-nowrap
               ${sizeClasses[size]}
               ${isSelected && !multiSelect
-                ? 'bg-white/80 text-gray-900 shadow-sm'
+                ? colors.selected
                 : isSuccess
-                  ? 'bg-emerald-100/80 text-emerald-700'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 hover:shadow-sm active:scale-95'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100/60'
               }
               ${option.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-1
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-1
             `}
           >
             {isSuccess ? (
@@ -103,6 +136,12 @@ SegmentedControl.displayName = 'SegmentedControl';
  * Pre-configured segmented control for common action patterns.
  * Used in card headers for Copy/Insert/Edit actions.
  */
+/** Keyboard shortcut hints for action buttons */
+const KEYBOARD_HINTS: Record<string, string> = {
+  copy: '⇧C',
+  insert: '⇧I'
+};
+
 interface ActionSegmentedControlProps {
   onCopy?: () => void;
   onInsert?: () => void;
@@ -117,6 +156,8 @@ interface ActionSegmentedControlProps {
   className?: string;
   /** Which actions to show */
   actions?: ('copy' | 'insert' | 'edit' | 'train' | 'download' | 'reprocess' | 'patient' | 'skip')[];
+  /** Show keyboard shortcut hints next to labels */
+  showKeyboardHints?: boolean;
 }
 
 export const ActionSegmentedControl: React.FC<ActionSegmentedControlProps> = memo(({
@@ -131,16 +172,25 @@ export const ActionSegmentedControl: React.FC<ActionSegmentedControlProps> = mem
   copiedRecently = false,
   insertedRecently = false,
   className = '',
-  actions = ['copy', 'insert']
+  actions = ['copy', 'insert'],
+  showKeyboardHints = false
 }) => {
+  // Helper to add keyboard hint to label
+  const withHint = (id: string, label: string): string => {
+    if (showKeyboardHints && KEYBOARD_HINTS[id]) {
+      return `${label} ${KEYBOARD_HINTS[id]}`;
+    }
+    return label;
+  };
+
   // Build options based on requested actions
   const options: SegmentOption[] = [];
 
   if (actions.includes('copy') && onCopy) {
-    options.push({ id: 'copy', label: 'Copy' });
+    options.push({ id: 'copy', label: withHint('copy', 'Copy') });
   }
   if (actions.includes('insert') && onInsert) {
-    options.push({ id: 'insert', label: 'Insert' });
+    options.push({ id: 'insert', label: withHint('insert', 'Insert') });
   }
   if (actions.includes('edit') && onEdit) {
     options.push({ id: 'edit', label: 'Edit' });

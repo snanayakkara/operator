@@ -213,7 +213,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
 
       {handoverOpen && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-xl w-full max-w-2xl p-4 space-y-3">
+          <div className="bg-white border border-gray-200 rounded-modal shadow-modal w-full max-w-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-gray-900">Handover</h3>
               <Button variant="ghost" size="sm" onClick={() => setHandoverOpen(false)}>Close</Button>
@@ -277,7 +277,7 @@ export const RoundsView: React.FC<RoundsViewProps> = ({ onClose }) => {
 
       {letterOpen && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white border border-gray-200 rounded-xl shadow-xl w-full max-w-2xl p-4 space-y-3">
+          <div className="bg-white border border-gray-200 rounded-modal shadow-modal w-full max-w-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-gray-900">GP discharge letter</h3>
               <Button variant="ghost" size="sm" onClick={() => setLetterOpen(false)}>Close</Button>

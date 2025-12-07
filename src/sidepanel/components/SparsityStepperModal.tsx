@@ -149,7 +149,7 @@ export const SparsityStepperModal: React.FC<SparsityStepperModalProps> = ({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="bg-white rounded-2xl shadow-xl max-w-xl w-full border-2 border-amber-200"
+          className="bg-white rounded-modal shadow-modal max-w-xl w-full border-2 border-amber-200"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-labelledby="stepper-title"

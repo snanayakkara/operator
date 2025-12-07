@@ -64,7 +64,7 @@ export const ModelLoadingErrorDialog: React.FC<ModelLoadingErrorDialogProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl m-4">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-modal shadow-modal m-4">
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-rose-50 to-orange-50 border-b-2 border-rose-200 px-6 py-4">
           <div className="flex items-start justify-between">

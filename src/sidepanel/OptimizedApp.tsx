@@ -16,7 +16,6 @@ import { TranscriptionSection } from './components/results/TranscriptionSection'
 import { QuickActionsGrouped } from './components/QuickActionsGrouped';
 import { AIReviewSection } from './components/AIReviewSection';
 import { SidebarHeader } from './components/SidebarHeader';
-import type { PipelineStageId } from './components/ui/PipelineStrip';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
@@ -223,6 +222,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const rounds = useRounds();
   const [roundsOpen, setRoundsOpen] = useState(false);
   const [globalQuickAddOpen, setGlobalQuickAddOpen] = useState(false);
+  const [extensionDarkMode, setExtensionDarkMode] = useState(false);
   const overlayState = {
     patientEducation: selectors.isOverlayActive('patient-education'),
     patientSelection: selectors.isOverlayActive('patient-selection'),
@@ -285,6 +285,42 @@ const OptimizedAppContent: React.FC = memo(() => {
   const [pendingMobileJob, setPendingMobileJob] = useState<MobileJobSummary | null>(null);
   const [pendingMobileAgent, setPendingMobileAgent] = useState<AgentType>('quick-letter');
   const [deletingMobileJobId, setDeletingMobileJobId] = useState<string | null>(null);
+
+  const applyExtensionDarkMode = useCallback((enabled: boolean) => {
+    const root = document.documentElement;
+    const body = document.body;
+
+    root.classList.toggle('dark', enabled);
+    body?.classList.toggle('dark', enabled);
+    root.classList.toggle('operator-extension-dark', enabled);
+    body?.classList.toggle('operator-extension-dark', enabled);
+
+    setExtensionDarkMode(enabled);
+
+    try {
+      localStorage.setItem('operator-extension-dark-mode', enabled ? 'true' : 'false');
+    } catch (error) {
+      console.debug('Dark mode preference persistence failed:', error);
+    }
+  }, []);
+
+  const toggleExtensionDarkMode = useCallback(() => {
+    const currentlyDark = extensionDarkMode || document.documentElement.classList.contains('operator-extension-dark');
+    const nextState = !currentlyDark;
+    applyExtensionDarkMode(nextState);
+    return nextState;
+  }, [applyExtensionDarkMode, extensionDarkMode]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('operator-extension-dark-mode');
+      if (stored === 'true') {
+        applyExtensionDarkMode(true);
+      }
+    } catch (error) {
+      console.debug('Dark mode preference load failed:', error);
+    }
+  }, [applyExtensionDarkMode]);
 
   // Smart default selection: Auto-select recommended agent when modal opens
   useEffect(() => {
@@ -572,6 +608,9 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setUIMode('processing', { sessionId, origin: 'user' });
         actions.setProcessing(true);
         actions.setProcessingStatus('processing');
+        // Update transcription state so the processing display shows the correct text
+        actions.setTranscription(job.transcript_text);
+        actions.setCurrentAgent(agentType);
         processingActive = true;
         actions.setPipelineProgress({
           stage: 'ai-analysis',
@@ -1977,17 +2016,21 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, []);
 
   // Store failed audio recording for troubleshooting (non-blocking)
+  // Also persists audio to disk for retry when Whisper server is unavailable
   const storeFailedAudioRecording = useCallback((
     audioBlob: Blob, 
     agentType: AgentType, 
     errorMessage: string, 
     transcriptionAttempt?: string,
-    recordingTime?: number
+    recordingTime?: number,
+    sessionId?: string,
+    patientName?: string
   ) => {
     // Make failed recording storage non-blocking to prevent UI freeze
     const performStorage = () => {
+      const recordingId = sessionId || `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const failedRecording: FailedAudioRecording = {
-        id: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: recordingId,
         audioBlob,
         timestamp: Date.now(),
         agentType,
@@ -2011,6 +2054,23 @@ const OptimizedAppContent: React.FC = memo(() => {
           fileSize: audioBlob.size
         });
       }
+
+      // Also persist audio to disk for retry after page reload (when Whisper server is down)
+      // This runs asynchronously and doesn't block the UI
+      if (sessionId && (errorMessage.includes('server not running') || errorMessage.includes('service unavailable') || errorMessage.includes('timed out'))) {
+        optimizationService.savePendingAudio(sessionId, audioBlob, {
+          agentType,
+          patientName,
+          timestamp: new Date().toISOString(),
+          failureReason: errorMessage
+        }).then(result => {
+          if (result.success) {
+            console.log('💾 Persisted audio to disk for retry:', result.audioPath);
+          }
+        }).catch(err => {
+          console.warn('⚠️ Failed to persist audio to disk (will remain in memory only):', err);
+        });
+      }
     };
 
     // Use requestIdleCallback for non-blocking storage, fallback to setTimeout
@@ -2019,7 +2079,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     } else {
       setTimeout(performStorage, 0);
     }
-  }, [actions, state.failedAudioRecordings]);
+  }, [actions, state.failedAudioRecordings, optimizationService]);
 
   // Clear failed recordings
   const _clearFailedRecordings = useCallback(() => {
@@ -2170,17 +2230,26 @@ const OptimizedAppContent: React.FC = memo(() => {
         
         // Batch transcription error updates to prevent UI blocking
         const performTranscriptionErrorUpdates = () => {
+          // Get patient name from session for pending audio metadata
+          const currentSession = state.patientSessions.find(s => s.id === sessionId);
+          const patientName = currentSession?.patient?.name;
+          
           // Store the failed recording for troubleshooting (non-blocking)
+          // Also persists to disk when it's a server unavailable error
           storeFailedAudioRecording(
             audioBlob,
             workflowId,
             `Transcription validation failed: ${
               isTranscriptionEmpty ? 'Empty transcription' :
               isTranscriptionTooShort ? `Too short (${cleanTranscription.length} chars)` :
-              isTranscriptionPlaceholder ? 'Placeholder response' :
+              isTranscriptionPlaceholder ? 'Placeholder response - server not running' :
+              isTranscriptionError ? 'Transcription error - server not running' :
               'Transcription error'
             }`,
-            cleanTranscription
+            cleanTranscription,
+            undefined, // recordingTime
+            sessionId,
+            patientName
           );
           
           // Determine error type and show appropriate toast
@@ -2982,12 +3051,15 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
         
         // Store failed recording for troubleshooting (non-blocking)
+        // Also persists to disk for retry when it's a server unavailable error
         storeFailedAudioRecording(
           audioBlob,
           workflowId,
           error.message || 'Background processing failed',
           '',
-          0
+          0,
+          sessionId,
+          patientName
         );
       };
 
@@ -3662,6 +3734,9 @@ const OptimizedAppContent: React.FC = memo(() => {
     timestamp?: Date;
   }>({ status: 'idle', message: '' });
 
+  // State for tracking transcription retry attempts
+  const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
+
   // Handle transcription editing with approval-based ASR corrections logging
   const handleTranscriptionEdit = useCallback(async (editedText: string) => {
     try {
@@ -3970,6 +4045,145 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
     }
   }, [state.transcription, state.isProcessing, state.selectedSessionId, state.currentSessionId, state.displaySession.isDisplayingSession, state.displaySession.displaySessionId, state.displaySession.displayTranscription, actions]);
+
+  /**
+   * Retry transcription from stored audio when the Whisper server was unavailable
+   * This allows users to re-transcribe recordings that failed due to server issues.
+   * Audio is retrieved from:
+   * 1. In-memory session audioBlob (if still in memory)
+   * 2. Disk-persisted pending audio (if saved when transcription failed)
+   */
+  const handleRetryTranscription = useCallback(async () => {
+    // Get the session and audio blob
+    const isViewingSession = state.displaySession.isDisplayingSession;
+    const targetSessionId = isViewingSession 
+      ? state.displaySession.displaySessionId 
+      : (state.selectedSessionId || state.currentSessionId);
+    
+    // Find the session with audioBlob
+    const session = state.patientSessions.find(s => s.id === targetSessionId);
+    let audioBlob = session?.audioBlob || currentAudioBlobRef.current;
+    let audioFromDisk = false;
+    
+    // If no in-memory audio, try to retrieve from disk
+    if (!audioBlob && targetSessionId) {
+      console.log('🔍 No in-memory audio, checking for persisted audio on disk...');
+      const diskAudio = await optimizationService.getPendingAudio(targetSessionId);
+      if (diskAudio) {
+        audioBlob = diskAudio;
+        audioFromDisk = true;
+        console.log('💾 Retrieved audio from disk, size:', diskAudio.size);
+      }
+    }
+    
+    if (!audioBlob) {
+      console.error('❌ No audio blob available for retry transcription');
+      ToastService.getInstance().error('No Audio Available', 'The recording may have been lost. Try recording again.');
+      return;
+    }
+
+    if (!session) {
+      console.error('❌ No session found for retry transcription');
+      return;
+    }
+
+    const agentType = session.agentType;
+    
+    console.log('🔄 Retrying transcription for session:', {
+      sessionId: targetSessionId,
+      agentType,
+      audioBlobSize: audioBlob.size,
+      audioSource: audioFromDisk ? 'disk' : 'memory'
+    });
+
+    try {
+      setIsRetryingTranscription(true);
+      
+      // Update session status to show retrying
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          status: 'transcribing',
+          errors: [],
+          pipelineProgress: {
+            stage: 'transcribing',
+            progress: 20,
+            stageProgress: 50,
+            details: 'Retrying transcription...',
+            modelName: 'MLX Whisper v3-turbo'
+          }
+        });
+      }
+
+      // Check if Whisper server is running
+      const serverStatus = await lmStudioService.whisperServerService.checkHealth();
+      if (!serverStatus.running) {
+        throw new Error(`Whisper server still not running. ${serverStatus.error || 'Please run ./start-whisper-server.sh'}`);
+      }
+
+      // Attempt transcription
+      const transcriptionResult = await lmStudioService.transcribeAudio(
+        audioBlob,
+        undefined,
+        agentType
+      );
+
+      // Check if transcription succeeded
+      const isTranscriptionError = transcriptionResult.startsWith('[') && transcriptionResult.endsWith(']');
+      if (isTranscriptionError) {
+        throw new Error(transcriptionResult);
+      }
+
+      console.log('✅ Retry transcription succeeded:', transcriptionResult.substring(0, 100));
+
+      // Update the session with the new transcription and store the audio blob
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          transcription: transcriptionResult,
+          audioBlob: audioBlob, // Restore audio blob to session for potential future retry
+          status: 'completed', // Just transcription done, not full processing
+          errors: [],
+          pipelineProgress: undefined
+        });
+        
+        // Clean up the pending audio file from disk since transcription succeeded
+        if (audioFromDisk) {
+          optimizationService.deletePendingAudio(targetSessionId).then(deleted => {
+            if (deleted) {
+              console.log('🗑️ Cleaned up pending audio file after successful retry');
+            }
+          });
+        }
+      }
+
+      // Update current state if this is the active session
+      if (!isViewingSession) {
+        actions.setTranscription(transcriptionResult);
+      }
+
+      // Show success message
+      ToastService.getInstance().success('Transcription Recovered', 'You can now reprocess with any agent.');
+
+      // Process with the original agent type
+      console.log('🚀 Starting agent processing with recovered transcription');
+      await handleAgentReprocess(agentType);
+
+    } catch (error: any) {
+      console.error('❌ Retry transcription failed:', error);
+      
+      // Update session with error
+      if (targetSessionId) {
+        actions.updatePatientSession(targetSessionId, {
+          status: 'error',
+          errors: [error.message || 'Retry transcription failed'],
+          pipelineProgress: undefined
+        });
+      }
+
+      ToastService.getInstance().error('Retry Failed', error.message || 'Unknown error');
+    } finally {
+      setIsRetryingTranscription(false);
+    }
+  }, [state.patientSessions, state.selectedSessionId, state.currentSessionId, state.displaySession, actions, lmStudioService, handleAgentReprocess, optimizationService]);
 
   // Reprocess with user-provided answers for missing information
   const handleReprocessWithMissingInfo = useCallback(async (answers: Record<string, string>) => {
@@ -4458,6 +4672,23 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.setPatientVersion(patientFriendlyVersion);
 
       console.log('✅ Patient version generated successfully');
+
+      // Open patient messaging with the generated patient version prefilled for editing/sending
+      if (state.currentAgent === 'quick-letter') {
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'message-patient',
+            data: {
+              subject: 'Patient letter',
+              message: patientFriendlyVersion
+            }
+          });
+          console.log('💬 Opened patient messaging dialog with patient version prefilled');
+        } catch (messagingError) {
+          console.warn('⚠️ Unable to open patient messaging dialog automatically:', messagingError);
+        }
+      }
 
     } catch (error) {
       console.error('❌ Failed to generate patient version:', error);
@@ -5017,31 +5248,13 @@ const OptimizedAppContent: React.FC = memo(() => {
     !!derivedPatientInfo &&
     !!derivedAgent &&
     (
+      // Show during recording/transcribing/processing if patient info is available
       (state.currentPatientInfo && state.ui.activeWorkflow && (recorder.isRecording || state.processingStatus === 'transcribing' || state.processingStatus === 'processing')) ||
-      (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent)
+      // Show when viewing a completed session from the dropdown
+      (state.displaySession.isDisplayingSession && state.displaySession.displayPatientInfo && state.displaySession.displayAgent) ||
+      // Show when results are complete (just finished processing) - ensures header appears after first dictation
+      (state.currentPatientInfo && state.ui.activeWorkflow && state.processingStatus === 'complete' && state.results)
     );
-
-  // Map current state to PipelineStageId for the header strip
-  const currentPipelineStage = useMemo((): PipelineStageId | undefined => {
-    if (recorder.isRecording) return 'record';
-    if (state.processingStatus === 'transcribing') return 'transcribe';
-
-    // Get current session's pipeline progress
-    const currentSession = state.patientSessions.find(s => s.id === state.currentSessionId);
-    const pipelineStage = currentSession?.pipelineProgress?.stage;
-
-    if (pipelineStage === 'audio-processing') return 'record';
-    if (pipelineStage === 'transcribing') return 'transcribe';
-    if (pipelineStage === 'ai-analysis') return 'classify';
-    if (pipelineStage === 'generation') {
-      // Map to summary or letter based on agent type
-      const agent = state.currentAgent || state.ui.activeWorkflow;
-      if (agent === 'quick-letter' || agent === 'consultation') return 'letter';
-      return 'summary';
-    }
-
-    return undefined;
-  }, [recorder.isRecording, state.processingStatus, state.patientSessions, state.currentSessionId, state.currentAgent, state.ui.activeWorkflow]);
 
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
@@ -5051,7 +5264,6 @@ const OptimizedAppContent: React.FC = memo(() => {
           status={recorder.isRecording ? 'recording' : state.processingStatus}
           isRecording={recorder.isRecording}
           currentAgent={state.currentAgent || state.ui.activeWorkflow}
-          pipelineStage={currentPipelineStage}
           modelStatus={state.modelStatus}
           onRefreshServices={checkModelStatus}
           patientSessions={state.patientSessions}
@@ -5065,9 +5277,6 @@ const OptimizedAppContent: React.FC = memo(() => {
           checkedSessionIds={allCheckedSessions}
           onToggleSessionCheck={handleToggleSessionCheck}
           persistedSessionIds={state.persistedSessionIds}
-          storageStats={storageStats}
-          onDeleteAllChecked={handleDeleteAllChecked}
-          onDeleteOldSessions={handleDeleteOldSessions}
           onTitleClick={handleReturnHome}
           mobileJobs={mobileJobs}
           mobileJobsLoading={mobileJobsLoading}
@@ -5456,6 +5665,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                     onTranscriptionEdit={handleTranscriptionEdit}
                     transcriptionSaveStatus={transcriptionSaveStatus}
                     onAgentReprocess={handleAgentReprocess}
+                    onRetryTranscription={handleRetryTranscription}
+                    isRetryingTranscription={isRetryingTranscription}
                     approvalState={displayData.isDisplayingSession
                       ? {
                           status: 'pending' as const,
@@ -5592,6 +5803,41 @@ const OptimizedAppContent: React.FC = memo(() => {
                   console.log('🫀 Opening TTE Trend Importer');
                   actions.openOverlay('tte-trend-importer');
                   actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+                  return;
+                }
+
+                if (actionId === 'xestro-dark-mode') {
+                  console.log('🌙 Toggling Xestro dark mode');
+
+                  // Always toggle extension theme immediately for fast feedback
+                  const desiredState = toggleExtensionDarkMode();
+
+                  try {
+                    const response = await chrome.runtime.sendMessage({
+                      type: 'EXECUTE_ACTION',
+                      action: 'xestro-dark-mode',
+                      data: { force: desiredState }
+                    });
+
+                    if (response?.success) {
+                      const enabled = typeof response.enabled === 'boolean' ? response.enabled : desiredState;
+                      // Keep extension/theme state in sync with whatever the EMR applied
+                      applyExtensionDarkMode(enabled);
+
+                      const toast = ToastService.getInstance();
+
+                      if (enabled) {
+                        toast.success('Dark mode enabled', 'Operator and Xestro switched to dark.');
+                      } else {
+                        toast.info('Dark mode disabled', 'Back to the default light theme.');
+                      }
+                    } else {
+                      ToastService.getInstance().error('Dark mode toggle failed', response?.error || 'Open a Xestro tab and try again.');
+                    }
+                  } catch (error) {
+                    console.error('❌ Dark mode toggle failed:', error);
+                    ToastService.getInstance().error('Dark mode toggle failed', error instanceof Error ? error.message : 'Unknown error');
+                  }
                   return;
                 }
 

@@ -206,7 +206,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
 
   return (
     <motion.div
-      className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}
+      className={`bg-white rounded-card border border-gray-200 shadow-card ${className}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -345,7 +345,7 @@ export const UnifiedPipelineProgress: React.FC<UnifiedPipelineProgressProps> = (
 
       {/* Current Status Details */}
       {progress.details && (
-        <div className="text-xs text-gray-600 text-center py-2 bg-gray-50 rounded border border-gray-100">
+        <div className="text-xs text-gray-600 text-center py-2 bg-gray-50 rounded-lg border border-gray-100">
           {progress.details}
           {progress.queuePosition !== undefined && progress.queuePosition > 0 && (
             <span className="ml-2 text-gray-500">• Queue position: {progress.queuePosition}</span>

@@ -105,7 +105,7 @@ export const DevicePopover: React.FC<DevicePopoverProps> = ({
         aria-label="Audio device settings"
         aria-modal="true"
         className="
-          bg-white border border-gray-200 rounded-lg shadow-xl
+          bg-white border border-gray-200 rounded-card shadow-modal
           w-80 max-h-96 overflow-hidden
         "
         style={{

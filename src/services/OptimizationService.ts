@@ -1028,4 +1028,219 @@ export class OptimizationService {
       timeout: this.timeout
     };
   }
+
+  // Pending Audio Management (for failed transcriptions)
+
+  /**
+   * Save audio blob to disk for later retry when transcription fails.
+   * Audio is stored in data/asr/pending/ directory with metadata.
+   */
+  async savePendingAudio(
+    sessionId: string,
+    audioBlob: Blob,
+    metadata: {
+      agentType: string;
+      patientName?: string;
+      timestamp: string;
+      failureReason?: string;
+    }
+  ): Promise<{ success: boolean; audioPath?: string }> {
+    const formData = new FormData();
+    const filename = `${sessionId}.webm`;
+    formData.append('audio', audioBlob, filename);
+    formData.append('metadata', JSON.stringify({
+      sessionId,
+      ...metadata
+    }));
+
+    try {
+      const response = await this.makeRequest<ApiResponse<{ audioPath: string }>>('/v1/asr/pending/save', {
+        method: 'POST',
+        body: formData
+      }, 10000);
+
+      logger.info('Saved pending audio for retry', {
+        component: 'OptimizationService',
+        sessionId,
+        audioPath: response.data?.audioPath
+      });
+
+      return { success: true, audioPath: response.data?.audioPath };
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to save pending audio (will remain in memory only)', {
+        component: 'OptimizationService',
+        sessionId,
+        error: err.message
+      });
+      return { success: false };
+    }
+  }
+
+  /**
+   * List all pending audio files that can be retried.
+   */
+  async listPendingAudio(): Promise<Array<{
+    sessionId: string;
+    audioPath: string;
+    agentType: string;
+    patientName?: string;
+    timestamp: string;
+    failureReason?: string;
+  }>> {
+    try {
+      const response = await this.makeRequest<ApiResponse<{ pending: Array<{
+        sessionId: string;
+        audioPath: string;
+        agentType: string;
+        patientName?: string;
+        timestamp: string;
+        failureReason?: string;
+      }> }>>('/v1/asr/pending/list', {
+        method: 'GET'
+      }, 5000);
+
+      return response.data?.pending || [];
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to list pending audio', {
+        component: 'OptimizationService',
+        error: err.message
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Retrieve a pending audio file as a Blob for retry.
+   */
+  async getPendingAudio(sessionId: string): Promise<Blob | null> {
+    try {
+      const url = `${this.baseUrl}/v1/asr/pending/audio/${sessionId}`;
+      const response = await fetch(url, {
+        method: 'GET'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch pending audio: ${response.status}`);
+      }
+
+      return await response.blob();
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to retrieve pending audio', {
+        component: 'OptimizationService',
+        sessionId,
+        error: err.message
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Delete a pending audio file after successful transcription.
+   */
+  async deletePendingAudio(sessionId: string): Promise<boolean> {
+    try {
+      await this.makeRequest<ApiResponse<{ deleted: boolean }>>(`/v1/asr/pending/delete/${sessionId}`, {
+        method: 'DELETE'
+      }, 5000);
+
+      logger.info('Deleted pending audio after successful retry', {
+        component: 'OptimizationService',
+        sessionId
+      });
+
+      return true;
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to delete pending audio', {
+        component: 'OptimizationService',
+        sessionId,
+        error: err.message
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Storage stats for server-side data (recordings, corrections, etc.)
+   */
+  async getServerStorageStats(): Promise<ServerStorageStats | null> {
+    try {
+      const response = await this.makeRequest<ApiResponse<ServerStorageStats>>('/v1/storage/stats', {
+        method: 'GET'
+      }, 10000);
+
+      if (response?.data) {
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      const err = toError(error);
+      logger.warn('Failed to get server storage stats', {
+        component: 'OptimizationService',
+        error: err.message
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Clear a specific storage category on the server.
+   */
+  async clearStorageCategory(category: 'pendingAudio' | 'trainingAudio' | 'corrections' | 'jobs'): Promise<{
+    deletedBytes: number;
+    deletedCount: number;
+  } | null> {
+    try {
+      const response = await this.makeRequest<ApiResponse<{
+        deletedBytes: number;
+        deletedCount: number;
+        category: string;
+      }>>(`/v1/storage/clear/${category}`, {
+        method: 'DELETE'
+      }, 30000);
+
+      if (response?.data) {
+        logger.info('Cleared storage category', {
+          component: 'OptimizationService',
+          category,
+          deletedBytes: response.data.deletedBytes,
+          deletedCount: response.data.deletedCount
+        });
+        return {
+          deletedBytes: response.data.deletedBytes,
+          deletedCount: response.data.deletedCount
+        };
+      }
+      return null;
+    } catch (error) {
+      const err = toError(error);
+      logger.error('Failed to clear storage category', {
+        component: 'OptimizationService',
+        category,
+        error: err.message
+      });
+      return null;
+    }
+  }
+}
+
+/**
+ * Server storage statistics type
+ */
+export interface ServerStorageStats {
+  pendingAudio: StorageCategoryStats;
+  trainingAudio: StorageCategoryStats;
+  corrections: StorageCategoryStats;
+  jobs: StorageCategoryStats;
+  gepa: StorageCategoryStats;
+  total: StorageCategoryStats;
+}
+
+export interface StorageCategoryStats {
+  bytes: number;
+  fileCount: number;
+  label: string;
 }

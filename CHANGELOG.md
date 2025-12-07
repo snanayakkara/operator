@@ -9,6 +9,44 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [3.42.0] - 2025-12-08
+
+### Added
+
+- **Ward conversation engine**
+  - Multi-turn conversational ward rounds with structured checklist flow (issues → results → plan → EDD) and condition-specific items (ADHF, aortic stenosis, HFpEF, AF).
+  - `WardConversationService` manages sessions with incremental diff merging; once-per-admission flags (DVT prophylaxis, follow-up arranged) and checklist skips tracked per admission.
+  - Ward update modal now shows assistant messages and accumulated human summary; apply/discard actions persist or discard session state.
+- **Keyboard shortcuts for results panel**
+  - `Shift+C` to copy and `Shift+I` to insert for Investigation Summary, Background, and Medication agents; hints shown inline in action buttons.
+- **Transcription retry banner**
+  - When Whisper fails (server offline), a retry banner appears in transcription section allowing re-transcription once server is available.
+- **Storage management options panel**
+  - New settings section showing browser and server storage usage; bulk delete by age (7/30/90 days) and per-category server cleanup (pending audio, training audio, corrections, jobs).
+- **Extension dark mode**
+  - CSS utility classes for `operator-extension-dark` toggle; results container and header surfaces adapt to dark palette.
+- **No-dock Python wrapper**
+  - `no-dock-python.py` hides Python processes from macOS dock; Whisper and DSPy startup scripts now use it automatically.
+
+### Changed
+
+- **Design system refresh (Sera UI-inspired)**
+  - New CSS tokens for primary violet accent, standardized shadows (`shadow-card`, `shadow-modal`), and border radii (`rounded-card`, `rounded-modal`).
+  - Button, Modal, Dropdown, and SegmentedControl components updated with violet focus rings and consistent elevation.
+  - Tailwind config extended with `accent.primary`, `radius.card/modal`, and `shadow.card/modal` utilities.
+- **Rounds types extended**
+  - `RoundsPatient` gains `expectedDischargeDate`, `admissionFlags`, `checklistSkips`; `WardUpdateDiff` supports `eddUpdate`, `admissionFlags`, `checklistSkips`.
+  - `Task` type adds optional `linkedIssueId` for procedure-issue linking.
+- **Ward list export section collapsible**
+  - Export & Import drawer now hidden by default in patients view; toggle reveals round export and pending updates review.
+- **SidebarHeader simplified**
+  - Removed PipelineStrip and storage management props; header border lightened.
+
+### Fixed
+
+- Ward update preview now renders EDD changes, admission flags, and checklist skips.
+- Whisper/DSPy servers no longer spawn dock icons on macOS.
+
 ## [3.41.0] - 2025-12-04
 
 ### Added

@@ -106,6 +106,13 @@ echo "   - Temperature: $WHISPER_TEMPERATURE"
 echo "   - Press Ctrl+C to stop"
 echo ""
 
-# Start the server using venv Python (not system python3)
-# After activating venv, use 'python' which correctly points to venv/bin/python
-python whisper-server.py
+# Start the server using venv Python without showing in macOS dock
+# Use wrapper script that calls AppKit to prevent dock icon
+if [ -f "no-dock-python.py" ]; then
+    echo "   Using no-dock wrapper to prevent macOS dock icon"
+    exec venv-whisper/bin/python no-dock-python.py whisper-server.py
+else
+    # Fallback to regular Python (will show in dock)
+    echo "   Warning: no-dock wrapper not found, Python may appear in dock"
+    exec venv-whisper/bin/python whisper-server.py
+fi

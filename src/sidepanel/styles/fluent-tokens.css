@@ -60,12 +60,30 @@
   --fluent-accent-amber: #f59e0b;      /* Warnings */
   --fluent-accent-red: #f43f5e;        /* Errors (enriched rose from #ef4444) */
 
+  /* ===== Primary Accent (Sera UI-inspired violet) ===== */
+  --fluent-accent-primary: #8B5CF6;           /* Primary action color */
+  --fluent-accent-primary-hover: #7C3AED;     /* Hover state */
+  --fluent-accent-primary-active: #6D28D9;    /* Active/pressed state */
+  --fluent-accent-primary-subtle: rgba(139, 92, 246, 0.08);  /* Subtle background */
+  --fluent-accent-primary-ring: rgba(139, 92, 246, 0.25);    /* Focus ring */
+
   /* Accent tints (very subtle, 2-3% opacity for backgrounds) */
   --fluent-accent-emerald-tint: rgba(16, 185, 129, 0.03);
   --fluent-accent-teal-tint: rgba(20, 184, 166, 0.03);
   --fluent-accent-violet-tint: rgba(168, 85, 247, 0.03);
   --fluent-accent-amber-tint: rgba(245, 158, 11, 0.03);
   --fluent-accent-red-tint: rgba(244, 63, 94, 0.03);
+  --fluent-accent-primary-tint: rgba(139, 92, 246, 0.04);   /* Primary accent tint */
+
+  /* ===== Standardized Shadows ===== */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.15);
+
+  /* ===== Standardized Border Radius ===== */
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
 }
 
 /* ===== Fluent Component Classes ===== */

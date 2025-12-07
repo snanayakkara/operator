@@ -192,7 +192,7 @@ Medications: ${emrData['medications-problemlist'] || 'No medications data availa
 
   // Normal layout - dedicated section
   return (
-    <div className="glass rounded-2xl overflow-hidden">
+    <div className="glass rounded-card overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
