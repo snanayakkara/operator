@@ -437,7 +437,7 @@ export const ScreenshotAnnotationModal: React.FC<ScreenshotAnnotationModalProps>
           {...getRootProps({
           className: `
             relative rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200
-            ${standalone ? 'aspect-[4/3] md:aspect-video min-h-[220px]' : 'aspect-video'}
+            aspect-square
           ${isActive 
             ? 'border-blue-500 bg-blue-50 scale-105' 
             : screenshot 

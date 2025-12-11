@@ -3,10 +3,9 @@
  * Shows patient demographics and current agent/status in a clean header bar
  */
 
-import React, { memo } from 'react';
-import { User, FileText } from 'lucide-react';
+import React, { memo, useCallback, useEffect } from 'react';
+import { User, FileText, ExternalLink } from 'lucide-react';
 import type { PatientInfo, AgentType, ProcessingStatus } from '@/types/medical.types';
-import { Button } from './buttons';
 import { StatusBadge, StateIndicator } from './status';
 import type { ProcessingState } from '@/utils/stateColors';
 
@@ -92,6 +91,42 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   const colors = getStatusColors(processingStatus, isRecording);
   const agentDisplayName = AGENT_DISPLAY_NAMES[agentType] || agentType;
 
+  // Handle navigation to patient in EMR
+  const handleGoToPatient = useCallback(async () => {
+    if (!isViewingCompletedSession || processingStatus !== 'complete') return;
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'NAVIGATE_TO_PATIENT',
+        fileNumber: patientInfo.id,
+        patientName: patientInfo.name
+      });
+      console.log('✅ Navigate to patient requested:', patientInfo.id);
+    } catch (error) {
+      console.error('❌ Failed to navigate to patient:', error);
+    }
+  }, [isViewingCompletedSession, processingStatus, patientInfo.id, patientInfo.name]);
+
+  // Keyboard shortcut: Shift+G for "Go to patient"
+  useEffect(() => {
+    if (!isViewingCompletedSession || processingStatus !== 'complete') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      // Shift+G without other modifiers
+      if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        handleGoToPatient();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isViewingCompletedSession, processingStatus, handleGoToPatient]);
+
   // Format age from DOB if available
   const calculateAge = (dob: string): string => {
     if (!dob) return '';
@@ -151,26 +186,21 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
 
           {/* Status Badge or Go To Patient Button */}
           {isViewingCompletedSession && processingStatus === 'complete' ? (
-            <Button
-              onClick={async () => {
-                try {
-                  await chrome.runtime.sendMessage({
-                    type: 'NAVIGATE_TO_PATIENT',
-                    fileNumber: patientInfo.id,
-                    patientName: patientInfo.name
-                  });
-                  console.log('✅ Navigate to patient requested:', patientInfo.id);
-                } catch (error) {
-                  console.error('❌ Failed to navigate to patient:', error);
-                }
-              }}
-              variant="primary"
-              size="md"
-              startIcon={User}
-              className="bg-slate-700 hover:bg-slate-800 text-white rounded-full shadow-sm hover:shadow-md"
+            <button
+              type="button"
+              onClick={handleGoToPatient}
+              className="
+                p-2 rounded-full
+                bg-slate-700 hover:bg-slate-800
+                text-white
+                shadow-sm hover:shadow-md
+                transition-colors
+              "
+              title="Go to patient (⇧G)"
+              aria-label="Go to patient"
             >
-              Go To Patient
-            </Button>
+              <ExternalLink size={16} />
+            </button>
           ) : (
             <div className="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full">
               {/* Animated pulsing dot */}

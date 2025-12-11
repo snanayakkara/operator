@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Modal } from '../modals';
 import { FormInput, FormTextarea } from '../forms';
-import { Button, ButtonGroup } from '../buttons';
+import { Button } from '../buttons';
 import { AlertCircle, Info, AlertTriangle, Edit3, Check, Brain, ChevronDown, ChevronRight } from 'lucide-react';
 
 type ValidationCorrection = {
@@ -84,6 +84,26 @@ const formatFieldPath = (path: string): string => {
     .replace(/_/g, ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/\b([a-z])/g, char => char.toUpperCase());
+};
+
+/**
+ * Format a value for display with reasonable decimal places
+ * Prevents showing values like "44.811753902663" - limits to 2 decimal places
+ */
+const formatValue = (value: unknown): string => {
+  if (value === null || value === undefined) return 'none';
+  if (typeof value === 'number') {
+    // Round to 2 decimal places for display
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  // For strings that look like numbers with many decimals, format them
+  if (typeof value === 'string') {
+    const num = parseFloat(value);
+    if (!isNaN(num) && value.includes('.') && value.split('.')[1]?.length > 2) {
+      return num.toFixed(2);
+    }
+  }
+  return String(value);
 };
 
 export const FieldValidationPrompt = <TValidation extends ValidationPromptData>({
@@ -381,12 +401,12 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 
         {/* Critical Missing Fields */}
         {validation.missingCritical.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-rose-600" />
-              <span className="text-rose-600 font-medium">{mergedCopy.criticalTitle}</span>
-              <span className="text-xs text-gray-500">{mergedCopy.criticalHelper}</span>
+          <section className="bg-rose-50/50 border border-rose-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-rose-200">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <span className="text-rose-700 font-semibold">{mergedCopy.criticalTitle}</span>
             </div>
+            <p className="text-xs text-rose-600">{mergedCopy.criticalHelper}</p>
             <div className="space-y-4">
               {validation.missingCritical.map(field => renderInput(field, true))}
             </div>
@@ -395,12 +415,12 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 
         {/* Low-confidence corrections */}
         {lowConfidenceCorrections.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <span className="text-amber-600 font-medium">{mergedCopy.suggestionsTitle}</span>
-              <span className="text-xs text-gray-500">{mergedCopy.suggestionsHelper}</span>
+          <section className="bg-amber-50/50 border border-amber-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-amber-200">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+              <span className="text-amber-700 font-semibold">{mergedCopy.suggestionsTitle}</span>
             </div>
+            <p className="text-xs text-amber-600">{mergedCopy.suggestionsHelper}</p>
             <div className="space-y-3">
               {lowConfidenceCorrections.map(correction => {
                 const config = fieldConfig[correction.field];
@@ -449,9 +469,9 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
                       <>
                         <div className="text-sm text-gray-600">
                           {correction.regexValue !== null && correction.regexValue !== undefined ? (
-                            <>Transcription: <strong className="font-mono bg-amber-50 px-1 rounded">{String(correction.regexValue)}</strong> → Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{String(correction.correctValue)}</strong></>
+                            <>Transcription: <strong className="font-mono bg-amber-50 px-1 rounded">{formatValue(correction.regexValue)}</strong> → Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{formatValue(correction.correctValue)}</strong></>
                           ) : (
-                            <>Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{String(correction.correctValue)}</strong></>
+                            <>Suggested: <strong className="font-mono bg-green-50 px-1 rounded">{formatValue(correction.correctValue)}</strong></>
                           )}
                         </div>
                         <div className="text-xs text-gray-500">
@@ -461,30 +481,32 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
                     )}
                     
                     {!isEditing && (
-                      <ButtonGroup spacing="sm">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           variant={isAccepted ? 'success' : 'outline'}
-                          size="sm"
+                          size="xs"
+                          className="text-xs px-2 py-1"
                           onClick={() => handleCorrectionToggle(correction, true)}
                         >
-                          Accept Suggestion
+                          Accept
                         </Button>
                         <Button
                           variant={!isAccepted ? 'primary' : 'outline'}
-                          size="sm"
+                          size="xs"
+                          className="text-xs px-2 py-1"
                           onClick={() => handleCorrectionToggle(correction, false)}
                         >
-                          Keep Original
+                          Keep
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="xs"
+                          className="text-xs px-2 py-1"
                           onClick={() => handleStartEditing(correction)}
                         >
-                          <Edit3 className="w-3 h-3 mr-1" />
-                          Edit
+                          <Edit3 className="w-3 h-3" />
                         </Button>
-                      </ButtonGroup>
+                      </div>
                     )}
                     <div className="text-xs text-gray-400">
                       Confidence: {(correction.confidence * 100).toFixed(0)}%
@@ -498,12 +520,12 @@ export const FieldValidationPrompt = <TValidation extends ValidationPromptData>(
 
         {/* Optional missing fields */}
         {validation.missingOptional.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Info className="w-5 h-5 text-blue-600" />
-              <span className="text-blue-600 font-medium">{mergedCopy.optionalTitle}</span>
-              <span className="text-xs text-gray-500">{mergedCopy.optionalHelper}</span>
+          <section className="bg-blue-50/50 border border-blue-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-blue-200">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
+              <span className="text-blue-700 font-semibold">{mergedCopy.optionalTitle}</span>
             </div>
+            <p className="text-xs text-blue-600">{mergedCopy.optionalHelper}</p>
             <div className="space-y-4">
               {validation.missingOptional.map(field => renderInput(field, false))}
             </div>

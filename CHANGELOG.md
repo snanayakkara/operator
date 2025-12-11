@@ -9,6 +9,27 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [3.43.0] - 2025-12-11
+
+### Added
+
+- **Angiogram lesion review dialog**
+  - Parses FINDINGS into a vessel → branch tree, lets you add/edit/remove lesions, and rewrites the FINDINGS section after approval.
+  - New "Lesions" action chip on angiogram reports to reopen the editor on demand.
+
+### Changed
+
+- **Patient-friendly versions**
+  - Generation now works while viewing completed sessions, respects the currently displayed report, and resets when switching sessions.
+  - Patient version actions disable while work is in flight to prevent double-runs.
+
+### Fixed
+
+- **Clipboard fidelity**
+  - Copy now writes HTML + plain text so markdown bold stays bold when pasted into EMR word processors (OnlyOffice).
+- **Patient version trigger**
+  - Angiogram agent’s patient version action now reliably kicks off generation instead of silently doing nothing.
+
 ## [3.42.0] - 2025-12-08
 
 ### Added

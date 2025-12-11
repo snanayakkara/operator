@@ -95,8 +95,8 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setPatients(loadedPatients);
         setClinicians(loadedClinicians);
         setLoading(false);
-        if (!selectedPatientId && loadedPatients.length > 0) {
-          setSelectedPatientId(loadedPatients[0].id);
+        if (loadedPatients.length > 0) {
+          setSelectedPatientId(prev => prev ?? loadedPatients[0].id);
         }
       }
     });
@@ -109,7 +109,8 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       mounted = false;
       unsubscribe();
     };
-  }, [storage, selectedPatientId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storage]); // Only run on mount - don't re-run when selectedPatientId changes
 
   useEffect(() => {
     const interval = setInterval(async () => {

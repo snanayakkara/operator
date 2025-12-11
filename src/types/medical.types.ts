@@ -289,6 +289,7 @@ export interface AppState {
   mteerValidationStatus?: 'complete' | 'awaiting_validation';
   mteerExtractedData?: MTEERExtractedData;
   // Patient version generation
+  patientVersionSessionId?: string | null;
   patientVersion: string | null;
   isGeneratingPatientVersion: boolean;
 }
@@ -1051,6 +1052,7 @@ export interface RHCPatientData {
   bsa?: number; // m² (calculated)
   bmi?: number; // kg/m² (calculated)
   heartRate?: number; // bpm
+  rhythm?: string; // e.g., "Sinus rhythm", "Atrial fibrillation"
   systolicBP?: number; // mmHg
   diastolicBP?: number; // mmHg
   meanArterialPressure?: number; // mmHg (calculated)

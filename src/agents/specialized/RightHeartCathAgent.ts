@@ -296,10 +296,25 @@ export class RightHeartCathAgent extends MedicalAgent {
       };
 
       // DIAGNOSTIC: Verify report structure before return
-      console.log('🚨 RHC AGENT: Final report has rhcData?', 'rhcData' in report);
-      console.log('🚨 RHC AGENT: Report keys:', Object.keys(report));
-      console.log('🚨 RHC AGENT: calculations present?', !!report.calculations);
-      console.log('🚨 RHC AGENT: calculations:', JSON.stringify(calculations, null, 2));
+      console.log('🔍 RHC AGENT: Final report patientData:', JSON.stringify(finalData.patientData, null, 2));
+      console.log('🔍 RHC AGENT: patientData fields present:', {
+        height: finalData.patientData?.height,
+        weight: finalData.patientData?.weight,
+        haemoglobin: finalData.patientData?.haemoglobin,
+        sao2: finalData.patientData?.sao2,
+        svo2: finalData.patientData?.svo2,
+        bsa: finalData.patientData?.bsa,
+        bmi: finalData.patientData?.bmi
+      });
+      console.log('🔍 RHC AGENT: Fick calculation requirements met?', {
+        hasVO2: !!calculations?.estimatedVO2,
+        hasHb: !!finalData.patientData?.haemoglobin,
+        hasSaO2: !!finalData.patientData?.sao2,
+        hasSvO2: !!finalData.patientData?.svo2,
+        fickCO: calculations?.fickCO,
+        fickCI: calculations?.fickCI
+      });
+      console.log('🔍 RHC AGENT: calculations:', JSON.stringify(calculations, null, 2));
 
       // Store procedure in memory
       this.addProcedureMemory('RHC', {

@@ -52,7 +52,21 @@ export const RHC_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
 
   // Legacy field paths (for backward compatibility)
   'resources.fluoroscopyTime': { label: 'Fluoroscopy Time', inputType: 'number', placeholder: 'Total fluoroscopy time in minutes', helperText: 'Total radiation exposure time (OPTIONAL)' },
-  'resources.contrastVolume': { label: 'Contrast Volume', inputType: 'number', placeholder: 'Total contrast in mL', helperText: 'Total iodinated contrast volume (OPTIONAL)' }
+  'resources.contrastVolume': { label: 'Contrast Volume', inputType: 'number', placeholder: 'Total contrast in mL', helperText: 'Total iodinated contrast volume (OPTIONAL)' },
+
+  // Short-form field paths (model may send these instead of full paths)
+  'cardiacOutput.co': { label: 'Cardiac Output', inputType: 'number', placeholder: 'CO in L/min', helperText: 'Cardiac output (normal: 4-8 L/min)' },
+  'cardiacOutput.ci': { label: 'Cardiac Index', inputType: 'number', placeholder: 'CI in L/min/m²', helperText: 'Cardiac index (normal: 2.5-4.0 L/min/m²)' },
+  'co': { label: 'Cardiac Output', inputType: 'number', placeholder: 'CO in L/min', helperText: 'Cardiac output (normal: 4-8 L/min)' },
+  'ci': { label: 'Cardiac Index', inputType: 'number', placeholder: 'CI in L/min/m²', helperText: 'Cardiac index (normal: 2.5-4.0 L/min/m²)' },
+
+  // Fick calculation inputs - both paths for SvO2
+  'cardiacOutput.mixedVenousO2': { label: 'Mixed Venous O₂ (SvO₂)', inputType: 'number', placeholder: 'SvO₂ in %', helperText: 'Required for Fick CO calculation (normal: 60-80%)' },
+  'svo2': { label: 'Mixed Venous O₂ (SvO₂)', inputType: 'number', placeholder: 'SvO₂ in %', helperText: 'Required for Fick CO (normal: 60-80%)' },
+
+  // BMI - both paths
+  'bmi': { label: 'BMI', inputType: 'number', placeholder: 'BMI in kg/m²', helperText: 'Body Mass Index (normal: 18.5-25 kg/m²)' },
+  'patientData.bmi': { label: 'BMI', inputType: 'number', placeholder: 'BMI in kg/m²', helperText: 'Body Mass Index (normal: 18.5-25 kg/m²)' }
 };
 
 export const RHC_VALIDATION_COPY: ValidationPromptCopy = {

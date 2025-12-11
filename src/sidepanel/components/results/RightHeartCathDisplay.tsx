@@ -221,9 +221,13 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
             haemodynamicPressures: jsonData.haemodynamicPressures,
             cardiacOutput: jsonData.cardiacOutput,
             exerciseHaemodynamics: jsonData.exerciseHaemodynamics,
-            complications: jsonData.complications
+            complications: jsonData.complications,
+            patientData: jsonData.patientData,  // Include patientData from parsed JSON
+            calculations: jsonData.calculations  // Include calculations from parsed JSON
           };
           console.log('✅ Successfully parsed RHC data from JSON marker');
+          console.log('🔍 Parsed patientData:', jsonData.patientData);
+          console.log('🔍 Parsed calculations:', jsonData.calculations);
           return mockReport;
         }
 
@@ -234,6 +238,8 @@ export const RightHeartCathDisplay: React.FC<RightHeartCathDisplayProps> = ({
           const jsonData = JSON.parse(jsonMatch[0]);
           if (jsonData.rhcData) {
             console.log('✅ Found rhcData in generic JSON fallback');
+            console.log('🔍 Generic fallback patientData:', jsonData.patientData);
+            console.log('🔍 Generic fallback calculations:', jsonData.calculations);
             return jsonData as RightHeartCathReport;
           } else {
             console.log('❌ Generic JSON found but no rhcData property');
@@ -1197,6 +1203,19 @@ const renderCardiacOutputSection = (cardiacOutput: CardiacOutput, patientData?: 
   </div>
 );
 
+// Helper function to format vascular access for display
+function formatVascularAccess(access: string): string {
+  if (!access) return 'Not specified';
+  const formatted = access
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+  // Add "Vein" suffix for internal jugular/femoral
+  if (formatted.includes('Internal Jugular') || formatted.includes('Femoral')) {
+    return formatted + ' Vein';
+  }
+  return formatted;
+}
+
 // Helper function to render section content
 function renderSectionContent(
   sectionKey: string,
@@ -1207,7 +1226,15 @@ function renderSectionContent(
     return <div className="text-gray-500 italic">No structured data available</div>;
   }
 
-  const { rhcData: data, haemodynamicPressures, cardiacOutput, exerciseHaemodynamics, complications, patientData } = rhcData;
+  // Defensive fallbacks for all destructured properties
+  const {
+    rhcData: data,
+    haemodynamicPressures,
+    cardiacOutput,
+    exerciseHaemodynamics,
+    complications = [],
+    patientData = {}
+  } = rhcData;
 
   switch (sectionKey) {
     case 'indication':
@@ -1223,43 +1250,88 @@ function renderSectionContent(
         </div>
       );
 
-    case 'patient_details':
+    case 'patient_details': {
+      // Check if we have any patient data to display
+      const hasPatientData = patientData && (
+        patientData.height || patientData.weight || patientData.bsa ||
+        patientData.bmi || patientData.heartRate || patientData.age ||
+        patientData.gender || patientData.systolicBP || patientData.rhythm ||
+        patientData.haemoglobin || patientData.sao2 || patientData.svo2
+      );
+      const hasLabValues = data?.laboratoryValues && (
+        data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate
+      );
+
+      if (!hasPatientData && !hasLabValues) {
+        return (
+          <div className="text-gray-500 italic text-sm">
+            No patient demographics recorded. Use Edit All Fields to add patient data.
+          </div>
+        );
+      }
+
       return (
         <div className="space-y-3 text-sm">
-          {/* Patient Demographics & Anthropometrics */}
-          {patientData && (patientData.height || patientData.weight || patientData.bsa || patientData.bmi || patientData.heartRate || patientData.age || patientData.gender) && (
-            <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
-              <span className="font-medium text-green-900">Demographics & Anthropometrics:</span>
+          {/* Vitals (if available) */}
+          {patientData && (patientData.heartRate || patientData.systolicBP || patientData.rhythm) && (
+            <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+              <span className="font-medium text-blue-900">Vitals:</span>
               <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
-                {patientData.age && <div>Age: {patientData.age} years</div>}
-                {patientData.gender && <div>Gender: {patientData.gender}</div>}
-                {patientData.height && <div>Height: {patientData.height} cm</div>}
-                {patientData.weight && <div>Weight: {patientData.weight} kg</div>}
-                {patientData.bmi && <div>BMI: {patientData.bmi.toFixed(1)} kg/m²</div>}
-                {patientData.bsa && <div>BSA: {patientData.bsa.toFixed(2)} m²</div>}
+                {patientData.rhythm && <div>Rhythm: {patientData.rhythm}</div>}
                 {patientData.heartRate && <div>Heart Rate: {patientData.heartRate} bpm</div>}
+                {patientData.systolicBP && patientData.diastolicBP && (
+                  <div>BP: {patientData.systolicBP}/{patientData.diastolicBP} mmHg</div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Laboratory Values */}
-          {(data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
+          {/* Patient Demographics & Anthropometrics */}
+          {patientData && (patientData.height || patientData.weight || patientData.bsa || patientData.bmi || patientData.age || patientData.gender) && (
+            <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
+              <span className="font-medium text-green-900">Demographics & Anthropometrics:</span>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                {patientData.age && <div>Age: {patientData.age} years</div>}
+                {patientData.gender && <div>Gender: {String(patientData.gender).charAt(0).toUpperCase() + String(patientData.gender).slice(1)}</div>}
+                {patientData.height && <div>Height: {patientData.height} cm</div>}
+                {patientData.weight && <div>Weight: {patientData.weight} kg</div>}
+                {patientData.bmi && <div>BMI: {typeof patientData.bmi === 'number' ? patientData.bmi.toFixed(1) : patientData.bmi} kg/m²</div>}
+                {patientData.bsa && <div>BSA: {typeof patientData.bsa === 'number' ? patientData.bsa.toFixed(2) : patientData.bsa} m²</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Oxygen Saturations (if available) */}
+          {patientData && (patientData.sao2 || patientData.svo2 || patientData.haemoglobin) && (
+            <div className="bg-purple-50 p-3 rounded border-l-4 border-purple-400">
+              <span className="font-medium text-purple-900">Laboratory Values:</span>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+                {patientData.haemoglobin && <div>Haemoglobin: {patientData.haemoglobin} g/L</div>}
+                {patientData.sao2 && <div>SaO₂: {patientData.sao2}%</div>}
+                {patientData.svo2 && <div>SvO₂: {patientData.svo2}%</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Laboratory Values from rhcData (fallback) */}
+          {data?.laboratoryValues && (data.laboratoryValues.haemoglobin || data.laboratoryValues.lactate) && (
             <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-              <span className="font-medium">Laboratory Values:</span>
+              <span className="font-medium">Additional Laboratory Values:</span>
               <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-                {data.laboratoryValues.haemoglobin && <div>Haemoglobin: {data.laboratoryValues.haemoglobin} g/L</div>}
+                {data.laboratoryValues.haemoglobin && !patientData?.haemoglobin && <div>Haemoglobin: {data.laboratoryValues.haemoglobin} g/L</div>}
                 {data.laboratoryValues.lactate && <div>Lactate: {data.laboratoryValues.lactate} mmol/L</div>}
               </div>
             </div>
           )}
         </div>
       );
+    }
 
     case 'procedure':
       return (
         <div className="space-y-3 text-sm">
-          <div><span className="font-medium">Vascular Access:</span> {data.vascularAccess.replace('_', ' ')}</div>
-          <div><span className="font-medium">Catheter Details:</span> {data.catheterDetails}</div>
+          <div><span className="font-medium">Vascular Access:</span> {formatVascularAccess(data.vascularAccess)}</div>
+          <div><span className="font-medium">Catheter Details:</span> {data.catheterDetails || 'Not specified'}</div>
 
           {/* Radiation Safety & Contrast */}
           {(data.fluoroscopyTime || data.fluoroscopyDose || data.doseAreaProduct || data.contrastVolume) && (
@@ -1485,7 +1557,17 @@ function renderSectionContent(
         </div>
       );
 
-    case 'conclusions':
+    case 'conclusions': {
+      const hasConclusions = data?.immediateOutcomes || data?.recommendations || data?.followUp;
+
+      if (!hasConclusions) {
+        return (
+          <div className="text-gray-500 italic text-sm">
+            No conclusions or follow-up documented. Use Edit All Fields to add recommendations.
+          </div>
+        );
+      }
+
       return (
         <div className="space-y-3 text-sm">
           {data.immediateOutcomes && (
@@ -1499,6 +1581,7 @@ function renderSectionContent(
           )}
         </div>
       );
+    }
 
     default:
       return <div className="text-gray-500">Content not available</div>;

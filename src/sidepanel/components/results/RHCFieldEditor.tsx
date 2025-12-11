@@ -281,6 +281,22 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
     }
   }, [calculatedHaemodynamics.fickCO, calculatedHaemodynamics.fickCI]);
 
+  // Sync cardiacOutput.mixedVenousO2 → patientData.svo2 for Fick calculation
+  // The form input writes to cardiacOutput.mixedVenousO2, but Fick CO reads from patientData.svo2
+  useEffect(() => {
+    const mixedVenousValue = cardiacOutput.mixedVenousO2;
+    if (mixedVenousValue) {
+      const svo2 = parseFloat(mixedVenousValue);
+      if (!isNaN(svo2) && patientData.svo2 !== svo2) {
+        console.log('🔢 Field Editor: Syncing mixedVenousO2 → svo2:', svo2);
+        setPatientData(prev => ({
+          ...prev,
+          svo2
+        }));
+      }
+    }
+  }, [cardiacOutput.mixedVenousO2, patientData.svo2]);
+
   const handlePressureChange = (
     chamber: keyof HaemodynamicPressures,
     field: string,
@@ -389,7 +405,7 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
           animate={{ scale: 1 }}
           exit={{ scale: 0.95 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-modal shadow-modal max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-modal shadow-modal max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
@@ -594,10 +610,12 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                       onChange={(e) => handleRhcDataChange('vascularAccess', e.target.value)}
                       className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <option value="right_antecubital">Right Antecubital</option>
-                      <option value="left_antecubital">Left Antecubital</option>
-                      <option value="right_internal_jugular">Right Internal Jugular</option>
-                      <option value="right_femoral">Right Femoral</option>
+                      <option value="right_basilic_vein">Right Basilic Vein</option>
+                      <option value="right_internal_jugular_vein">Right Internal Jugular Vein</option>
+                      <option value="right_femoral_vein">Right Femoral Vein</option>
+                      <option value="left_femoral_vein">Left Femoral Vein</option>
+                      <option value="left_basilic_vein">Left Basilic Vein</option>
+                      <option value="right_median_antecubital_vein">Right Median Antecubital Vein</option>
                     </select>
                   </div>
 
@@ -1209,9 +1227,9 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
             )}
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <p className="text-sm text-gray-600">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <p className="text-xs text-gray-500">
                   Changes will be applied to the card export. Original data is preserved.
                 </p>
                 {!showAddCustomField && (
@@ -1219,17 +1237,18 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                     onClick={() => setShowAddCustomField(true)}
                     variant="outline"
                     size="sm"
-                    className="text-xs border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    className="text-xs border-2 border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap flex-shrink-0"
                   >
                     + Add Custom Field
                   </Button>
                 )}
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3 flex-shrink-0">
                 <Button
                   onClick={onCancel}
                   variant="outline"
                   size="md"
+                  className="whitespace-nowrap"
                 >
                   Cancel
                 </Button>
@@ -1238,6 +1257,7 @@ export const RHCFieldEditor: React.FC<RHCFieldEditorProps> = ({
                   variant="secondary"
                   size="md"
                   startIcon={<Check />}
+                  className="whitespace-nowrap"
                 >
                   Apply Changes
                 </Button>

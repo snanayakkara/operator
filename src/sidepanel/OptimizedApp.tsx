@@ -12,10 +12,11 @@ import { QueryProvider } from '@/providers/QueryProvider';
 import { AudioDeviceProvider, useAudioDeviceContext } from '@/contexts/AudioDeviceContext';
 import ErrorBoundary from './components/errors/ErrorBoundary';
 import { OptimizedResultsPanel } from './components/results/OptimizedResultsPanel';
+import { AngioLesionReviewDialog } from './components/results/AngioLesionReviewDialog';
 import { TranscriptionSection } from './components/results/TranscriptionSection';
-import { QuickActionsGrouped } from './components/QuickActionsGrouped';
 import { AIReviewSection } from './components/AIReviewSection';
-import { SidebarHeader } from './components/SidebarHeader';
+import { AppHeader } from './components/AppHeader';
+import type { UnifiedAction } from '@/config/unifiedActionsConfig';
 import { ToastContainer } from './components/ToastContainer';
 import { PatientSelectionModal } from './components/PatientSelectionModal';
 import { PatientEducationConfigCard } from './components/PatientEducationConfigCard';
@@ -56,6 +57,7 @@ import { RecordingToasts } from '@/utils/toastHelpers';
 import { notifySuccess, notifyError } from '@/utils/notifications';
 import { logger } from '@/utils/Logger';
 import { extractQuickLetterSummary, parseQuickLetterStructuredResponse } from '@/utils/QuickLetterSummaryExtractor';
+import { formatLesionTree, parseLesionTreeFromReport, replaceFindingsSection, type LesionTree } from '@/utils/AngioLesionUtils';
 import { RoundsProvider, useRounds } from '@/contexts/RoundsContext';
 import { ASRCorrectionsLog } from '@/services/ASRCorrectionsLog';
 import { PatientDataCacheService } from '@/services/PatientDataCacheService';
@@ -252,6 +254,11 @@ const OptimizedAppContent: React.FC = memo(() => {
   const [checkedSessions, setCheckedSessions] = useState<Set<string>>(new Set());
   const [isSavingRevision, setIsSavingRevision] = useState(false);
   const [isSavingGoldenPair, setIsSavingGoldenPair] = useState(false);
+  const [lesionReviewState, setLesionReviewState] = useState<{
+    open: boolean;
+    tree: LesionTree | null;
+    sourceKey: string | null;
+  }>({ open: false, tree: null, sourceKey: null });
 
   // Store current audio blob for failed transcription storage
   const currentAudioBlobRef = useRef<Blob | null>(null);
@@ -1012,6 +1019,14 @@ const OptimizedAppContent: React.FC = memo(() => {
     workflowId: activeWorkflowId,
     agentLabel: activeAgentLabel
   }), [activeWorkflowId, activeAgentLabel]);
+
+  // Clear stale patient-friendly versions when switching sessions
+  useEffect(() => {
+    if (state.patientVersionSessionId && activeWorkflowId && state.patientVersionSessionId !== activeWorkflowId) {
+      actions.setPatientVersion(null);
+      actions.setPatientVersionSessionId(null);
+    }
+  }, [state.patientVersionSessionId, activeWorkflowId, actions]);
 
   // Streaming control
   const stopStreaming = useCallback(() => {
@@ -3015,6 +3030,10 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.setProcessing(false);
         actions.setProcessingStatus('idle');
 
+        // Get patient name for error reporting (used in both branches)
+        const currentSession = state.patientSessions.find(s => s.id === sessionId);
+        const patientName = currentSession?.patient.name || 'Unknown Patient';
+
         // Update session to error state
         if (error.name === 'AbortError') {
           actions.updatePatientSession(sessionId, {
@@ -3023,9 +3042,6 @@ const OptimizedAppContent: React.FC = memo(() => {
             processingProgress: undefined // Clear progress immediately on cancel
           });
         } else {
-          const currentSession = state.patientSessions.find(s => s.id === sessionId);
-          const patientName = currentSession?.patient.name || 'Unknown Patient';
-
           actions.updatePatientSession(sessionId, {
             status: 'error',
             errors: [error.message || 'Processing failed'],
@@ -3707,10 +3723,125 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [actions, state.selectedSessionId]);
 
+  // ============================================
+  // AppHeader Action Handlers
+  // ============================================
+
+  /**
+   * Handle dictate mode action from AppHeader
+   * Routes to the appropriate workflow with recording
+   */
+  const handleHeaderDictate = useCallback((action: UnifiedAction) => {
+    console.log('🎤 Header dictate action:', action.id);
+    if (action.agentType) {
+      handleWorkflowSelect(action.agentType, action.quickActionField);
+    }
+  }, [handleWorkflowSelect]);
+
+  /**
+   * Handle type mode action from AppHeader
+   * Opens paste-notes panel for text input workflows
+   */
+  const handleHeaderType = useCallback((action: UnifiedAction) => {
+    console.log('⌨️ Header type action:', action.id);
+    if (action.agentType) {
+      handleTypeClick(action.agentType);
+    }
+  }, [handleTypeClick]);
+
+  /**
+   * Handle vision mode action from AppHeader
+   * Opens image investigation modal for vision workflows
+   */
+  const handleHeaderVision = useCallback((action: UnifiedAction) => {
+    console.log('📷 Header vision action:', action.id);
+    if (action.id === 'investigation-summary' || action.agentType === 'investigation-summary') {
+      actions.openOverlay('image-investigation');
+      actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+    }
+  }, [actions, state.selectedSessionId]);
+
+  /**
+   * Handle click-only actions from AppHeader
+   * For single-click utilities like screenshot annotation
+   */
+  const handleHeaderClick = useCallback(async (action: UnifiedAction) => {
+    console.log('👆 Header click action:', action.id);
+
+    // Handle specific click actions
+    switch (action.id) {
+      case 'annotate-screenshots':
+        try {
+          const url = chrome.runtime.getURL('src/canvas/index.html');
+          await chrome.tabs.create({ url, active: true });
+        } catch (error) {
+          console.error('❌ Failed to open Canvas page:', error);
+          actions.setErrors(['Unable to open Canvas. Please try again.']);
+        }
+        break;
+      case 'patient-education':
+        actions.openOverlay('patient-education');
+        actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+        break;
+      case 'ai-medical-review':
+        // Open AI review section/modal
+        console.log('🤖 Opening AI Medical Review');
+        break;
+      default:
+        console.log('⚠️ Unhandled click action:', action.id);
+    }
+  }, [actions, state.selectedSessionId]);
+
+  /**
+   * Handle Wrap Up action from AppHeader favourites
+   */
+  const handleWrapUp = useCallback(() => {
+    console.log('📝 Wrap Up action triggered');
+    // Open rounds or wrap-up functionality
+    setRoundsOpen(true);
+  }, []);
+
+  /**
+   * Handle opening full settings page
+   */
+  const handleOpenFullSettings = useCallback(() => {
+    console.log('⚙️ Opening full settings page');
+    chrome.runtime.openOptionsPage();
+  }, []);
+
+  const convertMarkdownToClipboardHtml = useCallback((text: string) => {
+    const escapeHtml = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const escaped = escapeHtml(text);
+    const withBold = escaped.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+    const withItalics = withBold.replace(/\*(?!\*)([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
+    const withLineBreaks = withItalics.replace(/\n/g, '<br>');
+    return `<div>${withLineBreaks}</div>`;
+  }, []);
+
   // Clipboard operations
   const handleCopy = useCallback(async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      const canWriteHtml = typeof ClipboardItem !== 'undefined' && !!navigator.clipboard?.write;
+      if (canWriteHtml) {
+        const htmlContent = convertMarkdownToClipboardHtml(text);
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([htmlContent], { type: 'text/html' }),
+              'text/plain': new Blob([text], { type: 'text/plain' })
+            })
+          ]);
+        } catch (clipboardError) {
+          console.warn('HTML clipboard write failed, falling back to plain text:', clipboardError);
+          await navigator.clipboard.writeText(text);
+        }
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
       console.log('📋 Text copied to clipboard');
 
       // Auto-mark current session as complete when user copies results
@@ -3725,7 +3856,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.error('Failed to copy text:', error);
       throw error;
     }
-  }, [state.currentSessionId, state.patientSessions, handleMarkSessionComplete]);
+  }, [convertMarkdownToClipboardHtml, state.currentSessionId, state.patientSessions, handleMarkSessionComplete]);
 
   // State for transcription edit feedback
   const [transcriptionSaveStatus, setTranscriptionSaveStatus] = useState<{
@@ -4115,7 +4246,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       // Check if Whisper server is running
-      const serverStatus = await lmStudioService.whisperServerService.checkHealth();
+      const serverStatus = await WhisperServerService.getInstance().checkServerStatus(true);
       if (!serverStatus.running) {
         throw new Error(`Whisper server still not running. ${serverStatus.error || 'Please run ./start-whisper-server.sh'}`);
       }
@@ -4638,12 +4769,19 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   // Patient version generation handler
   const handleGeneratePatientVersion = useCallback(async () => {
-    if (!state.results || state.isGeneratingPatientVersion) {
+    const displayData = getCurrentDisplayData();
+    const sourceResults = displayData?.results || state.results;
+    const sourceAgent = displayData?.agent ?? state.currentAgent;
+    const sourceSessionId = state.displaySession.isDisplayingSession
+      ? state.displaySession.displaySessionId
+      : (state.currentSessionId || state.selectedSessionId || activeWorkflowId || null);
+
+    if (!sourceResults || state.isGeneratingPatientVersion) {
       return;
     }
 
     // Check if current agent supports patient version generation
-    const supportsPatientVersion = state.currentAgent === 'quick-letter' || state.currentAgent === 'angiogram-pci';
+    const supportsPatientVersion = sourceAgent === 'quick-letter' || sourceAgent === 'angiogram-pci';
     if (!supportsPatientVersion) {
       return;
     }
@@ -4651,21 +4789,22 @@ const OptimizedAppContent: React.FC = memo(() => {
     try {
       console.log(`🎯 Generating patient-friendly version for ${state.currentAgent}`);
       actions.setGeneratingPatientVersion(true);
+      actions.setPatientVersionSessionId(sourceSessionId ?? null);
 
       let patientFriendlyVersion: string;
 
-      if (state.currentAgent === 'quick-letter') {
+      if (sourceAgent === 'quick-letter') {
         // Import QuickLetterAgent dynamically
         const { QuickLetterAgent } = await import('@/agents/specialized/QuickLetterAgent');
         const quickLetterAgent = new QuickLetterAgent();
-        patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(state.results);
-      } else if (state.currentAgent === 'angiogram-pci') {
+        patientFriendlyVersion = await quickLetterAgent.generatePatientVersion(sourceResults);
+      } else if (sourceAgent === 'angiogram-pci') {
         // Import AngiogramPCIAgent dynamically
         const { AngiogramPCIAgent } = await import('@/agents/specialized/AngiogramPCIAgent');
         const angiogramAgent = new AngiogramPCIAgent();
-        patientFriendlyVersion = await angiogramAgent.generatePatientVersion(state.results);
+        patientFriendlyVersion = await angiogramAgent.generatePatientVersion(sourceResults);
       } else {
-        throw new Error(`Patient version not supported for ${state.currentAgent}`);
+        throw new Error(`Patient version not supported for ${sourceAgent}`);
       }
 
       // Update state with the generated patient version
@@ -4674,7 +4813,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('✅ Patient version generated successfully');
 
       // Open patient messaging with the generated patient version prefilled for editing/sending
-      if (state.currentAgent === 'quick-letter') {
+      if (sourceAgent === 'quick-letter') {
         try {
           await chrome.runtime.sendMessage({
             type: 'EXECUTE_ACTION',
@@ -4696,7 +4835,90 @@ const OptimizedAppContent: React.FC = memo(() => {
     } finally {
       actions.setGeneratingPatientVersion(false);
     }
-  }, [state.results, state.currentAgent, state.isGeneratingPatientVersion, actions]);
+  }, [
+    state.results,
+    state.currentAgent,
+    state.isGeneratingPatientVersion,
+    state.displaySession.isDisplayingSession,
+    state.displaySession.displaySessionId,
+    state.currentSessionId,
+    state.selectedSessionId,
+    activeWorkflowId,
+    getCurrentDisplayData,
+    actions
+  ]);
+
+  const buildLesionReviewKey = useCallback((results: string) => {
+    const sessionId = activeWorkflowId || state.currentSessionId || 'active';
+    return `${sessionId}::${results.trim().length}`;
+  }, [activeWorkflowId, state.currentSessionId]);
+
+  const openLesionReview = useCallback(() => {
+    if (state.displaySession.isDisplayingSession) return;
+    if (state.currentAgent !== 'angiogram-pci') return;
+    if (!state.results || !state.results.trim()) return;
+    const key = buildLesionReviewKey(state.results);
+    const parsedTree = parseLesionTreeFromReport(state.results);
+    setLesionReviewState({
+      open: true,
+      tree: parsedTree,
+      sourceKey: key
+    });
+  }, [state.displaySession.isDisplayingSession, state.currentAgent, state.results, buildLesionReviewKey, parseLesionTreeFromReport]);
+
+  const handleLesionReviewConfirm = useCallback((tree: LesionTree) => {
+    if (!state.results) {
+      setLesionReviewState(prev => ({ ...prev, open: false }));
+      return;
+    }
+    const updatedFindings = formatLesionTree(tree);
+    const updatedReport = replaceFindingsSection(state.results, updatedFindings);
+    const key = buildLesionReviewKey(updatedReport);
+    setLesionReviewState({
+      open: false,
+      tree,
+      sourceKey: key
+    });
+    actions.setResults(updatedReport);
+    if (state.currentSessionId) {
+      actions.updatePatientSession(state.currentSessionId, { results: updatedReport });
+    }
+  }, [state.results, actions, state.currentSessionId, buildLesionReviewKey, formatLesionTree, replaceFindingsSection]);
+
+  const handleLesionReviewSkip = useCallback(() => {
+    if (state.results) {
+      const key = buildLesionReviewKey(state.results);
+      setLesionReviewState(prev => ({ ...prev, open: false, sourceKey: key }));
+    } else {
+      setLesionReviewState(prev => ({ ...prev, open: false }));
+    }
+  }, [state.results, buildLesionReviewKey]);
+
+  useEffect(() => {
+    if (state.displaySession.isDisplayingSession) return;
+    if (state.currentAgent !== 'angiogram-pci') return;
+    if (state.isProcessing || state.streaming) return;
+    if (!state.results || !state.results.trim()) return;
+
+    const key = buildLesionReviewKey(state.results);
+    if (lesionReviewState.sourceKey === key) return;
+
+    const parsedTree = parseLesionTreeFromReport(state.results);
+    setLesionReviewState({
+      open: true,
+      tree: parsedTree,
+      sourceKey: key
+    });
+  }, [
+    state.displaySession.isDisplayingSession,
+    state.currentAgent,
+    state.isProcessing,
+    state.streaming,
+    state.results,
+    buildLesionReviewKey,
+    lesionReviewState.sourceKey,
+    parseLesionTreeFromReport
+  ]);
 
   // Helper function to validate patient names before insertion
   const validatePatientBeforeInsertion = useCallback(async (text: string): Promise<boolean> => {
@@ -5260,24 +5482,37 @@ const OptimizedAppContent: React.FC = memo(() => {
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Hidden when Rounds overlay is open */}
       {!roundsOpen && (
-        <SidebarHeader
+        <AppHeader
+          // Action callbacks
+          onDictate={handleHeaderDictate}
+          onType={handleHeaderType}
+          onVision={handleHeaderVision}
+          onClick={handleHeaderClick}
+          onWrapUp={handleWrapUp}
+          onOpenFullSettings={handleOpenFullSettings}
+
+          // State display
           status={recorder.isRecording ? 'recording' : state.processingStatus}
           isRecording={recorder.isRecording}
-          currentAgent={state.currentAgent || state.ui.activeWorkflow}
           modelStatus={state.modelStatus}
-          onRefreshServices={checkModelStatus}
+
+          // Patient info
+          patientInfo={state.currentPatientInfo}
+
+          // Session management
           patientSessions={state.patientSessions}
-          onRemoveSession={handleRemoveSession}
-          onClearAllSessions={actions.clearPatientSessions}
-          onSessionSelect={handleSessionSelect}
-          onResumeRecording={handleResumeRecording}
-          onAgentReprocess={handleAgentReprocess}
           selectedSessionId={stableSelectedSessionId}
           currentSessionId={state.currentSessionId}
           checkedSessionIds={allCheckedSessions}
-          onToggleSessionCheck={handleToggleSessionCheck}
           persistedSessionIds={state.persistedSessionIds}
-          onTitleClick={handleReturnHome}
+          onSessionSelect={handleSessionSelect}
+          onRemoveSession={handleRemoveSession}
+          onClearAllSessions={actions.clearPatientSessions}
+          onToggleSessionCheck={handleToggleSessionCheck}
+          onResumeRecording={handleResumeRecording}
+          onAgentReprocess={handleAgentReprocess}
+
+          // Mobile jobs
           mobileJobs={mobileJobs}
           mobileJobsLoading={mobileJobsLoading}
           mobileJobsError={mobileJobsError}
@@ -5287,7 +5522,14 @@ const OptimizedAppContent: React.FC = memo(() => {
           attachingMobileJobId={attachingMobileJobId}
           deletingMobileJobId={deletingMobileJobId}
           attachedMobileJobIds={attachedMobileJobIds}
+
+          // Quick Add
           onOpenQuickAdd={() => setGlobalQuickAddOpen(true)}
+
+          // Loading/settings
+          loadingActions={new Set<string>()}
+          isDarkMode={extensionDarkMode}
+          onToggleDarkMode={toggleExtensionDarkMode}
         />
       )}
 
@@ -5699,11 +5941,12 @@ const OptimizedAppContent: React.FC = memo(() => {
                 currentAgentName={displayData.agentName}
                 isViewingSession={displayData.isDisplayingSession}
                 modelUsed={displayData.modelUsed || null}
-                selectedSessionId={displayData.isDisplayingSession ? displayData.patientInfo?.name || 'Unknown' : stableSelectedSessionId}
+                selectedSessionId={displayData.isDisplayingSession ? state.displaySession.displaySessionId || stableSelectedSessionId : stableSelectedSessionId}
                 selectedPatientName={displayData.patientInfo?.name || stableSelectedPatientName}
-                patientVersion={displayData.isDisplayingSession ? null : state.patientVersion}
-                isGeneratingPatientVersion={displayData.isDisplayingSession ? false : state.isGeneratingPatientVersion}
-                onGeneratePatientVersion={displayData.isDisplayingSession ? undefined : handleGeneratePatientVersion}
+                patientVersion={state.patientVersionSessionId === activeWorkflowId ? state.patientVersion : null}
+                isGeneratingPatientVersion={state.isGeneratingPatientVersion}
+                onGeneratePatientVersion={handleGeneratePatientVersion}
+                onOpenLesionReview={!displayData.isDisplayingSession ? openLesionReview : undefined}
                 streaming={displayData.isDisplayingSession ? false : !!state.streaming}
                 streamBuffer={displayData.isDisplayingSession ? '' : state.streamBuffer || ''}
                 ttftMs={displayData.isDisplayingSession ? null : state.ttftMs ?? null}
@@ -5763,386 +6006,16 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
         </div>
         
-        {/* Footer - Quick Actions */}
-        <div className="flex-shrink-0 bg-white border-t border-gray-200 p-4 relative z-10">
-          <QuickActionsGrouped
-            onQuickAction={async (actionId, data?: any) => {
-              console.log('🔧 Quick action triggered:', actionId, data);
-              
-              try {
-                // Handle screenshot annotation action
-                if (actionId === 'annotate-screenshots') {
-                  console.log('📸 Opening full-page Canvas');
-                  try {
-                    const url = chrome.runtime.getURL('src/canvas/index.html');
-                    await chrome.tabs.create({ url, active: true });
-                  } catch (error) {
-                    console.error('❌ Failed to open Canvas page:', error);
-                    actions.setErrors(['Unable to open Canvas. Please try again.']);
-                  }
-                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                  return;
-                }
-
-                // Handle BP Diary Importer action
-                if (actionId === 'bp-diary-importer') {
-                  console.log('🩺 Opening BP Diary Importer');
-                  actions.openOverlay('bp-diary-importer');
-                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                  return;
-                }
-
-                if (actionId === 'lipid-profile-importer') {
-                  console.log('🧪 Opening Lipid Profile Importer');
-                  actions.openOverlay('lipid-profile-importer');
-                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                  return;
-                }
-
-                if (actionId === 'tte-trend-importer') {
-                  console.log('🫀 Opening TTE Trend Importer');
-                  actions.openOverlay('tte-trend-importer');
-                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                  return;
-                }
-
-                if (actionId === 'xestro-dark-mode') {
-                  console.log('🌙 Toggling Xestro dark mode');
-
-                  // Always toggle extension theme immediately for fast feedback
-                  const desiredState = toggleExtensionDarkMode();
-
-                  try {
-                    const response = await chrome.runtime.sendMessage({
-                      type: 'EXECUTE_ACTION',
-                      action: 'xestro-dark-mode',
-                      data: { force: desiredState }
-                    });
-
-                    if (response?.success) {
-                      const enabled = typeof response.enabled === 'boolean' ? response.enabled : desiredState;
-                      // Keep extension/theme state in sync with whatever the EMR applied
-                      applyExtensionDarkMode(enabled);
-
-                      const toast = ToastService.getInstance();
-
-                      if (enabled) {
-                        toast.success('Dark mode enabled', 'Operator and Xestro switched to dark.');
-                      } else {
-                        toast.info('Dark mode disabled', 'Back to the default light theme.');
-                      }
-                    } else {
-                      ToastService.getInstance().error('Dark mode toggle failed', response?.error || 'Open a Xestro tab and try again.');
-                    }
-                  } catch (error) {
-                    console.error('❌ Dark mode toggle failed:', error);
-                    ToastService.getInstance().error('Dark mode toggle failed', error instanceof Error ? error.message : 'Unknown error');
-                  }
-                  return;
-                }
-
-                // Handle Paste Letter action
-                if (actionId === 'paste-letter') {
-                  console.log('📋 Opening Paste Notes Panel');
-                  actions.openOverlay('paste-notes');
-                  actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                  return;
-                }
-                
-                // Handle patient education - show configuration card
-                if (actionId === 'patient-education') {
-                  if (data?.type === 'show-config') {
-                    console.log('🎓 Showing Patient Education configuration card');
-                    actions.openOverlay('patient-education');
-                    actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-                    return;
-                  }
-                }
-
-                if (actionId === 'pre-op-plan') {
-                  console.log('🗂️ Starting Pre-Op Plan workflow from quick action');
-                  await handleWorkflowSelect('pre-op-plan');
-                  return;
-                }
-                
-                // Handle bloods prepare-modal action (opens modal before dictation)
-                if (actionId === 'bloods' && data?.type === 'prepare-modal') {
-                  console.log('🩸 Preparing bloods modal for dictation...');
-                  await chrome.runtime.sendMessage({
-                    type: 'EXECUTE_ACTION',
-                    action: 'bloods',
-                    data: {} // Open modal without content
-                  });
-                  console.log('✅ Bloods modal opened for dictation');
-                  return;
-                }
-                
-                // Handle EMR field actions
-                if (['investigation-summary', 'background', 'medications', 'social-history', 'bloods', 'bloods-insert', 'imaging', 'quick-letter', 'appointment-wrap-up', 'profile-photo', 'create-task'].includes(actionId)) {
-                  // Start with the data parameter to preserve preset data for appointment-wrap-up
-                  const messageData: any = { ...data };
-
-                  // Show field ingestion overlay for data extraction actions
-                  if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId) && data?.type !== 'manual') {
-                    console.log(`🔧 TAVI Ingestion: Showing field ingestion overlay for ${actionId}`);
-                    actions.openOverlay('field-ingestion');
-                    actions.setUIMode('processing', { sessionId: state.selectedSessionId, origin: 'auto' });
-                  }
-
-                  // If we have results and it's not a manual type request, include the content
-                  if (state.results && state.results.trim().length > 0 && data?.type !== 'manual') {
-                    messageData.content = state.results;
-                    console.log('🔧 Sending content to EMR field:', actionId);
-                  } else {
-                    console.log('🔧 Opening EMR field for manual entry:', actionId);
-                  }
-
-                  await chrome.runtime.sendMessage({
-                    type: 'EXECUTE_ACTION',
-                    action: actionId,
-                    data: messageData
-                  });
-
-                  // Clear field ingestion overlay after action completes
-                  if (['investigation-summary', 'background', 'medications', 'social-history'].includes(actionId)) {
-                    console.log(`🔧 TAVI Ingestion: Clearing field ingestion overlay after ${actionId}`);
-                    setTimeout(() => {
-                      actions.closeOverlay('field-ingestion');
-                    }, 1500); // Give time for the extraction to complete
-                  }
-
-                  console.log('✅ Quick action completed:', actionId);
-                } else if (actionId === 'ai-medical-review') {
-                  // Handle AI Medical Review processing
-                  console.log('🤖 Processing AI Medical Review with data:', data);
-
-                  if (data?.formattedInput) {
-                    // Create a session for this AI Medical Review
-                    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-                    const patientInfo = state.currentPatientInfo || data.emrData?.patientInfo || {
-                      name: 'AI Medical Review Session',
-                      id: `AI-${Date.now()}`,
-                      dob: '',
-                      age: '',
-                      extractedAt: Date.now()
-                    };
-
-                    const patientSession: PatientSession = {
-                      id: sessionId,
-                      patient: patientInfo,
-                      transcription: '', // No audio transcription for AI Medical Review
-                      results: '',
-                      agentType: 'ai-medical-review',
-                      agentName: 'AI Medical Review',
-                      timestamp: Date.now(),
-                      status: 'processing',
-                      completed: false,
-                      processingStartTime: Date.now()
-                    };
-
-                    // Add the session to the timeline
-                    actions.addPatientSession(patientSession);
-                    actions.setCurrentSessionId(sessionId);
-
-                    // Set processing state
-                    actions.setProcessing(true);
-                    actions.setCurrentAgent('ai-medical-review');
-                    actions.setResults('');
-                    actions.setErrors([]);
-                    actions.setProcessingStartTime(Date.now());
-
-                    // Initialize pipeline progress at AI Analysis stage (skip audio/transcription for AI Review)
-                    actions.setPipelineProgress({
-                      stage: 'ai-analysis',
-                      progress: 45,
-                      stageProgress: 10,
-                      details: 'Analyzing EMR data against Australian guidelines',
-                      modelName: 'MedGemma-27B'
-                    });
-
-                    // Update session with initial progress
-                    actions.updatePatientSession(sessionId, {
-                      pipelineProgress: {
-                        stage: 'ai-analysis',
-                        progress: 45,
-                        stageProgress: 10,
-                        details: 'Analyzing EMR data against Australian guidelines',
-                        modelName: 'MedGemma-27B'
-                      }
-                    });
-
-                    try {
-                      // Import AgentFactory dynamically to avoid circular dependencies
-                      const { AgentFactory } = await import('@/services/AgentFactory');
-
-                      // Update progress to generation stage
-                      actions.setPipelineProgress({
-                        stage: 'generation',
-                        progress: 70,
-                        stageProgress: 30,
-                        details: 'Generating clinical findings and recommendations',
-                        modelName: 'MedGemma-27B'
-                      });
-                      actions.updatePatientSession(sessionId, {
-                        pipelineProgress: {
-                          stage: 'generation',
-                          progress: 70,
-                          stageProgress: 30,
-                          details: 'Generating clinical findings and recommendations',
-                          modelName: 'MedGemma-27B'
-                        }
-                      });
-
-                      // Process with the AI Medical Review agent
-                      console.log('🤖 Processing with BatchPatientReviewAgent...');
-                      const result = await AgentFactory.processWithAgent('ai-medical-review', data.formattedInput);
-
-                      // Debug: Check what we got back
-                      console.log('🔍 AI Review Result:', {
-                        hasReviewData: !!result.reviewData,
-                        reviewDataKeys: result.reviewData ? Object.keys(result.reviewData) : null,
-                        findingsCount: result.reviewData?.findings?.length || 0,
-                        resultKeys: Object.keys(result),
-                        contentPreview: result.content?.substring(0, 200)
-                      });
-
-                      // Store structured review data in state for card display (like Patient Education)
-                      if (result.reviewData) {
-                        console.log('✅ Storing reviewData in state:', result.reviewData);
-                        actions.setReviewData(result.reviewData);
-                      } else {
-                        console.warn('⚠️ No reviewData found in result!');
-                      }
-
-                      // Calculate processing time with safe fallback if start time was not recorded
-                      const processingStartTime = patientSession.processingStartTime ?? patientSession.timestamp ?? Date.now();
-                      const processingTime = Date.now() - processingStartTime;
-
-                      // Update session with results and mark completed
-                      actions.updatePatientSession(sessionId, {
-                        results: result.content,
-                        status: 'completed',
-                        completed: true,
-                        reviewData: result.reviewData,
-                        processingTime,
-                        pipelineProgress: {
-                          stage: 'generation',
-                          progress: 100,
-                          stageProgress: 100,
-                          details: `Review completed in ${Math.round(processingTime / 1000)}s`,
-                          modelName: 'MedGemma-27B'
-                        }
-                      });
-
-                      // Update state with results
-                      actions.setMissingInfo(result.missingInfo || null);
-                      // Use atomic completion to ensure consistent state management
-                      actions.completeProcessingAtomic(sessionId, result.content);
-
-                      console.log('✅ AI Medical Review completed successfully in', processingTime, 'ms');
-                    } catch (error) {
-                      console.error('❌ AI Medical Review processing failed:', error);
-
-                      // Mark session as failed
-                      actions.updatePatientSession(sessionId, {
-                        status: 'error',
-                        completed: true,
-                        errors: [`AI Medical Review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
-                      });
-
-                      actions.setErrors([`AI Medical Review failed: ${error instanceof Error ? error.message : 'Unknown error'}`]);
-                      actions.setProcessingStatus('idle');
-                      actions.setProcessing(false);
-                    }
-                  } else {
-                    console.error('❌ AI Medical Review: No formatted input provided');
-                    actions.setErrors(['AI Medical Review failed: No patient data available']);
-                    actions.setProcessingStatus('idle');
-                    actions.setProcessing(false);
-                  }
-                } else if (actionId === 'batch-ai-review' && data?.type === 'show-modal') {
-                  // Handle batch AI review modal trigger - extract calendar patients first
-                  console.log('👥 Batch AI Review: Extracting calendar patients before opening modal...');
-
-                  // Set extracting state
-                  actions.setExtractingPatients(true);
-                  actions.setExtractError(null);
-
-                  try {
-                    // Get current tab
-                    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                    if (!tab?.id) {
-                      throw new Error('No active tab found. Please navigate to the EMR calendar page.');
-                    }
-
-                    console.log('📅 Requesting calendar extraction from tab:', tab.id);
-
-                    // Extract calendar patients from current page via content script
-                    const response = await new Promise<{ success: boolean; data?: any; error?: string }>((resolve) => {
-                      chrome.tabs.sendMessage(tab.id!, {
-                        type: 'extract-calendar-patients'
-                      }, (response) => {
-                        if (chrome.runtime.lastError) {
-                          console.error('📅 Chrome runtime error:', chrome.runtime.lastError);
-                          resolve({ success: false, error: chrome.runtime.lastError.message });
-                          return;
-                        }
-                        resolve(response || { success: false, error: 'No response from content script' });
-                      });
-                    });
-
-                    console.log('📅 Calendar extraction response:', response);
-
-                    if (response.success && response.data) {
-                      // Store calendar data in state
-                      actions.setCalendarData(response.data);
-                      actions.setExtractingPatients(false);
-
-                      console.log(`✅ Extracted ${response.data.totalCount} patients from calendar`);
-
-                      // Now open modal with populated data
-                      actions.openOverlay('patient-selection');
-                      actions.setUIMode('batch', { sessionId: null, origin: 'user' });
-                    } else {
-                      throw new Error(response.error || 'Failed to extract calendar patients. Make sure you are on the EMR appointment calendar page.');
-                    }
-                  } catch (error) {
-                    console.error('❌ Calendar extraction failed:', error);
-                    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-                    actions.setExtractingPatients(false);
-                    actions.setExtractError(errorMessage);
-
-                    // Still open modal to show error message
-                    actions.openOverlay('patient-selection');
-                    actions.setUIMode('batch', { sessionId: null, origin: 'user' });
-                  }
-                } else {
-                  console.log('ℹ️ Unhandled quick action:', actionId);
-                }
-              } catch (error) {
-                console.error('❌ Quick action failed:', actionId, error);
-                // Show user-friendly error feedback
-                actions.setErrors([`Failed to execute ${actionId}: ${error instanceof Error ? error.message : 'Unknown error'}`]);
-              }
-            }}
-            onStartWorkflow={(workflowId) => handleWorkflowSelect(workflowId as AgentType)}
-            onTypeClick={handleTypeClick}
-            isFooter={true}
-            isRecording={recorder.isRecording}
-            activeWorkflow={state.ui.activeWorkflow}
-            voiceActivityLevel={state.voiceActivityLevel}
-            recordingTime={recorder.recordingTime}
-            whisperServerRunning={state.modelStatus.whisperServer?.running}
-            onOpenRounds={() => setRoundsOpen(true)}
-            onImageInvestigation={() => {
-              console.log('📷 Opening Image Investigation modal');
-              actions.openOverlay('image-investigation');
-              actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-            }}
-          />
-        </div>
       </div>
+
+      {lesionReviewState.open && (
+        <AngioLesionReviewDialog
+          open={lesionReviewState.open}
+          lesionTree={lesionReviewState.tree}
+          onClose={handleLesionReviewSkip}
+          onConfirm={handleLesionReviewConfirm}
+        />
+      )}
 
       {/* Overlay Modals and Components */}
       

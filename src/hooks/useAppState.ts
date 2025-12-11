@@ -229,6 +229,7 @@ type AppAction =
   | { type: 'SET_SELECTED_SESSION_ID'; payload: string | null }
   | { type: 'SET_PROCESSING_PROGRESS'; payload: number }
   | { type: 'SET_AI_REVIEW_START_TIME'; payload: number }
+  | { type: 'SET_PATIENT_VERSION_SESSION_ID'; payload: string | null }
   | { type: 'SET_PATIENT_VERSION'; payload: string | null }
   | { type: 'SET_GENERATING_PATIENT_VERSION'; payload: boolean }
   // Streaming actions
@@ -308,6 +309,7 @@ const initialState: CombinedAppState = {
   mteerValidationResult: null,
   mteerValidationStatus: undefined,
   mteerExtractedData: undefined,
+  patientVersionSessionId: null,
   patientVersion: null,
   isGeneratingPatientVersion: false,
   // Streaming
@@ -774,6 +776,10 @@ function appStateReducer(state: CombinedAppState, action: AppAction): CombinedAp
     case 'SET_AI_REVIEW_START_TIME':
       return { ...state, ui: { ...state.ui, processingStartTime: action.payload } };
       
+    case 'SET_PATIENT_VERSION_SESSION_ID':
+      if (state.patientVersionSessionId === action.payload) return state;
+      return { ...state, patientVersionSessionId: action.payload };
+
     case 'SET_PATIENT_VERSION':
       if (state.patientVersion === action.payload) return state;
       return { ...state, patientVersion: action.payload };
@@ -1365,6 +1371,10 @@ export function useAppState() {
     
     setPatientVersion: useCallback((version: string | null) => {
       dispatch({ type: 'SET_PATIENT_VERSION', payload: version });
+    }, []),
+
+    setPatientVersionSessionId: useCallback((sessionId: string | null) => {
+      dispatch({ type: 'SET_PATIENT_VERSION_SESSION_ID', payload: sessionId });
     }, []),
     
     setGeneratingPatientVersion: useCallback((generating: boolean) => {

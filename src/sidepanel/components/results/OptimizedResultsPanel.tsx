@@ -11,7 +11,7 @@
 import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
-import { EyeOff, Eye, Download, Sparkles, Loader2, X, Tag } from 'lucide-react';
+import { EyeOff, Eye, Download, Sparkles, Loader2, X, Tag, GitBranch } from 'lucide-react';
 import Button, { IconButton } from '../buttons/Button';
 import { calculateWordCount, calculateReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
@@ -306,6 +306,7 @@ interface OptimizedResultsPanelProps {
   rhcReport?: any; // RightHeartCathReport with haemodynamic calculations
   onUpdateRhcReport?: (rhcReport: any) => void; // Callback to persist edited RHC report to session
   onRHCReprocessWithValidation?: (userFields: Record<string, any>) => void; // Callback for RHC validation reprocessing
+  onOpenLesionReview?: () => void;
   // Pipeline progress for unified progress bar
   pipelineProgress?: PipelineProgress | null;
   processingStartTime?: number | null;
@@ -410,6 +411,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   rhcReport,
   onUpdateRhcReport,
   onRHCReprocessWithValidation,
+  onOpenLesionReview,
   // Pipeline progress
   pipelineProgress,
   processingStartTime,
@@ -1576,23 +1578,33 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onEditAndTrain={onRevisionToggle ? () => onRevisionToggle(!isRevisionOpen) : undefined}
               editAndTrainActive={isRevisionOpen}
               disableEditAndTrain={isProcessing || !results}
-              customActions={agentType === 'angiogram-pci' ? [
-                {
-                  id: 'generate-patient-version',
-                  label: isGeneratingPatientVersion ? 'Generating...' : 'Patient Version',
-                  icon: ({ className }: { className?: string }) => (
-                    isGeneratingPatientVersion ? (
-                      <div className={`border-2 border-blue-300 border-t-transparent rounded-full animate-spin ${className}`}></div>
-                    ) : (
-                      <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    )
-                  ),
-                  onClick: onGeneratePatientVersion || (() => {}),
-                  variant: 'secondary' as const
-                }
-              ] : []}
+              customActions={agentType === 'angiogram-pci'
+                ? [
+                    ...(onOpenLesionReview ? [{
+                      id: 'review-lesions',
+                      label: 'Lesions',
+                      icon: ({ className }: { className?: string }) => <GitBranch className={className} />,
+                      onClick: onOpenLesionReview,
+                      variant: 'secondary' as const
+                    }] : []),
+                    ...(onGeneratePatientVersion ? [{
+                      id: 'generate-patient-version',
+                      label: isGeneratingPatientVersion ? 'Generating...' : 'Patient Version',
+                      icon: ({ className }: { className?: string }) => (
+                        isGeneratingPatientVersion ? (
+                          <div className={`border-2 border-blue-300 border-t-transparent rounded-full animate-spin ${className}`}></div>
+                        ) : (
+                          <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        )
+                      ),
+                      onClick: onGeneratePatientVersion,
+                      disabled: isGeneratingPatientVersion,
+                      variant: 'secondary' as const
+                    }] : [])
+                  ]
+                : []}
             />
           </motion.div>
         )}

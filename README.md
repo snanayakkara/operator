@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.42.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.43.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.42.0 adds multi-turn ward conversation engine with structured checklists, keyboard shortcuts for results (⇧C/⇧I), transcription retry for failed Whisper calls, UI design system refresh (Sera-inspired tokens), extension dark mode, and storage management panel.
+> **Latest:** v3.43.0 adds an angiogram lesion review tree (edit/approve before reporting), session-aware patient-friendly versions that trigger in completed sessions, and HTML clipboard copy so bold text stays bold in EMRs.
 
 ## 🏥 Overview
 
@@ -616,6 +616,11 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v3.43.0 (December 2025) — Angio Lesion Editor + Patient Copy Fixes
+- **Angiogram lesion review tree**: Auto-parses FINDINGS into vessel/branch lesions for quick add/edit/remove before regenerating the report.
+- **Lesions + patient-friendly actions**: New Lesions action chip in angiogram results; patient-friendly versions now run from completed sessions and lock to the active report.
+- **Clipboard fidelity**: Copy now writes HTML + plain text so markdown bold stays bold when pasted into EMR word processors (OnlyOffice).
+
 ### v3.41.0 (December 2025) — Rounds Clinicians + RHC Safety
 - **Clinician rosters & assignments**: Persist clinicians, quick-add/assign per patient, and manage chips inline on the patient card.
 - **LLM ward updates**: Generate 280-character update messages from recent ward events (issues, labs, tasks, ward entries) with selectable time windows and copy action.
@@ -696,7 +701,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.41.0 | **Updated**: December 2025 | **Architecture**: Advanced Intelligence with Local-First Medical AI + Rounds Clinician Roster & RHC Safety
+**Version**: 3.43.0 | **Updated**: December 2025 | **Architecture**: Angio lesion review flow + session-aware patient-friendly generation with EMR-safe clipboard formatting
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

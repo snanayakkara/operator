@@ -21,6 +21,7 @@ export interface CustomAction {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   onClick: () => void;
+  disabled?: boolean;
   variant?: 'primary' | 'secondary';
 }
 
@@ -108,7 +109,8 @@ const ActionButtons: React.FC<ActionButtonsProps> = memo(({
     options.push({
       id: action.id,
       label: action.label,
-      icon: action.icon
+      icon: action.icon,
+      disabled: action.disabled
     });
   });
 

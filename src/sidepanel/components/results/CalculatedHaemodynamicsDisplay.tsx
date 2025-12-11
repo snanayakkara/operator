@@ -215,7 +215,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
 
       {/* TIER 1: Essential Calculations */}
       {hasTier1Values && (
-        <div className="border border-gray-200 rounded-lg bg-white">
+        <div className="rounded-lg">
           <button
             type="button"
             onClick={() => toggleTier('tier1')}
@@ -223,11 +223,10 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
           >
             <TrendingUp className="w-5 h-5 text-emerald-600 flex-shrink-0" />
             <h3 className="text-base font-semibold text-gray-900">Essential Haemodynamics</h3>
-            <span className="text-xs text-gray-500">(Tier 1)</span>
             {expandedTiers.has('tier1') ? (
-              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             )}
           </button>
 
@@ -337,7 +336,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
 
       {/* TIER 2: High-Value Calculations */}
       {hasTier2Values && (
-        <div className="border border-gray-200 rounded-lg bg-white">
+        <div className="rounded-lg">
           <button
             type="button"
             onClick={() => toggleTier('tier2')}
@@ -345,11 +344,10 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
           >
             <Activity className="w-5 h-5 text-purple-600 flex-shrink-0" />
             <h3 className="text-base font-semibold text-gray-900">Advanced Metrics</h3>
-            <span className="text-xs text-gray-500">(Tier 2)</span>
             {expandedTiers.has('tier2') ? (
-              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             )}
           </button>
 
@@ -433,7 +431,7 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
 
       {/* TIER 3: Advanced Calculations */}
       {hasTier3Values && (
-        <div className="border border-gray-200 rounded-lg bg-white">
+        <div className="rounded-lg">
           <button
             type="button"
             onClick={() => toggleTier('tier3')}
@@ -441,11 +439,10 @@ export const CalculatedHaemodynamicsDisplay: React.FC<CalculatedHaemodynamicsDis
           >
             <Heart className="w-5 h-5 text-blue-600 flex-shrink-0" />
             <h3 className="text-base font-semibold text-gray-900">Specialized Calculations</h3>
-            <span className="text-xs text-gray-500">(Tier 3)</span>
             {expandedTiers.has('tier3') ? (
-              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             ) : (
-              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 ml-auto" />
             )}
           </button>
 
