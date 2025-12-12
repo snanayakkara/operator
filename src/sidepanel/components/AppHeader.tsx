@@ -220,7 +220,7 @@ export const AppHeader: React.FC<AppHeaderProps> = memo(({
               "
                 style={{ borderRadius: radius.sm }}
               >
-                <User size={12} className="text-emerald-600" />
+                <User size={14} className="text-emerald-600" />
                 <span className="text-[11px] font-medium text-emerald-700 max-w-[120px] truncate">
                   {(() => {
                     const name = patientInfo.name || 'Patient';
@@ -312,7 +312,7 @@ export const AppHeader: React.FC<AppHeaderProps> = memo(({
         {/* Favourites Row (only visible when drawer is closed) */}
         {!isCommandOpen && (
           <motion.div
-            className="px-3 pb-3"
+            className="px-3 pb-2"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: animation.duration.fast / 1000 }}

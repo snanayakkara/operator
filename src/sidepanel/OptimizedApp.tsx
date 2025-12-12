@@ -71,6 +71,7 @@ import Button from './components/buttons/Button';
 import { ChevronDown, Calendar, Brain, Star, Keyboard } from 'lucide-react';
 import { RoundsView } from './components/rounds/RoundsView';
 import { QuickAddModal } from './components/rounds/QuickAddModal';
+import { AppointmentMatrixBuilder } from './components/AppointmentMatrixBuilder';
 
 interface CurrentDisplayData {
   transcription: string;
@@ -223,6 +224,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const audioDeviceContext = useAudioDeviceContext();
   const rounds = useRounds();
   const [roundsOpen, setRoundsOpen] = useState(false);
+  const [appointmentBuilderOpen, setAppointmentBuilderOpen] = useState(false);
   const [globalQuickAddOpen, setGlobalQuickAddOpen] = useState(false);
   const [extensionDarkMode, setExtensionDarkMode] = useState(false);
   const overlayState = {
@@ -706,6 +708,17 @@ const OptimizedAppContent: React.FC = memo(() => {
           summaryLength: report.summary?.length || 0,
           agentType: finalAgentType
         });
+
+        // Detect when agent output matches input (generation failure)
+        // This catches cases where LM Studio echoes input or fails to transform
+        const contentMatchesInput = report.content?.trim() === job.transcript_text?.trim();
+        if (contentMatchesInput && agentType !== 'transcription') {
+          console.error('❌ Mobile job: Agent returned transcription unchanged');
+          console.error('   Agent type:', agentType);
+          console.error('   Transcript length:', job.transcript_text?.length || 0);
+          console.error('   Output length:', report.content?.length || 0);
+          throw new Error('Letter generation failed: Output matches input unchanged. Ensure LM Studio is running with a model loaded.');
+        }
 
         actions.setResults(report.content);
         if (report.summary) {
@@ -3406,7 +3419,13 @@ const OptimizedAppContent: React.FC = memo(() => {
         angiogramValidationStatus: state.angiogramValidationStatus,
         mteerValidationResult: state.mteerValidationResult ?? null,
         mteerValidationStatus: state.mteerValidationStatus,
-        agent: state.currentAgent,
+        // Use fallback chain: currentAgent -> activeWorkflow -> session's agentType
+        // This fixes race condition where currentAgent isn't set until streaming begins
+        agent: state.currentAgent || state.ui.activeWorkflow || (
+          state.currentSessionId
+            ? state.patientSessions.find(s => s.id === state.currentSessionId)?.agentType || null
+            : null
+        ),
         agentName: state.currentAgentName,
         patientInfo: state.currentPatientInfo,
         processingTime: state.totalProcessingTime,
@@ -3450,7 +3469,13 @@ const OptimizedAppContent: React.FC = memo(() => {
       preOpPlanData: state.preOpPlanData,
       reviewData: state.reviewData,
       rhcReport: state.rhcReport,
-      agent: state.currentAgent,
+      // Use fallback chain: currentAgent -> activeWorkflow -> session's agentType
+      // This fixes race condition where currentAgent isn't set until streaming begins
+      agent: state.currentAgent || state.ui.activeWorkflow || (
+        state.currentSessionId
+          ? state.patientSessions.find(s => s.id === state.currentSessionId)?.agentType || null
+          : null
+      ),
       agentName: state.currentAgentName,
       patientInfo: state.currentPatientInfo,
       processingTime: state.totalProcessingTime,
@@ -3715,11 +3740,24 @@ const OptimizedAppContent: React.FC = memo(() => {
   const handleTypeClick = useCallback((workflowId: AgentType) => {
     console.log('⌨️ Type mode selected for workflow:', workflowId);
 
-    // Open the paste-notes panel for supported workflows
-    if (workflowId === 'quick-letter' || workflowId === 'right-heart-cath') {
+    // Workflows that support type/paste mode
+    const typeSupported: AgentType[] = [
+      'quick-letter',
+      'right-heart-cath',
+      'background',
+      'investigation-summary',
+      'consultation',
+      'medication',
+      'bloods',
+      'imaging'
+    ];
+
+    if (typeSupported.includes(workflowId)) {
       setTypeWorkflowId(workflowId);
       actions.openOverlay('paste-notes');
       actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+    } else {
+      console.warn(`⚠️ Type mode not implemented for: ${workflowId}`);
     }
   }, [actions, state.selectedSessionId]);
 
@@ -3758,6 +3796,8 @@ const OptimizedAppContent: React.FC = memo(() => {
     if (action.id === 'investigation-summary' || action.agentType === 'investigation-summary') {
       actions.openOverlay('image-investigation');
       actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+    } else {
+      console.warn(`⚠️ Vision mode not implemented for: ${action.id}`);
     }
   }, [actions, state.selectedSessionId]);
 
@@ -3783,22 +3823,91 @@ const OptimizedAppContent: React.FC = memo(() => {
         actions.openOverlay('patient-education');
         actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
         break;
+      case 'ward-list':
+        setRoundsOpen(true);
+        break;
+      case 'appointment-wrap-up':
+        setAppointmentBuilderOpen(true);
+        break;
       case 'ai-medical-review':
         // Open AI review section/modal
         console.log('🤖 Opening AI Medical Review');
         break;
+
+      // === Profile Photo - Capture from doxy.me tab ===
+      case 'profile-photo':
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'profile-photo',
+            data: {}
+          });
+          console.log('📸 Profile photo capture initiated');
+        } catch (error) {
+          console.error('❌ Failed to capture profile photo:', error);
+          actions.setErrors(['Unable to capture photo. Please try again.']);
+        }
+        break;
+
+      // === Analysis Importers - Open overlay modals ===
+      case 'bp-diary-importer':
+        actions.openOverlay('bp-diary-importer');
+        break;
+
+      case 'lipid-profile-importer':
+        actions.openOverlay('lipid-profile-importer');
+        break;
+
+      case 'tte-trend-importer':
+        actions.openOverlay('tte-trend-importer');
+        break;
+
+      // === Batch AI Review - Open calendar extraction modal ===
+      case 'batch-ai-review':
+        console.log('📋 Opening Batch AI Review');
+        // The batch review is typically triggered via AIReviewSection
+        // For now, we can set review data to show the section
+        actions.setReviewData({
+          classification: 'BATCH',
+          findings: [],
+          recommendations: [],
+          summary: 'Batch review initiated'
+        });
+        break;
+
+      // === Create Task - Open rounds with task focus ===
+      case 'create-task':
+        setRoundsOpen(true);
+        // TODO: Add focus on task creation when rounds opens
+        break;
+
+      // === Pre-Op Plan - Route to agent workflow ===
+      case 'pre-op-plan':
+        if (action.agentType) {
+          handleWorkflowSelect(action.agentType, action.quickActionField);
+        }
+        break;
+
       default:
         console.log('⚠️ Unhandled click action:', action.id);
     }
-  }, [actions, state.selectedSessionId]);
+  }, [actions, state.selectedSessionId, handleWorkflowSelect]);
 
   /**
    * Handle Wrap Up action from AppHeader favourites
    */
   const handleWrapUp = useCallback(() => {
     console.log('📝 Wrap Up action triggered');
-    // Open rounds or wrap-up functionality
-    setRoundsOpen(true);
+    setAppointmentBuilderOpen(true);
+  }, []);
+
+  /**
+   * Handle generated appointment matrix preset
+   */
+  const handleAppointmentPresetGenerate = useCallback((preset: { itemCode: string; notes: string; displayName: string; taskMessage?: string }) => {
+    console.log('📆 Appointment preset generated:', preset);
+    setAppointmentBuilderOpen(false);
+    ToastService.getInstance().success('Appointment preset ready', `${preset.displayName} (${preset.itemCode})`);
   }, []);
 
   /**
@@ -5481,7 +5590,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Hidden when Rounds overlay is open */}
-      {!roundsOpen && (
+      {!roundsOpen && !appointmentBuilderOpen && (
         <AppHeader
           // Action callbacks
           onDictate={handleHeaderDictate}
@@ -5535,6 +5644,28 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       {/* Main Content Area - Single Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {appointmentBuilderOpen && (
+          <div className="fixed inset-0 z-50 bg-white shadow-lg overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-600" />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-gray-900">Appointment Wrap Up</span>
+                  <span className="text-xs text-gray-500">Build the appointment matrix, then generate</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAppointmentBuilderOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <AppointmentMatrixBuilder onGenerate={handleAppointmentPresetGenerate} />
+            </div>
+          </div>
+        )}
+
         {roundsOpen && (
           <div className="fixed inset-0 z-50 bg-white shadow-lg overflow-hidden flex flex-col">
             <RoundsView onClose={() => setRoundsOpen(false)} />

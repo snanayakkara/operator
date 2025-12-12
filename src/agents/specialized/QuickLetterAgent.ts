@@ -294,6 +294,27 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     console.log('📤 Raw output preview:', rawOutput.substring(0, 300) + '...');
     console.log('🔍 Looking for SUMMARY: and LETTER: markers in output');
 
+    // Validate that LM Studio actually generated content (not just echoed input)
+    const inputTrimmed = input.trim();
+    const outputTrimmed = rawOutput.trim();
+    const outputMatchesInput = outputTrimmed === inputTrimmed;
+    const outputTooShort = rawOutput.length < input.length * 0.3;
+    const outputLacksMarkers = !rawOutput.includes('SUMMARY:') && !rawOutput.includes('LETTER:');
+
+    if (outputMatchesInput) {
+      console.error('❌ LM Studio returned input unchanged - generation failed');
+      console.error('   Input length:', input.length);
+      console.error('   Output length:', rawOutput.length);
+      throw new Error('Letter generation failed: Model returned input unchanged. Ensure LM Studio is running with a model loaded.');
+    }
+
+    if (outputTooShort && outputLacksMarkers) {
+      console.warn('⚠️ LM Studio output suspiciously short and lacks SUMMARY:/LETTER: markers');
+      console.warn('   Input length:', input.length);
+      console.warn('   Output length:', rawOutput.length);
+      console.warn('   Output preview:', rawOutput.substring(0, 200));
+    }
+
     // Parse into summary + letter, then clean letter
     const { summary, letterContent } = this.parseStructuredResponse(rawOutput);
     console.log(`✅ [${processingType}] Parsed summary:`, summary.substring(0, 150) + '...');
@@ -856,14 +877,18 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       }
 
       // 3) Fallback: treat cleaned output as letter content and synthesize a summary
-      console.log('⚠️ No SUMMARY:/LETTER: markers found, using fallback parsing');
-      console.log('📄 Cleaned output for fallback:', cleanedOutput.substring(0, 200) + '...');
+      console.warn('⚠️ CRITICAL: No SUMMARY:/LETTER: markers found in LM Studio output');
+      console.warn('   This may indicate the model failed to follow the prompt format.');
+      console.warn('   Output length:', cleanedOutput.length, 'chars');
+      console.warn('   Output preview:', cleanedOutput.substring(0, 300));
+      console.warn('   If this matches your input transcription, the model may not be generating properly.');
+
       const intelligentSummary = this.generateIntelligentSummary(cleanedOutput);
       const fallbackSummary = intelligentSummary.length > 150
         ? intelligentSummary.substring(0, 147) + '...'
         : intelligentSummary;
 
-      console.log('🔄 Generated fallback summary:', fallbackSummary);
+      console.log('🔄 Generated fallback summary from content:', fallbackSummary);
       console.log('📝 Using cleaned output as letter content (length:', cleanedOutput.length, ')');
 
       return {

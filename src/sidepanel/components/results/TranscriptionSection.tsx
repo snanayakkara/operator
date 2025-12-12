@@ -109,6 +109,21 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   approvalState,
   onTranscriptionApprove
 }) => {
+  // Check for empty transcription (not available for this session)
+  const isEmpty = !originalTranscription || !originalTranscription.trim();
+
+  // Show empty state when transcription is missing and not currently processing
+  if (isEmpty && !isProcessing) {
+    return (
+      <div className={`border-b border-gray-200/50 ${className}`}>
+        <div className="flex items-center gap-2 px-4 py-3 text-gray-500">
+          <FileTextIcon className="w-4 h-4 flex-shrink-0" />
+          <span className="text-sm">Transcription not available for this session</span>
+        </div>
+      </div>
+    );
+  }
+
   const [transcriptionExpanded, setTranscriptionExpanded] = useState(!!defaultExpanded);
   const [transcriptionCopied, setTranscriptionCopied] = useState(false);
   const [transcriptionInserted, setTranscriptionInserted] = useState(false);

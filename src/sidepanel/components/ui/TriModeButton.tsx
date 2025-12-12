@@ -168,7 +168,7 @@ export const TriModeButton: React.FC<TriModeButtonProps> = memo(({
 
         {/* Label */}
         <span className={`
-          ${compact ? 'text-[11px] text-center leading-tight' : 'text-[13px]'}
+          ${compact ? 'text-[11px] text-center leading-tight whitespace-nowrap' : 'text-[13px]'}
           font-medium
           ${isDisabled ? 'text-neutral-400' : 'text-neutral-700'}
           ${compact ? '' : 'truncate'}
@@ -224,7 +224,7 @@ export const TriModeButton: React.FC<TriModeButtonProps> = memo(({
             className="text-blue-600 mb-0.5"
             strokeWidth={2}
           />
-          <span className="text-[9px] font-semibold text-blue-700">
+          <span className="text-[10px] font-semibold text-blue-700">
             D
           </span>
         </button>
@@ -253,7 +253,7 @@ export const TriModeButton: React.FC<TriModeButtonProps> = memo(({
             className="text-purple-600 mb-0.5"
             strokeWidth={2}
           />
-          <span className="text-[9px] font-semibold text-purple-700">
+          <span className="text-[10px] font-semibold text-purple-700">
             T
           </span>
         </button>
@@ -282,7 +282,7 @@ export const TriModeButton: React.FC<TriModeButtonProps> = memo(({
             className="text-cyan-600 mb-0.5"
             strokeWidth={2}
           />
-          <span className="text-[9px] font-semibold text-cyan-700">
+          <span className="text-[10px] font-semibold text-cyan-700">
             V
           </span>
         </button>

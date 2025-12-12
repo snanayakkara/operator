@@ -156,7 +156,7 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
 
         {/* Label */}
         <span className={`
-          ${compact ? 'text-[11px] text-center leading-tight' : 'text-[13px]'}
+          ${compact ? 'text-[11px] text-center leading-tight whitespace-nowrap' : 'text-[13px]'}
           font-medium
           ${isDisabled ? 'text-neutral-400' : 'text-neutral-700'}
           ${compact ? '' : 'truncate'}
@@ -194,6 +194,7 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
           disabled={isDisabled}
           className="
             flex flex-col items-center justify-center
+            px-2
             rounded-l-lg border-2
             bg-white
             transition-colors
@@ -208,11 +209,11 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
           aria-label={`Dictate ${label} with voice`}
         >
           <Mic
-            size={compact ? 18 : 16}
+            size={16}
             className="text-blue-600 mb-0.5"
             strokeWidth={2}
           />
-          <span className="text-[10px] font-semibold text-blue-700">
+          <span className="text-[9px] font-semibold text-blue-700">
             Dictate
           </span>
         </button>
@@ -223,6 +224,7 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
           disabled={isDisabled}
           className="
             flex flex-col items-center justify-center
+            px-2
             rounded-r-lg border-2
             bg-white
             transition-colors
@@ -237,11 +239,11 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
           aria-label={`Type ${label} manually`}
         >
           <Keyboard
-            size={compact ? 18 : 16}
+            size={16}
             className="text-purple-600 mb-0.5"
             strokeWidth={2}
           />
-          <span className="text-[10px] font-semibold text-purple-700">
+          <span className="text-[9px] font-semibold text-purple-700">
             Type
           </span>
         </button>

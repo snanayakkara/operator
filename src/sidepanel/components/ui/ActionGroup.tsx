@@ -12,7 +12,7 @@
 import React, { memo, useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
-import { colors, animation, radius, spacing } from '@/utils/designTokens';
+import { animation, radius } from '@/utils/designTokens';
 
 export interface ActionGroupProps {
   /** Unique group ID (used for persistence) */
@@ -182,10 +182,7 @@ export const ActionGroup: React.FC<ActionGroupProps> = memo(({
             variants={contentVariants}
             className="overflow-hidden"
           >
-            <div
-              className="px-2 pb-2 pt-1"
-              style={{ paddingLeft: spacing.sm, paddingRight: spacing.sm }}
-            >
+            <div className="px-3 pb-2 pt-1">
               {children}
             </div>
           </motion.div>

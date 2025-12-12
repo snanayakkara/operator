@@ -747,7 +747,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     !streaming &&
     !hasIntegratedTranscription &&
     agentType !== 'investigation-summary' &&
-    hasTranscription; // Show transcription for all agents including Quick Letter
+    (hasTranscription || isViewingSession); // Show transcription section for viewed sessions even if empty (shows "not available" message)
 
   // Debug TAVI detection
   if (agentType === 'tavi-workup') {
@@ -957,6 +957,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
       {/* Original Transcription Section - Hide during streaming, show when complete */}
       {/* For investigation-summary, show transcription AFTER results (handled in content section) */}
+      {/* TranscriptionSection handles its own empty state when transcription is not available */}
       <AnimatePresence>
         {showPrimaryTranscriptionSection && (
           <motion.div
@@ -965,25 +966,23 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: ANIMATION_DURATIONS.normal }}
           >
-            {hasTranscription && (
-              <TranscriptionSection
-                originalTranscription={originalTranscription ?? ''}
-                onTranscriptionCopy={onTranscriptionCopy}
-                onTranscriptionInsert={onTranscriptionInsert}
-                onTranscriptionEdit={onTranscriptionEdit}
-                transcriptionSaveStatus={transcriptionSaveStatus}
-                onAgentReprocess={onAgentReprocess}
-                onRetryTranscription={onRetryTranscription}
-                isRetryingTranscription={isRetryingTranscription}
-                currentAgent={currentAgent}
-                isProcessing={isProcessing}
-                audioBlob={audioBlob}
-                defaultExpanded={!resultsReady}
-                collapseWhen={resultsReady}
-                approvalState={approvalState}
-                onTranscriptionApprove={onTranscriptionApprove}
-              />
-            )}
+            <TranscriptionSection
+              originalTranscription={originalTranscription ?? ''}
+              onTranscriptionCopy={onTranscriptionCopy}
+              onTranscriptionInsert={onTranscriptionInsert}
+              onTranscriptionEdit={onTranscriptionEdit}
+              transcriptionSaveStatus={transcriptionSaveStatus}
+              onAgentReprocess={onAgentReprocess}
+              onRetryTranscription={onRetryTranscription}
+              isRetryingTranscription={isRetryingTranscription}
+              currentAgent={currentAgent}
+              isProcessing={isProcessing}
+              audioBlob={audioBlob}
+              defaultExpanded={!resultsReady}
+              collapseWhen={resultsReady}
+              approvalState={approvalState}
+              onTranscriptionApprove={onTranscriptionApprove}
+            />
           </motion.div>
         )}
       </AnimatePresence>

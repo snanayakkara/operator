@@ -19,7 +19,7 @@ import React, {
   useMemo
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Command } from 'lucide-react';
+import { Search, Command, Mic, Keyboard, Camera } from 'lucide-react';
 import { colors, animation, radius, shadows, zIndex } from '@/utils/designTokens';
 import {
   searchActions,
@@ -54,6 +54,194 @@ const inputVariants = {
     borderColor: colors.primary.DEFAULT
   }
 };
+
+const modeSplitVariants = {
+  hidden: { opacity: 0, width: 0 },
+  visible: { opacity: 1, width: 'auto' }
+};
+
+/**
+ * ActionRow - Individual action item with hover-reveal mode selector
+ */
+interface ActionRowProps {
+  action: UnifiedAction;
+  isFocused: boolean;
+  onSelect: (action: UnifiedAction, mode?: 'dictate' | 'type' | 'vision') => void;
+  onMouseEnter: () => void;
+}
+
+const ActionRow: React.FC<ActionRowProps> = memo(({
+  action,
+  isFocused,
+  onSelect,
+  onMouseEnter
+}) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const hasMultipleModes = action.modes.length > 1;
+
+  return (
+    <div
+      className={`
+        relative flex items-center gap-3 px-3 py-2
+        cursor-pointer
+        transition-colors
+        ${isFocused ? 'bg-violet-50' : 'hover:bg-neutral-50'}
+      `}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        onMouseEnter();
+      }}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onSelect(action)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(action);
+        }
+      }}
+      tabIndex={0}
+    >
+      {/* Icon */}
+      <action.icon
+        size={16}
+        className={isFocused ? 'text-violet-600' : 'text-neutral-500'}
+        strokeWidth={1.5}
+      />
+
+      {/* Label & Description */}
+      <div className="flex-1 min-w-0">
+        <div className={`
+          text-[13px] font-medium truncate
+          ${isFocused ? 'text-violet-900' : 'text-neutral-700'}
+        `}>
+          {action.label}
+        </div>
+        <div className="text-[11px] text-neutral-500 truncate">
+          {action.description}
+        </div>
+      </div>
+
+      {/* Right side: Shortcut OR Mode split on hover */}
+      <div className="flex items-center gap-1.5">
+        {/* Shortcut badge - hide when hovering multi-mode actions */}
+        <AnimatePresence>
+          {action.shortcut && !(hasMultipleModes && isHovered) && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.1 }}
+              className={`
+                px-1.5 py-0.5
+                text-[10px] font-medium
+                rounded
+                ${isFocused
+                  ? 'bg-violet-100 text-violet-600'
+                  : 'bg-neutral-100 text-neutral-500'
+                }
+              `}
+            >
+              {action.shortcut}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {/* Mode split - reveal on hover for multi-mode actions */}
+        <AnimatePresence>
+          {hasMultipleModes && isHovered && (
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={modeSplitVariants}
+              transition={{ duration: animation.duration.fast / 1000 }}
+              className="flex overflow-hidden rounded-md border border-neutral-200"
+            >
+              {action.modes.includes('dictate') && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(action, 'dictate');
+                  }}
+                  className="
+                    flex items-center gap-1 px-2 py-1
+                    text-[10px] font-semibold
+                    text-blue-600 bg-blue-50
+                    hover:bg-blue-100
+                    transition-colors
+                    border-r border-neutral-200
+                    last:border-r-0
+                  "
+                  title="Dictate"
+                >
+                  <Mic size={14} strokeWidth={2} />
+                  <span>D</span>
+                </button>
+              )}
+              {action.modes.includes('type') && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(action, 'type');
+                  }}
+                  className="
+                    flex items-center gap-1 px-2 py-1
+                    text-[10px] font-semibold
+                    text-purple-600 bg-purple-50
+                    hover:bg-purple-100
+                    transition-colors
+                    border-r border-neutral-200
+                    last:border-r-0
+                  "
+                  title="Type"
+                >
+                  <Keyboard size={14} strokeWidth={2} />
+                  <span>T</span>
+                </button>
+              )}
+              {action.modes.includes('vision') && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(action, 'vision');
+                  }}
+                  className="
+                    flex items-center gap-1 px-2 py-1
+                    text-[10px] font-semibold
+                    text-cyan-600 bg-cyan-50
+                    hover:bg-cyan-100
+                    transition-colors
+                  "
+                  title="Vision (scan image)"
+                >
+                  <Camera size={14} strokeWidth={2} />
+                  <span>V</span>
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Coming soon badge */}
+        {action.comingSoon && (
+          <span className="
+            px-1.5 py-0.5
+            text-[9px] font-semibold uppercase
+            bg-amber-100 text-amber-700
+            rounded-full
+          ">
+            Soon
+          </span>
+        )}
+      </div>
+    </div>
+  );
+});
+
+ActionRow.displayName = 'ActionRow';
 
 export const CommandBar: React.FC<CommandBarProps> = memo(({
   isOpen,
@@ -296,139 +484,22 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
                   </div>
 
                   {/* Actions */}
-                  <div className="py-1">
+                  <div className="py-1" role="group">
                     {group.actions.map((action) => {
                       const flatIndex = flatActions.indexOf(action);
                       const isFocused = flatIndex === focusedIndex;
 
                       return (
-                        <button
+                        <ActionRow
                           key={action.id}
-                          onClick={() => {
-                            onActionSelect(action);
+                          action={action}
+                          isFocused={isFocused}
+                          onSelect={(a, mode) => {
+                            onActionSelect(a, mode);
                             handleClose();
                           }}
                           onMouseEnter={() => setFocusedIndex(flatIndex)}
-                          className={`
-                            w-full flex items-center gap-3 px-3 py-2
-                            text-left
-                            transition-colors
-                            ${isFocused ? 'bg-violet-50' : 'hover:bg-neutral-50'}
-                          `}
-                          style={{ transitionDuration: `${animation.duration.fast}ms` }}
-                          role="option"
-                          aria-selected={isFocused}
-                        >
-                          {/* Icon */}
-                          <action.icon
-                            size={16}
-                            className={isFocused ? 'text-violet-600' : 'text-neutral-500'}
-                            strokeWidth={1.5}
-                          />
-
-                          {/* Label & Description */}
-                          <div className="flex-1 min-w-0">
-                            <div className={`
-                              text-[13px] font-medium truncate
-                              ${isFocused ? 'text-violet-900' : 'text-neutral-700'}
-                            `}>
-                              {action.label}
-                            </div>
-                            <div className="text-[11px] text-neutral-500 truncate">
-                              {action.description}
-                            </div>
-                          </div>
-
-                          {/* Shortcut */}
-                          {action.shortcut && (
-                            <span className={`
-                              px-1.5 py-0.5
-                              text-[10px] font-medium
-                              rounded
-                              ${isFocused
-                                ? 'bg-violet-100 text-violet-600'
-                                : 'bg-neutral-100 text-neutral-500'
-                              }
-                            `}>
-                              {action.shortcut}
-                            </span>
-                          )}
-
-                          {/* Mode selector buttons */}
-                          {action.modes.length > 1 && (
-                            <div className="flex gap-0.5">
-                              {action.modes.includes('dictate') && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onActionSelect(action, 'dictate');
-                                    handleClose();
-                                  }}
-                                  className="
-                                    px-1.5 py-0.5 rounded
-                                    text-[9px] font-bold
-                                    text-blue-600 hover:bg-blue-100
-                                    transition-colors
-                                  "
-                                  title="Dictate"
-                                >
-                                  D
-                                </button>
-                              )}
-                              {action.modes.includes('type') && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onActionSelect(action, 'type');
-                                    handleClose();
-                                  }}
-                                  className="
-                                    px-1.5 py-0.5 rounded
-                                    text-[9px] font-bold
-                                    text-purple-600 hover:bg-purple-100
-                                    transition-colors
-                                  "
-                                  title="Type"
-                                >
-                                  T
-                                </button>
-                              )}
-                              {action.modes.includes('vision') && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onActionSelect(action, 'vision');
-                                    handleClose();
-                                  }}
-                                  className="
-                                    px-1.5 py-0.5 rounded
-                                    text-[9px] font-bold
-                                    text-cyan-600 hover:bg-cyan-100
-                                    transition-colors
-                                  "
-                                  title="Vision (scan image)"
-                                >
-                                  V
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Coming soon badge */}
-                          {action.comingSoon && (
-                            <span className="
-                              px-1.5 py-0.5
-                              text-[9px] font-semibold uppercase
-                              bg-amber-100 text-amber-700
-                              rounded-full
-                            ">
-                              Soon
-                            </span>
-                          )}
-                        </button>
+                        />
                       );
                     })}
                   </div>
@@ -439,7 +510,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
             {/* Footer hint */}
             <div className="px-3 py-2 bg-neutral-50 border-t border-neutral-100">
               <div className="flex items-center justify-between text-[10px] text-neutral-500">
-                <span>↑↓ Navigate • Enter Select • Click D/T/V for mode</span>
+                <span>↑↓ Navigate • Enter Select • Hover for D|T|V</span>
                 <span>Single key shortcuts when empty</span>
               </div>
             </div>

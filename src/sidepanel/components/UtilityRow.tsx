@@ -10,7 +10,7 @@
 
 import React, { memo, useState, useRef } from 'react';
 import { Plus, Smartphone, Bell } from 'lucide-react';
-import { animation } from '@/utils/designTokens';
+import { animation, zIndex } from '@/utils/designTokens';
 import { StateChip } from './StateChip';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { SessionDropdown } from './SessionDropdown';
@@ -225,11 +225,11 @@ export const UtilityRow: React.FC<UtilityRowProps> = memo(({
         >
           <div
             data-dropdown-menu
-            className="z-50"
             style={{
               position: 'fixed',
               top: `${(mobileJobsButtonRef.current?.getBoundingClientRect().bottom || 0) + 8}px`,
-              left: `${Math.max(8, (mobileJobsButtonRef.current?.getBoundingClientRect().right || 340) - 360)}px`
+              left: `${Math.max(8, (mobileJobsButtonRef.current?.getBoundingClientRect().right || 340) - 360)}px`,
+              zIndex: zIndex.dropdown
             }}
           >
             <MobileJobsPanel

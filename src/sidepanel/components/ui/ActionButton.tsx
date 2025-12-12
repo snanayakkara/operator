@@ -118,7 +118,7 @@ export const ActionButton: React.FC<ActionButtonProps> = memo(({
 
       {/* Label */}
       <span className={`
-        ${compact ? 'text-[11px] text-center leading-tight' : 'text-[13px]'}
+        ${compact ? 'text-[11px] text-center leading-tight whitespace-nowrap' : 'text-[13px]'}
         font-medium
         ${isDisabled ? 'text-neutral-400' : 'text-neutral-700'}
         ${compact ? '' : 'truncate'}

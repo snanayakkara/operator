@@ -475,6 +475,16 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
     group: 'utilities',
     modes: ['click'],
     colorTheme: 'emerald'
+  },
+  {
+    id: 'ward-list',
+    label: 'Ward List',
+    description: 'Open ward list and tasks board',
+    icon: Stethoscope,
+    group: 'utilities',
+    shortcut: 'R',
+    modes: ['click'],
+    colorTheme: 'emerald'
   }
 ];
 
@@ -495,6 +505,7 @@ export const DEFAULT_FAVOURITES: string[] = [
 export const APPOINTMENT_WRAP_UP: UnifiedAction = {
   id: 'appointment-wrap-up',
   label: 'Wrap Up',
+  alias: 'Wrap Up',
   description: 'Complete appointment workflow',
   icon: Calendar,
   group: 'utilities',

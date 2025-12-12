@@ -91,7 +91,7 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
 
         if (isTriMode(action)) {
           return (
-            <motion.div key={action.id} className="flex-1" variants={itemVariants}>
+            <motion.div key={action.id} className="flex-1 min-w-0" variants={itemVariants}>
               <TriModeButton
                 id={action.id}
                 label={action.label}
@@ -111,7 +111,7 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
 
         if (isDualMode(action)) {
           return (
-            <motion.div key={action.id} className="flex-1" variants={itemVariants}>
+            <motion.div key={action.id} className="flex-1 min-w-0" variants={itemVariants}>
               <DualModeButton
                 id={action.id}
                 label={action.label}
@@ -130,7 +130,7 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
 
         // Fallback to ActionButton (shouldn't happen for these favourites)
         return (
-          <motion.div key={action.id} className="flex-1" variants={itemVariants}>
+          <motion.div key={action.id} className="flex-1 min-w-0" variants={itemVariants}>
             <ActionButton
               id={action.id}
               label={action.label}
@@ -147,10 +147,11 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
       })}
 
       {/* Wrap Up - special action that opens a drawer/modal */}
-      <motion.div className="flex-1" variants={itemVariants}>
+      <motion.div className="flex-1 min-w-0" variants={itemVariants}>
         <ActionButton
           id={APPOINTMENT_WRAP_UP.id}
           label={APPOINTMENT_WRAP_UP.label}
+          alias={APPOINTMENT_WRAP_UP.alias}
           icon={APPOINTMENT_WRAP_UP.icon}
           onClick={onWrapUp}
           shortcut={APPOINTMENT_WRAP_UP.shortcut}
