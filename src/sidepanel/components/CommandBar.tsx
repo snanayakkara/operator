@@ -8,6 +8,8 @@
  * - Keyboard navigation (arrows, Enter, ESC)
  * - Single-key shortcuts when open
  * - Slides down from input (dropdown style)
+ * - Error display slot (per UI Intent Section 8)
+ * - Optional ActionExecutor integration for unified action dispatch
  */
 
 import React, {
@@ -19,15 +21,18 @@ import React, {
   useMemo
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Command, Mic, Keyboard, Camera } from 'lucide-react';
+import { Search, Command, Mic, Keyboard, Camera, AlertCircle } from 'lucide-react';
 import { colors, animation, radius, shadows, zIndex } from '@/utils/designTokens';
 import {
   searchActions,
   getActionByShortcut,
   ACTION_GROUPS,
   type UnifiedAction,
-  type ActionGroup as ActionGroupType
+  type ActionGroup as ActionGroupType,
+  type InputMode
 } from '@/config/unifiedActionsConfig';
+import { useActionExecutor } from '@/hooks/useActionExecutor';
+import { ClarificationForm } from './ClarificationForm';
 
 export interface CommandBarProps {
   /** Whether the drawer is open */
@@ -36,8 +41,10 @@ export interface CommandBarProps {
   onOpen: () => void;
   /** Callback when drawer should close */
   onClose: () => void;
-  /** Callback when action is selected */
+  /** Callback when action is selected (legacy - use executor when available) */
   onActionSelect: (action: UnifiedAction, mode?: 'dictate' | 'type' | 'vision') => void;
+  /** Whether to use ActionExecutor for action dispatch (default: true) */
+  useExecutor?: boolean;
   /** Placeholder text */
   placeholder?: string;
   /** Additional className */
@@ -248,6 +255,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
   onOpen,
   onClose,
   onActionSelect,
+  useExecutor = true,
   placeholder = 'Search actions...',
   className = ''
 }) => {
@@ -255,6 +263,27 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ActionExecutor integration for unified action dispatch and clarification (UI Intent Section 9)
+  const {
+    execute,
+    error,
+    isExecuting,
+    clarification,
+    submitClarification,
+    cancelClarification
+  } = useActionExecutor();
+
+  // Unified action dispatch - uses executor or falls back to callback
+  const dispatchAction = useCallback(async (action: UnifiedAction, mode?: 'dictate' | 'type' | 'vision') => {
+    if (useExecutor) {
+      // Use central ActionExecutor (preferred path per UI Intent Section 4)
+      await execute(action.id, mode as InputMode, { origin: 'command-bar' });
+    } else {
+      // Legacy callback path
+      onActionSelect(action, mode);
+    }
+  }, [useExecutor, execute, onActionSelect]);
 
   // Filter actions based on search query
   const filteredActions = useMemo(() => {
@@ -310,7 +339,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
         const action = getActionByShortcut(e.key);
         if (action) {
           e.preventDefault();
-          onActionSelect(action);
+          dispatchAction(action);
           handleClose();
           return;
         }
@@ -319,7 +348,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, query, onOpen, onActionSelect]);
+  }, [isOpen, query, onOpen, dispatchAction]);
 
   // Handle input keyboard navigation
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -339,7 +368,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
       case 'Enter':
         e.preventDefault();
         if (focusedIndex >= 0 && flatActions[focusedIndex]) {
-          onActionSelect(flatActions[focusedIndex]);
+          dispatchAction(flatActions[focusedIndex]);
           handleClose();
         }
         break;
@@ -348,7 +377,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
         handleClose();
         break;
     }
-  }, [focusedIndex, flatActions, onActionSelect]);
+  }, [focusedIndex, flatActions, dispatchAction]);
 
   // Handle input focus
   const handleFocus = useCallback(() => {
@@ -430,19 +459,59 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
           role="combobox"
         />
 
-        {/* Keyboard hint */}
+        {/* Keyboard hint - hide when executing */}
         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-          <span className="
-            flex items-center gap-1
-            px-1.5 py-0.5
-            text-[10px] font-medium
-            bg-neutral-100 text-neutral-500
-            rounded
-          ">
-            <Command size={10} />K
-          </span>
+          {isExecuting ? (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-600 rounded animate-pulse">
+              Running...
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-neutral-100 text-neutral-500 rounded">
+              <Command size={10} />K
+            </span>
+          )}
         </div>
       </motion.div>
+
+      {/* Error Display Slot (per UI Intent Section 8) */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -4, height: 0 }}
+            transition={{ duration: animation.duration.fast / 1000 }}
+            className="mt-1.5 px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg"
+            role="alert"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-2">
+              <AlertCircle size={14} className="text-rose-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-medium text-rose-800">
+                  {error.message}
+                </p>
+                {error.suggestion && (
+                  <p className="text-[11px] text-rose-600 mt-0.5">
+                    {error.suggestion}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Clarification Form Slot (per UI Intent Section 9) */}
+      <AnimatePresence>
+        {clarification && (
+          <ClarificationForm
+            request={clarification}
+            onSubmit={submitClarification}
+            onCancel={cancelClarification}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Dropdown */}
       <AnimatePresence>
@@ -495,7 +564,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
                           action={action}
                           isFocused={isFocused}
                           onSelect={(a, mode) => {
-                            onActionSelect(a, mode);
+                            dispatchAction(a, mode);
                             handleClose();
                           }}
                           onMouseEnter={() => setFocusedIndex(flatIndex)}

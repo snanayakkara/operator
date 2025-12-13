@@ -31,6 +31,7 @@ import { DropdownPortal } from './DropdownPortal';
 import { SessionDropdown } from './SessionDropdown';
 import { QueueStatusDisplay } from './QueueStatusDisplay';
 import { ToastService } from '@/services/ToastService';
+import { getActionExecutor } from '@/services/ActionExecutor';
 import { AudioDeviceSelector as _AudioDeviceSelector } from './AudioDeviceSelector';
 import { CompactAudioDeviceDisplay } from './CompactAudioDeviceDisplay';
 import { AgentFactory } from '@/services/AgentFactory';
@@ -315,26 +316,37 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   // AI Services helper functions
   const handleRefreshServices = async () => {
     setIsRefreshing(true);
+    const executor = getActionExecutor();
     const toastService = ToastService.getInstance();
-    
+
     try {
       await onRefreshServices();
-      
-      // Show success/status toast based on results
+
+      // Show success/status based on results
       const lmStudioOk = modelStatus.isConnected;
       const whisperOk = modelStatus.whisperServer?.running || false;
-      
+
       if (lmStudioOk && whisperOk) {
+        // Success - use toast for positive confirmation (per UI Intent: errors to command bar, success can use toast)
         toastService.success('Services Status', 'All AI services are running normally');
       } else if (lmStudioOk || whisperOk) {
-        toastService.warning('Partial Service Status', 
-          `${lmStudioOk ? 'LMStudio connected' : 'LMStudio offline'}, ${whisperOk ? 'Whisper running' : 'Whisper stopped'}`);
+        // Partial - surface in command bar as warning
+        executor.errorFromBackground(
+          `${lmStudioOk ? 'LMStudio connected' : 'LMStudio offline'}, ${whisperOk ? 'Whisper running' : 'Whisper stopped'}`,
+          { suggestion: 'Check Settings for details', category: 'service', autoClearMs: 8000 }
+        );
       } else {
-        toastService.error('Services Offline', 'Both LMStudio and Whisper server are offline');
+        // Both offline - surface in command bar
+        executor.errorFromBackground(
+          'Both LMStudio and Whisper server are offline',
+          { suggestion: 'Start services to enable dictation', category: 'service' }
+        );
       }
     } catch (error) {
-      toastService.error('Status Check Failed', 
-        error instanceof Error ? error.message : 'Failed to check service status');
+      executor.errorFromBackground(
+        error instanceof Error ? error.message : 'Failed to check service status',
+        { suggestion: 'Check network connection', category: 'service' }
+      );
     } finally {
       setIsRefreshing(false);
     }

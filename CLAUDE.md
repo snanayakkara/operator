@@ -3,11 +3,13 @@
 **Operator (Chrome side‑panel extension)** is a local‑first medical dictation + EMR helper.
 
 - 14+ specialty **agents** (TAVI, Angio/PCI, mTEER, PFO, RHC, Quick Letter, Consultation, Investigation Summary, Aus Review, Background, Medication, Bloods, Imaging, Patient Education, Batch Review)
+- **ActionExecutor + command bar**: single registry drives command bar, favourites, and global `Shift+Letter` shortcuts; command bar now surfaces background errors and inline clarification forms before running actions.
 - **Transcription**: MLX Whisper (`whisper-large-v3-turbo`) at `http://localhost:8001`
 - **Generation**: LM Studio at `http://localhost:1234` (MedGemma‑27B for complex; Gemma‑3n‑e4b for simple)
 - **DSPy/GEPA** optimisation server at `http://localhost:8002`
 - **Intelligent Features**: lazy agent loading, cross‑agent knowledge sharing, smart recommendations, real‑time progress tracking
-- **Rounds/Handover**: Compact header with keyboard patient selector + icon quick actions (Go To, ward update, GP letter + refine, handover/quick add/discharge/undo/delete), Quick Add intake parser, ward update diffing, procedure subpoint day counters + checklists that auto-schedule tasks, global task board, HUD JSON export
+- **Quick Letter guardrails**: summaries capped at 150 chars and cross-checked so CAD/plaque content never yields “zero calcium/no CAD” hallucinations; reuses detected calcium scores.
+- **Rounds/Handover**: Compact header with keyboard patient selector + icon quick actions (Go To, ward update, GP letter + refine, handover/quick add/discharge/undo/delete), Quick Add intake parser, ward update diffing, procedure subpoint day counters + checklists that auto-schedule tasks, global task board, HUD JSON export, NOK save now exports a Shortcuts-friendly `nok_calls.json`
 - **Vision Intake**: Investigation Summary can OCR investigation photos/screenshots via Qwen3‑VL (type/date metadata + extraction prompts)
 - **Mobile/Shortcut Ingest**: macOS daemon ingests Shortcut sidecars (workflow codes, timestamps, geolocation), runs triage, and surfaces jobs in a grouped attachment modal
 - Australian spelling & guideline framing; privacy‑first (no cloud calls)

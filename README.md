@@ -1,14 +1,14 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-3.43.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
-[![React](https://img.shields.io/badge/react-18.2.0-blue.svg)]()
+[![React](https://img.shields.io/badge/react-18.3.1-blue.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v3.43.0 adds an angiogram lesion review tree (edit/approve before reporting), session-aware patient-friendly versions that trigger in completed sessions, and HTML clipboard copy so bold text stays bold in EMRs.
+> **Latest:** v4.0.0 routes every action through the ActionExecutor (command bar + favourites + keyboard), surfaces inline command-bar clarifications and background errors, hardens Quick Letter summaries against false “zero calcium/no CAD” claims, and exports next-of-kin call lists for ward Shortcuts.
 
 ## 🏥 Overview
 
@@ -616,6 +616,12 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v4.0.0 (December 2025) — Action Executor Release
+- **Central ActionExecutor + keyboard**: Command bar, favourites, and global `Shift+Letter` shortcuts now dispatch through one registry with availability checks; shortcuts pause while recording.
+- **Command-bar errors & clarifications**: Background failures (Whisper/LM Studio/storage) surface in the command bar with suggestions; inline clarification forms collect missing context before running actions.
+- **Quick Letter safety**: Prompts and post-processing cross-check CAD/plaque content to prevent false “zero calcium/no CAD” claims and clamp summaries to 150 characters.
+- **Rounds NOK export**: Saving next-of-kin details auto-exports a Shortcuts-ready `nok_calls.json` so ward call lists stay synced.
+
 ### v3.43.0 (December 2025) — Angio Lesion Editor + Patient Copy Fixes
 - **Angiogram lesion review tree**: Auto-parses FINDINGS into vessel/branch lesions for quick add/edit/remove before regenerating the report.
 - **Lesions + patient-friendly actions**: New Lesions action chip in angiogram results; patient-friendly versions now run from completed sessions and lock to the active report.
@@ -701,7 +707,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 3.43.0 | **Updated**: December 2025 | **Architecture**: Angio lesion review flow + session-aware patient-friendly generation with EMR-safe clipboard formatting
+**Version**: 4.0.0 | **Updated**: December 2025 | **Architecture**: Central ActionExecutor with command-bar error/clarification slots, CAD-safe Quick Letter summaries, global Shift+Letter shortcuts, and NOK call list export
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

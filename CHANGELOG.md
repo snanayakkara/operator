@@ -9,6 +9,30 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.0.0] - 2025-12-14
+
+### Added
+
+- **Central action execution**
+  - New ActionExecutor registry powers the command bar, favourites, keyboard shortcuts, and agent footers from one source with availability checks.
+  - Global `Shift+Letter` shortcuts (e.g., `Shift+L` for Quick Letter) now trigger workflows even when the command bar is closed, with safety guards while recording.
+- **Inline clarification flow**
+  - Command bar renders inline clarification forms for actions that need extra details before running, keeping the keyboard-only workflow intact.
+- **Next-of-kin export**
+  - Saving NOK details now writes a synced `nok_calls.json` payload for Shortcuts automation so bedside call lists stay fresh.
+
+### Changed
+
+- **Command bar error routing**
+  - Background errors (Whisper, LM Studio, storage) surface in the command bar instead of transient toasts, with corrective suggestions and auto-clear options.
+  - Favourites row and command bar dispatch through the ActionExecutor for consistent behaviour across inputs and modes.
+- **Quick Letter safety**
+  - Prompt warns against hallucinated zero calcium/no CAD statements and reuses detected calcium scores; summaries are clipped to 150 characters with clinical consistency checks.
+
+### Fixed
+
+- Quick Letter summaries regenerate when CAD/plaque is present to avoid false “no CAD/zero calcium” claims and align summary wording with the generated letter.
+
 ## [3.43.0] - 2025-12-11
 
 ### Added

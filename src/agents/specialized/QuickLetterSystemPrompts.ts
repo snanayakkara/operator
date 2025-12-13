@@ -80,7 +80,7 @@ PUNCTUATION AND STYLE:
 
 OUTPUT FORMAT - You MUST provide BOTH a summary and the full letter in this EXACT format. Do NOT deviate from this structure:
 
-SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on a very brief summary of the situation followed by the treatment plan as a list of actions. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Example: "CTCA zero calcium score and no CAD. Needs lipids checked 6 monthly."]
+SUMMARY: [Write a concise third-person clinical summary in 150 characters or less. Use short clinical statements without flowing sentences. Focus on a very brief summary of the situation followed by the treatment plan as a list of actions. **No personal pronouns (I/he/she) and NO PATIENT NAMES**. Start directly with clinical findings. Never claim a zero calcium score or "no CAD" unless explicitly stated; if a calcium score is provided, reuse that exact value or omit it. Do NOT copy the example text—summarise the dictated content only. Example: "NSTEMI; PCI to LAD. On DAPT; repeat lipids in 6 months."]
 ---
 LETTER: [The full rewritten letter content as polished prose paragraphs]
 

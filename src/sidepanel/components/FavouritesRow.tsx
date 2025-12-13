@@ -10,32 +10,36 @@
  * - Background uses DualModeButton (D|T split)
  * - Wrap Up uses ActionButton (single click → opens drawer)
  * - Compact, horizontal layout optimized for narrow panel
+ * - Optional ActionExecutor integration for unified dispatch
  */
 
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar } from 'lucide-react';
 import { animation } from '@/utils/designTokens';
 import {
   getActionById,
   APPOINTMENT_WRAP_UP,
   isDualMode,
   isTriMode,
-  type UnifiedAction
+  type UnifiedAction,
+  type InputMode
 } from '@/config/unifiedActionsConfig';
+import { useActionExecutor } from '@/hooks/useActionExecutor';
 import { ActionButton } from './ui/ActionButton';
 import { DualModeButton } from './ui/DualModeButton';
 import { TriModeButton } from './ui/TriModeButton';
 
 export interface FavouritesRowProps {
-  /** Callback when action is selected with dictate mode */
+  /** Callback when action is selected with dictate mode (legacy) */
   onDictate: (action: UnifiedAction) => void;
-  /** Callback when action is selected with type mode */
+  /** Callback when action is selected with type mode (legacy) */
   onType: (action: UnifiedAction) => void;
-  /** Callback when action is selected with vision mode */
+  /** Callback when action is selected with vision mode (legacy) */
   onVision: (action: UnifiedAction) => void;
-  /** Callback when Wrap Up is clicked */
+  /** Callback when Wrap Up is clicked (legacy) */
   onWrapUp: () => void;
+  /** Whether to use ActionExecutor for dispatch (default: true) */
+  useExecutor?: boolean;
   /** Currently loading action IDs */
   loadingActions?: Set<string>;
   /** Additional className */
@@ -71,9 +75,33 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
   onType,
   onVision,
   onWrapUp,
+  useExecutor = true,
   loadingActions = new Set(),
   className = ''
 }) => {
+  // ActionExecutor integration
+  const { execute, isExecuting } = useActionExecutor();
+
+  // Unified dispatch - uses executor or falls back to callbacks
+  const dispatchAction = useCallback(async (action: UnifiedAction, mode: InputMode) => {
+    if (useExecutor) {
+      await execute(action.id, mode, { origin: 'favourites' });
+    } else {
+      // Legacy callback path
+      if (mode === 'dictate') onDictate(action);
+      else if (mode === 'type') onType(action);
+      else if (mode === 'vision') onVision(action);
+    }
+  }, [useExecutor, execute, onDictate, onType, onVision]);
+
+  const dispatchWrapUp = useCallback(async () => {
+    if (useExecutor) {
+      await execute('appointment-wrap-up', 'click', { origin: 'favourites' });
+    } else {
+      onWrapUp();
+    }
+  }, [useExecutor, execute, onWrapUp]);
+
   // Get favourite actions
   const favourites = FAVOURITE_IDS
     .map(id => getActionById(id))
@@ -97,11 +125,11 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
                 label={action.label}
                 alias={action.alias}
                 icon={action.icon}
-                onDictate={() => onDictate(action)}
-                onType={() => onType(action)}
-                onVision={() => onVision(action)}
+                onDictate={() => dispatchAction(action, 'dictate')}
+                onType={() => dispatchAction(action, 'type')}
+                onVision={() => dispatchAction(action, 'vision')}
                 shortcut={action.shortcut}
-                isLoading={isLoading}
+                isLoading={isLoading || isExecuting}
                 colorTheme={action.colorTheme}
                 compact
               />
@@ -117,10 +145,10 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
                 label={action.label}
                 alias={action.alias}
                 icon={action.icon}
-                onDictate={() => onDictate(action)}
-                onType={() => onType(action)}
+                onDictate={() => dispatchAction(action, 'dictate')}
+                onType={() => dispatchAction(action, 'type')}
                 shortcut={action.shortcut}
-                isLoading={isLoading}
+                isLoading={isLoading || isExecuting}
                 colorTheme={action.colorTheme}
                 compact
               />
@@ -136,9 +164,9 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
               label={action.label}
               alias={action.alias}
               icon={action.icon}
-              onClick={() => onDictate(action)}
+              onClick={() => dispatchAction(action, 'dictate')}
               shortcut={action.shortcut}
-              isLoading={isLoading}
+              isLoading={isLoading || isExecuting}
               colorTheme={action.colorTheme}
               compact
             />
@@ -153,9 +181,9 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
           label={APPOINTMENT_WRAP_UP.label}
           alias={APPOINTMENT_WRAP_UP.alias}
           icon={APPOINTMENT_WRAP_UP.icon}
-          onClick={onWrapUp}
+          onClick={dispatchWrapUp}
           shortcut={APPOINTMENT_WRAP_UP.shortcut}
-          isLoading={loadingActions.has(APPOINTMENT_WRAP_UP.id)}
+          isLoading={loadingActions.has(APPOINTMENT_WRAP_UP.id) || isExecuting}
           colorTheme={APPOINTMENT_WRAP_UP.colorTheme}
           compact
         />

@@ -7,6 +7,7 @@ import { computeDayCount, computeLabTrendString, generateRoundsId, isoNow, colle
 import { WardUpdateModal } from './WardUpdateModal';
 import { PROCEDURE_CHECKLISTS, ProcedureChecklistKey } from '@/config/procedureChecklists';
 import { RoundsLLMService } from '@/services/RoundsLLMService';
+import { NokExportService } from '@/services/NokExportService';
 
 type ProcedureDraft = {
   name: string;
@@ -29,7 +30,7 @@ interface PatientDetailProps {
 }
 
 export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
-  const { updatePatient, clinicians, addClinician, assignClinicianToPatient, unassignClinicianFromPatient } = useRounds();
+  const { patients, updatePatient, clinicians, addClinician, assignClinicianToPatient, unassignClinicianFromPatient } = useRounds();
   const [mrn, setMrn] = useState(patient.mrn);
   const [bed, setBed] = useState(patient.bed);
   const [oneLiner, setOneLiner] = useState(patient.oneLiner);
@@ -133,17 +134,31 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
     }));
   };
 
-  const saveNextOfKin = () => {
-    const hasNokData = nokName.trim() || nokRelation.trim() || nokPhone.trim();
-    updatePatient(patient.id, (p) => ({
-      ...p,
+  const saveNextOfKin = async () => {
+    const trimmedName = nokName.trim();
+    const trimmedRelation = nokRelation.trim();
+    const trimmedPhone = nokPhone.trim();
+    const hasNokData = trimmedName || trimmedRelation || trimmedPhone;
+
+    const updatedPatient: RoundsPatient = {
+      ...patient,
       nextOfKin: hasNokData ? {
-        name: nokName.trim(),
-        relation: nokRelation.trim(),
-        phone: nokPhone.trim()
+        name: trimmedName,
+        relation: trimmedRelation,
+        phone: trimmedPhone
       } : undefined,
       lastUpdatedAt: isoNow()
-    }));
+    };
+
+    await updatePatient(patient.id, () => updatedPatient);
+
+    try {
+      await NokExportService.exportList(
+        patients.map(p => p.id === patient.id ? updatedPatient : p)
+      );
+    } catch (error) {
+      console.warn('⚠️ Failed to export NOK call list', error);
+    }
   };
 
   const startInvestigationEdit = () => {

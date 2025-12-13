@@ -52,6 +52,9 @@ import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringSe
 import { MetricsService } from '@/services/MetricsService';
 import { ProcessingTimePredictor } from '@/services/ProcessingTimePredictor';
 import { useRecorder } from '@/hooks/useRecorder';
+import { useRegisterActionHandlers } from '@/hooks/useActionExecutor';
+import { useGlobalKeyboardShortcuts } from '@/hooks/useGlobalKeyboardShortcuts';
+import { getActionExecutor, type ActionHandler, type ActionContext, type ActionResult } from '@/services/ActionExecutor';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
 import { notifySuccess, notifyError } from '@/utils/notifications';
@@ -910,6 +913,15 @@ const OptimizedAppContent: React.FC = memo(() => {
     getMicrophoneId: () => audioDeviceContext.selectedMicrophoneId
   });
 
+  // Global keyboard shortcuts (Shift+Letter) for quick action triggering
+  // Per UI Intent Section 5.5: "Shift+L immediately starts Quick Letter dictation"
+  // Disabled during active recording to prevent accidental triggers
+  const isRecordingActive = recorder.isRecording || ['recording', 'transcribing', 'processing'].includes(state.processingStatus);
+  useGlobalKeyboardShortcuts({
+    enabled: !isRecordingActive,
+    defaultMode: 'dictate'
+  });
+
   // Session isolation - prevent UI context switches during recordings
   const stableSelectedSessionId = useMemo(() => {
     // If currently recording, keep the existing selected session to prevent UI context switches
@@ -1302,7 +1314,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('💾 Session saved to local storage:', session.id);
     } catch (error) {
       console.error('❌ Failed to save session to persistence:', error);
-      ToastService.getInstance().error('Failed to save session locally. Storage may be full.');
+      getActionExecutor().errorFromBackground(
+        'Failed to save session locally',
+        { suggestion: 'Storage may be full - clear old sessions', category: 'storage' }
+      );
     }
   }, [persistenceService, actions, updateStorageStats]);
 
@@ -1326,7 +1341,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('✅ Session marked complete (persistent):', sessionId);
     } catch (error) {
       console.error('❌ Failed to mark session as complete:', error);
-      ToastService.getInstance().error('Failed to mark session as complete');
+      getActionExecutor().errorFromBackground(
+        'Failed to mark session as complete',
+        { suggestion: 'Try again', category: 'storage', autoClearMs: 5000 }
+      );
       setCheckedSessions(prev => {
         if (!prev.has(sessionId)) {
           return prev;
@@ -1358,7 +1376,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('↩️ Session unchecked (persistent):', sessionId);
     } catch (error) {
       console.error('❌ Failed to unmark session as complete:', error);
-      ToastService.getInstance().error('Failed to unmark session');
+      getActionExecutor().errorFromBackground(
+        'Failed to unmark session',
+        { suggestion: 'Try again', category: 'storage', autoClearMs: 5000 }
+      );
       setCheckedSessions(prev => {
         if (prev.has(sessionId)) {
           return prev;
@@ -1398,7 +1419,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       ToastService.getInstance().success(`Deleted ${result.deletedCount} checked sessions`);
     } catch (error) {
       console.error('❌ Failed to delete checked sessions:', error);
-      ToastService.getInstance().error('Failed to delete checked sessions');
+      getActionExecutor().errorFromBackground(
+        'Failed to delete checked sessions',
+        { suggestion: 'Try again', category: 'storage', autoClearMs: 5000 }
+      );
     }
   }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
 
@@ -1423,7 +1447,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       ToastService.getInstance().success(`Deleted ${result.deletedCount} old sessions`);
     } catch (error) {
       console.error('❌ Failed to delete old sessions:', error);
-      ToastService.getInstance().error('Failed to delete old sessions');
+      getActionExecutor().errorFromBackground(
+        'Failed to delete old sessions',
+        { suggestion: 'Try again', category: 'storage', autoClearMs: 5000 }
+      );
     }
   }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
 
@@ -1444,7 +1471,10 @@ const OptimizedAppContent: React.FC = memo(() => {
       ToastService.getInstance().success('Session deleted');
     } catch (error) {
       console.error('❌ Failed to delete session:', error);
-      ToastService.getInstance().error('Failed to delete session');
+      getActionExecutor().errorFromBackground(
+        'Failed to delete session',
+        { suggestion: 'Try again', category: 'storage', autoClearMs: 5000 }
+      );
     }
   }, [persistenceService, actions, updateStorageStats]);
 
@@ -2286,13 +2316,21 @@ const OptimizedAppContent: React.FC = memo(() => {
             isTranscriptionPlaceholder ? 'service-unavailable' :
             'error';
           
-          RecordingToasts.transcriptionFailed(errorType);
-          
-          // Simplify error message for better performance
+          // Route transcription errors to command bar (per UI Intent Section 8)
           const errorMessage = isTranscriptionEmpty ? 'No audio detected' :
             isTranscriptionTooShort ? 'Recording too short' :
             isTranscriptionPlaceholder ? 'Transcription service unavailable' :
             'Transcription service error';
+
+          const suggestion = isTranscriptionEmpty ? 'Try speaking closer to the microphone' :
+            isTranscriptionTooShort ? 'Record for at least 2 seconds' :
+            isTranscriptionPlaceholder ? 'Check Whisper server status' :
+            'Check Whisper server connection';
+
+          getActionExecutor().errorFromBackground(
+            `Transcription failed: ${errorMessage}`,
+            { suggestion, category: 'transcription' }
+          );
           
           // Update session with error state
           actions.updatePatientSession(sessionId, {
@@ -3075,8 +3113,11 @@ const OptimizedAppContent: React.FC = memo(() => {
             });
           }
 
-          // Show simplified toast notification for background processing error
-          RecordingToasts.processingFailed(patientName);
+          // Route processing errors to command bar (per UI Intent Section 8)
+          getActionExecutor().errorFromBackground(
+            `Processing failed for ${patientName}`,
+            { suggestion: 'Check LM Studio connection', category: 'generation' }
+          );
         }
         
         // Store failed recording for troubleshooting (non-blocking)
@@ -5560,6 +5601,206 @@ const OptimizedAppContent: React.FC = memo(() => {
     };
   }, []); // Run once on mount
 
+  // ============================================
+  // Action Executor Registration
+  // ============================================
+  // Register all action handlers with the central ActionExecutor
+  // This enables unified action execution from command bar, keyboard, etc.
+  useEffect(() => {
+    const executor = getActionExecutor();
+
+    // Default workflow handler for dictate mode actions
+    executor.registerHandler('__default_workflow__', async (action, mode, ctx) => {
+      if (!action.agentType) {
+        return { success: false, error: 'Action has no associated agent type' };
+      }
+
+      if (mode === 'dictate' || mode === undefined) {
+        handleWorkflowSelect(action.agentType, ctx.quickActionField);
+        return { success: true };
+      } else if (mode === 'type') {
+        handleTypeClick(action.agentType);
+        return { success: true };
+      }
+
+      return { success: false, error: `Unsupported mode: ${mode}` };
+    });
+
+    // Register dictate-mode handlers (route to workflow)
+    const dictateAgents: string[] = [
+      'quick-letter', 'consultation', 'tavi-workup', 'angiogram-pci',
+      'tavi', 'mteer', 'pfo-closure', 'right-heart-cath', 'background',
+      'medications', 'social-history', 'bloods', 'imaging', 'investigation-summary'
+    ];
+    dictateAgents.forEach(actionId => {
+      executor.registerHandler(actionId, async (action, mode, ctx) => {
+        if (mode === 'vision' && action.id === 'investigation-summary') {
+          actions.openOverlay('image-investigation');
+          actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+          return { success: true };
+        }
+
+        if (mode === 'type' && action.agentType) {
+          handleTypeClick(action.agentType);
+          return { success: true };
+        }
+
+        if (action.agentType) {
+          handleWorkflowSelect(action.agentType, ctx.quickActionField);
+          return { success: true };
+        }
+
+        return { success: false, error: 'No agent type for action' };
+      });
+    });
+
+    // Click-only handlers
+    executor.registerHandler('annotate-screenshots', async () => {
+      try {
+        const url = chrome.runtime.getURL('src/canvas/index.html');
+        await chrome.tabs.create({ url, active: true });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: 'Unable to open Canvas', suggestion: 'Please try again' };
+      }
+    });
+
+    executor.registerHandler('patient-education', async () => {
+      actions.openOverlay('patient-education');
+      actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+      return { success: true };
+    });
+
+    executor.registerHandler('ward-list', async () => {
+      setRoundsOpen(true);
+      return { success: true };
+    });
+
+    executor.registerHandler('appointment-wrap-up', async () => {
+      setAppointmentBuilderOpen(true);
+      return { success: true };
+    });
+
+    executor.registerHandler('ai-medical-review', async () => {
+      console.log('🤖 Opening AI Medical Review');
+      // TODO: Implement AI review modal/section opening
+      return { success: true };
+    });
+
+    executor.registerHandler('profile-photo', async () => {
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: 'profile-photo',
+          data: {}
+        });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: 'Unable to capture photo', suggestion: 'Please try again' };
+      }
+    });
+
+    executor.registerHandler('bp-diary-importer', async () => {
+      actions.openOverlay('bp-diary-importer');
+      return { success: true };
+    });
+
+    executor.registerHandler('lipid-profile-importer', async () => {
+      actions.openOverlay('lipid-profile-importer');
+      return { success: true };
+    });
+
+    executor.registerHandler('tte-trend-importer', async () => {
+      actions.openOverlay('tte-trend-importer');
+      return { success: true };
+    });
+
+    executor.registerHandler('batch-ai-review', async () => {
+      actions.setReviewData({
+        classification: 'BATCH',
+        findings: [],
+        recommendations: [],
+        summary: 'Batch review initiated'
+      });
+      return { success: true };
+    });
+
+    executor.registerHandler('create-task', async () => {
+      setRoundsOpen(true);
+      return { success: true };
+    });
+
+    executor.registerHandler('pre-op-plan', async (action, mode, ctx) => {
+      // Example of clarification flow (UI Intent Section 9):
+      // If no patient is currently loaded, ask for procedure type before proceeding
+      const hasPatient = !!state.currentPatientInfo?.name;
+
+      if (!hasPatient && mode !== 'type') {
+        // Request clarification for procedure type
+        // This demonstrates the inline clarification pattern
+        executor.requestClarification({
+          actionId: 'pre-op-plan',
+          message: 'Please specify the procedure details',
+          fields: [
+            {
+              id: 'procedureType',
+              label: 'Procedure Type',
+              type: 'select',
+              required: true,
+              options: [
+                { value: 'cabg', label: 'CABG' },
+                { value: 'valve', label: 'Valve Surgery' },
+                { value: 'tavi', label: 'TAVI' },
+                { value: 'pci', label: 'PCI' },
+                { value: 'other', label: 'Other' }
+              ],
+              helperText: 'Select the planned procedure'
+            },
+            {
+              id: 'urgency',
+              label: 'Urgency',
+              type: 'select',
+              options: [
+                { value: 'elective', label: 'Elective' },
+                { value: 'urgent', label: 'Urgent' },
+                { value: 'emergent', label: 'Emergent' }
+              ],
+              defaultValue: 'elective'
+            }
+          ],
+          onSubmit: async (values) => {
+            console.log('[Pre-Op Plan] Clarification submitted:', values);
+            // Now proceed with the workflow using clarified values
+            if (action.agentType) {
+              handleWorkflowSelect(action.agentType, ctx.quickActionField);
+            }
+            return { success: true, data: values };
+          },
+          onCancel: () => {
+            console.log('[Pre-Op Plan] Clarification cancelled');
+          }
+        });
+
+        // Return pending - the clarification form will handle completion
+        return { success: true, data: { pending: 'clarification' } };
+      }
+
+      if (action.agentType) {
+        handleWorkflowSelect(action.agentType, ctx.quickActionField);
+      }
+      return { success: true };
+    });
+
+    console.log('[ActionExecutor] Registered all action handlers');
+  }, [
+    handleWorkflowSelect,
+    handleTypeClick,
+    actions,
+    state.selectedSessionId,
+    setRoundsOpen,
+    setAppointmentBuilderOpen
+  ]);
+
   // Merge manual and auto-checked sessions for display
   const allCheckedSessions = useMemo(() => {
     const merged = new Set(checkedSessions);
@@ -5790,7 +6031,10 @@ const OptimizedAppContent: React.FC = memo(() => {
                       ToastService.getInstance().success('Transcription inserted to EMR');
                     } catch (error) {
                       console.error('Failed to insert transcription:', error);
-                      ToastService.getInstance().error('Failed to insert transcription');
+                      getActionExecutor().errorFromBackground(
+                        'Failed to insert transcription',
+                        { suggestion: 'Check EMR connection', category: 'generation', autoClearMs: 5000 }
+                      );
                     }
                   }}
                   onTranscriptionEdit={(text) => {
@@ -6792,7 +7036,10 @@ const OptimizedAppContent: React.FC = memo(() => {
               actions.setProcessingStatus('error');
               const errMsg = error instanceof Error ? error.message : 'Unknown error';
               actions.setErrors([`Failed to generate report: ${errMsg}`]);
-              ToastService.getInstance().error('Failed to generate report from typed notes');
+              getActionExecutor().errorFromBackground(
+                'Failed to generate report from typed notes',
+                { suggestion: 'Check LM Studio connection', category: 'generation' }
+              );
             }
           }}
         />

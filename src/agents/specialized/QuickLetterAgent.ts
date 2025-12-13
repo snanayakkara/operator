@@ -546,6 +546,94 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
   }
 
   /**
+   * Detect calcium score values in letter content
+   */
+  private extractCalciumScoreValue(text: string): number | null {
+    const match = text.match(/(?:calcium|ca|cac)\s+score[^0-9]{0,10}(\d{1,4})/i);
+    if (match && match[1]) {
+      const value = parseInt(match[1], 10);
+      return Number.isNaN(value) ? null : value;
+    }
+    return null;
+  }
+
+  /**
+   * Check if summary explicitly claims a zero calcium score
+   */
+  private claimsZeroCalcium(summaryText: string): boolean {
+    const lower = summaryText.toLowerCase();
+    return (
+      /\bctca\s+zero\s+calcium\b/.test(lower) ||
+      /\bzero\s+calcium\s+score\b/.test(lower) ||
+      /\bcalcium\s+score\s*(?:of\s*)?0\b/.test(lower) ||
+      /\bcalcium\s+score\s+zero\b/.test(lower)
+    );
+  }
+
+  /**
+   * Detect whether letter content indicates coronary artery disease or plaque burden
+   */
+  private letterIndicatesCoronaryDisease(letterText: string, calciumScore: number | null): boolean {
+    const lower = letterText.toLowerCase();
+    const negationPattern = /\b(no|nil|without)\b[^.]{0,40}\b(cad|coronary artery disease|stenosis|stenoses|plaques?|calcification)\b/gi;
+    const stripped = lower.replace(negationPattern, '');
+    const positiveSignals = [
+      /diffuse\s+coronary/,
+      /plaque/,
+      /stenosis|stenoses/,
+      /non[-\s]?obstructive/,
+      /obstructive/,
+      /atherosclero/,
+      /calcified/,
+      /\bcoronary artery disease\b/,
+      /\bcad\b/
+    ];
+    const hasPositiveSignal = positiveSignals.some(pattern => pattern.test(stripped));
+    const nonZeroCalcium = calciumScore !== null && calciumScore > 0;
+    return hasPositiveSignal || nonZeroCalcium;
+  }
+
+  /**
+   * Prevent hallucinated zero calcium / no CAD summaries when letter indicates disease
+   */
+  private enforceSummaryClinicalConsistency(summary: string, letterContent: string): string {
+    const calciumScore = this.extractCalciumScoreValue(letterContent);
+    const claimsZeroCalcium = this.claimsZeroCalcium(summary);
+    const claimsNoCad = /\bno\s+(cad|coronary artery disease)\b/i.test(summary);
+    const letterSuggestsDisease = this.letterIndicatesCoronaryDisease(letterContent, calciumScore);
+
+    // If summary conflicts with letter content, regenerate from letter content
+    if ((claimsZeroCalcium && letterSuggestsDisease) || (claimsNoCad && letterSuggestsDisease)) {
+      const regenerated = this.generateIntelligentSummary(letterContent);
+      if (regenerated) {
+        return this.truncateSummary(this.cleanUpSummary(regenerated));
+      }
+    }
+
+    // If only the calcium score is wrong, correct it using the detected value
+    if (claimsZeroCalcium && calciumScore !== null && calciumScore > 0) {
+      const corrected = summary.replace(
+        /zero\s+calcium\s+score|calcium\s+score\s*(?:of\s*)?0/gi,
+        `calcium score ${calciumScore}`
+      );
+      return this.truncateSummary(this.cleanUpSummary(corrected));
+    }
+
+    return summary;
+  }
+
+  /**
+   * Enforce 150 character limit on summaries with graceful truncation
+   */
+  private truncateSummary(summary: string, maxLength: number = 150): string {
+    const trimmed = summary.trim();
+    if (trimmed.length <= maxLength) {
+      return trimmed;
+    }
+    return trimmed.substring(0, maxLength - 3).trimEnd() + '...';
+  }
+
+  /**
    * Preprocess response output to remove reasoning artifacts and analysis sections
    * This method identifies and strips common patterns of AI reasoning that shouldn't appear in final output
    */
@@ -860,7 +948,9 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
         console.log('📝 Extracted letter content length:', letterContent.length);
         
         // Clean the extracted summary to remove trailing dashes
-        const summary = this.cleanSummaryText(summaryRaw);
+        let summary = this.cleanSummaryText(summaryRaw);
+        summary = this.enforceSummaryClinicalConsistency(summary, letterContent);
+        summary = this.truncateSummary(summary);
         console.log('🧹 Cleaned summary:', summary);
         return { summary, letterContent };
       }
@@ -871,7 +961,9 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       const legacyLetterMatch = cleanedOutput.match(/LETTER:\s*(.*)/s);
       if (legacySummaryMatch && legacyLetterMatch) {
         console.log('✅ Found legacy pattern with --- divider');
-        const summary = this.cleanSummaryText(legacySummaryMatch[1].trim());
+        let summary = this.cleanSummaryText(legacySummaryMatch[1].trim());
+        summary = this.enforceSummaryClinicalConsistency(summary, legacyLetterMatch[1]);
+        summary = this.truncateSummary(summary);
         const letterContent = legacyLetterMatch[1].trim();
         return { summary, letterContent };
       }
@@ -884,9 +976,11 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       console.warn('   If this matches your input transcription, the model may not be generating properly.');
 
       const intelligentSummary = this.generateIntelligentSummary(cleanedOutput);
-      const fallbackSummary = intelligentSummary.length > 150
+      let fallbackSummary = intelligentSummary.length > 150
         ? intelligentSummary.substring(0, 147) + '...'
         : intelligentSummary;
+      fallbackSummary = this.enforceSummaryClinicalConsistency(fallbackSummary, cleanedOutput);
+      fallbackSummary = this.truncateSummary(fallbackSummary);
 
       console.log('🔄 Generated fallback summary from content:', fallbackSummary);
       console.log('📝 Using cleaned output as letter content (length:', cleanedOutput.length, ')');
@@ -899,9 +993,14 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       console.warn('❌ Error parsing structured response:', error);
       // Try to clean the output even in error case
       const cleanedOutput = this.preprocessResponseOutput(outputText);
-      const fallbackSummary = cleanedOutput.length > 150
-        ? cleanedOutput.substring(0, 147) + '...'
-        : cleanedOutput;
+      const fallbackSummary = this.truncateSummary(
+        this.enforceSummaryClinicalConsistency(
+          cleanedOutput.length > 150
+            ? cleanedOutput.substring(0, 147) + '...'
+            : cleanedOutput,
+          cleanedOutput
+        )
+      );
       console.log('🚨 Using emergency fallback parsing with preprocessing');
       return { summary: fallbackSummary, letterContent: cleanedOutput };
     }
