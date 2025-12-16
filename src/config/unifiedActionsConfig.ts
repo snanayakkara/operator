@@ -589,25 +589,33 @@ export function isClickOnly(action: UnifiedAction): boolean {
 }
 
 /**
- * Fuzzy search actions by label, alias, or description
+ * Fuzzy search actions by label, alias, description, or shortcut.
+ *
+ * Intended behavior:
+ * - Substring match (fast, forgiving)
+ * - Word-prefix match (quick narrowing)
+ * - Subsequence match (lightweight fuzzy)
+ * - Results ranked by match quality
  */
 export function searchActions(query: string): UnifiedAction[] {
   if (!query.trim()) {
     return getAllActions();
   }
 
-  const lowerQuery = query.toLowerCase();
+  const normalizedQuery = normalizeSearchText(query);
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean);
+  const actions = getAllActions();
 
-  return getAllActions().filter(action => {
-    const searchableText = [
-      action.label,
-      action.alias,
-      action.description,
-      action.shortcut
-    ].filter(Boolean).join(' ').toLowerCase();
+  const scored = actions
+    .map((action, index) => ({
+      action,
+      index,
+      score: scoreActionMatch(action, normalizedQuery, queryTokens)
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
 
-    return searchableText.includes(lowerQuery);
-  });
+  return scored.map(s => s.action);
 }
 
 /**
@@ -615,4 +623,98 @@ export function searchActions(query: string): UnifiedAction[] {
  */
 export function getGroupMeta(group: ActionGroup): ActionGroupMeta | undefined {
   return ACTION_GROUPS.find(g => g.id === group);
+}
+
+function normalizeSearchText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function compactSearchText(text: string): string {
+  return normalizeSearchText(text).replace(/\s+/g, '');
+}
+
+function isSubsequence(needle: string, haystack: string): boolean {
+  if (!needle) return true;
+  let needleIndex = 0;
+  for (let i = 0; i < haystack.length; i += 1) {
+    if (haystack[i] === needle[needleIndex]) {
+      needleIndex += 1;
+      if (needleIndex >= needle.length) return true;
+    }
+  }
+  return false;
+}
+
+function scoreField(field: string | undefined, normalizedQuery: string): number {
+  if (!field) return 0;
+
+  const normalizedField = normalizeSearchText(field);
+  const compactField = compactSearchText(field);
+  const compactQuery = normalizedQuery.replace(/\s+/g, '');
+
+  // For single-character queries, avoid overly-broad substring matches.
+  if (normalizedQuery.length <= 1) {
+    if (normalizedField === normalizedQuery) return 140;
+    if (normalizedField.startsWith(normalizedQuery)) return 120;
+
+    const words = normalizedField.split(' ').filter(Boolean);
+    if (words.some(w => w.startsWith(normalizedQuery))) return 110;
+    return 0;
+  }
+
+  if (normalizedField === normalizedQuery) return 140;
+  if (normalizedField.startsWith(normalizedQuery)) return 120 + Math.min(20, normalizedQuery.length);
+
+  const words = normalizedField.split(' ').filter(Boolean);
+  if (words.some(w => w.startsWith(normalizedQuery))) return 110 + Math.min(10, normalizedQuery.length);
+
+  if (normalizedField.includes(normalizedQuery)) return 90 + Math.min(10, normalizedQuery.length);
+
+  if (isSubsequence(compactQuery, compactField)) {
+    const lengthBonus = Math.min(15, compactQuery.length);
+    return 70 + lengthBonus;
+  }
+
+  return 0;
+}
+
+function scoreActionMatch(action: UnifiedAction, normalizedQuery: string, queryTokens: string[]): number {
+  const combinedSearchText = [
+    action.label,
+    action.alias,
+    action.description,
+    action.shortcut
+  ].filter(Boolean).join(' ');
+
+  const combinedNormalized = normalizeSearchText(combinedSearchText);
+  const combinedCompact = combinedNormalized.replace(/\s+/g, '');
+
+  if (queryTokens.length > 1) {
+    const tokenPass = queryTokens.every(token => {
+      if (combinedNormalized.includes(token)) return true;
+      return isSubsequence(token.replace(/\s+/g, ''), combinedCompact);
+    });
+    if (!tokenPass) return 0;
+  }
+
+  const labelScore = scoreField(action.label, normalizedQuery);
+  const aliasScore = scoreField(action.alias, normalizedQuery);
+  const descriptionScore = scoreField(action.description, normalizedQuery);
+
+  // Shortcut should contribute but not dominate (especially since shortcuts can overlap)
+  const shortcutScore =
+    action.shortcut && normalizedQuery.replace(/\s+/g, '').toUpperCase() === action.shortcut
+      ? 60
+      : scoreField(action.shortcut, normalizedQuery);
+
+  // Weighted best-of: label > alias > description > shortcut
+  return Math.max(
+    labelScore,
+    Math.round(aliasScore * 0.95),
+    Math.round(descriptionScore * 0.65),
+    Math.round(shortcutScore * 0.5)
+  );
 }

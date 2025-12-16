@@ -4,7 +4,7 @@
  */
 
 import React, { memo, useCallback, useEffect } from 'react';
-import { User, FileText, ExternalLink } from 'lucide-react';
+import { User, FileText, ExternalLink, Keyboard } from 'lucide-react';
 import type { PatientInfo, AgentType, ProcessingStatus } from '@/types/medical.types';
 import { StatusBadge, StateIndicator } from './status';
 import type { ProcessingState } from '@/utils/stateColors';
@@ -15,6 +15,7 @@ interface PatientContextHeaderProps {
   processingStatus?: ProcessingStatus;
   isRecording?: boolean;
   isViewingCompletedSession?: boolean;
+  onOpenQuickLetterAndInsert?: () => void;
 }
 
 const AGENT_DISPLAY_NAMES: Record<AgentType, string> = {
@@ -85,7 +86,8 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
   agentType,
   processingStatus,
   isRecording = false,
-  isViewingCompletedSession = false
+  isViewingCompletedSession = false,
+  onOpenQuickLetterAndInsert
 }) => {
   const state = mapToProcessingState(processingStatus, isRecording);
   const colors = getStatusColors(processingStatus, isRecording);
@@ -186,21 +188,40 @@ export const PatientContextHeader: React.FC<PatientContextHeaderProps> = memo(({
 
           {/* Status Badge or Go To Patient Button */}
           {isViewingCompletedSession && processingStatus === 'complete' ? (
-            <button
-              type="button"
-              onClick={handleGoToPatient}
-              className="
-                p-2 rounded-full
-                bg-slate-700 hover:bg-slate-800
-                text-white
-                shadow-sm hover:shadow-md
-                transition-colors
-              "
-              title="Go to patient (⇧G)"
-              aria-label="Go to patient"
-            >
-              <ExternalLink size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+              {agentType === 'quick-letter' && typeof onOpenQuickLetterAndInsert === 'function' && (
+                <button
+                  type="button"
+                  onClick={onOpenQuickLetterAndInsert}
+                  className="
+                    p-2 rounded-full
+                    bg-emerald-600 hover:bg-emerald-700
+                    text-white
+                    shadow-sm hover:shadow-md
+                    transition-colors
+                  "
+                  title="Open Quick Letter + Insert"
+                  aria-label="Open Quick Letter + Insert"
+                >
+                  <Keyboard size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleGoToPatient}
+                className="
+                  p-2 rounded-full
+                  bg-slate-700 hover:bg-slate-800
+                  text-white
+                  shadow-sm hover:shadow-md
+                  transition-colors
+                "
+                title="Go to patient (⇧G)"
+                aria-label="Go to patient"
+              >
+                <ExternalLink size={16} />
+              </button>
+            </div>
           ) : (
             <div className="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-full">
               {/* Animated pulsing dot */}

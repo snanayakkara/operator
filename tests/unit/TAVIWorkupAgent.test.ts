@@ -6,6 +6,11 @@ const mockProcessWithAgent = vi.fn();
 
 vi.mock('@/services/LMStudioService', () => {
   return {
+    MODEL_CONFIG: {
+      REASONING_MODEL: 'mock-reasoning-model',
+      QUICK_MODEL: 'mock-quick-model',
+      OCR_MODEL: 'mock-ocr-model',
+    },
     LMStudioService: {
       getInstance: vi.fn(() => ({
         processWithAgent: mockProcessWithAgent,
@@ -80,17 +85,19 @@ describe('TAVIWorkupAgent', () => {
 
     const report = await agent.process(transcription);
 
-    expect(mockProcessWithAgent).toHaveBeenCalledTimes(1);
-    const [, payload] = mockProcessWithAgent.mock.calls[0];
-    const parsed = JSON.parse(payload);
+    // One quick-model validation call + one reasoning-model call
+    expect(mockProcessWithAgent.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const workupCall = mockProcessWithAgent.mock.calls.find((call: any[]) => call[2] === 'tavi-workup');
+    expect(workupCall).toBeDefined();
+    const payload = workupCall![1] as string;
 
-    expect(parsed.structured_data.patient.dob).toBe('1946-05-12');
-    expect(parsed.structured_data.patient.height_cm).toContain('172');
-    expect(parsed.missing_fields).toContain('Echo Study Date');
+    // Payload is plain text that includes the dictation and EMR context blocks.
+    expect(payload).toContain('DICTATED TAVI WORKUP:');
+    expect(payload).toContain(transcription);
+    expect(payload).toContain('EMR DATA CONTEXT:');
 
     expect(report.content).toContain('Patient');
     expect(report.content).toContain('Clinical');
-    expect(report.content).toContain('Missing / Not Stated');
     expect(report.workupData.patient.heightCm).toBe(172);
     expect(report.alerts.alertMessages).toBeDefined();
     expect(report.missingFields).toContain('Echo Study Date');
@@ -163,7 +170,8 @@ describe('TAVIWorkupAgent', () => {
 
   describe('EMR Dialog Field Integration', () => {
     const mockChrome = {
-      runtime: {
+      tabs: {
+        query: vi.fn(),
         sendMessage: vi.fn()
       }
     };
@@ -171,56 +179,45 @@ describe('TAVIWorkupAgent', () => {
     beforeEach(() => {
       // Mock chrome API
       global.chrome = mockChrome as any;
-      mockChrome.runtime.sendMessage.mockReset();
+      mockChrome.tabs.query.mockReset();
+      mockChrome.tabs.sendMessage.mockReset();
+      mockChrome.tabs.query.mockResolvedValue([{ id: 123 }]);
     });
 
     it('extracts and includes EMR fields in payload', async () => {
       // Mock EMR field responses
-      mockChrome.runtime.sendMessage
-        .mockResolvedValueOnce({ data: 'Patient has diabetes and hypertension' }) // background
-        .mockResolvedValueOnce({ data: 'Echo shows severe AS, CT shows bicuspid valve' }) // investigation-summary
-        .mockResolvedValueOnce({ data: 'Metoprolol 50mg BD, Atorvastatin 20mg' }) // medications
-        .mockResolvedValueOnce({ data: 'Retired teacher, lives with spouse' }); // social-history
+      mockChrome.tabs.sendMessage
+        .mockResolvedValueOnce({ success: true, data: 'Patient has diabetes and hypertension' }) // Background
+        .mockResolvedValueOnce({ success: true, data: 'Echo shows severe AS, CT shows bicuspid valve' }) // Investigation Summary
+        .mockResolvedValueOnce({ success: true, data: 'Metoprolol 50mg BD, Atorvastatin 20mg' }) // Medications
+        .mockResolvedValueOnce({ success: true, data: 'Retired teacher, lives with spouse' }) // Social History table
+        .mockResolvedValueOnce({ success: true, data: 'John Doe\n05/06/1959 (66)\nID: 123' }); // Patient demographics
 
       const agent = new TAVIWorkupAgent();
       await agent.process('Test transcription');
 
       // Verify EMR extraction calls were made
-      expect(mockChrome.runtime.sendMessage).toHaveBeenCalledTimes(4);
-      expect(mockChrome.runtime.sendMessage).toHaveBeenNthCalledWith(1, {
-        type: 'EXECUTE_ACTION',
-        action: 'background',
-        data: { extractOnly: true }
-      });
-      expect(mockChrome.runtime.sendMessage).toHaveBeenNthCalledWith(2, {
-        type: 'EXECUTE_ACTION',
-        action: 'investigation-summary',
-        data: { extractOnly: true }
-      });
-      expect(mockChrome.runtime.sendMessage).toHaveBeenNthCalledWith(3, {
-        type: 'EXECUTE_ACTION',
-        action: 'medications',
-        data: { extractOnly: true }
-      });
-      expect(mockChrome.runtime.sendMessage).toHaveBeenNthCalledWith(4, {
-        type: 'EXECUTE_ACTION',
-        action: 'social-history',
-        data: { extractOnly: true }
-      });
+      expect(mockChrome.tabs.sendMessage).toHaveBeenCalledTimes(5);
+      expect(mockChrome.tabs.sendMessage).toHaveBeenNthCalledWith(1, 123, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Background' });
+      expect(mockChrome.tabs.sendMessage).toHaveBeenNthCalledWith(2, 123, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Investigation Summary' });
+      expect(mockChrome.tabs.sendMessage).toHaveBeenNthCalledWith(3, 123, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Medications (Problem List for Phil)' });
+      expect(mockChrome.tabs.sendMessage).toHaveBeenNthCalledWith(4, 123, { type: 'EXTRACT_SOCIAL_HISTORY_TABLE' });
+      expect(mockChrome.tabs.sendMessage).toHaveBeenNthCalledWith(5, 123, { type: 'EXTRACT_PATIENT_DATA' });
 
       // Verify EMR data was included in LLM payload
-      const [, payload] = mockProcessWithAgent.mock.calls[0];
-      const parsed = JSON.parse(payload);
+      const workupCall = mockProcessWithAgent.mock.calls.find((call: any[]) => call[2] === 'tavi-workup');
+      expect(workupCall).toBeDefined();
+      const payload = workupCall![1] as string;
 
-      expect(parsed.emr_fields.background).toBe('Patient has diabetes and hypertension');
-      expect(parsed.emr_fields.investigation_summary).toBe('Echo shows severe AS, CT shows bicuspid valve');
-      expect(parsed.emr_fields.medications_problem_list).toBe('Metoprolol 50mg BD, Atorvastatin 20mg');
-      expect(parsed.emr_fields.social_history).toBe('Retired teacher, lives with spouse');
+      expect(payload).toContain('Background: Patient has diabetes and hypertension');
+      expect(payload).toContain('Investigation Summary: Echo shows severe AS, CT shows bicuspid valve');
+      expect(payload).toContain('Medications: Metoprolol 50mg BD, Atorvastatin 20mg');
+      expect(payload).toContain('Social History: Retired teacher, lives with spouse');
     });
 
     it('handles EMR extraction failures gracefully', async () => {
       // Mock failed EMR extraction
-      mockChrome.runtime.sendMessage.mockRejectedValue(new Error('EMR not available'));
+      mockChrome.tabs.sendMessage.mockRejectedValue(new Error('EMR not available'));
 
       const agent = new TAVIWorkupAgent();
       const report = await agent.process('Test transcription');
@@ -229,13 +226,14 @@ describe('TAVIWorkupAgent', () => {
       expect(report.content).toBeDefined();
 
       // Payload should have fallback values
-      const [, payload] = mockProcessWithAgent.mock.calls[0];
-      const parsed = JSON.parse(payload);
+      const workupCall = mockProcessWithAgent.mock.calls.find((call: any[]) => call[2] === 'tavi-workup');
+      expect(workupCall).toBeDefined();
+      const payload = workupCall![1] as string;
 
-      expect(parsed.emr_fields.background).toBe('Not available');
-      expect(parsed.emr_fields.investigation_summary).toBe('Not available');
-      expect(parsed.emr_fields.medications_problem_list).toBe('Not available');
-      expect(parsed.emr_fields.social_history).toBe('Not available');
+      expect(payload).toContain('Background: Not available');
+      expect(payload).toContain('Investigation Summary: Not available');
+      expect(payload).toContain('Medications: Not available');
+      expect(payload).toContain('Social History: Not available');
     });
   });
 
@@ -483,14 +481,11 @@ describe('TAVIWorkupAgent', () => {
       expect(report.content).toContain('Enhanced CT Analysis\n\nAnnulus area 432');
       expect(report.content).toContain('Procedure Planning\n\n26mm Edwards');
 
-      // Verify structured data includes all new fields
-      const [, payload] = mockProcessWithAgent.mock.calls[0];
-      const parsed = JSON.parse(payload);
-
-      expect(parsed.structured_data.laboratory.creatinine).toBe('65 μmol/L');
-      expect(parsed.structured_data.ecg.heart_rate).toBe('65 bpm');
-      expect(parsed.structured_data.ct_measurements.lvot_area).toBe('340 mm²');
-      expect(parsed.structured_data.procedure_plan.valve_selection.type).toBe('Edwards');
+      // Verify extractor-backed structured data includes all new fields
+      expect(report.workupData.laboratory.creatinine).toBe(65);
+      expect(report.workupData.ecg.rate).toBe(65);
+      expect(report.workupData.ctMeasurements.lvotAreaMm2).toBe(340);
+      expect(report.workupData.procedurePlan.valveSelection.type).toBe('Edwards');
     });
   });
 });

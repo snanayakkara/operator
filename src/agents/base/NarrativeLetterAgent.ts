@@ -173,7 +173,9 @@ Generate coherent narrative prose suitable for medical correspondence between co
     const australianSpelling: { [key: string]: string } = {
       'recognize': 'recognise', 'optimize': 'optimise', 'center': 'centre',
       'favor': 'favour', 'color': 'colour', 'organize': 'organise',
-      'realize': 'realise', 'analyze': 'analyse', 'defense': 'defence'
+      'realize': 'realise', 'analyze': 'analyse', 'defense': 'defence',
+      'ischemia': 'ischaemia', 'ischemic': 'ischaemic',
+      'furosemide': 'frusemide'
     };
     
     for (const [american, australian] of Object.entries(australianSpelling)) {

@@ -14,7 +14,7 @@ import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
-import { colors, animation, radius } from '@/utils/designTokens';
+import { colors, animation, radius, layout } from '@/utils/designTokens';
 
 export interface ActionButtonProps {
   /** Unique identifier */
@@ -73,8 +73,8 @@ export const ActionButton: React.FC<ActionButtonProps> = memo(({
       onClick={onClick}
       disabled={isDisabled}
       className={`
-        group relative flex items-center gap-2
-        ${compact ? 'flex-col justify-center p-2 min-h-[56px]' : 'px-3 py-2'}
+        group relative flex items-center
+        ${compact ? 'flex-col justify-center gap-1 p-1.5 w-full' : 'gap-2 px-3 py-2'}
         rounded-[${radius.md}] border
         transition-colors duration-[${animation.duration.fast}ms]
         ${isDisabled
@@ -85,11 +85,12 @@ export const ActionButton: React.FC<ActionButtonProps> = memo(({
       `}
       style={{
         borderRadius: radius.md,
-        transitionDuration: `${animation.duration.fast}ms`
+        transitionDuration: `${animation.duration.fast}ms`,
+        ...(compact ? { height: layout.header.favourites } : {})
       }}
-      variants={!isDisabled ? buttonVariants : undefined}
-      whileHover={!isDisabled ? 'hover' : undefined}
-      whileTap={!isDisabled ? 'tap' : undefined}
+      variants={!isDisabled && !compact ? buttonVariants : undefined}
+      whileHover={!isDisabled && !compact ? 'hover' : undefined}
+      whileTap={!isDisabled && !compact ? 'tap' : undefined}
       aria-label={label}
       aria-disabled={isDisabled}
       title={comingSoon ? `${label} - Coming soon` : label}
@@ -105,11 +106,11 @@ export const ActionButton: React.FC<ActionButtonProps> = memo(({
           <Loader2
             className="animate-spin"
             style={{ color: theme.icon }}
-            size={compact ? 20 : 16}
+            size={compact ? 18 : 16}
           />
         ) : (
           <Icon
-            size={compact ? 20 : 16}
+            size={compact ? 18 : 16}
             style={{ color: isDisabled ? colors.neutral[400] : theme.icon }}
             strokeWidth={1.5}
           />

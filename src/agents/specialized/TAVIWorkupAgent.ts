@@ -11,6 +11,7 @@ import type {
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { TAVI_WORKUP_SYSTEM_PROMPTS } from './TAVIWorkupSystemPrompts';
+import { TAVIWorkupExtractor } from '@/utils/text-extraction/TAVIWorkupExtractor';
 
 /**
  * Streamlined TAVI Workup Agent following standard MedicalAgent pattern.
@@ -62,6 +63,9 @@ export class TAVIWorkupAgent extends MedicalAgent {
     }
 
     try {
+      const { data: extractedWorkupData, alerts: extractedAlerts, missingFields: extractedMissingFields } =
+        TAVIWorkupExtractor.extract(input, { referenceDate: new Date(context?.timestamp ?? Date.now()) });
+
       // Progress callback helper
       const reportProgress = (phase: string, progress: number, details?: string) => {
         console.log(`📊 Progress Update: ${phase} - ${progress}% ${details ? `(${details})` : ''}`);
@@ -101,37 +105,9 @@ export class TAVIWorkupAgent extends MedicalAgent {
         const baseReport = this.createReport('', [], context, 0, 0);
         return {
           ...baseReport,
-          workupData: {
-            patient: {},
-            clinical: {},
-            laboratory: {},
-            ecg: {},
-            echocardiography: {},
-            ctMeasurements: {
-              coronaryHeights: {},
-              sinusOfValsalva: {},
-              coplanarAngles: [],
-              accessVessels: {}
-            },
-            procedurePlan: {
-              valveSelection: {},
-              access: {},
-              strategy: {}
-            }
-          },
-          alerts: {
-            alertMessages: [],
-            triggers: {
-              lowLeftMainHeight: false,
-              lowSinusDiameters: [],
-              lowCoronaryHeights: [],
-              smallAccessVessels: [],
-              calciumBurden: 'unknown',
-              accessConcerns: [],
-              contraindicationFlags: []
-            }
-          },
-          missingFields: [],
+          workupData: extractedWorkupData,
+          alerts: extractedAlerts,
+          missingFields: extractedMissingFields,
           status: 'awaiting_validation',
           validationResult: validation,
           extractedData: correctedData
@@ -158,6 +134,7 @@ export class TAVIWorkupAgent extends MedicalAgent {
       // Phase 3: Parse and Format Results
       reportProgress('Formatting results', 0, 'Parsing structured TAVI workup');
       const sections = this.parseResponse(response, context);
+      const formattedContent = this.formatReportContent(sections, response);
       const processingTime = Date.now() - startTime;
       reportProgress('Formatting results', 100, `TAVI workup complete - ${processingTime}ms`);
 
@@ -165,15 +142,17 @@ export class TAVIWorkupAgent extends MedicalAgent {
 
       // Create structured report
       const baseReport = this.createReport(
-        response.trim(),
+        formattedContent,
         sections,
         context,
         processingTime,
         this.assessConfidence(input, response)
       );
 
-      // Extract missing information from the response (similar to QuickLetter pattern)
-      const missingInfo = this.extractMissingInformation(response);
+      const missingInfo = this.mergeMissingFields(
+        extractedMissingFields,
+        this.extractMissingInformation(response)
+      );
 
       // Parse structured sections from JSON response
       const structuredSections = this.parseStructuredSections(response);
@@ -181,36 +160,16 @@ export class TAVIWorkupAgent extends MedicalAgent {
       // Create TAVI-specific report with both legacy and new structure
       const taviReport: TAVIWorkupReport = {
         ...baseReport,
-        workupData: {
-          patient: {},
-          clinical: {},
-          laboratory: {},
-          ecg: {},
-          echocardiography: {},
-          ctMeasurements: {
-            coronaryHeights: {},
-            sinusOfValsalva: {},
-            coplanarAngles: [],
-            accessVessels: {}
-          },
-          procedurePlan: {
-            valveSelection: {},
-            access: {},
-            strategy: {}
-          }
-        },
-        alerts: {
-          alertMessages: structuredSections?.alerts?.missing || [],
-          triggers: {
-            lowLeftMainHeight: false,
-            lowSinusDiameters: [],
-            smallAccessVessels: []
-          }
-        },
+        workupData: extractedWorkupData,
+        alerts: extractedAlerts,
         missingFields: missingInfo,
         structuredSections: structuredSections || undefined,
         metadata: {
           ...baseReport.metadata,
+          missingInformation: {
+            missing_structured: missingInfo
+          },
+          rawAIOutput: response,
           modelUsed: MODEL_CONFIG.REASONING_MODEL
         }
       };
@@ -247,6 +206,16 @@ export class TAVIWorkupAgent extends MedicalAgent {
       }
     } catch (jsonError) {
       console.warn('⚠️ TAVI Parser: JSON parsing failed, trying text patterns');
+    }
+
+    try {
+      const xmlSections = this.parseXMLResponse(response);
+      if (xmlSections.length > 0) {
+        console.log(`✅ TAVI Parser: XML parsing successful - ${xmlSections.length} sections`);
+        return xmlSections;
+      }
+    } catch (xmlError) {
+      console.warn('⚠️ TAVI Parser: XML parsing failed, trying text patterns');
     }
 
     // Fallback to text pattern parsing
@@ -317,6 +286,12 @@ export class TAVIWorkupAgent extends MedicalAgent {
   private parseTextPatterns(response: string): ReportSection[] {
     const sections: ReportSection[] = [];
 
+    // Plain heading format (legacy): "Patient\n...\n\nClinical\n..."
+    const plainHeadingSections = this.parsePlainHeadingSections(response);
+    if (plainHeadingSections.length > 0) {
+      return plainHeadingSections;
+    }
+
     // Look for common section headers
     const sectionPatterns = [
       /\*\*Patient\*\*\s*([\s\S]*?)(?=\*\*|$)/i,
@@ -352,6 +327,107 @@ export class TAVIWorkupAgent extends MedicalAgent {
     });
 
     return sections;
+  }
+
+  private parseXMLResponse(response: string): ReportSection[] {
+    const sections: ReportSection[] = [];
+    const sectionRegex = /<section\s+title="([^"]+)"\s*>([\s\S]*?)<\/section>/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = sectionRegex.exec(response)) !== null) {
+      const title = match[1]?.trim();
+      const rawContent = match[2] ?? '';
+      const content = rawContent
+        .replace(/<\/?[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (title && content) {
+        sections.push({
+          title,
+          content,
+          type: 'narrative',
+          priority: title.toLowerCase().includes('alerts') ? 'high' : 'medium'
+        });
+      }
+    }
+
+    return sections;
+  }
+
+  private parsePlainHeadingSections(response: string): ReportSection[] {
+    const normalized = response.replace(/\r\n/g, '\n').trim();
+    if (!normalized) return [];
+
+    const knownHeadings = new Map<string, { title: string; priority: 'high' | 'medium' | 'low' }>([
+      ['patient', { title: 'Patient', priority: 'medium' }],
+      ['clinical', { title: 'Clinical', priority: 'medium' }],
+      ['laboratory values', { title: 'Laboratory Values', priority: 'medium' }],
+      ['ecg assessment', { title: 'ECG Assessment', priority: 'medium' }],
+      ['background', { title: 'Background', priority: 'medium' }],
+      ['medications', { title: 'Medications', priority: 'medium' }],
+      ['medications (problem list)', { title: 'Medications (Problem List)', priority: 'medium' }],
+      ['social history', { title: 'Social History', priority: 'medium' }],
+      ['investigation summary', { title: 'Investigation Summary', priority: 'medium' }],
+      ['investigations', { title: 'Investigations', priority: 'medium' }],
+      ['other investigations', { title: 'Other Investigations', priority: 'medium' }],
+      ['echocardiography', { title: 'Echocardiography', priority: 'medium' }],
+      ['ct measurements', { title: 'CT Measurements', priority: 'medium' }],
+      ['enhanced ct analysis', { title: 'Enhanced CT Analysis', priority: 'medium' }],
+      ['procedure planning', { title: 'Procedure Planning', priority: 'medium' }],
+      ['devices planned', { title: 'Devices Planned', priority: 'medium' }],
+      ['alerts & anatomical considerations', { title: 'Alerts & Anatomical Considerations', priority: 'high' }],
+      ['missing / not stated', { title: 'Missing / Not Stated', priority: 'medium' }],
+    ]);
+
+    const lines = normalized.split('\n');
+    const headings: Array<{ lineIndex: number; key: string }> = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const key = lines[i].trim().toLowerCase();
+      if (knownHeadings.has(key)) {
+        headings.push({ lineIndex: i, key });
+      }
+    }
+
+    if (headings.length === 0) return [];
+
+    const sections: ReportSection[] = [];
+    for (let i = 0; i < headings.length; i++) {
+      const start = headings[i].lineIndex + 1;
+      const end = (headings[i + 1]?.lineIndex ?? lines.length);
+      const body = lines.slice(start, end).join('\n').trim();
+      if (!body) continue;
+      const meta = knownHeadings.get(headings[i].key)!;
+      sections.push({
+        title: meta.title,
+        content: body,
+        type: 'narrative',
+        priority: meta.priority
+      });
+    }
+
+    return sections;
+  }
+
+  private formatReportContent(sections: ReportSection[], rawResponse: string): string {
+    if (!sections || sections.length === 0) {
+      return `TAVI Workup Summary\n\n${rawResponse.trim()}`;
+    }
+
+    return sections.map(section => `${section.title}\n\n${section.content.trim()}`).join('\n\n');
+  }
+
+  private mergeMissingFields(primary: string[], additional: string[]): string[] {
+    const merged: string[] = [];
+    for (const item of [...primary, ...additional]) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      if (!merged.some(existing => existing.toLowerCase() === trimmed.toLowerCase())) {
+        merged.push(trimmed);
+      }
+    }
+    return merged;
   }
 
   /**
@@ -667,12 +743,20 @@ Please process this comprehensive TAVI workup dictation and format according to 
   private createErrorReport(errorMessage: string, processingTime: number, context?: MedicalContext): TAVIWorkupReport {
     console.log('🔧 TAVI Error Handler: Creating error report');
 
-    // Use content-only error display for cleaner UI
-    const errorContent = `TAVI workup processing encountered an error. Please review the dictation and try again.\n\nError details: ${errorMessage}`;
+    const errorContent = `Processing Error\n\nTAVI workup processing failed. Please review the dictation and try again.\n\nError details: ${errorMessage}`;
+
+    const sections: ReportSection[] = [
+      {
+        title: 'Processing Error',
+        content: `TAVI workup processing failed.\n\n${errorMessage}`,
+        type: 'narrative',
+        priority: 'high'
+      }
+    ];
 
     const fallback = this.createReport(
       errorContent,
-      [], // No sections for error reports
+      sections,
       context,
       processingTime,
       0.1,
@@ -702,7 +786,7 @@ Please process this comprehensive TAVI workup dictation and format according to 
         }
       },
       alerts: {
-        alertMessages: [],
+        alertMessages: ['Processing error.'],
         triggers: {
           lowLeftMainHeight: false,
           lowSinusDiameters: [],

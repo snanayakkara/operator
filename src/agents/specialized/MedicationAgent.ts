@@ -247,6 +247,7 @@ export class MedicationAgent extends MedicalAgent {
       { pattern: /\bapixaban\b/gi, replacement: 'apixaban' },
       { pattern: /\baspirin\b/gi, replacement: 'aspirin' },
       { pattern: /\bclopidogrel\b/gi, replacement: 'clopidogrel' },
+      { pattern: /\bfurosemide\b/gi, replacement: 'frusemide' },
       { pattern: /\bfrusemide\b/gi, replacement: 'frusemide' },
       { pattern: /\bspironolactone\b/gi, replacement: 'spironolactone' },
       { pattern: /\bomeprazole\b/gi, replacement: 'omeprazole' },
@@ -636,8 +637,7 @@ export class MedicationAgent extends MedicalAgent {
 "${input}"
 
 Format each medication on a separate line with: medication name, dose, frequency.
-Use Australian medication names and standard abbreviations (BD, TDS, QID, PRN, mane, nocte).
-Include any allergies noted.`
+Use Australian medication names and standard abbreviations (BD, TDS, QID, PRN, mane, nocte).`
       }
     ];
 

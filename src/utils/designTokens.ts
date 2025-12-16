@@ -278,7 +278,7 @@ export const layout = {
   header: {
     mini: 40,
     command: 48,
-    favourites: 56
+    favourites: 48
   },
 
   // Component sizes

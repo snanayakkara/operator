@@ -836,6 +836,12 @@ export interface PatientSession {
   processingStartTime?: number;
   completedTime?: number;
   audioBlob?: Blob; // Store audio for reprocessing
+  pendingAudio?: {
+    saved: boolean;
+    audioPath?: string;
+    savedAt?: number;
+    failureReason?: string;
+  };
   // Progress tracking for long recordings (TAVI workup)
   processingProgress?: {
     phase: string;

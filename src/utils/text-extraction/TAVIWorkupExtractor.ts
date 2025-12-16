@@ -246,9 +246,9 @@ export class TAVIWorkupExtractor {
 
     // Rhythm extraction
     if (lower.includes('sinus rhythm') || lower.includes(' sr ')) {
-      ecg.rhythm = 'SR';
+      ecg.rhythm = 'sinus rhythm';
     } else if (lower.includes('atrial fibrillation') || lower.includes(' af ')) {
-      ecg.rhythm = 'AF';
+      ecg.rhythm = 'atrial fibrillation';
     } else {
       const rhythmMatch = lower.match(/rhythm[^\w]*([a-z\s]+?)(?:\s|$|[.,;])/i);
       if (rhythmMatch) {
@@ -636,7 +636,11 @@ export class TAVIWorkupExtractor {
       ct.calciumScore = Number(calciumScore.value.toFixed(0));
     }
 
-    const lvotCalcium = this.extractNumberWithContext(lower, /(lvot.*calcium)[^\d]*(\d+(?:\.\d+)?)/i, true);
+    const lvotCalcium = this.extractNumberWithContext(
+      lower,
+      /\b(?:lvot\s*(?:calcium|calcification)|calcium\s*(?:in\s*)?lvot)\b[^\d]*(\d+(?:\.\d+)?)/i,
+      true
+    );
     if (lvotCalcium) {
       ct.lvotCalciumScore = Number(lvotCalcium.value.toFixed(0));
     }
@@ -718,7 +722,7 @@ export class TAVIWorkupExtractor {
     }
 
     // BAV size extraction
-    const bavMatch = original.match(/bav[:\s]*(\d+\s*mm|not planned|none)/i);
+    const bavMatch = original.match(/bav[:\s]*(\d+\s*mm(?:\s*valve)?|not planned|none)/i);
     if (bavMatch) {
       plan.strategy.bav = bavMatch[1].trim();
     }
@@ -752,7 +756,7 @@ export class TAVIWorkupExtractor {
     for (const pattern of notesPatterns) {
       const match = original.match(pattern);
       if (match) {
-        plan.caseNotes = match[1].trim();
+        plan.caseNotes = match[1].trim().replace(/[.]+$/, '').trim();
         break;
       }
     }
@@ -795,7 +799,7 @@ export class TAVIWorkupExtractor {
     }
 
     // ECG alerts
-    if (data.ecg.rhythm === 'AF' || data.ecg.rhythm === 'atrial fibrillation') {
+    if (data.ecg.rhythm === 'atrial fibrillation') {
       alertMessages.push('Atrial fibrillation - anticoagulation strategy consideration.');
     }
 

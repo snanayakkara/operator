@@ -223,12 +223,8 @@ function Band({ maxSpeed = 50, minSpeed = 0, cardText: _cardText = 'Ready to Rec
 
         texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
         texture.anisotropy = 16;
-        // three@0.168 uses colorSpace; retain compatibility with older encoding API when available
+        // three@0.168 uses colorSpace
         texture.colorSpace = THREE.SRGBColorSpace;
-        const srgbEncoding = (THREE as unknown as { sRGBEncoding?: unknown }).sRGBEncoding;
-        if (srgbEncoding && 'encoding' in texture) {
-          (texture as unknown as { encoding: unknown }).encoding = srgbEncoding;
-        }
         texture.flipY = false;
 
         setCardTexture(prev => {

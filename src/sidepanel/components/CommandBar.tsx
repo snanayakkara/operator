@@ -6,7 +6,6 @@
  * - ⌘K or / to open
  * - Fuzzy search across all workflows and actions
  * - Keyboard navigation (arrows, Enter, ESC)
- * - Single-key shortcuts when open
  * - Slides down from input (dropdown style)
  * - Error display slot (per UI Intent Section 8)
  * - Optional ActionExecutor integration for unified action dispatch
@@ -25,7 +24,6 @@ import { Search, Command, Mic, Keyboard, Camera, AlertCircle } from 'lucide-reac
 import { colors, animation, radius, shadows, zIndex } from '@/utils/designTokens';
 import {
   searchActions,
-  getActionByShortcut,
   ACTION_GROUPS,
   type UnifiedAction,
   type ActionGroup as ActionGroupType,
@@ -34,6 +32,15 @@ import {
 import { useActionExecutor } from '@/hooks/useActionExecutor';
 import { ClarificationForm } from './ClarificationForm';
 
+type SelectableMode = 'dictate' | 'type' | 'vision';
+
+const MODE_ORDER: SelectableMode[] = ['dictate', 'type', 'vision'];
+
+function getSelectableModes(action: UnifiedAction | null | undefined): SelectableMode[] {
+  if (!action) return [];
+  return MODE_ORDER.filter(mode => action.modes.includes(mode));
+}
+
 export interface CommandBarProps {
   /** Whether the drawer is open */
   isOpen: boolean;
@@ -41,6 +48,8 @@ export interface CommandBarProps {
   onOpen: () => void;
   /** Callback when drawer should close */
   onClose: () => void;
+  /** Optional callback when query changes (for coordinating surrounding UI) */
+  onQueryChange?: (query: string) => void;
   /** Callback when action is selected (legacy - use executor when available) */
   onActionSelect: (action: UnifiedAction, mode?: 'dictate' | 'type' | 'vision') => void;
   /** Whether to use ActionExecutor for action dispatch (default: true) */
@@ -73,6 +82,8 @@ const modeSplitVariants = {
 interface ActionRowProps {
   action: UnifiedAction;
   isFocused: boolean;
+  isKeyboardNavigating: boolean;
+  selectedMode: SelectableMode | null;
   onSelect: (action: UnifiedAction, mode?: 'dictate' | 'type' | 'vision') => void;
   onMouseEnter: () => void;
 }
@@ -80,11 +91,14 @@ interface ActionRowProps {
 const ActionRow: React.FC<ActionRowProps> = memo(({
   action,
   isFocused,
+  isKeyboardNavigating,
+  selectedMode,
   onSelect,
   onMouseEnter
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const hasMultipleModes = action.modes.length > 1;
+  const showModeSplit = hasMultipleModes && (isHovered || (isFocused && isKeyboardNavigating));
 
   return (
     <div
@@ -130,32 +144,9 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
 
       {/* Right side: Shortcut OR Mode split on hover */}
       <div className="flex items-center gap-1.5">
-        {/* Shortcut badge - hide when hovering multi-mode actions */}
-        <AnimatePresence>
-          {action.shortcut && !(hasMultipleModes && isHovered) && (
-            <motion.span
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-              className={`
-                px-1.5 py-0.5
-                text-[10px] font-medium
-                rounded
-                ${isFocused
-                  ? 'bg-violet-100 text-violet-600'
-                  : 'bg-neutral-100 text-neutral-500'
-                }
-              `}
-            >
-              {action.shortcut}
-            </motion.span>
-          )}
-        </AnimatePresence>
-
         {/* Mode split - reveal on hover for multi-mode actions */}
         <AnimatePresence>
-          {hasMultipleModes && isHovered && (
+          {showModeSplit && (
             <motion.div
               initial="hidden"
               animate="visible"
@@ -180,7 +171,13 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
                     border-r border-neutral-200
                     last:border-r-0
                   "
+                  style={{
+                    ...(selectedMode === 'dictate'
+                      ? { boxShadow: 'inset 0 0 0 1px rgba(37, 99, 235, 0.45)' }
+                      : {})
+                  }}
                   title="Dictate"
+                  aria-pressed={selectedMode === 'dictate'}
                 >
                   <Mic size={14} strokeWidth={2} />
                   <span>D</span>
@@ -202,7 +199,13 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
                     border-r border-neutral-200
                     last:border-r-0
                   "
+                  style={{
+                    ...(selectedMode === 'type'
+                      ? { boxShadow: 'inset 0 0 0 1px rgba(147, 51, 234, 0.45)' }
+                      : {})
+                  }}
                   title="Type"
+                  aria-pressed={selectedMode === 'type'}
                 >
                   <Keyboard size={14} strokeWidth={2} />
                   <span>T</span>
@@ -222,7 +225,13 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
                     hover:bg-cyan-100
                     transition-colors
                   "
+                  style={{
+                    ...(selectedMode === 'vision'
+                      ? { boxShadow: 'inset 0 0 0 1px rgba(8, 145, 178, 0.45)' }
+                      : {})
+                  }}
                   title="Vision (scan image)"
+                  aria-pressed={selectedMode === 'vision'}
                 >
                   <Camera size={14} strokeWidth={2} />
                   <span>V</span>
@@ -254,6 +263,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
   isOpen,
   onOpen,
   onClose,
+  onQueryChange,
   onActionSelect,
   useExecutor = true,
   placeholder = 'Search actions...',
@@ -261,6 +271,8 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
 }) => {
   const [query, setQuery] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [focusedMode, setFocusedMode] = useState<SelectableMode | null>(null);
+  const [isKeyboardNavigating, setIsKeyboardNavigating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -314,6 +326,42 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
     return groupedActions.flatMap(g => g.actions);
   }, [groupedActions]);
 
+  const focusedAction = useMemo(() => {
+    if (focusedIndex < 0) return null;
+    return flatActions[focusedIndex] || null;
+  }, [focusedIndex, flatActions]);
+
+  const focusedActionModes = useMemo(() => {
+    return getSelectableModes(focusedAction);
+  }, [focusedAction]);
+
+  // Default focused mode when moving between actions
+  useEffect(() => {
+    if (!focusedAction) {
+      setFocusedMode(null);
+      return;
+    }
+
+    const selectable = getSelectableModes(focusedAction);
+    if (selectable.length === 0) {
+      setFocusedMode(null);
+      return;
+    }
+
+    setFocusedMode(selectable.includes('dictate') ? 'dictate' : selectable[0]);
+  }, [focusedAction?.id]);
+
+  // Handle close
+  const handleClose = useCallback(() => {
+    setQuery('');
+    onQueryChange?.('');
+    setFocusedIndex(-1);
+    setFocusedMode(null);
+    setIsKeyboardNavigating(false);
+    onClose();
+    inputRef.current?.blur();
+  }, [onClose, onQueryChange]);
+
   // Handle global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -333,42 +381,51 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
         handleClose();
         return;
       }
-
-      // Single-key shortcuts when drawer is open and no query
-      if (isOpen && query === '' && e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
-        const action = getActionByShortcut(e.key);
-        if (action) {
-          e.preventDefault();
-          dispatchAction(action);
-          handleClose();
-          return;
-        }
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, query, onOpen, dispatchAction]);
+  }, [isOpen, onOpen, handleClose]);
 
   // Handle input keyboard navigation
   const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
+        setIsKeyboardNavigating(true);
         setFocusedIndex(prev =>
           prev < flatActions.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
+        setIsKeyboardNavigating(true);
         setFocusedIndex(prev =>
           prev > 0 ? prev - 1 : flatActions.length - 1
         );
         break;
+      case 'ArrowLeft':
+      case 'ArrowRight': {
+        if (!isKeyboardNavigating) return;
+        if (!focusedAction) return;
+        if (focusedActionModes.length <= 1) return;
+
+        e.preventDefault();
+        const direction = e.key === 'ArrowRight' ? 1 : -1;
+        setFocusedMode(prev => {
+          const current = prev ?? (focusedActionModes.includes('dictate') ? 'dictate' : focusedActionModes[0]);
+          const currentIndex = focusedActionModes.indexOf(current);
+          const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+          const nextIndex = (safeIndex + direction + focusedActionModes.length) % focusedActionModes.length;
+          return focusedActionModes[nextIndex];
+        });
+        break;
+      }
       case 'Enter':
         e.preventDefault();
         if (focusedIndex >= 0 && flatActions[focusedIndex]) {
-          dispatchAction(flatActions[focusedIndex]);
+          const action = flatActions[focusedIndex];
+          dispatchAction(action, focusedMode ?? undefined);
           handleClose();
         }
         break;
@@ -377,7 +434,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
         handleClose();
         break;
     }
-  }, [focusedIndex, flatActions, dispatchAction]);
+  }, [focusedIndex, flatActions, dispatchAction, focusedAction, focusedActionModes, focusedMode, handleClose, isKeyboardNavigating]);
 
   // Handle input focus
   const handleFocus = useCallback(() => {
@@ -385,14 +442,6 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
       onOpen();
     }
   }, [isOpen, onOpen]);
-
-  // Handle close
-  const handleClose = useCallback(() => {
-    setQuery('');
-    setFocusedIndex(-1);
-    onClose();
-    inputRef.current?.blur();
-  }, [onClose]);
 
   // Handle click outside
   useEffect(() => {
@@ -410,10 +459,16 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, handleClose]);
 
-  // Reset focused index when query changes
+  // Focus first match when searching (keeps Enter useful)
   useEffect(() => {
-    setFocusedIndex(-1);
-  }, [query]);
+    if (!isOpen) return;
+    if (!query.trim()) {
+      setFocusedIndex(-1);
+      setIsKeyboardNavigating(false);
+      return;
+    }
+    setFocusedIndex(flatActions.length > 0 ? 0 : -1);
+  }, [query, isOpen, flatActions.length]);
 
   return (
     <div
@@ -436,7 +491,12 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const nextQuery = e.target.value;
+            setQuery(nextQuery);
+            onQueryChange?.(nextQuery);
+            setIsKeyboardNavigating(false);
+          }}
           onFocus={handleFocus}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
@@ -563,6 +623,8 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
                           key={action.id}
                           action={action}
                           isFocused={isFocused}
+                          isKeyboardNavigating={isKeyboardNavigating}
+                          selectedMode={isFocused ? focusedMode : null}
                           onSelect={(a, mode) => {
                             dispatchAction(a, mode);
                             handleClose();
@@ -579,8 +641,8 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
             {/* Footer hint */}
             <div className="px-3 py-2 bg-neutral-50 border-t border-neutral-100">
               <div className="flex items-center justify-between text-[10px] text-neutral-500">
-                <span>↑↓ Navigate • Enter Select • Hover for D|T|V</span>
-                <span>Single key shortcuts when empty</span>
+                <span>↑↓ Navigate • ←→ Mode • Enter Select</span>
+                <span>Type to filter</span>
               </div>
             </div>
           </motion.div>

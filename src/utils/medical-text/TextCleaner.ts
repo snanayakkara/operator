@@ -125,6 +125,8 @@ export class MedicalTextCleaner {
 
     // Strip filler words and false starts
     cleaned = this.removeFillerWords(cleaned);
+    // Narrative outputs should be calm and readable; treat pause-commas from dictation as noise.
+    cleaned = cleaned.replace(/,/g, '');
     cleaned = cleaned.replace(/\b(\w+)\s+\.\.\.\s+\1\b/gi, '$1');
 
     // Convert numbers to digits with units

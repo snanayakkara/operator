@@ -264,6 +264,12 @@ interface OptimizedResultsPanelProps {
   errors?: string[];
   reviewData?: any;
   audioBlob?: Blob | null;
+  pendingAudio?: {
+    saved: boolean;
+    audioPath?: string;
+    savedAt?: number;
+    failureReason?: string;
+  };
   // Performance metrics data
   transcriptionTime?: number | null;
   agentProcessingTime?: number | null;
@@ -368,6 +374,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   errors = [],
   reviewData,
   audioBlob,
+  pendingAudio,
   // Performance metrics data
   transcriptionTime = null,
   agentProcessingTime = null,
@@ -968,6 +975,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           >
             <TranscriptionSection
               originalTranscription={originalTranscription ?? ''}
+              sessionId={selectedSessionId}
+              sessionSource={sessionSource}
+              sessionErrors={errors}
+              pendingAudio={pendingAudio}
               onTranscriptionCopy={onTranscriptionCopy}
               onTranscriptionInsert={onTranscriptionInsert}
               onTranscriptionEdit={onTranscriptionEdit}
@@ -1011,6 +1022,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               {originalTranscription && (
                 <TranscriptionSection
                   originalTranscription={originalTranscription ?? ''}
+                  sessionId={selectedSessionId}
+                  sessionSource={sessionSource}
+                  sessionErrors={errors}
+                  pendingAudio={pendingAudio}
                   onTranscriptionCopy={onTranscriptionCopy}
                   onTranscriptionInsert={onTranscriptionInsert}
                   onTranscriptionEdit={onTranscriptionEdit}
@@ -1263,6 +1278,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               {/* Transcription Section for TAVI */}
               <TranscriptionSection
                 originalTranscription={originalTranscription || ''}
+                sessionId={selectedSessionId}
+                sessionSource={sessionSource}
+                sessionErrors={errors}
+                pendingAudio={pendingAudio}
                 onTranscriptionCopy={onTranscriptionCopy}
                 onTranscriptionInsert={onTranscriptionInsert}
                 onTranscriptionEdit={onTranscriptionEdit}
@@ -1324,6 +1343,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               {/* Transcription Section for Patient Education */}
               <TranscriptionSection
                 originalTranscription={originalTranscription || ''}
+                sessionId={selectedSessionId}
+                sessionSource={sessionSource}
+                sessionErrors={errors}
+                pendingAudio={pendingAudio}
                 onTranscriptionCopy={onTranscriptionCopy}
                 onTranscriptionInsert={onTranscriptionInsert}
                 onTranscriptionEdit={onTranscriptionEdit}
@@ -1459,9 +1482,13 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               )}
 
               {/* Show transcription AFTER results for investigation-summary */}
-              {agentType === 'investigation-summary' && originalTranscription && !streaming && (
+              {(agentType === 'investigation-summary' && !streaming && (hasTranscription || isViewingSession)) && (
                 <TranscriptionSection
                   originalTranscription={originalTranscription ?? ''}
+                  sessionId={selectedSessionId}
+                  sessionSource={sessionSource}
+                  sessionErrors={errors}
+                  pendingAudio={pendingAudio}
                   onTranscriptionCopy={onTranscriptionCopy}
                   onTranscriptionInsert={onTranscriptionInsert}
                   onTranscriptionEdit={onTranscriptionEdit}

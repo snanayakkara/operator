@@ -1,29 +1,18 @@
-import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page, BrowserContext } from '@playwright/test';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 test.describe('Extension Loading Tests', () => {
   let extensionId: string;
 
   test('should load extension successfully', async ({ context }) => {
     try {
-      // Wait for extension to load
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Check for background pages (service worker)
-      const backgroundPages = context.backgroundPages();
-      if (backgroundPages.length > 0) {
-        const url = backgroundPages[0].url();
-        const matches = url.match(/chrome-extension:\/\/([a-z]{32})/);
-        if (matches) {
-          extensionId = matches[1];
-          expect(extensionId).toBeTruthy();
-          expect(extensionId).toMatch(/^[a-z]{32}$/);
-          console.log(`✅ Extension loaded via background page with ID: ${extensionId}`);
-          return;
-        }
-      }
-      
-      // Fallback: try the helper method
       extensionId = await ExtensionTestHelper.getExtensionId(context);
       expect(extensionId).toBeTruthy();
       expect(extensionId).toMatch(/^[a-z]{32}$/);
@@ -39,46 +28,17 @@ test.describe('Extension Loading Tests', () => {
   test('should have correct manifest configuration', async ({ context }) => {
     // Reuse extension ID from previous test or get it again
     if (!extensionId) {
-      const backgroundPages = context.backgroundPages();
-      if (backgroundPages.length > 0) {
-        const url = backgroundPages[0].url();
-        const matches = url.match(/chrome-extension:\/\/([a-z]{32})/);
-        if (matches) {
-          extensionId = matches[1];
-        }
-      }
-      
-      if (!extensionId) {
-        extensionId = await ExtensionTestHelper.getExtensionId(context);
-      }
+      extensionId = await ExtensionTestHelper.getExtensionId(context);
     }
-    
-    // Navigate to extension details page
-    const page = await context.newPage();
-    await page.goto('chrome://extensions/');
-    await page.waitForTimeout(2000);
 
-    // Find the extension card
-    const extensionCard = page.locator('.extension-list-item').filter({
-      hasText: 'Xestro EMR Assistant'
-    });
+    const manifestPath = path.join(__dirname, '../../dist/manifest.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
 
-    await expect(extensionCard).toBeVisible();
-
-    // Check extension details
-    const extensionName = await extensionCard.locator('h3').textContent();
-    expect(extensionName).toContain('Xestro EMR Assistant');
-
-    // Check version
-    const versionText = await extensionCard.locator('.version').textContent();
-    expect(versionText).toMatch(/\d+\.\d+\.\d+/);
-
-    // Verify extension is enabled
-    const toggleSwitch = extensionCard.locator('cr-toggle');
-    const isEnabled = await toggleSwitch.getAttribute('checked');
-    expect(isEnabled).toBeTruthy();
-
-    await page.close();
+    expect(manifest.manifest_version).toBe(3);
+    expect(manifest.name).toBe('Operator');
+    expect(manifest.permissions).toContain('sidePanel');
+    expect(manifest.background?.service_worker).toBe('service-worker.js');
+    expect(manifest.version).toMatch(/\d+\.\d+\.\d+/);
   });
 
   test('should open side panel successfully', async ({ page, context }) => {
@@ -101,24 +61,8 @@ test.describe('Extension Loading Tests', () => {
     expect(sidePanel).toBeTruthy();
     console.log('✅ Side panel opened successfully');
 
-    // Verify UI elements are present
-    const headerExists = await ExtensionTestHelper.waitForSidePanelElement(
-      sidePanel, 
-      'h1', 
-      5000
-    );
-    expect(headerExists).toBeTruthy();
-
-    const headerText = await sidePanel.locator('h1').textContent();
-    expect(headerText).toContain('Xestro EMR Assistant');
-
-    // Check for key UI components
-    const recordButtonExists = await ExtensionTestHelper.waitForSidePanelElement(
-      sidePanel,
-      'button:has-text("microphone"), [data-testid="record-button"], button[title*="record"]',
-      3000
-    );
-    expect(recordButtonExists).toBeTruthy();
+    // Verify UI elements are present (command bar is the most stable anchor)
+    await expect(sidePanel.locator('input[placeholder*="Type or press"]')).toBeVisible({ timeout: 15000 });
   });
 
   test('should handle permissions correctly', async ({ page, context }) => {

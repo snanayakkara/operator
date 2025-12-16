@@ -1,6 +1,6 @@
 // Content script for Operator Chrome Extension
 // Handles EMR interaction and field manipulation
-/* global HTMLVideoElement, HTMLSelectElement */
+/* global HTMLVideoElement, HTMLSelectElement, HTMLStyleElement, Document */
 
 const CONTENT_SCRIPT_VERSION = '2.7.0-xestro-dark-mode';
 console.log('🏥 Operator Chrome Extension Content Script Loading...', window.location.href);
@@ -40,6 +40,7 @@ class ContentScriptHandler {
   private saveAndSendRunning = false;
   private darkModeStyleElement: HTMLStyleElement | null = null;
   private darkModeEnabled = false;
+  private pendingIframeDarkModeRefresh: number | null = null;
 
   constructor() {
     this.initialize();
@@ -906,33 +907,631 @@ class ContentScriptHandler {
     }
   }
 
+  private getXestroDarkModeCssText(): string {
+    return `
+      /* Operator Xestro Dark Mode (Material-inspired) */
+      html.operator-xestro-dark-mode {
+        color-scheme: dark;
+
+        /* Core palette (Material Dark Theme guidance: dark surfaces + high contrast text) */
+        --operator-xestro-bg: #000000;
+        --operator-xestro-surface-0: #121212;
+        --operator-xestro-surface-1: #1e1e1e;
+        --operator-xestro-surface-2: #2a2a2a;
+        --operator-xestro-surface-3: #333333;
+
+        --operator-xestro-text-primary: rgba(255, 255, 255, 0.87);
+        --operator-xestro-text-secondary: rgba(255, 255, 255, 0.60);
+        --operator-xestro-text-disabled: rgba(255, 255, 255, 0.38);
+
+        --operator-xestro-border: rgba(255, 255, 255, 0.12);
+        --operator-xestro-border-strong: rgba(255, 255, 255, 0.20);
+
+        --operator-xestro-link: #8ab4f8;
+        --operator-xestro-accent: #03dac6;
+        --operator-xestro-danger: #cf6679;
+        --operator-xestro-focus: rgba(138, 180, 248, 0.35);
+
+        background: var(--operator-xestro-bg);
+      }
+
+      html.operator-xestro-dark-mode body {
+        background: var(--operator-xestro-bg) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode a {
+        color: var(--operator-xestro-link) !important;
+      }
+
+      html.operator-xestro-dark-mode ::selection {
+        background: rgba(3, 218, 198, 0.25);
+      }
+
+      /* Xestro core surfaces */
+      html.operator-xestro-dark-mode .XestroBox,
+      html.operator-xestro-dark-mode .XestroBoxContent,
+      html.operator-xestro-dark-mode .patient-record,
+      html.operator-xestro-dark-mode .record-view,
+      html.operator-xestro-dark-mode #patient-view {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .XestroBox {
+        border: 1px solid var(--operator-xestro-border) !important;
+        box-shadow: none !important;
+      }
+
+      html.operator-xestro-dark-mode .XestroBoxTitle,
+      html.operator-xestro-dark-mode .XestroBoxHeader,
+      html.operator-xestro-dark-mode .XestroHeader,
+      html.operator-xestro-dark-mode .Header,
+      html.operator-xestro-dark-mode header {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Common container fallbacks (Bootstrap-like patterns) */
+      html.operator-xestro-dark-mode .panel,
+      html.operator-xestro-dark-mode .panel-body,
+      html.operator-xestro-dark-mode .panel-heading,
+      html.operator-xestro-dark-mode .card,
+      html.operator-xestro-dark-mode .card-body,
+      html.operator-xestro-dark-mode .card-header,
+      html.operator-xestro-dark-mode .modal-content,
+      html.operator-xestro-dark-mode .dropdown-menu {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Form controls (scoped to likely Xestro containers to avoid theming Operator overlays) */
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="text"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="search"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="email"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="url"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="tel"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="password"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input[type="number"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) textarea,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) select,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) .form-control {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border-strong) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input::placeholder,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) textarea::placeholder {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) input:focus,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) textarea:focus,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) select:focus,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog,
+        .ui-menu,
+        .ui-datepicker
+      ) .form-control:focus {
+        border-color: rgba(138, 180, 248, 0.55) !important;
+        box-shadow: 0 0 0 3px var(--operator-xestro-focus) !important;
+        outline: none !important;
+      }
+
+      /* Buttons (scoped) */
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) button,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) input[type="button"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) input[type="submit"],
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) .btn {
+        background: var(--operator-xestro-surface-2) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) .btn-primary,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) button.primary {
+        background: rgba(3, 218, 198, 0.16) !important;
+        border-color: rgba(3, 218, 198, 0.35) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) button:hover,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .dropdown-menu,
+        .ui-widget-content,
+        .ui-dialog
+      ) .btn:hover {
+        background: var(--operator-xestro-surface-3) !important;
+      }
+
+      /* jQuery UI (autocomplete/dialogs) */
+      html.operator-xestro-dark-mode .ui-widget-content,
+      html.operator-xestro-dark-mode .ui-dialog,
+      html.operator-xestro-dark-mode .ui-dialog-content,
+      html.operator-xestro-dark-mode .ui-menu,
+      html.operator-xestro-dark-mode .ui-datepicker {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .ui-widget-header,
+      html.operator-xestro-dark-mode .ui-dialog-titlebar {
+        background: var(--operator-xestro-surface-2) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .ui-state-default,
+      html.operator-xestro-dark-mode .ui-button,
+      html.operator-xestro-dark-mode .ui-menu-item-wrapper {
+        background: var(--operator-xestro-surface-2) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .ui-state-hover,
+      html.operator-xestro-dark-mode .ui-state-focus,
+      html.operator-xestro-dark-mode .ui-menu-item-wrapper.ui-state-active {
+        background: var(--operator-xestro-surface-3) !important;
+        border-color: var(--operator-xestro-border-strong) !important;
+      }
+
+      html.operator-xestro-dark-mode .ui-state-active,
+      html.operator-xestro-dark-mode .ui-state-highlight {
+        background: rgba(3, 218, 198, 0.16) !important;
+        border-color: rgba(3, 218, 198, 0.35) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* jQuery UI icon sprites are usually dark; invert them only */
+      html.operator-xestro-dark-mode .ui-icon {
+        filter: invert(1) hue-rotate(180deg) saturate(1.2);
+      }
+
+      /* Tag-it */
+      html.operator-xestro-dark-mode ul.tagit {
+        background: var(--operator-xestro-surface-1) !important;
+        border: 1px solid var(--operator-xestro-border-strong) !important;
+      }
+
+      html.operator-xestro-dark-mode ul.tagit li.tagit-choice {
+        background: rgba(138, 180, 248, 0.12) !important;
+        border: 1px solid rgba(138, 180, 248, 0.35) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode ul.tagit li.tagit-choice .tagit-close {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Tables (scoped) */
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .ui-widget-content,
+        .ui-dialog
+      ) table {
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .ui-widget-content,
+        .ui-dialog
+      ) th,
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .ui-widget-content,
+        .ui-dialog
+      ) td {
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode :is(
+        .XestroBox,
+        .XestroBoxContent,
+        .patient-record,
+        .record-view,
+        #patient-view,
+        .panel,
+        .card,
+        .modal-content,
+        .ui-widget-content,
+        .ui-dialog
+      ) tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.03) !important;
+      }
+
+      /* Scrollbars (WebKit) */
+      html.operator-xestro-dark-mode ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+      }
+      html.operator-xestro-dark-mode ::-webkit-scrollbar-track {
+        background: var(--operator-xestro-surface-0);
+      }
+      html.operator-xestro-dark-mode ::-webkit-scrollbar-thumb {
+        background: var(--operator-xestro-surface-2);
+        border-radius: 8px;
+        border: 3px solid var(--operator-xestro-surface-0);
+      }
+      html.operator-xestro-dark-mode ::-webkit-scrollbar-thumb:hover {
+        background: var(--operator-xestro-surface-3);
+      }
+    `;
+  }
+
   private ensureDarkModeStyles() {
     if (this.darkModeStyleElement) return;
 
     const style = document.createElement('style');
     style.id = '__operator_xestro_dark_mode__';
-    style.textContent = `
-      html.operator-xestro-dark-mode {
-        filter: invert(0.92) hue-rotate(180deg) saturate(0.9);
-        color-scheme: dark;
-        transition: filter 0.2s ease;
-      }
+    style.textContent = this.getXestroDarkModeCssText();
 
-      html.operator-xestro-dark-mode img,
-      html.operator-xestro-dark-mode video,
-      html.operator-xestro-dark-mode picture,
-      html.operator-xestro-dark-mode canvas,
-      html.operator-xestro-dark-mode iframe {
-        filter: invert(1) hue-rotate(180deg) saturate(1);
-      }
-
-      html.operator-xestro-dark-mode ::selection {
-        background: rgba(125, 211, 252, 0.35);
-      }
-    `;
-
-    document.head.appendChild(style);
+    (document.head || document.documentElement).appendChild(style);
     this.darkModeStyleElement = style;
+  }
+
+  private ensureDarkModeStylesInDocument(targetDocument: Document) {
+    if (targetDocument.getElementById('__operator_xestro_dark_mode__')) return;
+
+    const style = targetDocument.createElement('style');
+    style.id = '__operator_xestro_dark_mode__';
+    style.textContent = this.getXestroDarkModeCssText();
+    (targetDocument.head || targetDocument.documentElement).appendChild(style);
+  }
+
+  private applyXestroDarkModeToSameOriginIframes(enabled: boolean) {
+    if (!this.emrSystem || this.emrSystem.name !== 'Xestro') return;
+
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    for (const iframe of iframes) {
+      try {
+        const iframeDocument = iframe.contentDocument;
+        if (!iframeDocument?.documentElement) continue;
+        this.ensureDarkModeStylesInDocument(iframeDocument);
+        iframeDocument.documentElement.classList.toggle('operator-xestro-dark-mode', enabled);
+      } catch {
+        // Ignore cross-origin iframes
+      }
+    }
   }
 
   private toggleXestroDarkMode(forceState?: boolean): boolean | null {
@@ -948,6 +1547,7 @@ class ContentScriptHandler {
 
     document.documentElement.classList.toggle('operator-xestro-dark-mode', nextState);
     this.darkModeEnabled = nextState;
+    this.applyXestroDarkModeToSameOriginIframes(nextState);
 
     try {
       localStorage.setItem('operator-xestro-dark-mode', nextState ? 'true' : 'false');
@@ -1008,6 +1608,7 @@ class ContentScriptHandler {
 
   private handleDOMChanges(mutations: MutationRecord[]) {
     // Handle dynamic content loading
+    let iframeAdded = false;
     for (const mutation of mutations) {
       if (mutation.type === 'childList') {
         mutation.addedNodes.forEach(node => {
@@ -1019,9 +1620,23 @@ class ContentScriptHandler {
               // Update field mappings if needed
               this.updateFieldMappings();
             }
+
+            if (!iframeAdded && (element.matches?.('iframe') || element.querySelector?.('iframe'))) {
+              iframeAdded = true;
+            }
           }
         });
       }
+    }
+
+    if (iframeAdded && this.darkModeEnabled && this.emrSystem?.name === 'Xestro') {
+      if (this.pendingIframeDarkModeRefresh) {
+        window.clearTimeout(this.pendingIframeDarkModeRefresh);
+      }
+      this.pendingIframeDarkModeRefresh = window.setTimeout(() => {
+        this.pendingIframeDarkModeRefresh = null;
+        this.applyXestroDarkModeToSameOriginIframes(true);
+      }, 250);
     }
   }
 
@@ -2284,10 +2899,9 @@ class ContentScriptHandler {
       const subjectInput = await this.findTaskSubjectField();
       if (subjectInput) {
         console.log('✅ Found Subject field, populating...');
-        subjectInput.value = '';
         subjectInput.focus();
-        subjectInput.value = taskData.subject;
-        this.triggerAllEvents(subjectInput, taskData.subject);
+        subjectInput.click();
+        this.setValueAndDispatchInputEvents(subjectInput, taskData.subject);
         console.log(`✅ Populated Subject: ${taskData.subject}`);
       } else {
         console.warn('⚠️ Subject field not found - task may need manual entry');
@@ -2297,10 +2911,9 @@ class ContentScriptHandler {
       const messageTextarea = await this.findTaskMessageField();
       if (messageTextarea) {
         console.log('✅ Found Message field, populating...');
-        messageTextarea.value = '';
         messageTextarea.focus();
-        messageTextarea.value = taskData.message;
-        this.triggerAllEvents(messageTextarea, taskData.message);
+        messageTextarea.click();
+        this.setValueAndDispatchInputEvents(messageTextarea, taskData.message);
         console.log(`✅ Populated Message: ${taskData.message.substring(0, 50)}...`);
       } else {
         console.warn('⚠️ Message field not found - task may need manual entry');
@@ -2473,6 +3086,188 @@ class ContentScriptHandler {
     }
   }
 
+  private getXestroAppointmentIdFromWindow(): string | null {
+    const w = window as any;
+    const candidates = [
+      'AppointmentID',
+      'AppointmentId',
+      'appointmentId',
+      'apptId',
+      'currentAppointmentId',
+      'CurrentAppointmentId',
+      'CurrentAppointmentID'
+    ];
+    for (const key of candidates) {
+      const value = w?.[key];
+      if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+      if (value && typeof value === 'object') {
+        const objCandidates = [
+          value.appointmentId,
+          value.appointmentID,
+          value.apptId,
+          value.id,
+          value.ID
+        ];
+        for (const candidate of objCandidates) {
+          if (typeof candidate === 'string' && candidate.trim().length > 0) return candidate.trim();
+          if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
+        }
+      }
+    }
+    return null;
+  }
+
+  private extractXestroId(value: string): string | null {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    // UUID/GUID
+    const uuid = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (uuid) return uuid[0];
+
+    // Long numeric IDs
+    const digits = trimmed.match(/\d{3,}/);
+    if (digits) return digits[0];
+
+    return null;
+  }
+
+  private getXestroAppointmentIdFromDom(root: Document | HTMLElement = document): string | null {
+    const selectors = [
+      'input[name="AppointmentID"]',
+      'input[name="AppointmentId"]',
+      'input[name="appointmentId"]',
+      'input#AppointmentID',
+      'input#AppointmentId',
+      'input[type="hidden"][name*="Appointment" i]',
+      'input[type="hidden"][id*="Appointment" i]',
+      'input[type="hidden"][name*="Appt" i]',
+      'input[type="hidden"][id*="Appt" i]',
+      'input[id*="Appointment"][id*="Id" i]',
+      'input[name*="Appointment"][name*="Id" i]',
+      'input[name*="Appt" i][name*="Id" i]',
+      'input[id*="Appt" i][id*="Id" i]',
+      'input[name*="PrimaryKey" i]',
+      'input[id*="PrimaryKey" i]',
+      'input[name*="pk" i]',
+      'input[id*="pk" i]',
+      '[data-appointment-id]',
+      '[data-appointmentid]',
+      '[data-appt-id]',
+      '[data-apptid]'
+    ];
+
+    for (const selector of selectors) {
+      const el = root.querySelector(selector) as HTMLElement | null;
+      if (!el) continue;
+
+      if (el instanceof HTMLInputElement) {
+        const extracted = this.extractXestroId(el.value || '');
+        if (extracted) return extracted;
+      }
+
+      const dataset = (el as any).dataset as Record<string, string> | undefined;
+      const datasetKeys = ['appointmentId', 'appointmentID', 'appointmentid', 'apptId', 'apptid', 'apptID'];
+      for (const key of datasetKeys) {
+        const value = dataset?.[key];
+        if (typeof value === 'string') {
+          const extracted = this.extractXestroId(value);
+          if (extracted) return extracted;
+        }
+      }
+
+      // Fallback: try attributes that often encode IDs
+      const attrNames = ['data-appointment-id', 'data-appointmentid', 'data-appt-id', 'data-apptid', 'value'];
+      for (const attrName of attrNames) {
+        const value = el.getAttribute(attrName);
+        if (typeof value === 'string') {
+          const extracted = this.extractXestroId(value);
+          if (extracted) return extracted;
+        }
+      }
+
+      const onclick = el.getAttribute('onclick') || '';
+      const extracted = this.extractXestroId(onclick);
+      if (extracted) return extracted;
+    }
+
+    // Heuristic: some pages embed appointment IDs in button/link handlers.
+    const handlerEls = Array.from(root.querySelectorAll('[onclick],[data-url],a[href]')) as HTMLElement[];
+    for (const el of handlerEls) {
+      const onclick = el.getAttribute('onclick') || '';
+      const href = el.getAttribute('href') || '';
+      const dataUrl = el.getAttribute('data-url') || '';
+      const haystack = `${onclick} ${href} ${dataUrl}`.toLowerCase();
+      if (!haystack.includes('appt') && !haystack.includes('appointment')) continue;
+      const extracted = this.extractXestroId(haystack);
+      if (extracted) return extracted;
+    }
+
+    // Try selected appointment row/container patterns.
+    const selected = root.querySelector(
+      'tr.appt.selected, tr.appt.active, tr.appt.ui-selected, .appt.selected, .appt.active, .appt.ui-selected'
+    ) as HTMLElement | null;
+    if (selected) {
+      const attrsToCheck = ['data-appointment-id', 'data-appointmentid', 'data-appt-id', 'data-apptid', 'data-id', 'id'];
+      for (const attr of attrsToCheck) {
+        const value = selected.getAttribute(attr);
+        if (typeof value === 'string' && value.trim().length > 0) {
+          const extracted = this.extractXestroId(value);
+          if (extracted) return extracted;
+        }
+      }
+      const anyData = (selected as any).dataset as Record<string, string> | undefined;
+      if (anyData) {
+        for (const [k, v] of Object.entries(anyData)) {
+          if (!v) continue;
+          if (k.toLowerCase().includes('appt') || k.toLowerCase().includes('appointment')) {
+            const extracted = this.extractXestroId(v);
+            if (extracted) return extracted;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private getXestroAppointmentWrapUpDialogRoot(): HTMLElement | null {
+    // The wrap-up dialog in Xestro is typically a jQuery UI dialog. Prefer the visible one.
+    const dialogs = Array.from(document.querySelectorAll('div.ui-dialog')) as HTMLElement[];
+    const visibleDialogs = dialogs.filter(d => d.offsetParent !== null);
+    const candidates = visibleDialogs.length ? visibleDialogs : dialogs;
+    for (const dialog of candidates) {
+      const title = dialog.querySelector('.ui-dialog-title')?.textContent?.trim().toLowerCase() || '';
+      if (title.includes('appt wrap up') || title.includes('wrap up')) {
+        return dialog;
+      }
+    }
+
+    // Fallback to the XPath-rooted container used elsewhere in this file.
+    const xpathRoot = this.findByXPath('/html/body/div[2]/div[7]') as HTMLElement | null;
+    return xpathRoot;
+  }
+
+  private ensureXestroAppointmentContextOrThrow(): string {
+    const appointmentId =
+      this.getXestroAppointmentIdFromWindow() ||
+      this.getXestroAppointmentIdFromDom(document);
+
+    if (appointmentId) return appointmentId;
+
+    console.warn('⚠️ Appointment wrap-up aborted: appointment ID not set');
+    throw new Error(
+      'Appointment ID is not set (no active appointment selected). Click/select the appointment in Xestro, then run Wrap Up again.'
+    );
+  }
+
+  private closeXestroDialog(dialogRoot: HTMLElement | null) {
+    if (!dialogRoot) return;
+    const closeButton = dialogRoot.querySelector('button.ui-dialog-titlebar-close, .ui-dialog-titlebar-close') as HTMLElement | null;
+    closeButton?.click();
+  }
+
   private async xestroAppointmentWrapUp(data: any) {
     // STEP 1: Create task FIRST (if taskMessage exists)
     if (data.preset?.taskMessage) {
@@ -2490,9 +3285,18 @@ class ContentScriptHandler {
     }
 
     // STEP 2: Then open appointment wrap-up dialog
-    const wrapUpButton = await this.findElement(
-      'button.btn.btn-primary.appt-wrap-up-btn, [data-action="appt-wrap-up"]'
-    );
+    // Best-effort pre-check (some pages only expose appointment context after the dialog opens).
+    const preAppointmentId =
+      this.getXestroAppointmentIdFromWindow() ||
+      this.getXestroAppointmentIdFromDom(document);
+    if (!preAppointmentId) {
+      console.log('ℹ️ No appointment ID detected before opening Wrap Up dialog; proceeding and will validate after open.');
+    }
+
+    // Prefer a visible button to avoid clicking hidden/template elements.
+    const wrapUpButtonSelector = 'button.btn.btn-primary.appt-wrap-up-btn, [data-action="appt-wrap-up"]';
+    const wrapUpButtons = Array.from(document.querySelectorAll(wrapUpButtonSelector)) as HTMLElement[];
+    const wrapUpButton = wrapUpButtons.find(btn => btn.offsetParent !== null) || wrapUpButtons[0] || null;
 
     if (wrapUpButton) {
       console.log('📋 Opening appointment wrap-up dialog...');
@@ -2503,6 +3307,8 @@ class ContentScriptHandler {
       if (data.preset) {
         await this.populateAppointmentPreset(data.preset);
       }
+    } else {
+      throw new Error('Wrap Up button not found in Xestro');
     }
   }
 
@@ -3095,6 +3901,87 @@ class ContentScriptHandler {
     events.forEach(event => element.dispatchEvent(event));
   }
 
+  /**
+   * Set an input/textarea value using the native setter and dispatch minimal events.
+   * Useful for EMR widgets where extra focus/blur/keyboard events can cause side-effects.
+   */
+  private setValueAndDispatchInputEvents(
+    element: HTMLInputElement | HTMLTextAreaElement,
+    value: string
+  ) {
+    const setter = Object.getOwnPropertyDescriptor(
+      element instanceof HTMLInputElement ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype,
+      'value'
+    )?.set;
+
+    if (setter) {
+      setter.call(element, value);
+    } else {
+      element.value = value;
+    }
+
+    // Use non-bubbling events to avoid triggering unrelated global input processors
+    // on complex EMR pages, while still notifying element-level listeners.
+    element.dispatchEvent(new Event('input', { bubbles: false, cancelable: true }));
+    element.dispatchEvent(new Event('change', { bubbles: false, cancelable: true }));
+  }
+
+  private dispatchKey(
+    element: HTMLElement,
+    options: { key: string; code: string; keyCode: number }
+  ) {
+    const base = {
+      key: options.key,
+      code: options.code,
+      keyCode: options.keyCode,
+      which: options.keyCode,
+      bubbles: false,
+      cancelable: true
+    };
+    element.dispatchEvent(new KeyboardEvent('keydown', base));
+    element.dispatchEvent(new KeyboardEvent('keyup', base));
+    element.dispatchEvent(new KeyboardEvent('keypress', base));
+  }
+
+  private async acceptAutocompleteSelection(
+    input: HTMLInputElement | HTMLTextAreaElement,
+    options?: { waitForMenuMs?: number }
+  ) {
+    input.focus();
+    input.click();
+
+    // Move cursor to end (some widgets only accept on Enter if caret is at end)
+    try {
+      const len = input.value?.length ?? 0;
+      input.setSelectionRange?.(len, len);
+    } catch {
+      // Some inputs (or non-text types) may not support setSelectionRange
+    }
+
+    // Wait for the jQuery UI autocomplete menu (if present) to populate.
+    const deadline = Date.now() + (options?.waitForMenuMs ?? 800);
+    let menuReady = false;
+    while (Date.now() < deadline) {
+      const menu = document.querySelector('ul.ui-autocomplete.ui-menu') as HTMLElement | null;
+      const hasItems = !!menu?.querySelector('.ui-menu-item');
+      const isVisible = !!menu && menu.style.display !== 'none' && menu.offsetParent !== null;
+      if (hasItems && isVisible) {
+        menuReady = true;
+        break;
+      }
+      await this.wait(50);
+    }
+
+    // If the menu is open, ArrowDown highlights the first suggestion.
+    if (menuReady) {
+      this.dispatchKey(input, { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 });
+      await this.wait(50);
+    }
+
+    // Enter accepts the highlighted suggestion (or the current input if no menu).
+    this.dispatchKey(input, { key: 'Enter', code: 'Enter', keyCode: 13 });
+  }
+
   private async populateAppointmentPreset(preset: any) {
     try {
       console.log('📋 Starting appointment preset population...');
@@ -3174,102 +4061,47 @@ class ContentScriptHandler {
         if (itemCodesInput) {
           console.log(`✅ Found Item Codes field, setting value to: ${preset.itemCode}`);
 
-          // Clear and set value
-          itemCodesInput.value = '';
-          itemCodesInput.focus();
-          itemCodesInput.value = preset.itemCode;
+          // Validate that the wrap-up UI is actually bound to an appointment.
+          // Xestro can open the dialog chrome without an appointment context; then "Done" can hang.
+          const dialogRoot = this.getXestroAppointmentWrapUpDialogRoot();
+          const appointmentContextRoot =
+            (itemCodesInput.closest('form') as HTMLElement | null) ||
+            dialogRoot ||
+            document;
+          const appointmentContextId =
+            this.getXestroAppointmentIdFromDom(appointmentContextRoot) ||
+            this.getXestroAppointmentIdFromWindow();
 
-          // Trigger comprehensive events
-          this.triggerAllEvents(itemCodesInput, preset.itemCode);
+          if (!appointmentContextId) {
+            console.warn('⚠️ Wrap Up dialog opened without an appointment context; closing to avoid Xestro hang.');
+            this.closeXestroDialog(dialogRoot);
 
-          // Trigger input event for framework reactivity
-          itemCodesInput.dispatchEvent(new Event('input', { bubbles: true }));
-
-          // Simulate Enter key to activate autocomplete (opens dropdown)
-          setTimeout(() => {
-            const enterEvent = new KeyboardEvent('keydown', {
-              key: 'Enter',
-              code: 'Enter',
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true
-            });
-            itemCodesInput.dispatchEvent(enterEvent);
-            console.log('🎯 Triggered Enter key to open autocomplete dropdown');
-
-            // Wait for dropdown to open, then click the matching menu item
-            setTimeout(() => {
-              // Find the menu item with matching item-code class
-              const menuItemSelector = `.item-code-${preset.itemCode}`;
-              const menuItemDiv = document.querySelector(menuItemSelector);
-
-              if (menuItemDiv) {
-                // Click the parent <li> element
-                const menuItem = menuItemDiv.closest('li.ui-menu-item');
-                if (menuItem) {
-                  (menuItem as HTMLElement).click();
-                  console.log(`🎯 Clicked menu item with item code ${preset.itemCode}`);
-                } else {
-                  console.warn(`⚠️ Found item-code div but couldn't find parent li.ui-menu-item`);
-                }
-              } else {
-                console.warn(`⚠️ Could not find menu item with selector: ${menuItemSelector}`);
-              }
-            }, 100); // Wait 100ms for dropdown to open before clicking
-          }, 50); // 50ms ensures value propagates to DOM
-
-          // Wait briefly for code to register, then click Appointment Notes to accept
-          await this.wait(200);
-          console.log('📝 Clicking Appointment Notes area to accept billing code...');
-
-          // Try to find "Appointment Notes" textarea (not the wrap-up Notes field)
-          const appointmentNotesSelectors = [
-            'textarea[placeholder*="Appointment"]',
-            'textarea.appointment-notes',
-            'textarea[name*="Appointment"]',
-            '#AppointmentNotes',
-            '.appointment-notes-field textarea'
-          ];
-
-          let appointmentNotes: HTMLTextAreaElement | null = null;
-          for (const selector of appointmentNotesSelectors) {
-            appointmentNotes = document.querySelector(selector) as HTMLTextAreaElement;
-            if (appointmentNotes && appointmentNotes.offsetParent !== null) {
-              console.log(`✅ Found Appointment Notes via selector: ${selector}`);
-              break;
+            try {
+              const inputs = Array.from(appointmentContextRoot.querySelectorAll('input')) as HTMLInputElement[];
+              const hidden = inputs
+                .filter(i => i.type === 'hidden')
+                .slice(0, 50)
+                .map(i => ({ name: i.name, id: i.id, value: i.value }));
+              const all = inputs
+                .slice(0, 50)
+                .map(i => ({ type: i.type, name: i.name, id: i.id, value: i.value }));
+              console.warn('🔎 Wrap Up dialog inputs (first 50):', all);
+              console.warn('🔎 Wrap Up dialog hidden inputs (first 50):', hidden);
+            } catch {
+              // ignore debug failures
             }
+
+            throw new Error('Appointment ID is not set (wrap-up dialog missing appointment context)');
           }
 
-          // Fallback: find all textareas and identify by context
-          if (!appointmentNotes) {
-            const allTextareas = Array.from(document.querySelectorAll('textarea')) as HTMLTextAreaElement[];
-            const visibleTextareas = allTextareas.filter(ta => ta.offsetParent !== null);
-            console.log(`Found ${visibleTextareas.length} visible textareas`);
+          // Clear + set value with minimal events (avoid extra focus/blur churn)
+          this.setValueAndDispatchInputEvents(itemCodesInput, '');
+          this.setValueAndDispatchInputEvents(itemCodesInput, preset.itemCode);
 
-            // Look for textarea NOT named "Notes" (which is wrap-up notes)
-            for (const textarea of visibleTextareas) {
-              const name = textarea.getAttribute('name');
-              const placeholder = textarea.placeholder || '';
-              console.log('Textarea details:', { name, placeholder, classes: textarea.className });
-
-              // Skip wrap-up Notes field, find appointment notes
-              if (name !== 'Notes' && !textarea.classList.contains('Notes')) {
-                appointmentNotes = textarea;
-                console.log('✅ Found Appointment Notes field (by exclusion)');
-                break;
-              }
-            }
-          }
-
-          if (appointmentNotes) {
-            appointmentNotes.focus();
-            appointmentNotes.click();
-            console.log('✅ Clicked Appointment Notes area - billing code should be accepted');
-            await this.wait(300);
-          } else {
-            console.warn('⚠️ Appointment Notes field not found - billing code may not be accepted');
-          }
+          // Re-enter the field, move cursor to end, and press Return to accept the selection.
+          // (Xestro's billing code autocomplete often requires Enter to commit.)
+          await this.wait(100);
+          await this.acceptAutocompleteSelection(itemCodesInput, { waitForMenuMs: 1000 });
 
           console.log(`✅ Populated Item Code: ${preset.itemCode}`);
         } else {
@@ -3437,35 +4269,64 @@ class ContentScriptHandler {
   private async findAndClickXestroBox(fieldName: string): Promise<HTMLElement | null> {
     console.log(`🔍 Looking for XestroBox with title "${fieldName}"`);
     
-    // Find all XestroBox elements
-    const xestroBoxes = document.querySelectorAll('.XestroBox');
-    console.log(`Found ${xestroBoxes.length} XestroBox elements`);
-    
-    for (let i = 0; i < xestroBoxes.length; i++) {
-      const box = xestroBoxes[i] as HTMLElement;
-      const titleElement = box.querySelector('.XestroBoxTitle');
-      
-      if (titleElement && titleElement.textContent?.includes(fieldName)) {
-        console.log(`✅ Found XestroBox for "${fieldName}" at index ${i}`);
-        console.log(`🖱️ Clicking XestroBox title: "${titleElement.textContent}"`);
-        
-        // Click the XestroBox (or its title) to expand it
-        (titleElement as HTMLElement).click();
-        
-        // Wait a moment for the expansion animation
-        await this.wait(500);
-        
-        return box;
+    const normalize = (value: string) => value.replace(/\s+/g, ' ').trim().toLowerCase();
+    const target = normalize(fieldName);
+
+    const findNearestNotesRoot = (anchor: HTMLElement | null): HTMLElement | null => {
+      if (!anchor) return null;
+      let current: HTMLElement | null = anchor;
+      while (current) {
+        if (current.querySelector?.('.XestroBoxTitle')) return current;
+        current = current.parentElement;
       }
+      return null;
+    };
+
+    // Prefer scoping to the patient notes area to avoid matching similarly-named
+    // sections inside other dialogs (e.g., Quick Letter templates with "Background").
+    const patientNotesRoot =
+      findNearestNotesRoot(document.getElementById('patientNotesSave')) ||
+      findNearestNotesRoot(document.getElementById('patientNotesInput')) ||
+      findNearestNotesRoot(document.getElementById('patientNoteInput'));
+
+    // Find all XestroBox elements
+    const root = patientNotesRoot ?? document;
+    const xestroBoxes = Array.from(root.querySelectorAll('.XestroBox')) as HTMLElement[];
+    console.log(`Found ${xestroBoxes.length} XestroBox elements`);
+
+    const candidates = xestroBoxes
+      .map((box, index) => {
+        const titleElement = box.querySelector('.XestroBoxTitle') as HTMLElement | null;
+        const rawTitle = titleElement?.textContent || '';
+        const title = normalize(rawTitle);
+        const inModal = !!box.closest?.('.modal, [role="dialog"], [aria-modal="true"]');
+        const visible = box.offsetParent !== null && (!!titleElement && titleElement.offsetParent !== null);
+        // If we successfully scoped to the patient notes root, prefer non-modal content.
+        const eligible = patientNotesRoot ? !inModal : true;
+        return { box, titleElement, rawTitle, title, index, visible, eligible };
+      })
+      .filter(c => c.titleElement && c.title && c.visible && c.eligible);
+
+    const pick =
+      candidates.find(c => c.title === target) ||
+      candidates.find(c => c.title.startsWith(target)) ||
+      candidates.find(c => c.title.includes(target));
+
+    if (pick?.titleElement) {
+      console.log(`✅ Found XestroBox for "${fieldName}" at index ${pick.index}`);
+      console.log(`🖱️ Clicking XestroBox title: "${pick.rawTitle}"`);
+      pick.titleElement.click();
+      await this.wait(500);
+      return pick.box;
     }
-    
-    console.log(`❌ No XestroBox found with title containing "${fieldName}"`);
+
+    console.log(`❌ No XestroBox found matching "${fieldName}"`);
     // Log all available titles for debugging
     xestroBoxes.forEach((box, index) => {
       const titleElement = box.querySelector('.XestroBoxTitle');
       console.log(`  ${index + 1}. XestroBoxTitle: "${titleElement?.textContent || 'No title'}"`);
     });
-    
+
     return null;
   }
 

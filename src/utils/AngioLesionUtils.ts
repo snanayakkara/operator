@@ -105,7 +105,7 @@ export const parseLesionTreeFromReport = (report: string): LesionTree => {
   const findingsText = extractFindingsSection(report);
   const tree = defaultTree();
 
-  const subsectionRegex = /\*\*\s*([A-Za-z0-9\s()\/-]+?)\s*\*\*\s*([\s\S]*?)(?=\n\*\*|$)/g;
+  const subsectionRegex = /\*\*\s*([A-Za-z0-9\s()/-]+?)\s*\*\*\s*([\s\S]*?)(?=\n\*\*|$)/g;
   let match: RegExpExecArray | null;
 
   while ((match = subsectionRegex.exec(findingsText)) !== null) {

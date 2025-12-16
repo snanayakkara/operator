@@ -3,17 +3,17 @@
  * Ensures new unified implementation preserves exact behavior of legacy functions
  */
 
-import { test, expect } from '@playwright/test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { MedicalTextCleaner, cleanMedicalText, cleanNarrativeText, cleanSummaryText } from '../TextCleaner';
 
-test.describe('MedicalTextCleaner Golden Tests', () => {
+describe('MedicalTextCleaner Golden Tests', () => {
   let cleaner: MedicalTextCleaner;
 
-  test.beforeEach(() => {
+  beforeEach(() => {
     cleaner = MedicalTextCleaner.getInstance();
   });
 
-  test.describe('Basic Medical Text Cleaning (replaces MedicalAgent.cleanMedicalText)', () => {
+  describe('Basic Medical Text Cleaning (replaces MedicalAgent.cleanMedicalText)', () => {
     const testCases = [
       {
         description: 'basic whitespace normalization',
@@ -48,19 +48,19 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     testCases.forEach(({ description, input, expected }) => {
-      test(`preserves behavior for ${description}`, () => {
+      it(`preserves behavior for ${description}`, () => {
         const result = cleaner.clean(input, { level: 'medical' });
         expect(result).toBe(expected);
       });
 
-      test(`backward compatibility function works for ${description}`, () => {
+      it(`backward compatibility function works for ${description}`, () => {
         const result = cleanMedicalText(input);
         expect(result).toBe(expected);
       });
     });
   });
 
-  test.describe('Narrative Text Cleaning (replaces NarrativeLetterAgent.cleanNarrativeText)', () => {
+  describe('Narrative Text Cleaning (replaces NarrativeLetterAgent.cleanNarrativeText)', () => {
     const testCases = [
       {
         description: 'removes salutations',
@@ -101,14 +101,14 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     testCases.forEach(({ description, input, expected, expectedWithParagraphs, expectedWithoutParagraphs }) => {
-      test(`preserves behavior for ${description}`, () => {
+      it(`preserves behavior for ${description}`, () => {
         const result = cleaner.clean(input, { level: 'narrative' });
         const expectedResult = expectedWithoutParagraphs || expected;
         expect(result).toBe(expectedResult);
       });
 
       if (expectedWithParagraphs) {
-        test(`preserves paragraphs when requested for ${description}`, () => {
+        it(`preserves paragraphs when requested for ${description}`, () => {
           const result = cleaner.clean(input, { 
             level: 'narrative', 
             preserveParagraphs: true 
@@ -117,7 +117,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
         });
       }
 
-      test(`backward compatibility function works for ${description}`, () => {
+      it(`backward compatibility function works for ${description}`, () => {
         const result = cleanNarrativeText(input);
         const expectedResult = expectedWithoutParagraphs || expected;
         expect(result).toBe(expectedResult);
@@ -125,7 +125,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     });
   });
 
-  test.describe('Summary Text Cleaning (replaces QuickLetterSummaryExtractor.cleanSummaryText)', () => {
+  describe('Summary Text Cleaning (replaces QuickLetterSummaryExtractor.cleanSummaryText)', () => {
     const testCases = [
       {
         description: 'removes trailing dashes',
@@ -165,19 +165,19 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     testCases.forEach(({ description, input, expected }) => {
-      test(`preserves behavior for ${description}`, () => {
+      it(`preserves behavior for ${description}`, () => {
         const result = cleaner.clean(input, { level: 'summary' });
         expect(result).toBe(expected);
       });
 
-      test(`backward compatibility function works for ${description}`, () => {
+      it(`backward compatibility function works for ${description}`, () => {
         const result = cleanSummaryText(input);
         expect(result).toBe(expected);
       });
     });
   });
 
-  test.describe('Medical Terminology Preservation', () => {
+  describe('Medical Terminology Preservation', () => {
     const medicalTerms = [
       'mild stenosis', 'moderate regurgitation', 'severe insufficiency',
       'TIMI flow III', 'ejection fraction 45%', 'blood pressure 120/80',
@@ -185,7 +185,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     medicalTerms.forEach(term => {
-      test(`preserves medical term: ${term}`, () => {
+      it(`preserves medical term: ${term}`, () => {
         const input = `Patient has ${term} noted on examination.`;
         const result = cleaner.clean(input, { level: 'medical' });
         expect(result.toLowerCase()).toContain(term.toLowerCase());
@@ -193,7 +193,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     });
   });
 
-  test.describe('Australian Medical Compliance', () => {
+  describe('Australian Medical Compliance', () => {
     const australianTerms = [
       { us: 'furosemide', au: 'frusemide' },
       { us: 'sulfasalazine', au: 'sulphasalazine' },
@@ -201,17 +201,17 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     australianTerms.forEach(({ us, au }) => {
-      test(`maintains Australian spelling: ${au}`, () => {
+      it(`maintains Australian spelling: ${au}`, () => {
         const input = `Patient requires ${au} therapy.`;
         const result = cleaner.clean(input, { level: 'medical' });
         expect(result).toContain(au);
-        expect(result).not.toContain(us);
+        expect(result).not.toMatch(new RegExp(`\\b${us}\\b`, 'i'));
       });
     });
   });
 
-  test.describe('Custom Rules', () => {
-    test('applies custom cleaning rules', () => {
+  describe('Custom Rules', () => {
+    it('applies custom cleaning rules', () => {
       cleaner.addCustomRule({
         pattern: /\btest pattern\b/gi,
         replacement: 'replaced pattern',
@@ -223,7 +223,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
       expect(result).toBe('This has a replaced pattern in it.');
     });
 
-    test('allows setting multiple custom rules', () => {
+    it('allows setting multiple custom rules', () => {
       const rules = [
         {
           pattern: /\bpattern1\b/gi,
@@ -245,7 +245,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     });
   });
 
-  test.describe('Edge Cases and Error Handling', () => {
+  describe('Edge Cases and Error Handling', () => {
     const edgeCases = [
       { description: 'null-like input', input: '', expected: '' },
       { description: 'only whitespace', input: '   \n\t  ', expected: '' },
@@ -255,7 +255,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     ];
 
     edgeCases.forEach(({ description, input, expected: _expected }) => {
-      test(`handles edge case: ${description}`, () => {
+      it(`handles edge case: ${description}`, () => {
         expect(() => {
           const result = cleaner.clean(input, { level: 'medical' });
           expect(typeof result).toBe('string');
@@ -264,8 +264,8 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
     });
   });
 
-  test.describe('Performance and Memory', () => {
-    test('handles large text efficiently', () => {
+  describe('Performance and Memory', () => {
+    it('handles large text efficiently', () => {
       const largeText = 'Patient has moderate stenosis. '.repeat(10000);
       const startTime = Date.now();
       
@@ -276,7 +276,7 @@ test.describe('MedicalTextCleaner Golden Tests', () => {
       expect(result.length).toBeGreaterThan(0);
     });
 
-    test('maintains singleton pattern', () => {
+    it('maintains singleton pattern', () => {
       const instance1 = MedicalTextCleaner.getInstance();
       const instance2 = MedicalTextCleaner.getInstance();
       expect(instance1).toBe(instance2);

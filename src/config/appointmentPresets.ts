@@ -113,7 +113,7 @@ export const getTaskMessageFromMatrix = (matrix: AppointmentMatrix): string => {
     return taskLine;
   });
 
-  return `${followUpText}\n\nTasks to complete:\n${taskLines.join('\n')}`;
+  return `${followUpText}\n\nTasks to complete please:\n${taskLines.join('\n')}`;
 };
 
 export const generatePresetFromMatrix = (matrix: AppointmentMatrix): AppointmentPreset => {

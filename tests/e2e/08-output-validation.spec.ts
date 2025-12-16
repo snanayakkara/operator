@@ -1,4 +1,5 @@
-import { test, expect, Page, Frame } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page, Frame } from '@playwright/test';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
 import { MedicalReportValidator, ValidationResult } from '../helpers/MedicalReportValidator';
 import { MEDICAL_DICTATIONS, getDictation, getExpectedOutputs } from '../helpers/MedicalDictations';

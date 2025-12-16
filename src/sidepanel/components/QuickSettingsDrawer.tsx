@@ -15,8 +15,11 @@
 import React, { memo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Moon, Sun, Settings, ExternalLink, Mic, Speaker, AlertTriangle } from 'lucide-react';
-import { colors, animation, radius, shadows, zIndex } from '@/utils/designTokens';
+import { colors, animation, radius, shadows } from '@/utils/designTokens';
 import { useAudioDevices } from '@/hooks/useAudioDevices';
+
+const QUICK_SETTINGS_BACKDROP_Z_INDEX = 1_000_000;
+const QUICK_SETTINGS_DRAWER_Z_INDEX = QUICK_SETTINGS_BACKDROP_Z_INDEX + 1;
 
 export interface QuickSettingsDrawerProps {
   /** Whether the drawer is open */
@@ -105,7 +108,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = memo(({
             exit="hidden"
             transition={{ duration: animation.duration.fast / 1000 }}
             className="fixed inset-0 bg-black/20"
-            style={{ zIndex: zIndex.modal - 1 }}
+            style={{ zIndex: QUICK_SETTINGS_BACKDROP_Z_INDEX }}
             onClick={onClose}
             aria-hidden="true"
           />
@@ -124,7 +127,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = memo(({
               ${className}
             `}
             style={{
-              zIndex: zIndex.modal,
+              zIndex: QUICK_SETTINGS_DRAWER_Z_INDEX,
               boxShadow: shadows.modal
             }}
             role="dialog"

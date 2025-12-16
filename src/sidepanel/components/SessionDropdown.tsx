@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Users,
   Clock,
@@ -639,15 +640,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     }
   }, []);
 
-  // Expand all categories when user starts scrolling
-  const handleListScroll = useCallback(() => {
-    if (!showAllCompleted || !showAllInProgress || !showAllErrored) {
-      setShowAllCompleted(true);
-      setShowAllInProgress(true);
-      setShowAllErrored(true);
-    }
-  }, [showAllCompleted, showAllInProgress, showAllErrored]);
-
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
 
   const filteredSessions = useMemo(() => {
@@ -744,6 +736,56 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     return result;
   }, [sessionCategories, showAllCompleted, showAllInProgress, showAllErrored, isSearchActive]);
 
+  const expandBottomCategory = useCallback(() => {
+    if (isSearchActive) return;
+
+    // Expand only the bottom-most visible category to avoid shifting items the user is already looking at.
+    if (sessionCategories.completed.length > 0) {
+      if (visibleSessions.hasMoreCompleted) setShowAllCompleted(true);
+      return;
+    }
+    if (sessionCategories.errored.length > 0) {
+      if (visibleSessions.hasMoreErrored) setShowAllErrored(true);
+      return;
+    }
+    if (sessionCategories.inProgress.length > 0) {
+      if (visibleSessions.hasMoreInProgress) setShowAllInProgress(true);
+    }
+  }, [
+    isSearchActive,
+    sessionCategories.completed.length,
+    sessionCategories.errored.length,
+    sessionCategories.inProgress.length,
+    visibleSessions.hasMoreCompleted,
+    visibleSessions.hasMoreErrored,
+    visibleSessions.hasMoreInProgress
+  ]);
+
+  const handleListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    if (isSearchActive) return;
+
+    const target = event.currentTarget;
+    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24;
+
+    if (isNearBottom) {
+      expandBottomCategory();
+    }
+  }, [expandBottomCategory, isSearchActive]);
+
+  const handleListWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY <= 0) return;
+    if (isSearchActive) return;
+
+    const target = event.currentTarget;
+    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24;
+
+    // If the list isn't scrollable yet (e.g. only the initial items are rendered),
+    // a downward scroll gesture should still reveal the rest.
+    if (isNearBottom) {
+      expandBottomCategory();
+    }
+  }, [expandBottomCategory, isSearchActive]);
+
   const handleClearAll = () => {
     onClearAllSessions();
     onClose();
@@ -806,7 +848,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       startIcon={<ChevronDown />}
       className="px-3 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50"
     >
-      Show {hiddenCount} more {category}
+      Scroll to load {hiddenCount} more {category}
     </Button>
   );
 
@@ -823,6 +865,16 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       }
     };
   }, [isOpen, recalcPosition]);
+
+  const getCascadeMotionProps = useCallback((extraIndex: number) => {
+    const delay = Math.min(0.35, extraIndex * 0.025);
+    return {
+      initial: { opacity: 0, y: 8 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, y: -6 },
+      transition: { duration: 0.16, ease: 'easeOut' as const, delay }
+    };
+  }, []);
 
   const getDropdownStyle = useCallback((): React.CSSProperties => {
     if (computedPos) {
@@ -853,7 +905,6 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
 
   const totalSessionsCount = sessions.length;
   const matchingSessionsCount = filteredSessions.length;
-
 
   const dropdownContent = (
     <div
@@ -926,7 +977,11 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
       </div>
 
       {/* Sessions List */}
-      <div className="max-h-[calc(100vh-160px)] overflow-y-auto" onScroll={handleListScroll}>
+      <div
+        className="max-h-[calc(100vh-160px)] overflow-y-auto"
+        onScroll={handleListScroll}
+        onWheel={handleListWheel}
+      >
         {matchingSessionsCount === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-gray-500">
             {isSearchActive ? (
@@ -949,7 +1004,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                   <span className="text-xs font-medium text-amber-700">In Progress</span>
                 </div>
                 <div className="space-y-2">
-                  {visibleSessions.inProgress.map(({ session, isChecked }) => {
+                  {visibleSessions.inProgress.slice(0, INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }) => {
                     const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                     return (
                       <EnhancedSessionItem
@@ -974,6 +1029,47 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       />
                     );
                   })}
+                  <AnimatePresence initial={false}>
+                    {showAllInProgress && !isSearchActive && visibleSessions.inProgress.length > INITIAL_VISIBLE_SESSIONS && (
+                      <motion.div
+                        key="inProgress-extra"
+                        className="overflow-hidden"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                      >
+                        <div className="space-y-2">
+                          {visibleSessions.inProgress.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
+                            const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                            return (
+                              <motion.div key={session.id} {...getCascadeMotionProps(extraIndex)}>
+                                <EnhancedSessionItem
+                                  session={session}
+                                  state={sessionState?.state || 'processing'}
+                                  isSelected={selectedSessionId === session.id}
+                                  isNextReview={nextReviewSession?.session.id === session.id}
+                                  isActiveRecording={session.id === activeRecordingSessionId}
+                                  copiedSessionId={copiedSessionId}
+                                  isChecked={isChecked}
+                                  isCompact={isChecked}
+                                  isPersisted={persistedSessionIds.has(session.id)}
+                                  onToggleCheck={handleToggleCheck}
+                                  onSessionSelect={onSessionSelect}
+                                  onResumeRecording={onResumeRecording}
+                                  onStopRecording={onStopRecording}
+                                  onAgentReprocess={onAgentReprocess}
+                                  onRemoveSession={onRemoveSession}
+                                  onCopyResults={handleCopyResults}
+                                  onClose={onClose}
+                                />
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {visibleSessions.hasMoreInProgress && (
                     <ShowMoreButton
                       onClick={() => setShowAllInProgress(true)}
@@ -993,7 +1089,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                   <span className="text-xs font-medium text-red-700">Needs Attention</span>
                 </div>
                 <div className="space-y-2">
-                  {visibleSessions.errored.map(({ session, isChecked }) => {
+                  {visibleSessions.errored.slice(0, INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }) => {
                     const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                     return (
                       <EnhancedSessionItem
@@ -1018,6 +1114,47 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       />
                     );
                   })}
+                  <AnimatePresence initial={false}>
+                    {showAllErrored && !isSearchActive && visibleSessions.errored.length > INITIAL_VISIBLE_SESSIONS && (
+                      <motion.div
+                        key="errored-extra"
+                        className="overflow-hidden"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                      >
+                        <div className="space-y-2">
+                          {visibleSessions.errored.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
+                            const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                            return (
+                              <motion.div key={session.id} {...getCascadeMotionProps(extraIndex)}>
+                                <EnhancedSessionItem
+                                  session={session}
+                                  state={sessionState?.state || 'error'}
+                                  isSelected={selectedSessionId === session.id}
+                                  isNextReview={nextReviewSession?.session.id === session.id}
+                                  isActiveRecording={session.id === activeRecordingSessionId}
+                                  copiedSessionId={copiedSessionId}
+                                  isChecked={isChecked}
+                                  isCompact={isChecked}
+                                  isPersisted={persistedSessionIds.has(session.id)}
+                                  onToggleCheck={handleToggleCheck}
+                                  onSessionSelect={onSessionSelect}
+                                  onResumeRecording={onResumeRecording}
+                                  onStopRecording={onStopRecording}
+                                  onAgentReprocess={onAgentReprocess}
+                                  onRemoveSession={onRemoveSession}
+                                  onCopyResults={handleCopyResults}
+                                  onClose={onClose}
+                                />
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {visibleSessions.hasMoreErrored && (
                     <ShowMoreButton
                       onClick={() => setShowAllErrored(true)}
@@ -1039,7 +1176,7 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                   </div>
                 )}
                 <div className="space-y-2">
-                  {visibleSessions.completed.map(({ session, isChecked }) => {
+                  {visibleSessions.completed.slice(0, INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }) => {
                     const sessionState = timelineStates.find(ts => ts.session.id === session.id);
                     return (
                       <EnhancedSessionItem
@@ -1064,6 +1201,47 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       />
                     );
                   })}
+                  <AnimatePresence initial={false}>
+                    {showAllCompleted && !isSearchActive && visibleSessions.completed.length > INITIAL_VISIBLE_SESSIONS && (
+                      <motion.div
+                        key="completed-extra"
+                        className="overflow-hidden"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                      >
+                        <div className="space-y-2">
+                          {visibleSessions.completed.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
+                            const sessionState = timelineStates.find(ts => ts.session.id === session.id);
+                            return (
+                              <motion.div key={session.id} {...getCascadeMotionProps(extraIndex)}>
+                                <EnhancedSessionItem
+                                  session={session}
+                                  state={sessionState?.state || 'needs_review'}
+                                  isSelected={selectedSessionId === session.id}
+                                  isNextReview={nextReviewSession?.session.id === session.id}
+                                  isActiveRecording={session.id === activeRecordingSessionId}
+                                  copiedSessionId={copiedSessionId}
+                                  isChecked={isChecked}
+                                  isCompact={isChecked}
+                                  isPersisted={persistedSessionIds.has(session.id)}
+                                  onToggleCheck={handleToggleCheck}
+                                  onSessionSelect={onSessionSelect}
+                                  onResumeRecording={onResumeRecording}
+                                  onStopRecording={onStopRecording}
+                                  onAgentReprocess={onAgentReprocess}
+                                  onRemoveSession={onRemoveSession}
+                                  onCopyResults={handleCopyResults}
+                                  onClose={onClose}
+                                />
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {visibleSessions.hasMoreCompleted && (
                     <ShowMoreButton
                       onClick={() => setShowAllCompleted(true)}

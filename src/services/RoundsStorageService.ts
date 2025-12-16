@@ -33,7 +33,7 @@ export class RoundsStorageService {
           if (optimisticPatients.length > 0) {
             console.log(`[RoundsStorage] Storage change detected, preserving ${optimisticPatients.length} optimistic patient(s)`);
             // Merge: keep optimistic patients from cache, add non-optimistic from storage
-            const storageIds = new Set(storageValue.map(p => p.id));
+            const _storageIds = new Set(storageValue.map(p => p.id));
             const merged = [
               ...optimisticPatients,
               ...storageValue.filter(p => !optimisticPatients.some(op => op.id === p.id))

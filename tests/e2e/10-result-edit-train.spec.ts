@@ -1,4 +1,5 @@
-import { test, expect, Frame } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Frame } from '@playwright/test';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
 import { promises as fs } from 'fs';
 import path from 'path';

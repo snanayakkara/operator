@@ -20,6 +20,7 @@ import { toError } from '@/utils/errorHelpers';
 import { CacheManager } from '@/utils/CacheManager';
 import { PerformanceMonitor } from '@/utils/performance/PerformanceMonitor';
 import { PatternCompiler, type PatternCategory } from '@/utils/performance/PatternCompiler';
+import { cardiologyRegistry } from '@/utils/medical-text/CardiologyPatternRegistry';
 import type { AgentType } from '@/types/medical.types';
 
 export interface MedicalPatternConfig {
@@ -38,6 +39,11 @@ export interface MedicalPatternConfig {
 
 export interface MedicalTerm {
   term: string;
+  /**
+   * Back-compat alias for consumers that expect `text` instead of `term`.
+   * Both fields contain the matched surface form.
+   */
+  text: string;
   category: string;
   context: string;
   confidence: number;
@@ -141,7 +147,7 @@ export class MedicalPatternService {
   
   // Configuration
   private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes for medical patterns
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75;
+  private readonly DEFAULT_MIN_CONFIDENCE_THRESHOLD = 0.75;
   private readonly CONTEXT_WINDOW = 100; // Characters around term for context analysis
   
   private constructor() {
@@ -175,6 +181,8 @@ export class MedicalPatternService {
       australianCompliance?: boolean;
     }
   ): Promise<MedicalTerm[]> {
+    if (!text || !text.trim()) return [];
+
     const measurement = this.performanceMonitor.startMeasurement('medical_extraction', 'MedicalPatternService')
       .setInputLength(text.length);
 
@@ -225,8 +233,9 @@ export class MedicalPatternService {
 
       // Remove duplicates and sort by confidence
       const deduplicatedTerms = this.deduplicateTerms(extractedTerms);
+      const minConfidenceThreshold = this.getMinConfidenceThreshold(finalConfig);
       const sortedTerms = deduplicatedTerms
-        .filter(term => term.confidence >= this.MIN_CONFIDENCE_THRESHOLD)
+        .filter(term => term.confidence >= minConfidenceThreshold)
         .sort((a, b) => b.confidence - a.confidence);
 
       // Cache the results
@@ -550,6 +559,7 @@ export class MedicalPatternService {
 
       const term: MedicalTerm = {
         term: match[0],
+        text: match[0],
         category: pattern.category,
         context: expandedContext,
         confidence: this.calculateEnhancedConfidence(match[0], pattern, expandedContext),
@@ -576,7 +586,7 @@ export class MedicalPatternService {
    * Calculate enhanced confidence score with semantic factors
    */
   private calculateEnhancedConfidence(term: string, pattern: MedicalPattern, context: string): number {
-    let confidence = 0.7; // Base confidence
+    let confidence = pattern.confidence ?? 0.7; // Base confidence
 
     // Pattern-specific confidence
     if (pattern.category === 'medication') confidence += 0.1;
@@ -584,6 +594,8 @@ export class MedicalPatternService {
     
     // Term characteristics
     if (term.length > 3) confidence += 0.1;
+    // Short acronyms (e.g., LAD, RCA, STEMI) are clinically meaningful
+    if (/^[A-Z]{2,6}$/.test(term)) confidence += 0.12;
     if (/\d/.test(term)) confidence += 0.05; // Contains numbers
     if (/\b(mg|mcg|ml|mmHg|%)\b/i.test(term)) confidence += 0.1; // Contains units
 
@@ -599,6 +611,19 @@ export class MedicalPatternService {
     }
 
     return Math.min(confidence, 1.0);
+  }
+
+  private getMinConfidenceThreshold(config: MedicalPatternConfig): number {
+    switch (config.extractionMode) {
+      case 'lightweight':
+        return 0.8;
+      case 'focused':
+        return 0.72;
+      case 'comprehensive':
+      default:
+        // Comprehensive mode should surface useful acronyms like LAD/LCX/RCA.
+        return 0.65;
+    }
   }
 
   /**
@@ -801,6 +826,13 @@ export class MedicalPatternService {
         pattern: /\b(TAPSE|PASP|RVSP)\s+(\d+)\s*(mm|mmHg)?\b/gi,
         category: 'measurement',
         domain: 'cardiology'
+      },
+      {
+        name: 'interventional_terms',
+        pattern: /\b(coronary|angiography|angiogram|angioplasty|stent|pci|cabg)\b/gi,
+        category: 'procedure',
+        domain: 'cardiology',
+        confidence: 0.82
       }
     ];
 
@@ -886,6 +918,43 @@ export class MedicalPatternService {
     this.patterns.set('anatomy', anatomyPatterns);
     this.patterns.set('general', generalPatterns);
 
+    // Merge in the consolidated CardiologyPatternRegistry (Phase 2) to cover
+    // key interventional and anatomy terms (e.g., LAD, PCI, stent, TIMI).
+    try {
+      const registryPatterns = cardiologyRegistry.getAllPatterns().map((pattern): MedicalPattern => {
+        const domain: MedicalDomain =
+          pattern.category === 'anatomy'
+            ? 'anatomy'
+            : pattern.category === 'medications'
+              ? 'medication'
+              : 'cardiology';
+
+        const baseConfidence = 0.6 + Math.min(0.35, pattern.priority / 300);
+
+        return {
+          name: `registry:${pattern.id}`,
+          pattern: pattern.pattern,
+          category: pattern.category,
+          domain,
+          confidence: Math.min(1.0, baseConfidence),
+          metadata: {
+            description: pattern.description,
+            examples: pattern.examples,
+            clinicalContext: pattern.clinicalContext,
+            priority: pattern.priority,
+          }
+        };
+      });
+
+      for (const p of registryPatterns) {
+        const existing = this.patterns.get(p.domain) || [];
+        existing.push(p);
+        this.patterns.set(p.domain, existing);
+      }
+    } catch (error) {
+      logger.warn('Unable to merge CardiologyPatternRegistry patterns', { error });
+    }
+
     logger.debug('Medical patterns initialized', {
       totalDomains: this.patterns.size,
       totalPatterns: Array.from(this.patterns.values()).flat().length
@@ -902,6 +971,7 @@ export class MedicalPatternService {
     while ((match = pattern.pattern.exec(text)) !== null) {
       const term: MedicalTerm = {
         term: match[0],
+        text: match[0],
         category: pattern.category,
         context: this.extractContext(text, match.index, match[0].length, config.preserveContext),
         confidence: this.calculateConfidence(match[0], pattern),

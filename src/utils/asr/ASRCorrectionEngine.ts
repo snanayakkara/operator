@@ -1285,6 +1285,9 @@ export class ASRCorrectionEngine {
 
     // Investigation-specific ASR correction patterns
     const investigationASRPatterns: ReplacementPattern[] = [
+      // Preserve likely unit confusion for valve gradients (mmHg misheard as millimeters)
+      [/\baortic\s+valve\s+gradient\s+(\d+(?:\.\d+)?)\s*millimeters?\b/gi, 'aortic valve gradient $1 (millimeters)'],
+
       // Common transcription errors
       [/\bLED\b/gi, 'LAD'], // "LED stenosis" -> "LAD stenosis"
       [/\bosteocircumflex\b/gi, 'ostial circumflex'], 
@@ -1297,11 +1300,13 @@ export class ASRCorrectionEngine {
       
       // Distance and measurement patterns
       [/\bproximal\b/gi, 'prox'],
-      [/\b(\d+)\s*millimeters?\b/gi, '($1mm)'],
-      [/\b(\d+)\s*mm(?!Hg)\b/gi, '($1mm)'],
+      // Normalize "millimeters" to "mm" first, then wrap mm-values (avoids double-wrapping)
+      [/\b(\d+(?:\.\d+)?)\s*millimeters?\b/gi, '$1mm'],
+      // Wrap mm values unless already wrapped, and avoid mmHg
+      [/(?<!\()\b(\d+(?:\.\d+)?)\s*mm(?!Hg)\b/gi, '($1mm)'],
       
       // Calcium score formatting
-      [/\bCalcium score,?\s*(\d+)[.,]?\s*([0-9-]+(?:st|nd|rd|th)\s*centile)/gi, 'Ca Score $1/$2'],
+      [/\bCalcium score,?\s*(\d+)[.,]?\s*(\d+\s*to\s*\d+(?:st|nd|rd|th)\s*centile)/gi, 'Ca Score $1/$2'],
       
       // Exercise test corrections
       [/\bbruce\s+stage\s+(\d+)\b/gi, 'Bruce Stage $1'],
@@ -1401,9 +1406,13 @@ export class ASRCorrectionEngine {
     const remainingPatterns: ReplacementPattern[] = [
       // Lab value formatting
       [/\b(TChol|TG|HDL|LDL|non-HDL|HbA1c|Cr|eGFR|Ferr|Tn|BNP)\s*,\s*(\d+(?:\.\d+)?)/g, '$1 $2'],
-      [/\bHbA1c\s*(\d+(?:\.\d+)?)(?!%)/gi, 'HbA1c $1%'],
+      // Add % only when no percentage is already present (avoid partial backtracking on decimals)
+      [/\bHbA1c\s*(\d+(?:\.\d+)?)(?!\.\d)(?!\s*%)/gi, 'HbA1c $1%'],
 
       // Valve gradient patterns
+      // Handle long-form valve gradient dictation and preserve "(millimeters)" when present
+      [/\baortic\s+valve\s+gradient\s+(\d+(?:\.\d+)?)\s*\(millimeters\)/gi, 'AV MPG $1 (millimeters)'],
+      [/\baortic\s+valve\s+gradient\b/gi, 'AV MPG'],
       [/\b(AV|MV|TV|PV)\s+gradient\b/gi, '$1 MPG'],
       [/\biotic\s+valve\s+gradient\b/gi, 'AV MPG'],
       [/\biotic\s+valve\b/gi, 'AV'],
@@ -1418,9 +1427,6 @@ export class ASRCorrectionEngine {
       [/\bmoderately dilated\b/gi, 'mod dil'],
       [/\bmildly dilated\b/gi, 'mild dil'],
       [/\bseverely dilated\b/gi, 'sev dil'],
-
-      // PASP formatting
-      [/\bPASP\s+(\d+)\b/gi, 'PASP >$1'],
 
       // RVSP with units
       [/\bRVSP\s+(?:from\s+)?(\d+)\s+to\s+(\d+)(?!\s*mmHg)\b/gi, 'RVSP from $1 to $2mmHg'],
@@ -1447,6 +1453,10 @@ export class ASRCorrectionEngine {
       processed = processed.replace(pattern, replacement);
     }
 
+    // PASP formatting: preserve explicit units, otherwise use legacy ">X" notation
+    processed = processed.replace(/\bPASP\s+(\d+)\s*mmHg\b/gi, 'PASP $1 mmHg');
+    processed = processed.replace(/\bPASP\s+(\d+)\b(?!\s*mmHg\b)/gi, 'PASP >$1');
+
     return processed;
   }
 
@@ -1456,34 +1466,32 @@ export class ASRCorrectionEngine {
   private applyExerciseTestPatterns(text: string): string {
     let processed = text;
 
-    // New patterns for direct dictation formats
-    // Pattern 1: "exercised X minutes Y mets" -> "exercised for X minutes, Y METs" (most specific first)
-    processed = processed.replace(
-      /\bexercised\s+(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
-      'exercised for $1 minutes, $2 METs'
-    );
-
-    // Pattern 2: "X minutes, Y mets" -> "exercised for X minutes, Y METs"
-    processed = processed.replace(
-      /\b(\d+(?:\.\d+)?)\s+minutes,\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
-      'exercised for $1 minutes, $2 METs'
-    );
-
-    // Pattern 3: "X minutes Y mets" -> "exercised for X minutes, Y METs" (most general last)
-    processed = processed.replace(
-      /\b(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
-      'exercised for $1 minutes, $2 METs'
-    );
-
-    // Exercise test METs patterns - existing patterns (handle edge cases)
+    // Legacy pattern: duplicate "minutes" should become METs.
     processed = processed.replace(
       /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\s+minutes?\b/gi,
       'exercised for $1 minutes, $2 METs'
     );
 
+    // Legacy pattern: trailing period after MET value becomes semicolon marker.
     processed = processed.replace(
-      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,?\s+(\d+(?:\.\d+)?)\.?\s+/gi,
-      'exercised for $1 minutes, $2 METs; '
+      /\bexercised\s+for\s+(\d+(?:\.\d+)?)\s+minutes,\s+(\d+(?:\.\d+)?)\.(?=\s|$)/gi,
+      'exercised for $1 minutes, $2 METs;'
+    );
+
+    // Direct dictation formats:
+    processed = processed.replace(
+      /\bexercised\s+(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
+      'exercised for $1 minutes, $2 METs'
+    );
+
+    processed = processed.replace(
+      /(?<!exercised for )(?<![\d.])(\d+(?:\.\d+)?)\s+minutes,\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
+      'exercised for $1 minutes, $2 METs'
+    );
+
+    processed = processed.replace(
+      /(?<!exercised for )(?<![\d.])(\d+(?:\.\d+)?)\s+minutes\s+(\d+(?:\.\d+)?)\s+mets?\b/gi,
+      'exercised for $1 minutes, $2 METs'
     );
 
     return processed;
@@ -1529,6 +1537,10 @@ export class ASRCorrectionEngine {
       
       // Final whitespace normalization
       correctedText = correctedText.replace(/\s+/g, ' ').trim();
+      // Preserve legacy "header ready" trailing space for bare investigation headers.
+      if (/:$/.test(correctedText)) {
+        correctedText = `${correctedText} `;
+      }
       
       return correctedText;
       

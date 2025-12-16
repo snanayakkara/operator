@@ -413,6 +413,9 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
     cleaned = cleaned.replace(/\b(um|uh|er|you know|like|I mean|actually|basically|sort of|kind of)\b/gi, '');
     cleaned = cleaned.replace(/\b(\w+)\s+\.\.\.\s+\1\b/gi, '$1');
 
+    // Standardise common dosing unit spellings
+    cleaned = cleaned.replace(/\bmilligrams?\b/gi, 'mg');
+
     // Convert numbers to digits with units
     cleaned = cleaned.replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(mg|mcg|g|ml|l|mmol\/l|mmhg|units?|years?|months?|weeks?|days?|hours?)\b/gi, (match, num, unit) => {
       const numbers: { [key: string]: string } = {
@@ -438,7 +441,8 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       'esophageal': 'oesophageal', 'hemoglobin': 'haemoglobin', 'hemorrhage': 'haemorrhage',
       'leukemia': 'leukaemia', 'pediatric': 'paediatric', 'orthopedic': 'orthopaedic',
       'anesthesia': 'anaesthesia', 'hemodynamic': 'haemodynamic', 'tumor': 'tumour',
-      'diarrhea': 'diarrhoea', 'estrogen': 'oestrogen', 'fetus': 'foetus'
+      'diarrhea': 'diarrhoea', 'estrogen': 'oestrogen', 'fetus': 'foetus',
+      'ischemia': 'ischaemia', 'ischemic': 'ischaemic'
     };
     for (const [american, australian] of Object.entries(australianSpelling)) {
       const regex = new RegExp(`\\b${american}\\b`, 'gi');
@@ -450,6 +454,7 @@ export class QuickLetterAgent extends NarrativeLetterAgent {
       // Medication spelling corrections
       'perhexylene': 'perhexiline',
       'perhexaline': 'perhexiline',
+      'furosemide': 'frusemide',
 
       // Common abbreviation clarifications (context-dependent)
       'non-stemmy': 'NSTEMI',

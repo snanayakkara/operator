@@ -456,6 +456,14 @@ export class SessionPersistenceService {
       status: session.status,
       processingTime: session.processingTime,
       modelUsed: session.modelUsed,
+      audioDuration: session.audioDuration,
+      warnings: session.warnings,
+      errors: session.errors,
+      pendingAudio: session.pendingAudio,
+      recordingStartTime: session.recordingStartTime,
+      transcriptionStartTime: session.transcriptionStartTime,
+      processingStartTime: session.processingStartTime,
+      pipelineProgress: session.pipelineProgress,
       completedTime: session.completedTime,
       quickActionField: session.quickActionField,
       completed: session.completed, // Processing completion status
@@ -473,8 +481,8 @@ export class SessionPersistenceService {
       source: persisted.source,
       mobileJobId: persisted.mobileJobId,
       patient: persisted.patient,
-      transcription: persisted.transcription,
-      results: persisted.results,
+      transcription: persisted.transcription || '',
+      results: persisted.results || '',
       summary: persisted.summary,
       taviStructuredSections: persisted.taviStructuredSections,
       educationData: persisted.educationData,
@@ -486,10 +494,18 @@ export class SessionPersistenceService {
       status: persisted.status,
       processingTime: persisted.processingTime,
       modelUsed: persisted.modelUsed,
+      audioDuration: persisted.audioDuration,
+      warnings: persisted.warnings,
+      errors: persisted.errors,
+      pendingAudio: persisted.pendingAudio,
       completedTime: persisted.completedTime,
       quickActionField: persisted.quickActionField,
       completed: persisted.completed || false, // Processing completion status
       rhcReport: persisted.rhcReport, // Right Heart Cath structured report
+      recordingStartTime: persisted.recordingStartTime,
+      transcriptionStartTime: persisted.transcriptionStartTime,
+      processingStartTime: persisted.processingStartTime,
+      pipelineProgress: persisted.pipelineProgress,
       markedCompleteAt: persisted.markedCompleteAt // User-initiated completion timestamp
       // audioBlob not restored (was not persisted)
     };

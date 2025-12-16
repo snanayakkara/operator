@@ -36,7 +36,8 @@ export default defineConfig({
     video: 'retain-on-failure',
     
     /* Browser settings */
-    headless: false, // Set to true for CI
+    // Extensions are much more reliable in headed mode; set `HEADLESS=true` to override.
+    headless: process.env.HEADLESS === 'true',
     viewport: { width: 1280, height: 720 },
     
     /* Increase timeouts for extension loading */
@@ -89,12 +90,5 @@ export default defineConfig({
   /* Folder for test artifacts such as screenshots, videos, traces, etc. */
   outputDir: 'test-results/artifacts/',
 
-  /* Run your local dev server before starting the tests */
-  webServer: [
-    {
-      command: 'npm run build',
-      port: 3000, // Not used but required
-      reuseExistingServer: !process.env.CI,
-    }
-  ],
+  // Build + preview server are managed in `tests/helpers/global-setup.ts`.
 });

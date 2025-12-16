@@ -13,7 +13,7 @@ import React, { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import { Mic, Keyboard, Loader2 } from 'lucide-react';
-import { colors, animation, radius } from '@/utils/designTokens';
+import { colors, animation, radius, layout } from '@/utils/designTokens';
 
 export interface DualModeButtonProps {
   /** Unique identifier */
@@ -102,20 +102,21 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
       data-action-id={id}
       className={`
         relative overflow-hidden
-        ${compact ? 'min-h-[56px]' : 'min-h-[40px]'}
+        ${compact ? '' : 'min-h-[40px]'}
         ${className}
       `}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      variants={!isDisabled ? containerVariants : undefined}
-      whileHover={!isDisabled ? 'hover' : undefined}
+      variants={!isDisabled && !compact ? containerVariants : undefined}
+      whileHover={!isDisabled && !compact ? 'hover' : undefined}
+      style={compact ? { height: layout.header.favourites, minHeight: layout.header.favourites } : undefined}
     >
       {/* Collapsed state - shows main icon and label */}
       <motion.button
         className={`
           absolute inset-0
-          flex items-center gap-2
-          ${compact ? 'flex-col justify-center p-2' : 'px-3 py-2'}
+          flex
+          ${compact ? 'flex-col items-center justify-center gap-1 p-1.5' : 'items-center gap-2 px-3 py-2'}
           rounded-lg border
           transition-colors
           ${isDisabled
@@ -143,11 +144,11 @@ export const DualModeButton: React.FC<DualModeButtonProps> = memo(({
             <Loader2
               className="animate-spin"
               style={{ color: theme.icon }}
-              size={compact ? 20 : 16}
+              size={compact ? 18 : 16}
             />
           ) : (
             <Icon
-              size={compact ? 20 : 16}
+              size={compact ? 18 : 16}
               style={{ color: isDisabled ? colors.neutral[400] : theme.icon }}
               strokeWidth={1.5}
             />

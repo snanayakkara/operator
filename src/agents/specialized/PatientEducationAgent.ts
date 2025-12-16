@@ -507,8 +507,10 @@ ${patientInfo.medicare ? `Medicare: ${patientInfo.medicare}` : ''}` : 'No patien
     missingRequiredElements: string[];
     qualityScore: number;
   } {
-    const hasProhibitedContent = PATIENT_EDUCATION_VALIDATION_RULES.prohibitedPhrases
-      .some(phrase => content.toLowerCase().includes(phrase.toLowerCase()));
+    const hasProhibitedContent =
+      content.includes('[CONTENT FILTERED FOR SAFETY]') ||
+      PATIENT_EDUCATION_VALIDATION_RULES.prohibitedPhrases
+        .some(phrase => content.toLowerCase().includes(phrase.toLowerCase()));
     
     const missingRequiredElements = PATIENT_EDUCATION_VALIDATION_RULES.requiredElements
       .filter(element => !content.toLowerCase().includes(element.toLowerCase()));

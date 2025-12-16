@@ -52,9 +52,8 @@ import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringSe
 import { MetricsService } from '@/services/MetricsService';
 import { ProcessingTimePredictor } from '@/services/ProcessingTimePredictor';
 import { useRecorder } from '@/hooks/useRecorder';
-import { useRegisterActionHandlers } from '@/hooks/useActionExecutor';
 import { useGlobalKeyboardShortcuts } from '@/hooks/useGlobalKeyboardShortcuts';
-import { getActionExecutor, type ActionHandler, type ActionContext, type ActionResult } from '@/services/ActionExecutor';
+import { getActionExecutor, type ActionResult } from '@/services/ActionExecutor';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
 import { notifySuccess, notifyError } from '@/utils/notifications';
@@ -288,7 +287,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   // Storage management state
-  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
+  const [_storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [mobileJobs, setMobileJobs] = useState<MobileJobSummary[]>([]);
   const [mobileJobsLoading, setMobileJobsLoading] = useState(false);
   const [mobileJobsError, setMobileJobsError] = useState<string | null>(null);
@@ -1401,7 +1400,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [checkedSessions, markSessionChecked, unmarkSessionChecked]);
 
   // Bulk delete operations for storage management
-  const handleDeleteAllChecked = useCallback(async () => {
+  const _handleDeleteAllChecked = useCallback(async () => {
     try {
       const result = await persistenceService.deleteAllCheckedSessions();
       console.log(`🗑️ Deleted ${result.deletedCount} checked sessions`);
@@ -1426,7 +1425,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [persistenceService, state.patientSessions, actions, updateStorageStats]);
 
-  const handleDeleteOldSessions = useCallback(async (daysOld: number) => {
+  const _handleDeleteOldSessions = useCallback(async (daysOld: number) => {
     try {
       const result = await persistenceService.deleteOldSessions(daysOld);
       console.log(`🗑️ Deleted ${result.deletedCount} sessions older than ${daysOld} days`);
@@ -2113,17 +2112,52 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
       }
 
-      // Also persist audio to disk for retry after page reload (when Whisper server is down)
-      // This runs asynchronously and doesn't block the UI
-      if (sessionId && (errorMessage.includes('server not running') || errorMessage.includes('service unavailable') || errorMessage.includes('timed out'))) {
+      // Persist audio to disk for retry after page reload (best-effort, non-blocking).
+      // This enables later re-transcription even if the session reloads or the service worker restarts.
+      if (sessionId) {
+        const baseSession = state.patientSessions.find(s => s.id === sessionId);
+        const savedAt = Date.now();
+        actions.updatePatientSession(sessionId, {
+          pendingAudio: {
+            saved: false,
+            savedAt,
+            failureReason: errorMessage
+          }
+        });
+
         optimizationService.savePendingAudio(sessionId, audioBlob, {
           agentType,
           patientName,
           timestamp: new Date().toISOString(),
           failureReason: errorMessage
         }).then(result => {
+          const pendingAudioUpdate = {
+            saved: result.success,
+            audioPath: result.audioPath,
+            savedAt,
+            failureReason: errorMessage
+          };
+
+          actions.updatePatientSession(sessionId, {
+            pendingAudio: {
+              ...pendingAudioUpdate
+            }
+          });
+
+          if (baseSession) {
+            // Persist the pending-audio metadata so it shows up when viewing sessions later.
+            saveSessionToPersistence({
+              ...baseSession,
+              pendingAudio: pendingAudioUpdate
+            }).catch(e => {
+              console.warn('⚠️ Failed to persist pending-audio metadata:', e);
+            });
+          }
+
           if (result.success) {
             console.log('💾 Persisted audio to disk for retry:', result.audioPath);
+          } else {
+            console.warn('⚠️ Pending audio save did not succeed (will remain in memory only)');
           }
         }).catch(err => {
           console.warn('⚠️ Failed to persist audio to disk (will remain in memory only):', err);
@@ -2137,7 +2171,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     } else {
       setTimeout(performStorage, 0);
     }
-  }, [actions, state.failedAudioRecordings, optimizationService]);
+  }, [actions, state.failedAudioRecordings, state.patientSessions, optimizationService, saveSessionToPersistence]);
 
   // Clear failed recordings
   const _clearFailedRecordings = useCallback(() => {
@@ -2311,7 +2345,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           );
           
           // Determine error type and show appropriate toast
-          const errorType = isTranscriptionEmpty ? 'no-audio' :
+          const _errorType = isTranscriptionEmpty ? 'no-audio' :
             isTranscriptionTooShort ? 'too-short' :
             isTranscriptionPlaceholder ? 'service-unavailable' :
             'error';
@@ -3759,7 +3793,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [recorder, state.ui.activeWorkflow, actions, extractPatientData, state.patientSessions, state.modelStatus]);
 
-  const handleReturnHome = useCallback(() => {
+  const _handleReturnHome = useCallback(() => {
     if (recorder.isRecording) {
       console.log('🏠 Home navigation blocked while recording in progress');
       return;
@@ -3778,33 +3812,88 @@ const OptimizedAppContent: React.FC = memo(() => {
   // Track which workflow invoked Type mode
   const [typeWorkflowId, setTypeWorkflowId] = React.useState<AgentType | null>(null);
 
-  const handleTypeClick = useCallback((workflowId: AgentType) => {
-    console.log('⌨️ Type mode selected for workflow:', workflowId);
+  const handleTypeClick = useCallback(async (
+    workflowId: AgentType,
+    quickActionField?: string
+  ): Promise<ActionResult> => {
+    console.log('⌨️ Type mode selected for workflow:', workflowId, quickActionField ? `(field: ${quickActionField})` : '');
 
-    // Workflows that support type/paste mode
-    const typeSupported: AgentType[] = [
-      'quick-letter',
-      'right-heart-cath',
-      'background',
-      'investigation-summary',
-      'consultation',
-      'medication',
-      'bloods',
-      'imaging'
-    ];
+    // Map Quick Action fields (or workflow fallbacks) to EMR dialog openers
+    const manualFieldTargets: Record<string, { action: string; label: string }> = {
+      background: { action: 'background', label: 'Background' },
+      'social-history': { action: 'social-history', label: 'Social History' },
+      'investigation-summary': { action: 'investigation-summary', label: 'Investigation Summary' },
+      medications: { action: 'medications', label: 'Medications' },
+      bloods: { action: 'bloods', label: 'Bloods' },
+      imaging: { action: 'imaging', label: 'Imaging' }
+    };
 
-    if (typeSupported.includes(workflowId)) {
+    const workflowToField: Partial<Record<AgentType, string>> = {
+      background: 'background',
+      medication: 'medications',
+      bloods: 'bloods',
+      imaging: 'imaging',
+      'investigation-summary': 'investigation-summary'
+    };
+
+    const manualFieldKey = quickActionField || workflowToField[workflowId];
+
+    if (manualFieldKey && manualFieldTargets[manualFieldKey]) {
+      const target = manualFieldTargets[manualFieldKey];
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: target.action,
+          data: {}
+        });
+        actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+        setTypeWorkflowId(null);
+        return { success: true };
+      } catch (error) {
+        console.error(`❌ Failed to open ${target.label} for manual entry:`, error);
+        getActionExecutor().errorFromBackground(
+          `Unable to open ${target.label} field`,
+          { suggestion: 'Try again from the EMR' }
+        );
+        return {
+          success: false,
+          error: `Failed to open ${target.label}`,
+          suggestion: 'Try again from the EMR'
+        };
+      }
+    }
+
+    // Workflows that use paste-notes input instead of direct EMR fields
+    const pasteNoteWorkflows: AgentType[] = ['quick-letter', 'right-heart-cath'];
+
+    if (pasteNoteWorkflows.includes(workflowId)) {
       setTypeWorkflowId(workflowId);
       actions.openOverlay('paste-notes');
       actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
-    } else {
-      console.warn(`⚠️ Type mode not implemented for: ${workflowId}`);
+      return { success: true };
     }
+
+    console.warn(`⚠️ Type mode not implemented for: ${workflowId}`);
+    return {
+      success: false,
+      error: `Type mode not implemented for ${workflowId}`,
+      suggestion: 'Try using dictate mode'
+    };
   }, [actions, state.selectedSessionId]);
 
   // ============================================
   // AppHeader Action Handlers
   // ============================================
+
+  /**
+   * Start Patient Education as a fresh session context.
+   * Clears any selected/displayed session so the config card isn't mixed with old results.
+   */
+  const openPatientEducation = useCallback(() => {
+    actions.clearDisplaySession();
+    actions.openOverlay('patient-education');
+    actions.setUIMode('configuring', { sessionId: null, origin: 'user' });
+  }, [actions]);
 
   /**
    * Handle dictate mode action from AppHeader
@@ -3819,12 +3908,12 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   /**
    * Handle type mode action from AppHeader
-   * Opens paste-notes panel for text input workflows
+   * Opens paste-notes or the relevant EMR field for manual entry
    */
   const handleHeaderType = useCallback((action: UnifiedAction) => {
     console.log('⌨️ Header type action:', action.id);
     if (action.agentType) {
-      handleTypeClick(action.agentType);
+      void handleTypeClick(action.agentType, action.quickActionField);
     }
   }, [handleTypeClick]);
 
@@ -3861,8 +3950,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
         break;
       case 'patient-education':
-        actions.openOverlay('patient-education');
-        actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+        openPatientEducation();
         break;
       case 'ward-list':
         setRoundsOpen(true);
@@ -3916,10 +4004,31 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
         break;
 
-      // === Create Task - Open rounds with task focus ===
+      // === Create Task - Open EMR task dialog ===
       case 'create-task':
-        setRoundsOpen(true);
-        // TODO: Add focus on task creation when rounds opens
+        try {
+          const toast = ToastService.getInstance();
+          toast.info('Opening Create Task in EMR…', 'Preparing task dialog', 2000);
+
+          const response = await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'create-task',
+            data: {}
+          });
+
+          if (response?.success === false || response?.error) {
+            throw new Error(response?.error || 'Create Task failed');
+          }
+
+          toast.success('Create Task opened', 'Task dialog should be visible in EMR');
+        } catch (error) {
+          console.error('❌ Failed to open Create Task in EMR:', error);
+          const message = error instanceof Error ? error.message : 'Unable to open task dialog';
+          actions.setErrors([message]);
+          getActionExecutor().errorFromBackground('Unable to open task dialog in EMR', {
+            suggestion: 'Make sure a patient chart is open, then try again'
+          });
+        }
         break;
 
       // === Pre-Op Plan - Route to agent workflow ===
@@ -3932,7 +4041,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       default:
         console.log('⚠️ Unhandled click action:', action.id);
     }
-  }, [actions, state.selectedSessionId, handleWorkflowSelect]);
+  }, [actions, handleWorkflowSelect, openPatientEducation]);
 
   /**
    * Handle Wrap Up action from AppHeader favourites
@@ -3948,7 +4057,41 @@ const OptimizedAppContent: React.FC = memo(() => {
   const handleAppointmentPresetGenerate = useCallback((preset: { itemCode: string; notes: string; displayName: string; taskMessage?: string }) => {
     console.log('📆 Appointment preset generated:', preset);
     setAppointmentBuilderOpen(false);
-    ToastService.getInstance().success('Appointment preset ready', `${preset.displayName} (${preset.itemCode})`);
+
+    // Fire-and-forget: the builder does not await async callbacks.
+    void (async () => {
+      const toast = ToastService.getInstance();
+      toast.info('Applying appointment in EMR…', `${preset.displayName} (${preset.itemCode})`, 2500);
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: 'appointment-wrap-up',
+          data: {
+            preset: {
+              id: 'matrix-generated',
+              displayName: preset.displayName,
+              itemCode: preset.itemCode,
+              notes: preset.notes,
+              taskMessage: preset.taskMessage
+            }
+          }
+        });
+
+        if (response?.success === false || response?.error) {
+          throw new Error(response?.error || 'Appointment wrap-up failed');
+        }
+
+        toast.success('Appointment applied in EMR', `${preset.displayName} (${preset.itemCode})`);
+      } catch (error) {
+        console.error('❌ Failed to apply appointment wrap-up in EMR:', error);
+        const message = error instanceof Error ? error.message : 'Unable to apply appointment';
+        toast.error('Appointment apply failed', message);
+        getActionExecutor().errorFromBackground('Unable to apply appointment in EMR', {
+          suggestion: 'Make sure a patient is open in the EMR, then try again'
+        });
+      }
+    })();
   }, []);
 
   /**
@@ -4416,15 +4559,31 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       console.log('✅ Retry transcription succeeded:', transcriptionResult.substring(0, 100));
 
+      const updatedSession = {
+        ...session,
+        transcription: transcriptionResult,
+        audioBlob: audioBlob,
+        pendingAudio: undefined,
+        status: 'completed' as const,
+        errors: [],
+        pipelineProgress: undefined
+      };
+
       // Update the session with the new transcription and store the audio blob
       if (targetSessionId) {
         actions.updatePatientSession(targetSessionId, {
           transcription: transcriptionResult,
           audioBlob: audioBlob, // Restore audio blob to session for potential future retry
+          pendingAudio: undefined,
           status: 'completed', // Just transcription done, not full processing
           errors: [],
           pipelineProgress: undefined
         });
+
+        // If we're viewing a previous session, also update the isolated display state
+        if (isViewingSession) {
+          actions.setDisplaySession(updatedSession);
+        }
         
         // Clean up the pending audio file from disk since transcription succeeded
         if (audioFromDisk) {
@@ -4434,6 +4593,13 @@ const OptimizedAppContent: React.FC = memo(() => {
             }
           });
         }
+      }
+
+      // Persist recovered transcription so it survives reloads
+      try {
+        await saveSessionToPersistence(updatedSession);
+      } catch (e) {
+        console.warn('⚠️ Failed to persist recovered transcription:', e);
       }
 
       // Update current state if this is the active session
@@ -4464,7 +4630,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     } finally {
       setIsRetryingTranscription(false);
     }
-  }, [state.patientSessions, state.selectedSessionId, state.currentSessionId, state.displaySession, actions, lmStudioService, handleAgentReprocess, optimizationService]);
+  }, [state.patientSessions, state.selectedSessionId, state.currentSessionId, state.displaySession, actions, lmStudioService, handleAgentReprocess, optimizationService, saveSessionToPersistence]);
 
   // Reprocess with user-provided answers for missing information
   const handleReprocessWithMissingInfo = useCallback(async (answers: Record<string, string>) => {
@@ -5355,6 +5521,57 @@ const OptimizedAppContent: React.FC = memo(() => {
     }
   }, [state.currentAgent, state.ui.activeWorkflow, state.currentSessionId, state.patientSessions, handleMarkSessionComplete, markSessionChecked, validatePatientBeforeInsertion]);
 
+  const handleOpenQuickLetterAndInsert = useCallback(async () => {
+    const displayData = getCurrentDisplayData();
+    if (displayData.agent !== 'quick-letter') return;
+
+    const letterText = displayData.results;
+    if (!letterText || !letterText.trim()) return;
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'EXECUTE_ACTION',
+        action: 'quick-letter',
+        data: {}
+      });
+    } catch (error) {
+      console.error('❌ Failed to open Quick Letter in EMR:', error);
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      await handleInsertToEMR(letterText, undefined, 'quick-letter');
+    } catch (error) {
+      console.error('❌ Failed to insert Quick Letter to EMR:', error);
+      return;
+    }
+
+    const targetSessionId = state.displaySession.displaySessionId || state.selectedSessionId;
+    if (!targetSessionId) return;
+
+    const targetSession = state.patientSessions.find(s => s.id === targetSessionId);
+    if (targetSession && targetSession.status === 'completed' && !targetSession.reviewedAt) {
+      handleMarkSessionComplete(targetSession);
+    }
+
+    await markSessionChecked(targetSessionId);
+    setAutoCheckedSessions(prev => {
+      const next = new Set(prev);
+      next.add(targetSessionId);
+      return next;
+    });
+  }, [
+    getCurrentDisplayData,
+    handleInsertToEMR,
+    handleMarkSessionComplete,
+    markSessionChecked,
+    setAutoCheckedSessions,
+    state.displaySession.displaySessionId,
+    state.patientSessions,
+    state.selectedSessionId
+  ]);
+
   // Memoized status checking for better performance
   // Use a stable reference to avoid recreating the callback every render
   const setModelStatus = actions.setModelStatus;
@@ -5619,8 +5836,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         handleWorkflowSelect(action.agentType, ctx.quickActionField);
         return { success: true };
       } else if (mode === 'type') {
-        handleTypeClick(action.agentType);
-        return { success: true };
+        return handleTypeClick(action.agentType, ctx.quickActionField);
       }
 
       return { success: false, error: `Unsupported mode: ${mode}` };
@@ -5641,8 +5857,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         if (mode === 'type' && action.agentType) {
-          handleTypeClick(action.agentType);
-          return { success: true };
+          return handleTypeClick(action.agentType, ctx.quickActionField || action.quickActionField);
         }
 
         if (action.agentType) {
@@ -5666,8 +5881,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     });
 
     executor.registerHandler('patient-education', async () => {
-      actions.openOverlay('patient-education');
-      actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
+      openPatientEducation();
       return { success: true };
     });
 
@@ -5726,8 +5940,25 @@ const OptimizedAppContent: React.FC = memo(() => {
     });
 
     executor.registerHandler('create-task', async () => {
-      setRoundsOpen(true);
-      return { success: true };
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: 'create-task',
+          data: {}
+        });
+
+        if (response?.success === false || response?.error) {
+          return { success: false, error: response?.error || 'Create Task failed' };
+        }
+
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: 'Unable to open task dialog',
+          suggestion: 'Make sure a patient chart is open in the EMR, then try again'
+        };
+      }
     });
 
     executor.registerHandler('pre-op-plan', async (action, mode, ctx) => {
@@ -5795,6 +6026,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [
     handleWorkflowSelect,
     handleTypeClick,
+    openPatientEducation,
     actions,
     state.selectedSessionId,
     setRoundsOpen,
@@ -5928,6 +6160,7 @@ const OptimizedAppContent: React.FC = memo(() => {
               }
               isRecording={recorder.isRecording}
               isViewingCompletedSession={state.displaySession.isDisplayingSession}
+              onOpenQuickLetterAndInsert={handleOpenQuickLetterAndInsert}
             />
           )}
 
@@ -6230,7 +6463,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
 
           {/* Session Loading State - Show when session selected but no results loaded and not completed, and not already displaying session */}
-          {stableSelectedSessionId && !state.results && !state.streaming && !state.isProcessing && state.processingStatus !== 'complete' && !state.displaySession.isDisplayingSession && (
+          {stableSelectedSessionId && !overlayState.patientEducation && !state.results && !state.streaming && !state.isProcessing && state.processingStatus !== 'complete' && !state.displaySession.isDisplayingSession && (
             <div className="flex-1 min-h-0 flex items-center justify-center p-8">
               <div className="max-w-md text-center space-y-4">
                 <div className="w-16 h-16 mx-auto bg-purple-50 rounded-full flex items-center justify-center">
@@ -6255,7 +6488,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           )}
 
           {/* Main Results Panel - Show when session selected, streaming, processing, or completed with results */}
-          {(stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (
+          {!overlayState.patientEducation && (stableSelectedSessionId || state.streaming || state.isProcessing || (state.results && state.processingStatus === 'complete')) && (
             <div className="flex-1 min-h-0 overflow-y-auto py-4">
               {(() => {
                 const displayData = getCurrentDisplayData();
@@ -6265,13 +6498,19 @@ const OptimizedAppContent: React.FC = memo(() => {
                   s.id === (displayData.isDisplayingSession ? state.displaySession.displaySessionId : state.currentSessionId)
                 );
                 const sessionSource = currentSession?.source || 'recording';
+                const panelWarnings = displayData.isDisplayingSession
+                  ? (currentSession?.warnings || [])
+                  : state.ui.warnings;
+                const panelErrors = displayData.isDisplayingSession
+                  ? (currentSession?.errors || [])
+                  : state.ui.errors;
 
                 return (
                   <OptimizedResultsPanel
                     results={displayData.results}
                     resultsSummary={displayData.summary || ''}
-                    warnings={state.ui.warnings}
-                    errors={state.ui.errors}
+                    warnings={panelWarnings}
+                    errors={panelErrors}
                     agentType={displayData.agent || null}
                     onCopy={handleCopy}
                     onInsertToEMR={(text: string, targetField?: string) => { handleInsertToEMR(text, targetField, displayData.agent || null); }}
@@ -6309,6 +6548,7 @@ const OptimizedAppContent: React.FC = memo(() => {
                 currentAgent={displayData.agent}
                 isProcessing={displayData.isDisplayingSession ? false : state.isProcessing}
                 audioBlob={displayData.isDisplayingSession ? null : currentAudioBlobRef.current}
+                pendingAudio={currentSession?.pendingAudio}
                 transcriptionTime={displayData.isDisplayingSession ? null : state.transcriptionTime}
                 agentProcessingTime={displayData.isDisplayingSession ? null : state.agentProcessingTime}
                 totalProcessingTime={displayData.isDisplayingSession ? (displayData.processingTime || null) : state.totalProcessingTime}

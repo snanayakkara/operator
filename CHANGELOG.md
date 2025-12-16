@@ -9,6 +9,31 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.1.0] - 2025-12-16
+
+### Added
+
+- **Ranked action search**
+  - Command bar search now scores and ranks matches across label/alias/description/shortcut using substring, word-prefix, and subsequence matching.
+- **TAVI workup deterministic extraction**
+  - TAVI Workup agent now pre-extracts structured fields/alerts from dictation (with missing-field tracking) and supports XML/plain-heading section parsing fallbacks.
+- **Expanded cardiology term recognition**
+  - Medical pattern extraction now merges the consolidated CardiologyPatternRegistry (Phase 2) to better surface interventional/anatomy acronyms (e.g., LAD/LCX/RCA, TIMI).
+
+### Changed
+
+- **Xestro dark mode refresh**
+  - Content-script dark mode now uses a Material-inspired palette with scoped CSS variables and improved iframe refresh handling.
+- **Quick Letter normalisation**
+  - Post-processing now standardises “milligrams” → `mg`, expands Australian spelling for ischaemia/ischaemic, and corrects furosemide → frusemide.
+- **Medical pattern confidence tuning**
+  - Confidence thresholds now vary by extraction mode to retain useful acronyms in comprehensive runs.
+
+### Fixed
+
+- **Medical term shape compatibility**
+  - MedicalPatternService now returns a back-compat `text` field alongside `term` for consumers expecting the older key.
+
 ## [4.0.0] - 2025-12-14
 
 ### Added

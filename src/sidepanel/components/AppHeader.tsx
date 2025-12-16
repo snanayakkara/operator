@@ -167,6 +167,7 @@ export const AppHeader: React.FC<AppHeaderProps> = memo(({
 }) => {
   // Local state for command bar and settings
   const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Handle action selection from command bar dropdown
@@ -289,14 +290,18 @@ export const AppHeader: React.FC<AppHeaderProps> = memo(({
           <CommandBar
             isOpen={isCommandOpen}
             onOpen={() => setIsCommandOpen(true)}
-            onClose={() => setIsCommandOpen(false)}
+            onClose={() => {
+              setIsCommandOpen(false);
+              setCommandQuery('');
+            }}
+            onQueryChange={setCommandQuery}
             onActionSelect={handleActionSelect}
             placeholder="Type or press ⌘K..."
           />
         </div>
 
         {/* Actions Drawer (slides down from command bar) */}
-        {isCommandOpen && (
+        {isCommandOpen && commandQuery.trim() === '' && (
           <div className="px-3 pb-2">
             <ActionsDrawer
               isOpen={isCommandOpen}

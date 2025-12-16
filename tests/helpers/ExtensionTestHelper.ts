@@ -13,12 +13,31 @@ export class ExtensionTestHelper {
     
     while (retryCount < maxRetries) {
       try {
+        // Method 0: MV3 service worker URL (preferred)
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for extension to load
+        let serviceWorkers = context.serviceWorkers();
+        if (serviceWorkers.length === 0) {
+          try {
+            await context.waitForEvent('serviceworker', { timeout: 10_000 });
+            serviceWorkers = context.serviceWorkers();
+          } catch {
+            // fall through to other methods
+          }
+        }
+        for (const sw of serviceWorkers) {
+          const url = sw.url();
+          if (url.startsWith('chrome-extension://')) {
+            const matches = url.match(/chrome-extension:\/\/([a-z]{32})/);
+            if (matches) return matches[1];
+          }
+        }
+
         // Method 1: Check background pages (service worker)
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for extension to load
         const backgroundPages = context.backgroundPages();
         if (backgroundPages.length > 0) {
           const url = backgroundPages[0].url();
-          const matches = url.match(/chrome-extension:\/\/([a-z]+)/);
+          const matches = url.match(/chrome-extension:\/\/([a-z]{32})/);
           if (matches) return matches[1];
         }
 
@@ -27,60 +46,11 @@ export class ExtensionTestHelper {
         for (const page of pages) {
           const url = page.url();
           if (url.startsWith('chrome-extension://')) {
-            const matches = url.match(/chrome-extension:\/\/([a-z]+)/);
+            const matches = url.match(/chrome-extension:\/\/([a-z]{32})/);
             if (matches) return matches[1];
           }
         }
 
-        // Method 3: Navigate to chrome://extensions and get ID
-        const page = await context.newPage();
-        try {
-          await page.goto('chrome://extensions/', { waitUntil: 'domcontentloaded', timeout: 10000 });
-          await page.waitForTimeout(3000); // Allow time for extensions to render
-          
-          // Enable developer mode if not already enabled
-          const devModeToggle = page.locator('[role="switch"][aria-labelledby="devMode"]');
-          try {
-            if (await devModeToggle.isVisible({ timeout: 2000 })) {
-              const isEnabled = await devModeToggle.getAttribute('aria-checked');
-              if (isEnabled !== 'true') {
-                await devModeToggle.click();
-                await page.waitForTimeout(2000);
-              }
-            }
-          } catch (error) {
-            console.log('Dev mode toggle not found or already enabled');
-          }
-
-          // Find the Xestro EMR Assistant extension
-          const extensionCard = page.locator('.extension-list-item').filter({
-            hasText: 'Xestro EMR Assistant'
-          });
-
-          if (await extensionCard.isVisible({ timeout: 5000 })) {
-            // Try to get extension ID from various sources
-            const extensionUrl = await extensionCard.locator('a').first().getAttribute('href');
-            if (extensionUrl) {
-              const matches = extensionUrl.match(/chrome-extension:\/\/([a-z]+)/);
-              if (matches) return matches[1];
-            }
-            
-            // Alternative: get from details button
-            const detailsButton = extensionCard.locator('button:has-text("Details")');
-            if (await detailsButton.isVisible({ timeout: 1000 })) {
-              await detailsButton.click();
-              await page.waitForTimeout(1000);
-              const currentUrl = page.url();
-              const matches = currentUrl.match(/chrome:\/\/extensions\/\?id=([a-z]+)/);
-              if (matches) return matches[1];
-            }
-          }
-        } finally {
-          if (!page.isClosed()) {
-            await page.close();
-          }
-        }
-        
         retryCount++;
         if (retryCount < maxRetries) {
           console.log(`Extension not found, retrying... (${retryCount}/${maxRetries})`);
@@ -101,6 +71,18 @@ export class ExtensionTestHelper {
   static async openSidePanel(page: Page, extensionId?: string): Promise<Frame | null> {
     if (!extensionId) {
       throw new Error('Extension ID is required to open side panel');
+    }
+
+    // Most reliable approach in automation: open the side panel page directly.
+    // (Chrome's actual side panel UI is not consistently introspectable as a frame.)
+    try {
+      const sidePanelUrl = `chrome-extension://${extensionId}/src/sidepanel/index.html`;
+      await page.goto(sidePanelUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(1000);
+      console.log('✅ Side panel opened via direct URL');
+      return page.mainFrame();
+    } catch (error) {
+      console.log('Direct side panel URL failed, falling back to UI-based open:', error.message);
     }
 
     let retryCount = 0;
@@ -516,46 +498,47 @@ export class ExtensionTestHelper {
       // Enhanced getUserMedia with permission simulation
       const originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
       
-      Object.defineProperty(navigator, 'mediaDevices', {
-        value: {
-          getUserMedia: async (constraints: any) => {
-            console.log('Mock getUserMedia called with constraints:', constraints);
-            
-            // Simulate permission check delay
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            if (constraints.audio) {
-              const stream = new MockMediaStream();
-              console.log('Mock audio stream created:', stream.id);
-              return stream;
-            }
-            
-            if (constraints.video) {
-              throw new Error('Video not supported in mock');
-            }
-            
-            throw new Error('No audio or video constraints specified');
-          },
-          enumerateDevices: async () => {
-            return [
-              {
-                deviceId: 'mock-audio-input-1',
-                kind: 'audioinput',
-                label: 'Mock Microphone (Test)',
-                groupId: 'mock-group-1'
-              }
-            ];
-          },
-          getSupportedConstraints: () => {
-            return {
-              sampleRate: true,
-              channelCount: true,
-              autoGainControl: true,
-              echoCancellation: true,
-              noiseSuppression: true
-            };
+      const mediaDevices = new (class extends EventTarget {})() as any;
+      mediaDevices.getUserMedia = async (constraints: any) => {
+        console.log('Mock getUserMedia called with constraints:', constraints);
+        
+        // Simulate permission check delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (constraints.audio) {
+          const stream = new MockMediaStream();
+          console.log('Mock audio stream created:', stream.id);
+          return stream;
+        }
+        
+        if (constraints.video) {
+          throw new Error('Video not supported in mock');
+        }
+        
+        throw new Error('No audio or video constraints specified');
+      };
+      mediaDevices.enumerateDevices = async () => {
+        return [
+          {
+            deviceId: 'mock-audio-input-1',
+            kind: 'audioinput',
+            label: 'Mock Microphone (Test)',
+            groupId: 'mock-group-1'
           }
-        },
+        ];
+      };
+      mediaDevices.getSupportedConstraints = () => {
+        return {
+          sampleRate: true,
+          channelCount: true,
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true
+        };
+      };
+      
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: mediaDevices,
         writable: true,
         configurable: true
       });

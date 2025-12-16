@@ -5,6 +5,7 @@
  */
 
 import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport, RightHeartCathReport } from './medical.types';
+import type { PipelineProgress } from './medical.types';
 
 /**
  * Persisted session data structure
@@ -15,8 +16,8 @@ export interface PersistedSession {
   source?: 'live' | 'mobile' | 'paste';
   mobileJobId?: string;
   patient: PatientInfo;
-  transcription: string;
-  results: string;
+  transcription?: string;
+  results?: string;
   summary?: string;
   taviStructuredSections?: any;
   educationData?: any;
@@ -30,6 +31,18 @@ export interface PersistedSession {
   processingTime?: number;
   modelUsed?: string;
   audioDuration?: number; // Audio duration in seconds for ETA prediction
+  warnings?: string[];
+  errors?: string[];
+  pendingAudio?: {
+    saved: boolean;
+    audioPath?: string;
+    savedAt?: number;
+    failureReason?: string;
+  };
+  recordingStartTime?: number;
+  transcriptionStartTime?: number;
+  processingStartTime?: number;
+  pipelineProgress?: PipelineProgress;
   completedTime?: number;
   quickActionField?: string;
   completed: boolean; // Processing completion status (not the same as markedCompleteAt)

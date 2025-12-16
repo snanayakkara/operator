@@ -4,7 +4,8 @@
  * Tests the complete Patient Education workflow from UI interaction to content generation
  */
 
-import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page, BrowserContext } from '@playwright/test';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
 import { LMStudioMock } from '../helpers/LMStudioMock';
 

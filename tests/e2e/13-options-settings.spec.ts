@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 // E2E: Extension Options (Settings) page
 // Validates navigation, headings, and basic interactions without requiring local services.

@@ -11,7 +11,6 @@
  * - Visual grouping with accordions
  * - Grid layout for compact display
  * - Persisted expand/collapse state
- * - Keyboard shortcut hints
  */
 
 import React, { memo, useCallback } from 'react';
@@ -190,8 +189,8 @@ export const ActionsDrawer: React.FC<ActionsDrawerProps> = memo(({
             bg-neutral-50 border-t border-neutral-100
             sticky bottom-0
           ">
-            <div className="flex items-center justify-between text-[10px] text-neutral-500">
-              <span>Hover for D|T split • Single keys when search empty</span>
+          <div className="flex items-center justify-between text-[10px] text-neutral-500">
+              <span>Browse groups • Hover for D|T split</span>
               <span className="font-medium">ESC to close</span>
             </div>
           </div>

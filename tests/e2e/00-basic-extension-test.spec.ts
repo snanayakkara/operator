@@ -1,4 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 test.describe('Basic Extension Tests', () => {
   test('should load browser with extension', async ({ page, context }) => {
@@ -8,78 +14,33 @@ test.describe('Basic Extension Tests', () => {
       // Wait for extension to initialize
       await page.waitForTimeout(5000);
       
-      // Check if extension service worker is running
-      const backgroundPages = context.backgroundPages();
-      console.log(`Found ${backgroundPages.length} background pages`);
-      
-      if (backgroundPages.length > 0) {
-        const serviceWorkerUrl = backgroundPages[0].url();
-        console.log(`Service worker URL: ${serviceWorkerUrl}`);
-        expect(serviceWorkerUrl).toContain('chrome-extension://');
-        
-        // Extract extension ID
-        const matches = serviceWorkerUrl.match(/chrome-extension:\/\/([a-z]{32})/);
-        if (matches) {
-          const extensionId = matches[1];
-          console.log(`✅ Extension ID found: ${extensionId}`);
-          
-          // Try to navigate to extension popup
-          try {
-            await page.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
-            await page.waitForTimeout(2000);
-            
-            const title = await page.title();
-            console.log(`Extension popup title: ${title}`);
-            
-            // Look for any content indicating the extension loaded
-            const bodyText = await page.textContent('body').catch(() => '');
-            console.log(`Extension popup content length: ${bodyText.length}`);
-            
-            expect(bodyText.length).toBeGreaterThan(0);
-            console.log('✅ Extension popup accessible');
-          } catch (error) {
-            console.log('Extension popup not accessible:', error.message);
-          }
-          
-          // Try to access side panel
-          try {
-            await page.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`);
-            await page.waitForTimeout(2000);
-            
-            const sidePanelTitle = await page.title();
-            console.log(`Side panel title: ${sidePanelTitle}`);
-            
-            const sidePanelContent = await page.textContent('body').catch(() => '');
-            console.log(`Side panel content length: ${sidePanelContent.length}`);
-            
-            if (sidePanelContent.length > 0) {
-              expect(sidePanelContent.length).toBeGreaterThan(0);
-              console.log('✅ Side panel accessible');
-            }
-          } catch (error) {
-            console.log('Side panel not directly accessible:', error.message);
-          }
+      // MV3 uses a service worker (not background pages). Wait for it.
+      let serviceWorkers = context.serviceWorkers();
+      console.log(`Found ${serviceWorkers.length} service workers`);
+
+      if (serviceWorkers.length === 0) {
+        try {
+          await context.waitForEvent('serviceworker', { timeout: 15000 });
+          serviceWorkers = context.serviceWorkers();
+          console.log(`Found ${serviceWorkers.length} service workers after waiting`);
+        } catch {
+          // Continue to assertions below
         }
-      } else {
-        console.log('⚠️ No background pages found - extension may not be loaded');
-        
-        // Try to navigate to chrome://extensions to see if extension is listed
-        await page.goto('chrome://extensions/');
-        await page.waitForTimeout(3000);
-        
-        // Look for extension name in the page
-        const pageContent = await page.textContent('body').catch(() => '');
-        const hasXestroExtension = pageContent.includes('Xestro EMR Assistant');
-        
-        if (hasXestroExtension) {
-          console.log('✅ Extension found in chrome://extensions');
-        } else {
-          console.log('❌ Extension not found in extensions page');
-          console.log('Extensions page content preview:', pageContent.substring(0, 500));
-        }
-        
-        expect(hasXestroExtension).toBe(true);
       }
+
+      const swUrl = serviceWorkers[0]?.url();
+      console.log(`Service worker URL: ${swUrl || 'none'}`);
+      expect(swUrl).toContain('chrome-extension://');
+
+      const matches = swUrl.match(/chrome-extension:\/\/([a-z]{32})/);
+      expect(matches).toBeTruthy();
+      const extensionId = matches?.[1];
+      console.log(`✅ Extension ID found: ${extensionId}`);
+
+      // Try to navigate to extension popup (best-effort; may be blocked by Chromium policies)
+      await page.goto(`chrome-extension://${extensionId}/src/popup/index.html`, { waitUntil: 'domcontentloaded' });
+      const bodyText = await page.textContent('body').catch(() => '');
+      expect(bodyText.length).toBeGreaterThan(0);
       
       console.log('🎉 Basic extension test completed successfully');
       
@@ -92,20 +53,16 @@ test.describe('Basic Extension Tests', () => {
   test('should have extension files built correctly', async ({ page }) => {
     console.log('🔄 Checking extension build files...');
     
-    // This test runs in the test environment, not the extension context
-    const fs = require('fs');
-    const path = require('path');
-    
     const distPath = path.join(__dirname, '../../dist');
     const manifestPath = path.join(distPath, 'manifest.json');
     
     // Check if manifest exists
-    expect(fs.existsSync(manifestPath)).toBe(true);
+    await expect(fs.access(manifestPath)).resolves.toBeUndefined();
     console.log('✅ Manifest file exists');
     
     // Read and validate manifest
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    expect(manifest.name).toBe('Xestro EMR Assistant');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    expect(manifest.name).toBe('Operator');
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toContain('sidePanel');
     console.log('✅ Manifest validation passed');
@@ -121,7 +78,7 @@ test.describe('Basic Extension Tests', () => {
     
     for (const file of keyFiles) {
       const filePath = path.join(distPath, file);
-      expect(fs.existsSync(filePath)).toBe(true);
+      await expect(fs.access(filePath)).resolves.toBeUndefined();
       console.log(`✅ ${file} exists`);
     }
     

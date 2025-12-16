@@ -26,6 +26,27 @@ import type { ProcessingState } from '@/utils/stateColors';
 
 interface TranscriptionSectionProps {
   originalTranscription: string;
+  /**
+   * Session ID (used for diagnostics and retrying from persisted audio)
+   */
+  sessionId?: string | null;
+  /**
+   * Session source helps decide whether audio recovery is possible (e.g., paste sessions have no audio)
+   */
+  sessionSource?: 'recording' | 'live' | 'mobile' | 'paste';
+  /**
+   * Session-level errors (used to explain why transcription is missing)
+   */
+  sessionErrors?: string[];
+  /**
+   * Metadata about server-side saved audio for retry
+   */
+  pendingAudio?: {
+    saved: boolean;
+    audioPath?: string;
+    savedAt?: number;
+    failureReason?: string;
+  };
   onTranscriptionCopy?: (text: string) => void;
   onTranscriptionInsert?: (text: string) => void;
   onTranscriptionEdit?: (text: string) => void;
@@ -93,6 +114,10 @@ const getApprovalLabel = (status: TranscriptionApprovalStatus): string => {
 
 const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   originalTranscription,
+  sessionId,
+  sessionSource = 'recording',
+  sessionErrors,
+  pendingAudio,
   onTranscriptionCopy,
   onTranscriptionInsert,
   onTranscriptionEdit,
@@ -114,11 +139,60 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
 
   // Show empty state when transcription is missing and not currently processing
   if (isEmpty && !isProcessing) {
+    const canAttemptRecovery = !!onRetryTranscription && sessionSource !== 'paste';
+    const reason =
+      pendingAudio?.failureReason ||
+      sessionErrors?.find(Boolean) ||
+      null;
+
     return (
       <div className={`border-b border-gray-200/50 ${className}`}>
-        <div className="flex items-center gap-2 px-4 py-3 text-gray-500">
-          <FileTextIcon className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm">Transcription not available for this session</span>
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-2 text-gray-500">
+            <FileTextIcon className="w-4 h-4 flex-shrink-0" />
+            <span className="text-sm">Transcription not available for this session</span>
+          </div>
+
+          {(reason || sessionId || pendingAudio || canAttemptRecovery) && (
+            <div className="mt-2 space-y-2">
+              {reason && (
+                <div className="text-xs text-gray-600">
+                  <span className="font-medium">Reason:</span> {reason}
+                </div>
+              )}
+
+              {pendingAudio && (
+                <div className="text-xs text-gray-600">
+                  <span className="font-medium">Saved audio:</span>{' '}
+                  {pendingAudio.saved
+                    ? (pendingAudio.audioPath || 'saved for retry')
+                    : 'not saved'}
+                </div>
+              )}
+
+              {sessionId && (
+                <div className="text-xs text-gray-500">
+                  <span className="font-medium">Session:</span>{' '}
+                  <span className="font-mono">{sessionId}</span>
+                </div>
+              )}
+
+              {canAttemptRecovery && (
+                <div className="pt-1">
+                  <Button
+                    onClick={onRetryTranscription}
+                    disabled={isRetryingTranscription || isProcessing}
+                    variant="primary"
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700"
+                    title="Retry transcription by reloading the saved audio and sending it to Whisper"
+                  >
+                    {isRetryingTranscription ? 'Retrying transcription…' : 'Retry transcription from saved audio'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

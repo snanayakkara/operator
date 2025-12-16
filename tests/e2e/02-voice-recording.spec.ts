@@ -1,4 +1,5 @@
-import { test, expect, Page, Frame } from '@playwright/test';
+import { test, expect } from './fixtures';
+import type { Page, Frame } from '@playwright/test';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
 
 test.describe('Voice Recording Tests', () => {

@@ -109,7 +109,7 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
 
   return (
     <motion.div
-      className={`flex gap-1.5 ${className}`}
+      className={`flex items-stretch gap-1.5 ${className}`}
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -175,7 +175,7 @@ export const FavouritesRow: React.FC<FavouritesRowProps> = memo(({
       })}
 
       {/* Wrap Up - special action that opens a drawer/modal */}
-      <motion.div className="flex-1 min-w-0" variants={itemVariants}>
+      <motion.div className="flex-[1.25] min-w-0" variants={itemVariants}>
         <ActionButton
           id={APPOINTMENT_WRAP_UP.id}
           label={APPOINTMENT_WRAP_UP.label}

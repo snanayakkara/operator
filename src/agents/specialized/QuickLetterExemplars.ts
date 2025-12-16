@@ -74,7 +74,7 @@ Dual antiplatelet therapy for 12 months, statin therapy, and cardiac rehabilitat
     audience: "GP",
     tone: "collaborative",
     summary: "Heart failure management update with medication adjustments",
-    inputTranscript: `Mrs. Brown returns for heart failure review. She has been feeling much better since our last visit with improved exercise tolerance. She can now walk to the shops without breathlessness. Her current medications include perindopril 10mg daily, metoprolol 50mg twice daily, and furosemide 40mg daily. Her weight has been stable at 68kg. Blood pressure today is 110/70 mmHg with heart rate 65 regular. Examination shows no peripheral oedema and clear lung fields. Recent blood tests show eGFR 45, potassium 4.2, and BNP 150. Echo last month showed improvement in ejection fraction from 35% to 45%. I plan to uptitrate her ACE inhibitor and consider adding spironolactone.`,
+    inputTranscript: `Mrs. Brown returns for heart failure review. She has been feeling much better since our last visit with improved exercise tolerance. She can now walk to the shops without breathlessness. Her current medications include perindopril 10mg daily, metoprolol 50mg twice daily, and frusemide 40mg daily. Her weight has been stable at 68kg. Blood pressure today is 110/70 mmHg with heart rate 65 regular. Examination shows no peripheral oedema and clear lung fields. Recent blood tests show eGFR 45, potassium 4.2, and BNP 150. Echo last month showed improvement in ejection fraction from 35% to 45%. I plan to uptitrate her ACE inhibitor and consider adding spironolactone.`,
     targetOutput: `**Heart Failure Review**
 Mrs. Brown demonstrates excellent clinical improvement since last visit with significantly improved exercise tolerance and functional capacity.
 
@@ -88,13 +88,13 @@ Mrs. Brown demonstrates excellent clinical improvement since last visit with sig
 Recent bloods: eGFR 45, K+ 4.2, BNP 150 (improved)
 Echo: LVEF improved from 35% to 45%
 
-**Current Medications**
-- Perindopril 10mg daily
-- Metoprolol 50mg BD
-- Furosemide 40mg daily
+    **Current Medications**
+    - Perindopril 10mg daily
+    - Metoprolol 50mg BD
+    - Frusemide 40mg daily
 
-**Management Plan**
-Pleased with clinical improvement. Plan to optimise guideline-directed therapy with ACE inhibitor uptitration and consideration of mineralocorticoid receptor antagonist addition.`
+    **Management Plan**
+    Pleased with clinical improvement. Plan to optimise guideline-directed therapy with ACE inhibitor uptitration and consideration of mineralocorticoid receptor antagonist addition.`
   }
 ];
 

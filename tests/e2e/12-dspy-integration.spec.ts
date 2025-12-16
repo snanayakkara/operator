@@ -3,7 +3,7 @@
  * Tests DSPy feature flag functionality and fallback behavior
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { ExtensionTestHelper } from '../helpers/ExtensionTestHelper';
 
 test.describe('DSPy Integration E2E', () => {

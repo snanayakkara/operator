@@ -1,6 +1,6 @@
 # Operator
 
-[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)]()
 [![Chrome Extension](https://img.shields.io/badge/chrome-extension-green.svg)]()
 [![TypeScript](https://img.shields.io/badge/typescript-5.9.2-blue.svg)]()
 [![React](https://img.shields.io/badge/react-18.3.1-blue.svg)]()
@@ -8,7 +8,7 @@
 
 A sophisticated **local-first medical AI dictation and EMR integration** Chrome extension that combines high-performance transcription with specialized medical agents for healthcare professionals.
 
-> **Latest:** v4.0.0 routes every action through the ActionExecutor (command bar + favourites + keyboard), surfaces inline command-bar clarifications and background errors, hardens Quick Letter summaries against false “zero calcium/no CAD” claims, and exports next-of-kin call lists for ward Shortcuts.
+> **Latest:** v4.1.0 upgrades Xestro dark mode (Material-style), adds ranked fuzzy action search (label/alias/shortcut), improves TAVI workup field extraction and section parsing, and expands cardiology pattern recognition for acronyms (LAD/LCX/RCA, TIMI).
 
 ## 🏥 Overview
 
@@ -616,6 +616,12 @@ interface PerformanceMetrics {
 
 ## 🚀 Recent Updates
 
+### v4.1.0 (December 2025) — Search + Dark Mode + TAVI Extraction
+- **Ranked action search**: Command bar search now scores and ranks matches across label/alias/description/shortcut with lightweight fuzzy matching.
+- **Xestro dark mode refresh**: Material-inspired palette with scoped CSS variables and improved iframe refresh handling.
+- **TAVI workup extraction**: Deterministic field/alert extraction from dictation with missing-field tracking; section parser now supports XML/plain headings.
+- **Medical term recognition**: Cardiology pattern registry merged to better surface interventional/anatomy acronyms (e.g., LAD/LCX/RCA, TIMI).
+
 ### v4.0.0 (December 2025) — Action Executor Release
 - **Central ActionExecutor + keyboard**: Command bar, favourites, and global `Shift+Letter` shortcuts now dispatch through one registry with availability checks; shortcuts pause while recording.
 - **Command-bar errors & clarifications**: Background failures (Whisper/LM Studio/storage) surface in the command bar with suggestions; inline clarification forms collect missing context before running actions.
@@ -707,7 +713,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Version**: 4.0.0 | **Updated**: December 2025 | **Architecture**: Central ActionExecutor with command-bar error/clarification slots, CAD-safe Quick Letter summaries, global Shift+Letter shortcuts, and NOK call list export
+**Version**: 4.1.0 | **Updated**: December 2025 | **Architecture**: ActionExecutor-driven UI/shortcuts + ranked action search, refreshed Xestro dark mode, deterministic TAVI workup extraction, and expanded cardiology pattern recognition
 
 For detailed development information, see [CLAUDE.md](CLAUDE.md)
 

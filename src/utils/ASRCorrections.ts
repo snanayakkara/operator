@@ -103,6 +103,7 @@ export const ASRCorrections: ASRCorrectionCategories = {
     // Anti-arrhythmics
     [/\bamiodarown\b/gi, 'amiodarone'],
     [/\bamioderone\b/gi, 'amiodarone'],
+        [/\bsodolol\b/gi, 'sotalol'],
     
     // PPIs/GI
     [/\bomeprazzole\b/gi, 'omeprazole'],
@@ -278,8 +279,6 @@ export const ASRCorrections: ASRCorrectionCategories = {
     [/\bdiastolic\s+diameter\b/gi, 'LVEDD'],
     [/\bend\s*diastolic\s+diameter\b/gi, 'LVEDD'],
     [/\bLV\s+end\s*diastolic\s+diameter\b/gi, 'LVEDD'],
-    // Conjunction improvements for comma separation
-    [/\s+and\s+/gi, ', ']
   ],
 
   /**

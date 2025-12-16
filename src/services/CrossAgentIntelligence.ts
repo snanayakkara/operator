@@ -435,7 +435,7 @@ export class CrossAgentIntelligence {
         description: 'Risk of hyperkalaemia with ACE inhibitor and spironolactone'
       },
       {
-        drugs: ['digoxin', 'furosemide'],
+        drugs: ['digoxin', 'furosemide', 'frusemide'],
         severity: 'moderate' as const,
         description: 'Diuretic may increase digoxin toxicity risk'
       }
