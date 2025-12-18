@@ -9,6 +9,27 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.1.1] - 2025-12-18
+
+### Added
+
+- **Lesion review UI optimized for narrow side panels**
+  - Stacked lesion cards, reduced font sizes, compact header, and full-width description fields for readability in Chrome side panel.
+- **Improved vessel finding extraction**
+  - Extraction now handles natural speech patterns (e.g., "30% LAD stenosis", "dominant right coronary artery", "small circumflex") and maps branch mentions (D1/D2/OM).
+
+### Changed
+
+- **Validation prompt behavior**
+  - Data validation prompt updated to detect procedure type and avoid marking PCI intervention fields as critical for diagnostic-only angiograms.
+- **Compact layout adjustments**
+  - Reduced paddings and control widths to prevent horizontal overflow in side panel.
+
+### Fixed
+
+- **Missing vessel extraction**
+  - Regex and sentence-based extraction fixes prevent premature validation modal by extracting vessel findings and populating the lesion review dialog.
+
 ## [4.1.0] - 2025-12-16
 
 ### Added
