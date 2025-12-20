@@ -13,7 +13,7 @@ export interface IntakeNote {
 
 export type IssueStatus = 'open' | 'resolved';
 
-export type IssueSubpointType = 'note' | 'procedure';
+export type IssueSubpointType = 'note' | 'procedure' | 'antibiotic';
 
 export interface ProcedureDetails {
   name: string;
@@ -21,6 +21,13 @@ export interface ProcedureDetails {
   notes?: string;
   showDayCounter?: boolean;
   checklistKey?: 'post-cardiac-surgery';
+}
+
+export interface AntibioticDetails {
+  name: string;
+  startDate: string; // ISO date - Day 1 of antibiotic course
+  stopDate?: string; // ISO date - optional planned end date
+  notes?: string;
 }
 
 export interface IssueSubpointBase {
@@ -40,7 +47,13 @@ export interface IssueSubpointProcedure extends IssueSubpointBase {
   text?: string; // optional legacy/compat text
 }
 
-export type IssueSubpoint = IssueSubpointNote | IssueSubpointProcedure;
+export interface IssueSubpointAntibiotic extends IssueSubpointBase {
+  type: 'antibiotic';
+  antibiotic: AntibioticDetails;
+  text?: string; // optional legacy/compat text
+}
+
+export type IssueSubpoint = IssueSubpointNote | IssueSubpointProcedure | IssueSubpointAntibiotic;
 
 export interface Issue {
   id: string;
@@ -191,6 +204,12 @@ export interface RoundsPatient {
   admissionFlags?: WardAdmissionFlags;
   checklistSkips?: AdmissionChecklistSkip[];
   roundCompletedDate?: string;
+  
+  // Billing entries for this patient
+  billingEntries?: BillingEntry[];
+  
+  // Unified admission/discharge checklist (replaces separate admissionFlags for new patients)
+  checklist?: AdmissionDischargeChecklist;
 }
 
 // HUD projection types for future smart-glasses integration
@@ -234,3 +253,72 @@ export interface IntakeParserResult {
 
 // Message update time window options
 export type MessageTimeWindow = '6h' | '12h' | '24h' | '48h' | 'today6am' | 'lastRound';
+
+// ============================================================================
+// Billing Types
+// ============================================================================
+
+export type BillingStatus = 'pending' | 'entered' | 'rejected';
+
+export interface MBSCode {
+  code: string;
+  description: string;
+  fee?: number;
+  category?: 'consult' | 'procedure' | 'inpatient' | 'other';
+  common?: number; // ranking for common codes (lower = more common)
+}
+
+export interface BillingEntry {
+  id: string;
+  mbsCode: string;
+  description: string;
+  fee?: number;
+  serviceDate: string; // ISO date
+  notes?: string;
+  status: BillingStatus;
+  notionId?: string; // Notion page ID when synced
+  notionLastSyncedAt?: string;
+  notionSyncError?: string;
+  patientId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ============================================================================
+// Unified Admission/Discharge Checklist
+// ============================================================================
+
+export interface AdmissionDischargeChecklist {
+  // Admission flags
+  dischargePlanning?: boolean; // true when patient is marked for discharge planning
+  familyMeeting?: boolean;
+  socialWork?: boolean;
+  palliativeCare?: boolean;
+  
+  // Discharge checklist items
+  medicationReconciliation?: boolean;
+  dischargeInstructions?: boolean;
+  followupScheduled?: boolean;
+  transportArranged?: boolean;
+  gpLetterSent?: boolean;
+  
+  // Metadata
+  lastUpdatedAt?: string;
+}
+
+// ============================================================================
+// Analytics Types
+// ============================================================================
+
+export type AnalyticsTimeRange = '7d' | '30d' | '90d' | '1y' | 'ytd';
+
+export interface AnalyticsSummary {
+  patientCount: number;
+  admissionCount: number;
+  dischargeCount: number;
+  avgLengthOfStay: number; // in days
+  billingTotal: number;
+  billingEntryCount: number;
+  billedTotal: number;
+  pendingTotal: number;
+}

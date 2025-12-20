@@ -1,6 +1,7 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
 import type {
   MedicalContext,
+  MedicalContextWithLockedFacts,
   ChatMessage,
   ReportSection,
   TAVIReportStructured,
@@ -74,7 +75,18 @@ export class TAVIAgent extends MedicalAgent {
     'paravalvular regurgitation': 'paravalvular leak',
     'millimeter': 'mm',
     'millimeters of mercury': 'mmHg',
-    'centimeter squared': 'cm²'
+    'centimeter squared': 'cm²',
+    // Additional terminology fixes
+    'confidant wire': 'Confida wire',
+    'confidant': 'Confida',
+    'lvadp': 'LVEDP',
+    'lv diastolic pressure': 'LVEDP',
+    'lv end-diastolic pressure': 'LVEDP',
+    'evolut fx plus': 'Evolut FX+',
+    'evolut fx-plus': 'Evolut FX+',
+    'valvular balloon': 'Valver balloon',
+    'protamine sulphate': 'Protamine',
+    'protamine sulfate': 'Protamine'
   };
 
   constructor() {
@@ -100,52 +112,95 @@ export class TAVIAgent extends MedicalAgent {
     }
   }
 
-  async process(input: string, context?: MedicalContext): Promise<TAVIReportStructured> {
+  async process(input: string, context?: MedicalContextWithLockedFacts): Promise<TAVIReportStructured> {
     await this.initializeSystemPrompt();
 
     const startTime = Date.now();
-    
+
     try {
       // Store input in memory
       this.updateMemory('currentInput', input);
       this.updateMemory('processingContext', context);
 
+      // Check for locked facts from proof mode
+      const hasLockedFacts = context?.lockedFacts && Object.keys(context.lockedFacts).length > 0;
+      if (hasLockedFacts) {
+        console.log('[TAVIAgent] Processing with locked facts:', context.lockedFacts);
+      }
+
       // Correct TAVI-specific terminology
       const correctedInput = this.correctTAVITerminology(input);
-      
+
       // Extract TAVI data from input
       const taviData = this.extractTAVIData(correctedInput);
-      
+
       // Analyze hemodynamics
       const hemodynamics = this.extractHemodynamicData(correctedInput);
-      
+
       // Assess valve positioning and deployment
       const valveAssessment = this.assessValvePositioning(correctedInput);
-      
+
       // Identify complications
       const complications = this.identifyComplications(correctedInput);
 
+      // Check if this is a proof mode extraction request (early return before expensive LLM generation)
+      if (context?.requestProofMode) {
+        console.log('[TAVIAgent] Proof mode requested - extracting facts and pausing before LLM generation');
+        const keyFacts = this.extractKeyFacts(taviData, hemodynamics);
+
+        // Return early with extracted data and facts for proof mode
+        const processingTime = Date.now() - startTime;
+        return {
+          ...this.createReport(
+            '', // No content yet - will be generated after proof mode
+            [],
+            context,
+            processingTime,
+            0.5
+          ),
+          status: 'awaiting_proof' as any, // Special status to signal proof mode checkpoint
+          taviData,
+          hemodynamics,
+          valveAssessment,
+          complications,
+          keyFacts // Include extracted facts for proof mode dialog
+        } as any;
+      }
+
+      // Apply locked facts to extracted data (override with user-confirmed values)
+      if (hasLockedFacts && context?.lockedFacts) {
+        this.applyLockedFacts(context.lockedFacts, taviData, hemodynamics);
+      }
+
       // Build messages for LLM processing (handled internally by generateStructuredReport)
-      
+
       // Generate structured report content with JSON + narrative
       const reportContent = await this.generateStructuredReport(
         taviData,
         hemodynamics,
         valveAssessment,
         complications,
-        correctedInput
+        correctedInput,
+        context
       );
 
       // Parse and validate JSON data from response
       const { jsonData, validationErrors, narrativeContent } = this.parseJSONAndNarrative(reportContent);
 
+      // Final sanitization: strip any remaining markdown artifacts
+      const cleanedNarrativeContent = narrativeContent
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .replace(/^\s*`+/gm, '')
+        .trim();
+
       // Parse response into sections (using the narrative part)
-      const sections = this.parseResponse(narrativeContent, context);
+      const sections = this.parseResponse(cleanedNarrativeContent, context);
 
       // Create comprehensive TAVI report with structured JSON data
       const processingTime = Date.now() - startTime;
       const report: TAVIReportStructured = {
-        ...this.createReport(narrativeContent, sections, context, processingTime, 0.95),
+        ...this.createReport(cleanedNarrativeContent, sections, context, processingTime, 0.95),
         taviData,
         hemodynamics,
         valveAssessment,
@@ -420,10 +475,11 @@ Provide both JSON structured data and narrative analysis following TAVI procedur
     hemodynamics: HemodynamicData,
     valveAssessment: ValveAssessment,
     complications: TAVIComplication[],
-    originalInput: string
+    originalInput: string,
+    context?: MedicalContextWithLockedFacts
   ): Promise<string> {
     console.log(`🔧 Generating TAVI report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
-    
+
     try {
       // Prepare comprehensive context for LMStudio
       const extractedData = {
@@ -432,19 +488,22 @@ Provide both JSON structured data and narrative analysis following TAVI procedur
         valveAssessment,
         complications
       };
-      
+
       // Use enhanced TAVI system prompt with JSON requirements
-      const contextualPrompt = `${this.systemPrompt}
+      let contextualPrompt = `${this.systemPrompt}
 
 EXTRACTED DATA CONTEXT:
 ${JSON.stringify(extractedData, null, 2)}`;
 
-      // Use enhanced user prompt for JSON + narrative output
-      const _userPrompt = `Please analyze this TAVI procedural dictation and generate a comprehensive report with structured JSON data:
+      // Inject fact-locking instruction if user confirmed facts exist
+      const hasLockedFacts = context?.lockedFacts && Object.keys(context.lockedFacts).length > 0;
+      if (hasLockedFacts && context?.lockedFacts) {
+        const lockedFactsList = Object.entries(context.lockedFacts)
+          .map(([field, value]) => `  - ${field}: ${value}`)
+          .join('\n');
 
-"${originalInput}"
-
-Provide both JSON structured data and narrative analysis following TAVI procedural reporting standards.`;
+        contextualPrompt += `\n\n**CRITICAL: USER-CONFIRMED FACTS (DO NOT MODIFY)**\n${lockedFactsList}\n\nYou MUST use these exact values in your narrative. Do NOT change, rephrase, or contradict these confirmed facts.`;
+      }
 
       const report = await this.lmStudioService.processWithAgent(contextualPrompt, originalInput);
       
@@ -782,19 +841,75 @@ Note: This report was generated with limited AI processing due to technical issu
     let narrativeContent = response;
 
     try {
-      // Strip conversational preamble if LLM ignores output format instructions
-      // Common patterns: "Okay, here is...", "Sure, I'll...", "Here's the...", etc.
-      const cleanedResponse = response.replace(
-        /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|based on|certainly)[^{]*?(?=\{)/i,
-        ''
-      ).trim();
+      // STEP 1: Strip ALL markdown code fences globally (LLM often ignores format instructions)
+      let cleanedResponse = response
+        // Remove all markdown code fence markers globally
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim();
+      
+      // STEP 2: Strip conversational preamble before JSON
+      cleanedResponse = cleanedResponse
+        .replace(
+          /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|i understand|based on|certainly|of course|absolutely|right|medical report)[^{]*?(?=\{)/i,
+          ''
+        )
+        .replace(
+          /^[^{]*?(?:i understand|you want me to|i'll|i will|let me|here is|here's)[^{]*?(?=\{)/i,
+          ''
+        )
+        .trim();
+      
+      // STEP 3: If still no JSON at start, find it and extract
+      if (!cleanedResponse.startsWith('{')) {
+        const jsonStart = cleanedResponse.indexOf('{');
+        if (jsonStart > 0) {
+          console.log('⚠️ Stripping preamble before JSON:', cleanedResponse.substring(0, Math.min(jsonStart, 100)) + '...');
+          cleanedResponse = cleanedResponse.substring(jsonStart);
+        }
+      }
 
-      // Look for JSON block (now at the beginning after stripping preamble)
-      const jsonBlockMatch = cleanedResponse.match(/^\s*\{[\s\S]*?\}(?=\s*(?:\n\n|\*\*|$))/);
+      // STEP 4: Extract complete JSON object by counting braces
+      let jsonString = '';
+      if (cleanedResponse.startsWith('{')) {
+        let braceCount = 0;
+        let inString = false;
+        let escapeNext = false;
+        
+        for (let i = 0; i < cleanedResponse.length; i++) {
+          const char = cleanedResponse[i];
+          jsonString += char;
+          
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          
+          if (char === '"') {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') braceCount++;
+            else if (char === '}') {
+              braceCount--;
+              if (braceCount === 0) break; // Complete JSON object found
+            }
+          }
+        }
+      }
 
-      if (jsonBlockMatch) {
-        const jsonString = jsonBlockMatch[0];
+      if (jsonString) {
         console.log('🔍 Found JSON block in TAVI response:', jsonString.substring(0, 200) + '...');
+
+        // ALWAYS remove JSON block from narrative content, regardless of validation success
+        narrativeContent = cleanedResponse.substring(jsonString.length).trim();
 
         try {
           // Parse and validate the JSON
@@ -804,9 +919,6 @@ Note: This report was generated with limited AI processing due to technical issu
           if (validationResult.success) {
             jsonData = validationResult.data;
             console.log('✅ TAVI JSON validation successful');
-
-            // Remove JSON block from narrative content (use cleanedResponse)
-            narrativeContent = cleanedResponse.substring(jsonString.length).trim();
 
             // Log missing fields if any
             if (jsonData.missingFields && jsonData.missingFields.length > 0) {
@@ -833,12 +945,35 @@ Note: This report was generated with limited AI processing due to technical issu
 
     // Fallback: if no narrative content after JSON removal, use cleaned response
     if (!narrativeContent || narrativeContent.trim().length === 0) {
-      // Strip any remaining preamble from narrative content
-      narrativeContent = response.replace(
-        /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|based on|certainly)[^*{]*?(?=\*\*)/i,
-        ''
-      ).trim() || response;
+      // Strip markdown fences and preamble from narrative content
+      narrativeContent = response
+        // Remove all markdown code fence markers
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        // Strip preamble patterns
+        .replace(
+          /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|i understand|based on|certainly|of course|medical report)[^*{]*?(?=\*\*)/i,
+          ''
+        )
+        .replace(
+          /^[^*]*?(?:i understand|you want me to|i'll structure|here is a)[^*]*?(?=\*\*)/i,
+          ''
+        )
+        .trim() || response.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      
+      // Also strip template placeholders if present (indicates template output, not real report)
+      if (narrativeContent.includes('[Insert') || narrativeContent.includes('[insert')) {
+        console.warn('⚠️ TAVI response contains template placeholders - LLM may not have generated actual content');
+        validationErrors.push('Response contains template placeholders instead of actual content');
+      }
     }
+
+    // FINAL CLEANUP: Ensure ALL markdown code fences are removed from narrative
+    narrativeContent = narrativeContent
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .replace(/^\s*`+\s*/gm, '')  // Strip any orphaned backticks at line starts
+      .trim();
 
     console.log(`📊 TAVI parsing result: JSON=${jsonData ? 'valid' : 'invalid'}, errors=${validationErrors.length}, narrative=${narrativeContent.length} chars`);
 
@@ -847,5 +982,268 @@ Note: This report was generated with limited AI processing due to technical issu
       validationErrors,
       narrativeContent
     };
+  }
+
+  /**
+   * Extract key facts from TAVI data for proof mode verification
+   * Returns array of critical facts that must be verified before report generation
+   */
+  extractKeyFacts(taviData: TAVIData, hemodynamics: HemodynamicData): import('@/types/medical.types').KeyFact[] {
+    const facts: import('@/types/medical.types').KeyFact[] = [];
+    let factId = 1;
+
+    // Valve size and type (CRITICAL)
+    if (taviData.valveDetails?.size || taviData.valveDetails?.manufacturer) {
+      facts.push({
+        id: `tavi-fact-${factId++}`,
+        category: 'valve',
+        label: 'Valve Type & Size',
+        value: `${taviData.valveDetails.manufacturer || 'Not specified'} ${taviData.valveDetails.size || ''}`.trim(),
+        sourceField: 'valveDetails.manufacturer+size',
+        critical: true,
+        status: 'pending',
+        unit: ''
+      });
+    }
+
+    // Annulus dimensions (CRITICAL for sizing)
+    if (taviData.preImplant?.annulusDimensions) {
+      const dims = taviData.preImplant.annulusDimensions;
+      const dimText = [
+        dims.minDiameter ? `Min Ø ${dims.minDiameter}` : null,
+        dims.maxDiameter ? `Max Ø ${dims.maxDiameter}` : null,
+        dims.perimeter ? `P ${dims.perimeter}` : null,
+        dims.area ? `A ${dims.area}` : null
+      ].filter(Boolean).join(', ');
+
+      if (dimText) {
+        facts.push({
+          id: `tavi-fact-${factId++}`,
+          category: 'measurements',
+          label: 'Annulus Dimensions',
+          value: dimText,
+          sourceField: 'preImplant.annulusDimensions',
+          critical: true,
+          status: 'pending',
+          unit: 'mm/cm²'
+        });
+      }
+    }
+
+    // Access approach
+    if (taviData.accessApproach?.primary) {
+      facts.push({
+        id: `tavi-fact-${factId++}`,
+        category: 'access',
+        label: 'Access Route',
+        value: taviData.accessApproach.primary,
+        sourceField: 'accessApproach.primary',
+        critical: false,
+        status: 'pending',
+        unit: ''
+      });
+    }
+
+    // Pre-implant haemodynamics
+    if (hemodynamics?.preImplant) {
+      const pre = hemodynamics.preImplant;
+      if (pre.meanGradient) {
+        facts.push({
+          id: `tavi-fact-${factId++}`,
+          category: 'haemodynamics',
+          label: 'Pre-Implant Mean Gradient',
+          value: pre.meanGradient,
+          sourceField: 'hemodynamics.preImplant.meanGradient',
+          critical: false,
+          status: 'pending',
+          unit: 'mmHg'
+        });
+      }
+
+      if (pre.valveArea) {
+        facts.push({
+          id: `tavi-fact-${factId++}`,
+          category: 'haemodynamics',
+          label: 'Pre-Implant AVA',
+          value: pre.valveArea,
+          sourceField: 'hemodynamics.preImplant.valveArea',
+          critical: false,
+          status: 'pending',
+          unit: 'cm²'
+        });
+      }
+    }
+
+    // Post-implant haemodynamics (CRITICAL for success)
+    if (hemodynamics?.postImplant) {
+      const post = hemodynamics.postImplant;
+      if (post.meanGradient) {
+        facts.push({
+          id: `tavi-fact-${factId++}`,
+          category: 'haemodynamics',
+          label: 'Post-Implant Mean Gradient',
+          value: post.meanGradient,
+          sourceField: 'hemodynamics.postImplant.meanGradient',
+          critical: true,
+          status: 'pending',
+          unit: 'mmHg'
+        });
+      }
+    }
+
+    // Post-implant AR from TAVIData (CRITICAL for success)
+    if (taviData.postImplant?.aorticRegurgitation) {
+      facts.push({
+        id: `tavi-fact-${factId++}`,
+        category: 'haemodynamics',
+        label: 'Post-Implant AR',
+        value: taviData.postImplant.aorticRegurgitation,
+        sourceField: 'postImplant.aorticRegurgitation',
+        critical: true,
+        status: 'pending',
+        unit: ''
+      });
+    }
+
+    // Contrast and fluoroscopy (safety documentation)
+    if (taviData.proceduralDetails?.contrastVolume) {
+      facts.push({
+        id: `tavi-fact-${factId++}`,
+        category: 'resources',
+        label: 'Contrast Volume',
+        value: taviData.proceduralDetails.contrastVolume,
+        sourceField: 'proceduralDetails.contrastVolume',
+        critical: false,
+        status: 'pending',
+        unit: 'mL'
+      });
+    }
+
+    if (taviData.proceduralDetails?.fluoroscopyTime) {
+      facts.push({
+        id: `tavi-fact-${factId++}`,
+        category: 'resources',
+        label: 'Fluoroscopy Time',
+        value: taviData.proceduralDetails.fluoroscopyTime,
+        sourceField: 'proceduralDetails.fluoroscopyTime',
+        critical: false,
+        status: 'pending',
+        unit: 'min'
+      });
+    }
+
+    console.log(`✅ Extracted ${facts.length} key facts for TAVI proof mode`);
+    return facts;
+  }
+
+  /**
+   * Apply locked facts from proof mode to extracted data
+   * Overrides extracted values with user-confirmed values
+   */
+  private applyLockedFacts(
+    lockedFacts: Record<string, string>,
+    taviData: TAVIData,
+    hemodynamics: HemodynamicData
+  ): void {
+    console.log('[TAVIAgent] Applying locked facts to extracted data...');
+
+    for (const [sourceField, confirmedValue] of Object.entries(lockedFacts)) {
+      const [dataType, ...fieldPath] = sourceField.split('.');
+      const field = fieldPath.join('.');
+
+      try {
+        if (dataType === 'valveDetails') {
+          // Apply to valve data
+          if (field === 'size') {
+            taviData.valveDetails.size = confirmedValue as ValveSize;
+            console.log(`  ✓ Locked valve size: ${confirmedValue}`);
+          } else if (field === 'manufacturer') {
+            taviData.valveDetails.manufacturer = confirmedValue as ValveManufacturer;
+            console.log(`  ✓ Locked valve manufacturer: ${confirmedValue}`);
+          } else if (field === 'model') {
+            taviData.valveDetails.model = confirmedValue;
+            console.log(`  ✓ Locked valve model: ${confirmedValue}`);
+          } else if (field === 'manufacturer+size') {
+            // Combined field - parse it
+            const parts = confirmedValue.split(' ');
+            const size = parts[parts.length - 1];
+            const manufacturer = parts.slice(0, -1).join(' ');
+            if (size && this.valveSizes[size]) {
+              taviData.valveDetails.size = size as ValveSize;
+            }
+            if (manufacturer) {
+              taviData.valveDetails.manufacturer = manufacturer as ValveManufacturer;
+            }
+            console.log(`  ✓ Locked valve: ${confirmedValue}`);
+          }
+        } else if (dataType === 'preImplant') {
+          // Apply to pre-implant data
+          if (field === 'annulusDimensions.minDiameter') {
+            if (!taviData.preImplant.annulusDimensions) {
+              taviData.preImplant.annulusDimensions = {};
+            }
+            taviData.preImplant.annulusDimensions.minDiameter = confirmedValue;
+            console.log(`  ✓ Locked annulus min diameter: ${confirmedValue}`);
+          } else if (field === 'annulusDimensions.maxDiameter') {
+            if (!taviData.preImplant.annulusDimensions) {
+              taviData.preImplant.annulusDimensions = {};
+            }
+            taviData.preImplant.annulusDimensions.maxDiameter = confirmedValue;
+            console.log(`  ✓ Locked annulus max diameter: ${confirmedValue}`);
+          } else if (field === 'annulusDimensions.perimeter') {
+            if (!taviData.preImplant.annulusDimensions) {
+              taviData.preImplant.annulusDimensions = {};
+            }
+            taviData.preImplant.annulusDimensions.perimeter = confirmedValue;
+            console.log(`  ✓ Locked annulus perimeter: ${confirmedValue}`);
+          } else if (field === 'annulusDimensions.area') {
+            if (!taviData.preImplant.annulusDimensions) {
+              taviData.preImplant.annulusDimensions = {};
+            }
+            taviData.preImplant.annulusDimensions.area = confirmedValue;
+            console.log(`  ✓ Locked annulus area: ${confirmedValue}`);
+          }
+        } else if (dataType === 'hemodynamics') {
+          // Apply to hemodynamic data
+          const [phase, measurement] = fieldPath;
+          if (phase === 'preImplant') {
+            if (measurement === 'meanGradient') {
+              hemodynamics.preImplant.meanGradient = confirmedValue;
+              console.log(`  ✓ Locked pre-implant mean gradient: ${confirmedValue}`);
+            } else if (measurement === 'peakGradient') {
+              hemodynamics.preImplant.peakGradient = confirmedValue;
+              console.log(`  ✓ Locked pre-implant peak gradient: ${confirmedValue}`);
+            }
+          } else if (phase === 'postImplant') {
+            if (measurement === 'meanGradient') {
+              hemodynamics.postImplant.meanGradient = confirmedValue;
+              console.log(`  ✓ Locked post-implant mean gradient: ${confirmedValue}`);
+            } else if (measurement === 'peakGradient') {
+              hemodynamics.postImplant.peakGradient = confirmedValue;
+              console.log(`  ✓ Locked post-implant peak gradient: ${confirmedValue}`);
+            }
+          }
+        } else if (dataType === 'postImplant') {
+          // Apply to post-implant data
+          if (field === 'aorticRegurgitation') {
+            taviData.postImplant.aorticRegurgitation = confirmedValue as AorticRegurgitationGrade;
+            console.log(`  ✓ Locked aortic regurgitation: ${confirmedValue}`);
+          }
+        } else if (dataType === 'proceduralDetails') {
+          // Apply to procedural details
+          if (field === 'contrastVolume') {
+            taviData.proceduralDetails.contrastVolume = confirmedValue;
+            console.log(`  ✓ Locked contrast volume: ${confirmedValue}`);
+          } else if (field === 'fluoroscopyTime') {
+            taviData.proceduralDetails.fluoroscopyTime = confirmedValue;
+            console.log(`  ✓ Locked fluoroscopy time: ${confirmedValue}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`  ⚠️ Failed to apply locked fact ${sourceField}:`, error);
+      }
+    }
+
+    console.log('[TAVIAgent] ✅ Locked facts applied successfully');
   }
 }

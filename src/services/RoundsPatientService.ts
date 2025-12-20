@@ -5,6 +5,7 @@ import {
   IssueSubpoint,
   IssueSubpointNote,
   IssueSubpointProcedure,
+  IssueSubpointAntibiotic,
   RoundsPatient,
   Task,
   WardEntry,
@@ -24,6 +25,16 @@ const normalizeSubpoints = (subpoints: IssueSubpoint[] = []): IssueSubpoint[] =>
         text: 'text' in sub ? (sub as any).text || '' : undefined,
         procedure: (sub as IssueSubpointProcedure).procedure!
       } as IssueSubpointProcedure;
+    }
+
+    if (sub.type === 'antibiotic' && (sub as IssueSubpointAntibiotic).antibiotic) {
+      return {
+        id: sub.id,
+        timestamp: sub.timestamp,
+        type: 'antibiotic',
+        text: 'text' in sub ? (sub as any).text || '' : undefined,
+        antibiotic: (sub as IssueSubpointAntibiotic).antibiotic!
+      } as IssueSubpointAntibiotic;
     }
 
     return {
@@ -47,6 +58,9 @@ const clonePatient = (patient: RoundsPatient): RoundsPatient => ({
       text: 'text' in sub ? (sub as any).text || '' : '',
       procedure: sub.type === 'procedure'
         ? { ...(sub as any).procedure }
+        : undefined,
+      antibiotic: sub.type === 'antibiotic'
+        ? { ...(sub as any).antibiotic }
         : undefined
     }))
   })),

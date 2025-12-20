@@ -1,4 +1,9 @@
 export const TAVI_WORKUP_SYSTEM_PROMPTS = {
+  // Standard key used by SystemPromptLoader.loadSystemPrompt(..., 'primary')
+  get primary() {
+    return this.generation;
+  },
+
   // TEMP: Shortened prompt to test payload size issue
   generation_full: `You are an expert interventional cardiologist preparing a comprehensive TAVI (Transcatheter Aortic Valve Implantation) workup report for clinical documentation and PDF export.`,
 
@@ -17,7 +22,6 @@ JSON STRUCTURE (replace ALL placeholder text with actual extracted content):
   "social_history": {"content": "[Extract from dictation + EMR Social History. Include smoking status, alcohol use, support system, living arrangements, occupation. Prioritize EMR Social History table data. If not provided in either source, write 'Social history not provided']", "missing": []},
   "investigations": {"content": "[Extract OTHER investigation results from dictation + EMR Investigation Summary (NOT echo or CT which have dedicated sections). Include: stress tests, cardiac catheter findings, blood tests, other imaging. If not provided, write 'Other investigations not provided']", "missing": []},
   "echocardiography": {"content": "[⚠️ ANTI-HALLUCINATION: Extract ONLY what is explicitly stated in THIS dictation. Do NOT use example patterns as templates. Do NOT infer measurements not mentioned. Do NOT copy from other cases.\n\nExtract ECHO measurements from dictation using specific patterns:\n\nAortic Valve Assessment:\n• Look for: 'mean gradient XX mmHg', 'peak gradient XX mmHg', 'max gradient XX'\n• Look for: 'aortic valve area XX cm²', 'valve area XX', 'AVA XX'\n• Look for: 'dimensionless index XX', 'DI XX', 'velocity ratio XX'\n\nLeft Ventricular Function:\n• Look for: 'LVEF XX%', 'ejection fraction XX%', 'EF XX'\n• Look for: 'LV function mild/moderate/severe'\n• Look for: 'septum XX mm', 'septal thickness XX'\n• Look for: 'LVOT gradient', 'outflow tract gradient'\n\nValve Pathology:\n• Look for: 'MR', 'mitral regurgitation', 'AR', 'aortic regurgitation'\n• Look for: 'TR', 'tricuspid regurgitation', 'PR', 'pulmonary regurgitation'\n• Look for: 'trivial', 'mild', 'moderate', 'severe'\n\nOther Parameters:\n• Look for: 'stroke volume XX ml', 'cardiac output XX L/min'\n• Look for: 'indexed valve area XX cm²/m²'\n• Look for: 'TAVI', 'prosthetic valve', 'bioprosthetic'\n\nExample output format (DO NOT copy this text): 'EF 60%, septum 16mm, no LVOT gradient, triv MR'\n\nIf not provided, write 'Echocardiographic findings not provided in dictation']", "missing": []},
-  "enhanced_ct": {"content": "[Extract CT measurements from dictation using enhanced patterns:\n\nAnnulus Measurements:\n• Look for: 'CT area XXX', 'annulus area XXX', 'area XXX mm²/cm²'\n• Look for: 'CT perimeter XX', 'annulus perimeter XX', 'perimeter XX mm/cm'\n• Look for: 'annulus diameter XX', 'diameter XX mm'\n\nCalcium Assessment:\n• Look for: 'calcium score XXX', 'calcium XXX', 'Agatston score XXX'\n• Look for: 'calcification mild/moderate/severe'\n\nAccess Vessel Sizing:\n• Look for: 'iliac XXmm', 'femoral XXmm', 'subclavian XXmm'\n• Look for: 'access vessel diameter XX', 'vessel size XX'\n\nExample output: 'CT area 460 mm², perimeter 68 mm, moderate calcification, iliac arteries 8-9mm bilaterally, femoral access suitable'\n\nIf measurements not provided, write 'CT analysis not provided in dictation']", "missing": []},
   "procedure_planning": {"content": "[Extract valve selection and procedural details from dictation using enhanced patterns:\n\nValve Selection:\n• Look for: 'Sapien [3/Ultra] XXmm', 'Evolut [R/PRO/FX] XXmm', 'ACURATE [neo/neo2] XXmm'\n• Look for: 'XXmm valve', 'valve size XX', 'recommend XXmm'\n\nAccess Route:\n• Look for: 'transfemoral', 'transapical', 'transaortic', 'subclavian access'\n• Look for: 'access via', 'approach through'\n\nSizing Rationale:\n• Look for: 'based on annulus', 'sizing calculation', 'CT measurements suggest'\n• Look for: 'oversizing XX%', 'nominal sizing'\n\nExample output: 'Valve selection: Sapien 3 26mm valve recommended based on CT annulus area 460mm². Transfemoral access planned via right femoral artery.'\n\nIf planning details not provided, write 'Procedure planning not provided in dictation']", "missing": []},
   "alerts": {"content": "[Extract any clinical concerns, contraindications, risk factors from dictation. If none mentioned, write 'No specific alerts mentioned in dictation']", "missing": []},
   "missing_summary": {"missing_clinical": [], "missing_diagnostic": [], "missing_measurements": [], "completeness_score": "XX%"}
@@ -40,10 +44,6 @@ MEASUREMENT EXTRACTION RULES:
 - Include units when mentioned (mmHg, cm², mm², mm)
 
 SPECIFIC EXTRACTION PATTERNS:
-- "annulus area 649" → enhanced_ct: "Annulus area 649 mm²"
-- "perimeter 72" → enhanced_ct: "Annulus perimeter 72 mm"
-- "iliac 8mm" → enhanced_ct: "Iliac artery diameter 8mm"
-- "femoral 6mm" → enhanced_ct: "Femoral artery diameter 6mm"
 - "sapien 3 29mm" → procedure_planning: "Valve selection: Sapien 3 29mm valve"
 - "mean gradient 25" → echocardiography: "Mean gradient 25 mmHg"
 
@@ -57,7 +57,6 @@ EMR DATA MAPPING (EMR data provided at the end - ABSOLUTE PRIORITY OVER DICTATIO
 IMPORTANT DISTINCTION - Investigation Summary vs Individual Test Results:
 - EMR Investigation Summary → clinical section (contains summary assessments, risk scores)
 - Dictated echo measurements → echocardiography section (specific echo values from transcription)
-- Dictated CT measurements → enhanced_ct section (specific CT values from transcription)
 - These are separate data sources that complement each other
 
 IMPORTANT: EMR fields contain actual patient data - use this instead of saying "not provided"
@@ -68,14 +67,12 @@ EXAMPLE - if dictation mentions "85-year-old male with severe AS":
 
 MEASUREMENT EXAMPLE - if dictation says "mean gradient 64, valve area 0.9, annulus area 623, annulus perimeter 78":
 - echocardiography: "Mean gradient 64 mmHg, aortic valve area 0.9 cm²"
-- enhanced_ct: "Annulus area 623 mm², annulus perimeter 78 mm"
 
 VALVE SELECTION EXAMPLE - if dictation says "sapien 3 29mm valve selected based on sizing":
 - procedure_planning: "Valve selection: Sapien 3 29mm valve selected based on sizing considerations"
 
 COMBINED EXAMPLE - if dictation says "Mean gradient 25, severe stenosis, annulus area 649, perimeter 72, sapien 3 29 mm":
 - echocardiography: "Mean gradient 25 mmHg"
-- enhanced_ct: "Annulus area 649 mm², annulus perimeter 72 mm"
 - procedure_planning: "Valve selection: Sapien 3 29mm valve"
 
 EMR PATIENT DEMOGRAPHICS EXAMPLE - if EMR contains "John Smith, 05/06/1959 (66)" and dictation says "75-year-old male":
@@ -147,7 +144,6 @@ MANDATORY: Begin immediately with { and end with } - no prefacing text, markdown
     "content": "Echocardiographic findings narrative here",
     "missing": ["List any missing echocardiographic measurements"]
   },
-  "enhanced_ct": {
     "content": "Complete anatomical assessment including LVOT, calcium scoring, detailed measurements narrative here",
     "missing": ["List any missing CT measurements or analyses"]
   },

@@ -691,6 +691,10 @@ def process_with_dspy_stream():
             agent_type = data['agent_type']
             transcript = data['transcript']
             options = data.get('options', {})
+            
+            # E15: Key Facts support - optional confirmed facts from proof mode
+            facts = data.get('facts')  # KeyFactsEnvelope: { version: 1, facts: KeyFacts }
+            has_facts = facts is not None and isinstance(facts, dict) and 'facts' in facts
 
             # Check feature flag and SDK availability
             if not USE_LMSTUDIO_SDK or lm_studio_client is None:
@@ -702,8 +706,9 @@ def process_with_dspy_stream():
                 yield f"event: error\ndata: {json.dumps({'error': f'DSPy not enabled for agent type: {agent_type}'})}\n\n"
                 return
 
-            # Phase 1: Setup (0-10%)
-            yield f"event: progress\ndata: {json.dumps({'phase': 'Audio Processing', 'progress': 5, 'details': 'Initializing DSPy predictor'})}\n\n"
+            # B7: Stage taxonomy - use controlled stage names
+            # Stage: collecting (0-5%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'collecting', 'percent': 5, 'detail': 'Initialising predictor'})}\n\n"
 
             # Configure fresh run if requested
             if options.get('fresh_run'):
@@ -719,8 +724,8 @@ def process_with_dspy_stream():
                 yield f"event: error\ndata: {json.dumps({'error': f'No predictor found for agent: {agent_type}'})}\n\n"
                 return
 
-            # Phase 2: AI Analysis (10-40%)
-            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 15, 'details': 'Analyzing transcript'})}\n\n"
+            # Stage: extracting (35-45%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'extracting', 'percent': 40, 'detail': 'Preparing context'})}\n\n"
 
             # Get system prompt from predictor (assuming it has a system_prompt attribute)
             system_prompt = getattr(predictor, 'system_prompt', None) or getattr(predictor, 'signature', '')
@@ -730,9 +735,11 @@ def process_with_dspy_stream():
             model_name = agent_config.get('model', 'medgemma-27b-text-it-mlx')
 
             logger.info(f"Starting SDK streaming for {agent_type} with model {model_name}")
+            if has_facts:
+                logger.info(f"Using confirmed key facts from proof mode")
 
-            # Phase 3: Get loaded models and select appropriate one
-            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 40, 'details': 'Finding loaded model'})}\n\n"
+            # Stage: reasoning (45-85%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'reasoning', 'percent': 45, 'detail': 'Loading model'})}\n\n"
 
             # Get list of loaded models
             loaded_models = lm_studio_client.llm.list_loaded()
@@ -751,11 +758,61 @@ def process_with_dspy_stream():
             char_count = 0
             estimated_total_chars = 2000  # Estimate based on typical report length
 
-            # Prepare the prompt (combining system + user)
-            combined_prompt = f"{system_prompt}\n\nUser: {transcript}\n\nAssistant:"
+            # E15: Build prompt with confirmed facts if provided
+            facts_section = ""
+            if has_facts:
+                # Format confirmed facts as ground truth constraints
+                key_facts = facts.get('facts', {})
+                facts_lines = ["\n## Confirmed Key Facts (treat as ground truth):"]
+                
+                # Patient info
+                patient = key_facts.get('patient', {})
+                if patient:
+                    if patient.get('name'):
+                        facts_lines.append(f"- Patient: {patient['name']}")
+                    if patient.get('age'):
+                        facts_lines.append(f"- Age: {patient['age']}")
+                    if patient.get('sex'):
+                        facts_lines.append(f"- Sex: {patient['sex']}")
+                
+                # Context
+                context = key_facts.get('context', {})
+                if context:
+                    if context.get('indication'):
+                        facts_lines.append(f"- Indication: {context['indication']}")
+                    if context.get('procedure'):
+                        facts_lines.append(f"- Procedure: {context['procedure']}")
+                
+                # Medications
+                medications = key_facts.get('medications', [])
+                if medications:
+                    facts_lines.append(f"- Medications: {', '.join(medications)}")
+                
+                # Problems
+                problems = key_facts.get('problems', [])
+                if problems:
+                    facts_lines.append(f"- Problems: {', '.join(problems)}")
+                
+                # Investigations
+                investigations = key_facts.get('investigations', {})
+                if investigations:
+                    for name, value in investigations.items():
+                        facts_lines.append(f"- {name}: {value}")
+                
+                # Freeform
+                freeform = key_facts.get('freeform', {})
+                if freeform:
+                    for name, value in freeform.items():
+                        facts_lines.append(f"- {name}: {value}")
+                
+                facts_lines.append("\nUse these confirmed facts as authoritative. Prefer them over any ambiguous transcript content.\n")
+                facts_section = "\n".join(facts_lines)
 
-            # Stream completion with prompt processing progress callback
-            yield f"event: progress\ndata: {json.dumps({'phase': 'AI Analysis', 'progress': 45, 'details': 'Starting generation'})}\n\n"
+            # Prepare the prompt (combining system + facts + user)
+            combined_prompt = f"{system_prompt}{facts_section}\n\nUser: {transcript}\n\nAssistant:"
+
+            # Stage: reasoning - starting generation
+            yield f"event: progress\ndata: {json.dumps({'stage': 'reasoning', 'percent': 50, 'detail': 'Starting generation'})}\n\n"
 
             # Create callbacks for progress tracking
             def on_prompt_progress(progress: float):
@@ -789,7 +846,7 @@ def process_with_dspy_stream():
                 )
 
                 # Iterate over the stream
-                last_progress = 45
+                last_progress = 50
                 for fragment in prediction_stream:
                     if hasattr(fragment, 'content') and fragment.content:
                         content = fragment.content
@@ -799,10 +856,10 @@ def process_with_dspy_stream():
                         # Emit token
                         yield f"event: token\ndata: {json.dumps({'delta': content, 'fullText': full_text})}\n\n"
 
-                        # Phase 4: Generation progress (90-100% based on char count)
-                        new_progress = min(98, 90 + int((char_count / estimated_total_chars) * 8))
+                        # Stage: reasoning (50-85% based on char count)
+                        new_progress = min(85, 50 + int((char_count / estimated_total_chars) * 35))
                         if new_progress > last_progress:
-                            yield f"event: progress\ndata: {json.dumps({'phase': 'Generation', 'progress': new_progress, 'details': f'Generated {char_count} characters'})}\n\n"
+                            yield f"event: progress\ndata: {json.dumps({'stage': 'reasoning', 'percent': new_progress, 'detail': f'Generated {char_count} characters'})}\n\n"
                             last_progress = new_progress
 
             except Exception as stream_error:
@@ -810,13 +867,19 @@ def process_with_dspy_stream():
                 yield f"event: error\ndata: {json.dumps({'error': f'Streaming failed: {str(stream_error)}'})}\n\n"
                 return
 
-            # Phase 5: Finalization (98-100%)
-            yield f"event: progress\ndata: {json.dumps({'phase': 'Generation', 'progress': 99, 'details': 'Finalizing report'})}\n\n"
+            # Stage: formatting (85-95%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'formatting', 'percent': 90, 'detail': 'Structuring output'})}\n\n"
+
+            # Stage: validating (95-98%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'validating', 'percent': 98, 'detail': 'Finalising report'})}\n\n"
 
             processing_time = (now_melbourne() - start_time).total_seconds() * 1000
 
-            # Complete
-            yield f"event: complete\ndata: {json.dumps({'result': full_text, 'processing_time': round(processing_time), 'agent_type': agent_type})}\n\n"
+            # Stage: complete (100%)
+            yield f"event: progress\ndata: {json.dumps({'stage': 'complete', 'percent': 100, 'detail': 'Complete'})}\n\n"
+
+            # Complete event with result
+            yield f"event: complete\ndata: {json.dumps({'result': full_text, 'processing_time': round(processing_time), 'agent_type': agent_type, 'used_facts': has_facts})}\n\n"
 
             log_request('process/stream', success=True)
 

@@ -392,6 +392,8 @@ export class ActionExecutor {
     mode?: InputMode,
     context: Partial<ActionContext> = {}
   ): Promise<ActionResult> {
+    console.log(`🔷 [ActionExecutor] execute() called:`, { actionId, mode, context });
+
     // Clear previous error and clarification on new command (per UI Intent Section 8)
     this.clearError();
     if (this.currentClarification) {
@@ -401,6 +403,7 @@ export class ActionExecutor {
 
     // Prevent concurrent execution
     if (this.isExecuting) {
+      console.warn(`⚠️ [ActionExecutor] Blocked - already executing`);
       return {
         success: false,
         error: 'Action already in progress',

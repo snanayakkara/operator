@@ -212,7 +212,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
               title="Mobile dictations"
             />
             {unattachedMobileJobs.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-10 px-1.5 min-w-[18px] h-4 leading-tight">
+              <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-20 px-1.5 min-w-[18px] h-4 leading-tight pointer-events-none">
                 {unattachedMobileJobs.length}
               </span>
             )}

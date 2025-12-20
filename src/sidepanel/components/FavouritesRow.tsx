@@ -1,13 +1,14 @@
 /**
  * FavouritesRow Component
  *
- * Horizontal row of 4 favourite actions with one-click access.
- * Default favourites: Quick Letter, Background, Investigations, Wrap Up
+ * Horizontal row of 5 favourite actions with one-click access.
+ * Default favourites: Quick Letter, Background, Medications, Investigations, Wrap Up
  *
  * Features:
  * - Quick Letter uses DualModeButton (D|T split)
- * - Investigations uses TriModeButton (D|T|V split)
  * - Background uses DualModeButton (D|T split)
+ * - Medications uses DualModeButton (D|T split)
+ * - Investigations uses TriModeButton (D|T|V split)
  * - Wrap Up uses ActionButton (single click → opens drawer)
  * - Compact, horizontal layout optimized for narrow panel
  * - Optional ActionExecutor integration for unified dispatch
@@ -47,7 +48,7 @@ export interface FavouritesRowProps {
 }
 
 // Default favourites (fixed for now)
-const FAVOURITE_IDS = ['quick-letter', 'background', 'investigation-summary'];
+const FAVOURITE_IDS = ['quick-letter', 'background', 'medications', 'investigation-summary'];
 
 const containerVariants = {
   hidden: { opacity: 0 },

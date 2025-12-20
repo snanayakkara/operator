@@ -218,66 +218,72 @@ OUTPUT FORMAT:
 - "Dual antiplatelet therapy" → "Two blood-thinning medications to keep the stent working properly"`,
 
   // Quick model validation prompt for Angiogram/PCI data extraction
-  dataValidationPrompt: `You are validating Angiogram/PCI (Percutaneous Coronary Intervention) procedure data extraction. Your job is to:
+  dataValidationPrompt: `You are validating Angiogram/PCI data extraction. FIRST determine the procedure type:
 
-1. VERIFY regex-extracted values against the transcription
-2. DETECT values the regex MISSED that are present in transcription
-3. IDENTIFY critical missing fields needed for complete procedural documentation
+**PROCEDURE TYPE DETECTION:**
+- DIAGNOSTIC_ANGIOGRAM: No stent, no balloon, no angioplasty, no intervention - just vessel assessment
+- PCI_INTERVENTION: Stent deployed, balloon used, angioplasty performed
+- COMBINED: Diagnostic findings + intervention in same procedure
 
-CRITICAL FIELDS FOR ANGIOGRAM/PCI:
-- **Access Site**: femoral, radial, brachial (required for closure technique)
-- **Target Vessel**: LAD, LCx, RCA, OM, diag, etc. (required for intervention documentation)
-- **Lesion Location**: proximal, mid, distal + specific segment (required for precise documentation)
-- **Stenosis %**: degree of narrowing (required for intervention indication)
-- **For PCI Interventions**:
-  - stentType: Xience, Resolute, Promus, etc. (required for device tracking)
-  - stentSize: diameter in mm (required for registry reporting)
-  - stentLength: length in mm (required for registry reporting)
-  - balloonSize: diameter for pre/post-dilation (useful for technique documentation)
-- **TIMI Flow**: pre/post-intervention flow grade 0-3 (required for success assessment)
-- **Resources**: contrastVolume (ml), fluoroscopyTime (min) (required for safety documentation)
+**CRITICAL FIELDS BY PROCEDURE TYPE:**
+
+For DIAGNOSTIC_ANGIOGRAM (no intervention):
+- Access Site: femoral, radial, brachial (critical: true)
+- Vessel findings for LM, LAD, LCx, RCA (critical: false - document what was dictated)
+- Stenosis percentages if mentioned (critical: false - optional for diagnostics)
+- Dominance: right/left/codominant (critical: false)
+- INTERVENTION FIELDS ARE NOT CRITICAL for diagnostic-only procedures
+
+For PCI_INTERVENTION or COMBINED:
+- Access Site (critical: true)
+- Target Vessel (critical: true)
+- Stenosis % (critical: true)
+- Stent details: type, size, length (critical: true for PCI)
+- TIMI Flow: pre/post (critical: true)
+
+**EXTRACTION RULES FOR VESSEL FINDINGS:**
+Extract findings even if mentioned in natural order:
+- "30% LAD stenosis" → LAD has 30% stenosis
+- "dominant large RCA with 30% diffuse irregularities" → RCA findings
+- "small non-dominant circumflex" → LCx finding
+- "80% D2 stenosis" → LAD branch (D2) finding
 
 CONFIDENCE SCORING:
-- 0.95-1.0: Unambiguous (exact match: "3.5mm × 18mm Xience stent")
-- 0.80-0.94: Clear with minor ASR issues ("three point five" vs "3.5")
-- 0.60-0.79: Implicit/contextual (inferred from clinical language)
+- 0.95-1.0: Unambiguous (exact match)
+- 0.80-0.94: Clear with minor ASR issues
+- 0.60-0.79: Implicit/contextual
 - 0.00-0.59: Uncertain/ambiguous
 
 OUTPUT FORMAT (strict JSON only):
 {
+  "procedureType": "DIAGNOSTIC_ANGIOGRAM" | "PCI_INTERVENTION" | "COMBINED",
   "corrections": [
     {
-      "field": "intervention.stentSize",
+      "field": "findings.rca",
       "regexValue": null,
-      "correctValue": 3.5,
-      "reason": "Found '3.5mm Xience stent' in transcription",
-      "confidence": 0.95
+      "correctValue": "Dominant large RCA with 30% diffuse irregularities, calcified vessel",
+      "reason": "Found RCA description in transcription",
+      "confidence": 0.92
     }
   ],
-  "missingCritical": [
-    {
-      "field": "intervention.stentLength",
-      "reason": "Stent length not specified - required for PCI registry reporting",
-      "critical": true
-    }
-  ],
+  "missingCritical": [],
   "missingOptional": [
     {
-      "field": "resources.fluoroscopyTime",
-      "reason": "Fluoroscopy time not documented - useful for radiation dose tracking",
+      "field": "resources.contrastVolume",
+      "reason": "Contrast volume not documented",
       "critical": false
     }
   ],
-  "confidence": 0.88
+  "confidence": 0.90
 }
 
 RULES:
 - ONLY suggest corrections if you find the value in the transcription
-- Mark as "critical: true" if field is REQUIRED for registry reporting or intervention documentation
-- Mark as "critical: false" if field is useful but not essential
-- Set confidence based on how clear/unambiguous the value is in the transcription
+- For DIAGNOSTIC procedures: vessel findings/stenosis are NOT critical - just extract what's there
+- For PCI procedures: stent details, target vessel, TIMI flow ARE critical
+- DO NOT mark intervention fields as critical for diagnostic-only angiograms
 - DO NOT hallucinate values that aren't in the transcription
-- For diagnostic angiograms (no intervention), focus on vessel findings and access site
+- Use "corrections" to ADD values the regex missed (e.g., vessel findings from natural speech)
 - For PCI, prioritize stent details, TIMI flow, and lesion characteristics`,
 };
 

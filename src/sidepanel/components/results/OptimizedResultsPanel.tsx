@@ -36,11 +36,14 @@ import {
   WarningsPanel,
   TroubleshootingSection,
   TAVIWorkupDisplay,
-  RightHeartCathDisplay
+  RightHeartCathDisplay,
+  NextStepSuggestionsCard,
+  KeyFactsProofDialog
 } from './index';
 import { PatientEducationOutputCard } from '../PatientEducationOutputCard';
 import { PreOpPlanDisplay } from './PreOpPlanDisplay';
-import type { AgentType, FailedAudioRecording, PipelineProgress, PreOpPlanReport, ValidationResult } from '@/types/medical.types';
+import type { AgentType, FailedAudioRecording, PipelineProgress, PreOpPlanReport, ValidationResult, KeyFact, KeyFactsProofResult, ProofModeConfig } from '@/types/medical.types';
+import type { NextStepStatus, NextStepEngineResult, NextStepSuggestion } from '@/types/nextStep.types';
 import { MissingInfoPanel } from './MissingInfoPanel';
 import { UnifiedPipelineProgress } from '../UnifiedPipelineProgress';
 import type { TranscriptionApprovalState, TranscriptionApprovalStatus } from '@/types/optimization';
@@ -298,6 +301,18 @@ interface OptimizedResultsPanelProps {
   taviValidationResult?: ValidationResult | null;
   taviValidationStatus?: 'complete' | 'awaiting_validation';
   onTAVIReprocessWithValidation?: (fields: Record<string, any>) => void;
+  // TAVI Proof Mode
+  taviProofModeData?: {
+    facts: KeyFact[];
+    onComplete: (result: KeyFactsProofResult) => void;
+    onCancel: () => void;
+  } | null;
+  // Angio/PCI Proof Mode
+  angioProofModeData?: {
+    facts: KeyFact[];
+    onComplete: (result: KeyFactsProofResult) => void;
+    onCancel: () => void;
+  } | null;
   angiogramValidationResult?: ValidationResult | null;
   angiogramValidationStatus?: 'complete' | 'awaiting_validation';
   onAngioReprocessWithValidation?: (fields: Record<string, any>) => void;
@@ -343,6 +358,14 @@ interface OptimizedResultsPanelProps {
   isViewingSession?: boolean;
   // OCR explanation from vision model (for image-based investigation summary)
   ocrExplanation?: string | null;
+  // Next-Step Engine props
+  nextStepStatus?: import('@/types/nextStep.types').NextStepStatus;
+  nextStepResult?: import('@/types/nextStep.types').NextStepEngineResult | null;
+  onNextStepIntegrate?: (suggestions: import('@/types/nextStep.types').NextStepSuggestion[]) => Promise<void>;
+  onNextStepUndo?: () => void;
+  canNextStepUndo?: boolean;
+  isNextStepIntegrating?: boolean;
+  nextStepIntegrationError?: string | null;
 }
 
 const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
@@ -404,6 +427,10 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   taviValidationResult = null,
   taviValidationStatus,
   onTAVIReprocessWithValidation,
+  // TAVI Proof Mode
+  taviProofModeData = null,
+  // Angio/PCI Proof Mode
+  angioProofModeData = null,
   angiogramValidationResult = null,
   angiogramValidationStatus,
   onAngioReprocessWithValidation,
@@ -433,11 +460,24 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   isSavingRevision = false,
   isSavingGoldenPair = false,
   isViewingSession = false,
-  ocrExplanation = null
+  ocrExplanation = null,
+  // Next-Step Engine props
+  nextStepStatus,
+  nextStepResult,
+  onNextStepIntegrate,
+  onNextStepUndo,
+  canNextStepUndo = false,
+  isNextStepIntegrating = false,
+  nextStepIntegrationError = null
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const angioValidation = useValidationCheckpoint<ValidationResult>({ agentType: 'angiogram-pci' });
   const mteerValidation = useValidationCheckpoint<ValidationResult>({ agentType: 'mteer' });
+
+  // TAVI Proof Mode state
+  const [showProofMode, setShowProofMode] = useState(false);
+  const [proofFacts, setProofFacts] = useState<KeyFact[]>([]);
+  const [proofConfig] = useState<Partial<ProofModeConfig>>({ mode: 'visual' });
 
   const {
     showValidationModal: showAngioValidation,
@@ -494,6 +534,19 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
     handleMTEERValidationRequired,
     clearMTEERValidationState
   ]);
+
+  // Proof Mode effect (TAVI and Angio/PCI)
+  useEffect(() => {
+    if (agentType === 'tavi' && taviProofModeData) {
+      setProofFacts(taviProofModeData.facts);
+      setShowProofMode(true);
+    } else if (agentType === 'angiogram-pci' && angioProofModeData) {
+      setProofFacts(angioProofModeData.facts);
+      setShowProofMode(true);
+    } else {
+      setShowProofMode(false);
+    }
+  }, [agentType, taviProofModeData, angioProofModeData]);
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
@@ -1193,29 +1246,40 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
               {/* Letter Card */}
               <motion.div 
-                className="letter-card rounded-lg border border-blue-200 bg-blue-50 overflow-hidden"
+                className={`letter-card rounded-lg border overflow-hidden ${canNextStepUndo ? 'border-indigo-300 bg-indigo-50' : 'border-blue-200 bg-blue-50'}`}
                 variants={withReducedMotion(cardVariants)}
               >
                 {/* Header with title and actions */}
-                <div className="px-4 py-3 border-b border-blue-200 bg-blue-100">
+                <div className={`px-4 py-3 border-b ${canNextStepUndo ? 'border-indigo-200 bg-indigo-100' : 'border-blue-200 bg-blue-100'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-blue-800 font-semibold text-sm">{isRevisionOpen ? 'Letter (Editing)' : 'Letter'}</h4>
-                    <ActionSegmentedControl
-                      onCopy={handleLetterCopy}
-                      onInsert={handleLetterInsert}
-                      onTrain={canEditAndTrain ? () => onRevisionToggle?.(!isRevisionOpen) : undefined}
-                      onReprocess={canReprocessQuickLetter && !isProcessing ? handleQuickLetterReprocess : undefined}
-                      onPatient={!isGeneratingPatientVersion ? onGeneratePatientVersion : undefined}
-                      copiedRecently={letterButtonStates.copied}
-                      insertedRecently={letterButtonStates.inserted}
-                      actions={[
-                        'copy',
-                        'insert',
-                        ...(canEditAndTrain ? ['train' as const] : []),
-                        ...(canReprocessQuickLetter ? ['reprocess' as const] : []),
-                        'patient' as const
-                      ]}
-                    />
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h4 className={`font-semibold text-sm ${canNextStepUndo ? 'text-indigo-800' : 'text-blue-800'}`}>
+                        {isRevisionOpen ? 'Letter (Editing)' : 'Letter'}
+                      </h4>
+                      {canNextStepUndo && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 bg-indigo-200 rounded">
+                          Modified
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0">
+                      <ActionSegmentedControl
+                        onCopy={handleLetterCopy}
+                        onInsert={handleLetterInsert}
+                        onTrain={canEditAndTrain ? () => onRevisionToggle?.(!isRevisionOpen) : undefined}
+                        onReprocess={canReprocessQuickLetter && !isProcessing ? handleQuickLetterReprocess : undefined}
+                        onPatient={!isGeneratingPatientVersion ? onGeneratePatientVersion : undefined}
+                        copiedRecently={letterButtonStates.copied}
+                        insertedRecently={letterButtonStates.inserted}
+                        actions={[
+                          'copy',
+                          'insert',
+                          ...(canEditAndTrain ? ['train' as const] : []),
+                          ...(canReprocessQuickLetter ? ['reprocess' as const] : []),
+                          'patient' as const
+                        ]}
+                      />
+                    </div>
                   </div>
                 </div>
                 {/* Body content */}
@@ -1269,6 +1333,19 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Next-Step Suggestions Card - only show for quick-letter agent */}
+              {agentType === 'quick-letter' && (nextStepStatus || nextStepResult) && (
+                <NextStepSuggestionsCard
+                  status={nextStepStatus || 'idle'}
+                  result={nextStepResult || null}
+                  onIntegrate={onNextStepIntegrate || (async () => {})}
+                  onUndo={onNextStepUndo || (() => {})}
+                  canUndo={canNextStepUndo}
+                  isIntegrating={isNextStepIntegrating}
+                  integrationError={nextStepIntegrationError || null}
+                />
+              )}
 
               {/* Transcription section now shown at the top with showPrimaryTranscriptionSection - no duplicate needed here */}
             </motion.div>
@@ -1899,6 +1976,36 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onMTEERReprocessWithValidation(userFields);
             }
           }}
+        />
+      )}
+
+      {/* Proof Mode Dialog (TAVI or Angio/PCI) */}
+      {((agentType === 'tavi' && taviProofModeData) ||
+        (agentType === 'angiogram-pci' && angioProofModeData)) &&
+        showProofMode && proofFacts.length > 0 && (
+        <KeyFactsProofDialog
+          facts={proofFacts}
+          agentLabel={agentType === 'tavi' ? 'TAVI Procedure' : 'Angiogram/PCI'}
+          onComplete={(result) => {
+            console.log(`✅ ${agentType} Proof Mode: Facts confirmed`, result);
+            setShowProofMode(false);
+            if (agentType === 'tavi' && taviProofModeData) {
+              taviProofModeData.onComplete(result);
+            } else if (agentType === 'angiogram-pci' && angioProofModeData) {
+              angioProofModeData.onComplete(result);
+            }
+          }}
+          onCancel={() => {
+            console.log(`🚫 ${agentType} Proof Mode: Cancelled`);
+            setShowProofMode(false);
+            if (agentType === 'tavi' && taviProofModeData) {
+              taviProofModeData.onCancel();
+            } else if (agentType === 'angiogram-pci' && angioProofModeData) {
+              angioProofModeData.onCancel();
+            }
+          }}
+          isOpen={showProofMode}
+          initialConfig={proofConfig}
         />
       )}
 

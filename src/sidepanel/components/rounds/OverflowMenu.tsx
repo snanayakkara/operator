@@ -1,25 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MoreVertical, ClipboardList, Plus, CheckSquare, Undo2, Trash2 } from 'lucide-react';
+import { MoreVertical, Plus, CheckSquare, Undo2, Trash2 } from 'lucide-react';
 import { IconButton } from './IconButton';
 
 interface OverflowMenuProps {
-  onHandover: () => void;
   onQuickAdd: () => void;
   onDischarge: () => void;
   onUndo: () => void;
   onDelete: () => void;
-  activeCount: number;
   canUndo: boolean;
   className?: string;
 }
 
 export const OverflowMenu: React.FC<OverflowMenuProps> = ({
-  onHandover,
   onQuickAdd,
   onDischarge,
   onUndo,
   onDelete,
-  activeCount,
   canUndo,
   className = ''
 }) => {
@@ -70,16 +66,6 @@ export const OverflowMenu: React.FC<OverflowMenuProps> = ({
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
           <div className="py-1">
-            {/* Handover */}
-            <button
-              type="button"
-              onClick={() => handleAction(onHandover)}
-              className="w-full px-3 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2 transition-colors"
-            >
-              <ClipboardList className="h-3.5 w-3.5 text-gray-600" />
-              <span>Handover ({activeCount})</span>
-            </button>
-
             {/* Quick Add */}
             <button
               type="button"

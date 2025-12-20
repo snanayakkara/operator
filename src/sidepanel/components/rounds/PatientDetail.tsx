@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Star, ChevronDown, Phone, X, Copy, Check } from 'lucide-react';
+import { Plus, Star, Phone, X, Copy, Check, MoreVertical, GripVertical, ChevronDown } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { IssueSubpoint, RoundsPatient, Clinician, MessageTimeWindow } from '@/types/rounds.types';
@@ -8,6 +8,8 @@ import { WardUpdateModal } from './WardUpdateModal';
 import { PROCEDURE_CHECKLISTS, ProcedureChecklistKey } from '@/config/procedureChecklists';
 import { RoundsLLMService } from '@/services/RoundsLLMService';
 import { NokExportService } from '@/services/NokExportService';
+import { BillingSection } from './BillingSection';
+import { DischargeChecklist } from './DischargeChecklist';
 
 type ProcedureDraft = {
   name: string;
@@ -24,6 +26,31 @@ const defaultProcedureDraft = (): ProcedureDraft => ({
   showDayCounter: true,
   checklistKey: ''
 });
+
+type AntibioticDraft = {
+  name: string;
+  startDate: string;
+  stopDate: string;
+  notes: string;
+};
+
+const defaultAntibioticDraft = (): AntibioticDraft => ({
+  name: '',
+  startDate: '',
+  stopDate: '',
+  notes: ''
+});
+
+// Helper to calculate stop date from start date + days
+const calculateStopDate = (startDate: string, days: number): string => {
+  if (!startDate) return '';
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) return '';
+  // Days is total course length, so stop date is start + (days - 1)
+  const stop = new Date(start);
+  stop.setDate(stop.getDate() + days - 1);
+  return stop.toISOString().split('T')[0];
+};
 
 interface PatientDetailProps {
   patient: RoundsPatient;
@@ -65,11 +92,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [activeSubpointIssueId, setActiveSubpointIssueId] = useState<string | null>(null);
   const [subpointDrafts, setSubpointDrafts] = useState<Record<string, string>>({});
-  const [subpointEntryType, setSubpointEntryType] = useState<Record<string, 'note' | 'procedure'>>({});
+  const [subpointEntryType, setSubpointEntryType] = useState<Record<string, 'note' | 'procedure' | 'antibiotic'>>({});
   const [procedureDrafts, setProcedureDrafts] = useState<Record<string, ProcedureDraft>>({});
+  const [antibioticDrafts, setAntibioticDrafts] = useState<Record<string, AntibioticDraft>>({});
   const [editingProcedureToggles, setEditingProcedureToggles] = useState<Record<string, boolean>>({});
   const [dayCounterTick, setDayCounterTick] = useState(Date.now());
   const [openIssueMenuId, setOpenIssueMenuId] = useState<string | null>(null);
+  const [draggingIssueId, setDraggingIssueId] = useState<string | null>(null);
+  const [dragOverIssueId, setDragOverIssueId] = useState<string | null>(null);
+  const [expandedResolvedIssueIds, setExpandedResolvedIssueIds] = useState<Set<string>>(new Set());
   const [showInvestigationForm, setShowInvestigationForm] = useState(false);
   const [isInvestigationEditMode, setIsInvestigationEditMode] = useState(false);
   const [investigationEdits, setInvestigationEdits] = useState<Record<string, { name: string; summary?: string; date: string }>>({});
@@ -116,6 +147,21 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
       setOpenIssueMenuId(null);
     }
   }, [isEditMode]);
+
+  useEffect(() => {
+    setExpandedResolvedIssueIds(new Set());
+  }, [patient.id]);
+
+  useEffect(() => {
+    if (!openIssueMenuId) return;
+    const handler = (event: MouseEvent) => {
+      const root = document.querySelector(`[data-issue-menu-root="${openIssueMenuId}"]`);
+      if (root && root.contains(event.target as Node)) return;
+      setOpenIssueMenuId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openIssueMenuId]);
 
   useEffect(() => {
     if (isInvestigationEditMode) {
@@ -253,24 +299,38 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
 
   const addSubpoint = (issueId: string, subpoint: IssueSubpoint) => {
     const timestamp = isoNow();
-    const normalized: IssueSubpoint = subpoint.type === 'procedure'
-      ? {
-          ...subpoint,
-          id: subpoint.id || generateRoundsId('sub'),
-          timestamp: subpoint.timestamp || timestamp,
-          type: 'procedure',
-          procedure: {
-            ...subpoint.procedure,
-            showDayCounter: subpoint.procedure?.showDayCounter ?? false
-          }
+    let normalized: IssueSubpoint;
+    
+    if (subpoint.type === 'procedure') {
+      normalized = {
+        ...subpoint,
+        id: subpoint.id || generateRoundsId('sub'),
+        timestamp: subpoint.timestamp || timestamp,
+        type: 'procedure',
+        procedure: {
+          ...subpoint.procedure,
+          showDayCounter: subpoint.procedure?.showDayCounter ?? false
         }
-      : {
-          ...subpoint,
-          id: subpoint.id || generateRoundsId('sub'),
-          timestamp: subpoint.timestamp || timestamp,
-          type: 'note',
-          text: subpoint.text || ''
-        };
+      };
+    } else if (subpoint.type === 'antibiotic') {
+      normalized = {
+        ...subpoint,
+        id: subpoint.id || generateRoundsId('sub'),
+        timestamp: subpoint.timestamp || timestamp,
+        type: 'antibiotic',
+        antibiotic: {
+          ...subpoint.antibiotic
+        }
+      };
+    } else {
+      normalized = {
+        ...subpoint,
+        id: subpoint.id || generateRoundsId('sub'),
+        timestamp: subpoint.timestamp || timestamp,
+        type: 'note',
+        text: subpoint.text || ''
+      };
+    }
 
     updatePatient(patient.id, (p) => ({
       ...p,
@@ -287,6 +347,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
     setSubpointDrafts(prev => ({ ...prev, [issueId]: prev[issueId] || '' }));
     setSubpointEntryType(prev => ({ ...prev, [issueId]: prev[issueId] || 'note' }));
     setProcedureDrafts(prev => ({ ...prev, [issueId]: prev[issueId] || { ...defaultProcedureDraft(), checklistKey: undefined } }));
+    setAntibioticDrafts(prev => ({ ...prev, [issueId]: prev[issueId] || defaultAntibioticDraft() }));
   };
 
   const submitSubpoint = (issueId: string) => {
@@ -307,6 +368,21 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
         }
       });
       setProcedureDrafts(prev => ({ ...prev, [issueId]: { ...defaultProcedureDraft(), checklistKey: undefined } }));
+    } else if (type === 'antibiotic') {
+      const abx = antibioticDrafts[issueId] || defaultAntibioticDraft();
+      if (!abx.name.trim() || !abx.startDate) return;
+      addSubpoint(issueId, {
+        id: generateRoundsId('sub'),
+        timestamp: isoNow(),
+        type: 'antibiotic',
+        antibiotic: {
+          name: abx.name.trim(),
+          startDate: abx.startDate,
+          stopDate: abx.stopDate || undefined,
+          notes: abx.notes.trim() || undefined
+        }
+      });
+      setAntibioticDrafts(prev => ({ ...prev, [issueId]: defaultAntibioticDraft() }));
     } else {
       const text = subpointDrafts[issueId]?.trim() || '';
       if (!text) return;
@@ -365,6 +441,11 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
           values[`subpoint-date-${sub.id}`] = sub.procedure?.date || '';
           values[`subpoint-notes-${sub.id}`] = sub.procedure?.notes || '';
           setEditingProcedureToggles(prev => ({ ...prev, [sub.id]: sub.procedure?.showDayCounter ?? false }));
+        } else if (sub.type === 'antibiotic') {
+          values[`subpoint-abx-name-${sub.id}`] = sub.antibiotic?.name || '';
+          values[`subpoint-abx-date-${sub.id}`] = sub.antibiotic?.startDate || '';
+          values[`subpoint-abx-stop-${sub.id}`] = sub.antibiotic?.stopDate || '';
+          values[`subpoint-abx-notes-${sub.id}`] = sub.antibiotic?.notes || '';
         } else {
           values[`subpoint-${sub.id}`] = sub.text;
         }
@@ -411,6 +492,35 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                 notes: nextNotes,
                 showDayCounter: nextShowDayCounter,
                 checklistKey: nextChecklistKey
+              }
+            });
+            return acc;
+          }
+
+          if (sub.type === 'antibiotic') {
+            const nextName = editingValues[`subpoint-abx-name-${sub.id}`] !== undefined
+              ? editingValues[`subpoint-abx-name-${sub.id}`]?.trim() || ''
+              : sub.antibiotic?.name || '';
+            const nextDate = editingValues[`subpoint-abx-date-${sub.id}`] ?? sub.antibiotic?.startDate ?? '';
+            const nextStopDate = editingValues[`subpoint-abx-stop-${sub.id}`] ?? sub.antibiotic?.stopDate ?? '';
+            const nextNotes = editingValues[`subpoint-abx-notes-${sub.id}`] !== undefined
+              ? editingValues[`subpoint-abx-notes-${sub.id}`]?.trim() || ''
+              : sub.antibiotic?.notes || '';
+
+            // If the antibiotic name is cleared, treat as deletion
+            if (!nextName) {
+              return acc;
+            }
+
+            acc.push({
+              ...sub,
+              type: 'antibiotic',
+              antibiotic: {
+                ...sub.antibiotic,
+                name: nextName,
+                startDate: nextDate,
+                stopDate: nextStopDate || undefined,
+                notes: nextNotes
               }
             });
             return acc;
@@ -602,6 +712,33 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
     const resolved = patient.issues.filter(i => i.status === 'resolved');
     return [...open, ...resolved];
   }, [patient.issues]);
+
+  const reorderIssuesWithinStatus = (dragId: string, targetId: string) => {
+    if (dragId === targetId) return;
+    const dragged = patient.issues.find(i => i.id === dragId);
+    const target = patient.issues.find(i => i.id === targetId);
+    if (!dragged || !target) return;
+    if (dragged.status !== target.status) return; // only reorder within open/resolved bucket
+
+    const timestamp = isoNow();
+    updatePatient(patient.id, (p) => {
+      const open = p.issues.filter(i => i.status === 'open');
+      const resolved = p.issues.filter(i => i.status === 'resolved');
+      const group = dragged.status === 'open' ? open : resolved;
+      const fromIndex = group.findIndex(i => i.id === dragId);
+      const toIndex = group.findIndex(i => i.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return p;
+      const nextGroup = [...group];
+      const [moved] = nextGroup.splice(fromIndex, 1);
+      nextGroup.splice(toIndex, 0, moved);
+
+      return {
+        ...p,
+        issues: dragged.status === 'open' ? [...nextGroup, ...resolved] : [...open, ...nextGroup],
+        lastUpdatedAt: timestamp
+      };
+    });
+  };
 
   const locationDisplay = useMemo(() => {
     const parts: string[] = [];
@@ -940,24 +1077,27 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-400 p-3 sm:p-4 bg-white shadow-sm">
-        <div className="mb-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-gray-900">Issues</h4>
+      <div className="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-3 sm:px-4 py-3 bg-amber-50/60 border-b border-amber-100">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-900">Issues</h4>
+              <span className="text-[11px] text-amber-900/70">{sortedIssues.length}</span>
+            </div>
             <div className="flex items-center gap-1">
               {isEditMode ? (
                 <>
                   <button
                     type="button"
                     onClick={saveEdits}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                    className="text-[10px] px-2 py-1 rounded bg-white/70 text-amber-900 hover:bg-white transition-colors border border-amber-200"
                   >
                     Save
                   </button>
                   <button
                     type="button"
                     onClick={cancelEdits}
-                    className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="text-[10px] px-2 py-1 rounded text-amber-900/80 hover:bg-white/70 transition-colors"
                   >
                     Cancel
                   </button>
@@ -967,7 +1107,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   <button
                     type="button"
                     onClick={() => setShowIssueForm(v => !v)}
-                    className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-0.5"
+                    className="text-[10px] px-2 py-1 rounded text-amber-900/80 hover:bg-white/70 transition-colors flex items-center gap-1 border border-transparent hover:border-amber-200"
                   >
                     <Plus className="w-3 h-3" />
                     {showIssueForm ? 'Close' : 'Add'}
@@ -975,7 +1115,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   <button
                     type="button"
                     onClick={enterEditMode}
-                    className="text-[10px] px-1.5 py-0.5 rounded text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="text-[10px] px-2 py-1 rounded text-amber-900/80 hover:bg-white/70 transition-colors border border-transparent hover:border-amber-200"
                   >
                     Edit
                   </button>
@@ -983,16 +1123,17 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
               )}
             </div>
           </div>
+
           {showIssueForm && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input
-                className="rounded-md border px-2 py-2 text-sm w-full"
+                className="rounded-md border px-2 py-2 text-sm w-full bg-white"
                 placeholder="Issue title"
                 value={newIssueTitle}
                 onChange={(e) => setNewIssueTitle(e.target.value)}
               />
               <input
-                className="rounded-md border px-2 py-2 text-sm w-full"
+                className="rounded-md border px-2 py-2 text-sm w-full bg-white"
                 placeholder="Initial note"
                 value={newIssueNote}
                 onChange={(e) => setNewIssueNote(e.target.value)}
@@ -1004,59 +1145,177 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
             </div>
           )}
         </div>
-        <div className="divide-y divide-gray-100">
-          {sortedIssues.map((issue) => (
-            <div key={issue.id} className="py-3">
-              <div className="flex items-start justify-between gap-3 pb-2 border-b border-gray-100">
-                {isEditMode ? (
-                  <input
-                    className="flex-1 rounded-md border px-2 py-1.5 text-sm font-semibold"
-                    value={editingValues[`issue-${issue.id}`] || ''}
-                    onChange={(e) => updateEditValue(`issue-${issue.id}`, e.target.value)}
-                    placeholder="Issue title"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setOpenIssueMenuId(prev => (prev === issue.id ? null : issue.id))}
-                    className="flex-1 flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-gray-50 transition-colors -ml-2"
-                  >
-                    <span className={`font-semibold text-[15px] text-left ${issue.status === 'resolved' ? 'text-gray-400' : 'text-gray-900'}`}>
-                      {issue.title}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openIssueMenuId === issue.id ? 'rotate-180' : ''}`} />
-                  </button>
-                )}
-                {!isEditMode && issue.pinToHud && <Star className="w-4 h-4 text-amber-500 flex-shrink-0 mt-1" />}
-              </div>
-              {!isEditMode && openIssueMenuId === issue.id && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => toggleIssueStatus(issue.id)}
-                    className={`px-3 py-1 rounded-full border ${issue.status === 'open' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}
-                  >
-                    {issue.status === 'open' ? 'Mark resolved' : 'Mark open'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startSubpointEntry(issue.id)}
-                    className="px-3 py-1 rounded-full border bg-gray-100 border-gray-200 text-gray-800 flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add note/procedure
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteIssue(issue.id)}
-                    className="px-3 py-1 rounded-full border bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 transition-colors"
-                  >
-                    Delete
-                  </button>
+
+        <div className="p-3 sm:p-4 space-y-3">
+          {sortedIssues.map((issue, idx) => {
+            const isDragging = draggingIssueId === issue.id;
+            const isDragOver = dragOverIssueId === issue.id && draggingIssueId && draggingIssueId !== issue.id;
+            const isResolved = issue.status === 'resolved';
+            const canDrag = !isEditMode;
+            const resolvedExpanded = expandedResolvedIssueIds.has(issue.id);
+            const shouldShowSubpoints = isEditMode || !isResolved || resolvedExpanded;
+
+            return (
+              <div
+                key={issue.id}
+                className={`relative rounded-lg border bg-white p-3 shadow-sm transition ${
+                  isResolved ? 'border-gray-200 opacity-75' : 'border-gray-200'
+                } ${isDragOver ? 'ring-2 ring-amber-200' : ''} ${isDragging ? 'opacity-50' : ''}`}
+                onDragOver={(e) => {
+                  if (!canDrag || !draggingIssueId) return;
+                  e.preventDefault();
+                  setDragOverIssueId(issue.id);
+                }}
+                onDragLeave={() => {
+                  if (dragOverIssueId === issue.id) setDragOverIssueId(null);
+                }}
+                onDrop={(e) => {
+                  if (!canDrag || !draggingIssueId) return;
+                  e.preventDefault();
+                  reorderIssuesWithinStatus(draggingIssueId, issue.id);
+                  setDraggingIssueId(null);
+                  setDragOverIssueId(null);
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                          isResolved ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-800'
+                        }`}
+                        title={`Issue ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </span>
+                      {!isEditMode && (
+                        <span
+                          draggable={canDrag}
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            setDraggingIssueId(issue.id);
+                            try {
+                              e.dataTransfer.setData('text/plain', issue.id);
+                            } catch {
+                              // ignore
+                            }
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragEnd={() => {
+                            setDraggingIssueId(null);
+                            setDragOverIssueId(null);
+                          }}
+                          className="text-gray-300 hover:text-gray-500 cursor-grab"
+                          title="Drag to reorder"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      {isEditMode ? (
+                        <input
+                          className="w-full rounded-md border px-2 py-1.5 text-sm font-semibold"
+                          value={editingValues[`issue-${issue.id}`] || ''}
+                          onChange={(e) => updateEditValue(`issue-${issue.id}`, e.target.value)}
+                          placeholder="Issue title"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`text-sm font-semibold break-words ${isResolved ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                            {issue.title}
+                          </div>
+                          {issue.pinToHud && <Star className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                        </div>
+                      )}
+                      {!isEditMode && isResolved && (
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <div className="text-[11px] text-gray-400">Resolved</div>
+                          {issue.subpoints.length > 0 && (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedResolvedIssueIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(issue.id)) next.delete(issue.id);
+                                  else next.add(issue.id);
+                                  return next;
+                                });
+                              }}
+                            >
+                              {resolvedExpanded ? 'Hide notes' : `Show notes (${issue.subpoints.length})`}
+                              <ChevronDown className={`w-3 h-3 transition-transform ${resolvedExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isEditMode && (
+                    <div className="relative" data-issue-menu-root={issue.id}>
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenIssueMenuId(prev => (prev === issue.id ? null : issue.id));
+                        }}
+                        title="Issue actions"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {openIssueMenuId === issue.id && (
+                        <div className={`absolute right-0 w-44 rounded-lg border border-gray-200 bg-white shadow-lg z-20 overflow-hidden ${
+                          idx >= sortedIssues.length - 1 ? 'bottom-full mb-1' : 'mt-1'
+                        }`}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => {
+                              setOpenIssueMenuId(null);
+                              startSubpointEntry(issue.id);
+                            }}
+                          >
+                            <Plus className="w-3.5 h-3.5 text-gray-600" />
+                            Add detail
+                          </button>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                            onClick={() => {
+                              setOpenIssueMenuId(null);
+                              toggleIssueStatus(issue.id);
+                            }}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${issue.status === 'open' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                            {issue.status === 'open' ? 'Mark resolved' : 'Mark open'}
+                          </button>
+                          <div className="border-t border-gray-100" />
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-xs text-left hover:bg-rose-50 text-rose-700 flex items-center gap-2"
+                            onClick={() => {
+                              setOpenIssueMenuId(null);
+                              deleteIssue(issue.id);
+                            }}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className="mt-2 ml-1 space-y-1.5">
-                {issue.subpoints.map(sub => {
+
+                {shouldShowSubpoints && (issue.subpoints.length > 0) && (
+                  <div className="mt-2 space-y-2">
+                    {issue.subpoints.map(sub => {
                   const isProcedure = sub.type === 'procedure' && sub.procedure;
                   if (isProcedure) {
                     const dayCount = computeDayCount(sub.procedure?.date || '');
@@ -1107,7 +1366,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                               )}
                             </div>
                             <div className="text-xs text-gray-600">
-                              {sub.procedure?.date ? new Date(sub.procedure.date).toLocaleDateString() : 'Date not set'}
+                              {sub.procedure?.date ? new Date(sub.procedure.date).toLocaleDateString('en-AU') : 'Date not set'}
                             </div>
                             {sub.procedure?.notes && (
                               <div className="text-sm text-gray-700 whitespace-pre-wrap">{sub.procedure.notes}</div>
@@ -1118,8 +1377,105 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                     );
                   }
 
+                  const isAntibiotic = sub.type === 'antibiotic' && sub.antibiotic;
+                  if (isAntibiotic) {
+                    const dayCount = computeDayCount(sub.antibiotic?.startDate || '');
+                    // For antibiotics, Day 1 is the first day (add 1 to make 0 -> 1)
+                    const currentDay = dayCount !== null ? dayCount + 1 : null;
+                    
+                    // Check if today is the stop date (final day)
+                    const stopDayCount = sub.antibiotic?.stopDate ? computeDayCount(sub.antibiotic.stopDate) : null;
+                    const isFinalDay = stopDayCount === 0;
+                    const isPastStopDate = stopDayCount !== null && stopDayCount > 0;
+                    
+                    let badgeText: string;
+                    let badgeClass = 'bg-emerald-100 text-emerald-700';
+                    
+                    if (currentDay === null) {
+                      badgeText = 'No date';
+                    } else if (dayCount !== null && dayCount < 0) {
+                      badgeText = 'Upcoming';
+                    } else if (isFinalDay) {
+                      badgeText = `Day ${currentDay} — FINAL DAY`;
+                      badgeClass = 'bg-amber-100 text-amber-800 font-semibold';
+                    } else if (isPastStopDate) {
+                      badgeText = `Day ${currentDay} — Course ended`;
+                      badgeClass = 'bg-gray-100 text-gray-600';
+                    } else {
+                      badgeText = `Day ${currentDay}`;
+                    }
+                    
+                    return (
+                      <div key={sub.id} className={`text-sm text-gray-800 flex flex-col gap-1 border rounded-md p-2 ${isFinalDay ? 'border-amber-200 bg-amber-50' : isPastStopDate ? 'border-gray-200 bg-gray-50' : 'border-emerald-100 bg-emerald-50'}`}>
+                        {isEditMode ? (
+                          <>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <input
+                                className="flex-1 rounded-md border px-2 py-1 text-sm"
+                                value={editingValues[`subpoint-abx-name-${sub.id}`] || ''}
+                                onChange={(e) => updateEditValue(`subpoint-abx-name-${sub.id}`, e.target.value)}
+                                placeholder="Antibiotic name"
+                              />
+                              <input
+                                type="date"
+                                className="rounded-md border px-2 py-1 text-sm"
+                                value={editingValues[`subpoint-abx-date-${sub.id}`] || ''}
+                                onChange={(e) => updateEditValue(`subpoint-abx-date-${sub.id}`, e.target.value)}
+                                title="Start date"
+                              />
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                              <label className="text-xs text-gray-600 flex items-center gap-1">
+                                Stop date:
+                                <input
+                                  type="date"
+                                  className="rounded-md border px-2 py-1 text-sm"
+                                  value={editingValues[`subpoint-abx-stop-${sub.id}`] || ''}
+                                  onChange={(e) => updateEditValue(`subpoint-abx-stop-${sub.id}`, e.target.value)}
+                                />
+                              </label>
+                              {editingValues[`subpoint-abx-stop-${sub.id}`] && (
+                                <button
+                                  type="button"
+                                  className="text-xs text-gray-500 hover:text-gray-700"
+                                  onClick={() => updateEditValue(`subpoint-abx-stop-${sub.id}`, '')}
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              className="rounded-md border px-2 py-1 text-sm"
+                              value={editingValues[`subpoint-abx-notes-${sub.id}`] || ''}
+                              onChange={(e) => updateEditValue(`subpoint-abx-notes-${sub.id}`, e.target.value)}
+                              placeholder="Notes (optional)"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-gray-900">💊 {sub.antibiotic?.name}</span>
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full ${badgeClass}`}>
+                                {badgeText}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              Started {sub.antibiotic?.startDate ? new Date(sub.antibiotic.startDate).toLocaleDateString('en-AU') : 'Date not set'}
+                              {sub.antibiotic?.stopDate && (
+                                <span> · Ends {new Date(sub.antibiotic.stopDate).toLocaleDateString('en-AU')}</span>
+                              )}
+                            </div>
+                            {sub.antibiotic?.notes && (
+                              <div className="text-sm text-gray-700 whitespace-pre-wrap">{sub.antibiotic.notes}</div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div key={sub.id} className="text-[13px] text-gray-600 flex items-start pl-1">
+                    <div key={sub.id} className="text-[13px] text-gray-600 flex items-start">
                       <span className="mr-2 flex-shrink-0 text-gray-400">•</span>
                       {isEditMode ? (
                         <input
@@ -1133,9 +1489,15 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                       )}
                     </div>
                   );
-                })}
-              </div>
-              {!isEditMode && activeSubpointIssueId === issue.id && (
+                    })}
+                  </div>
+                )}
+
+                {!isEditMode && issue.subpoints.length === 0 && activeSubpointIssueId !== issue.id && (
+                  <div className="mt-2 text-xs text-gray-400">No notes yet.</div>
+                )}
+
+                {!isEditMode && activeSubpointIssueId === issue.id && (
                 <div className="mt-2 space-y-2 rounded-md border border-gray-200 p-2 bg-gray-50">
                   <div className="flex items-center justify-between text-xs text-gray-700">
                     <span className="font-medium">Add as</span>
@@ -1153,6 +1515,13 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                         onClick={() => setSubpointEntryType(prev => ({ ...prev, [issue.id]: 'procedure' }))}
                       >
                         Procedure
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-2 py-1 rounded-full border text-[11px] ${ (subpointEntryType[issue.id] || 'note') === 'antibiotic' ? 'bg-white border-gray-300 text-gray-900' : 'bg-transparent border-transparent text-gray-600 hover:bg-white/70'}`}
+                        onClick={() => setSubpointEntryType(prev => ({ ...prev, [issue.id]: 'antibiotic' }))}
+                      >
+                        Antibiotic
                       </button>
                     </div>
                   </div>
@@ -1173,6 +1542,75 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                         }
                       }}
                     />
+                  ) : (subpointEntryType[issue.id] || 'note') === 'antibiotic' ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          className="rounded-md border px-2 py-1 text-sm"
+                          placeholder="Antibiotic name"
+                          value={antibioticDrafts[issue.id]?.name || ''}
+                          onChange={(e) => setAntibioticDrafts(prev => ({ ...prev, [issue.id]: { ...(prev[issue.id] || defaultAntibioticDraft()), name: e.target.value } }))}
+                        />
+                        <input
+                          type="date"
+                          className="rounded-md border px-2 py-1 text-sm"
+                          value={antibioticDrafts[issue.id]?.startDate || ''}
+                          onChange={(e) => setAntibioticDrafts(prev => ({ ...prev, [issue.id]: { ...(prev[issue.id] || defaultAntibioticDraft()), startDate: e.target.value } }))}
+                        />
+                        <input
+                          className="sm:col-span-2 rounded-md border px-2 py-1 text-sm"
+                          placeholder="Notes (optional)"
+                          value={antibioticDrafts[issue.id]?.notes || ''}
+                          onChange={(e) => setAntibioticDrafts(prev => ({ ...prev, [issue.id]: { ...(prev[issue.id] || defaultAntibioticDraft()), notes: e.target.value } }))}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-700">
+                        <span>Course:</span>
+                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                          {[3, 5, 7].map((days, idx) => {
+                            const isSelected = antibioticDrafts[issue.id]?.stopDate === calculateStopDate(antibioticDrafts[issue.id]?.startDate || '', days);
+                            return (
+                              <button
+                                key={days}
+                                type="button"
+                                className={`px-3 py-1 text-[11px] transition-colors ${
+                                  isSelected
+                                    ? 'bg-emerald-100 text-emerald-800 font-medium'
+                                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                                } ${idx > 0 ? 'border-l border-gray-300' : ''} disabled:opacity-50`}
+                                onClick={() => {
+                                  const startDate = antibioticDrafts[issue.id]?.startDate || '';
+                                  if (startDate) {
+                                    setAntibioticDrafts(prev => ({ ...prev, [issue.id]: { ...(prev[issue.id] || defaultAntibioticDraft()), stopDate: calculateStopDate(startDate, days) } }));
+                                  }
+                                }}
+                                disabled={!antibioticDrafts[issue.id]?.startDate}
+                              >
+                                {days}d
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {antibioticDrafts[issue.id]?.stopDate && (
+                          <>
+                            <span className="text-emerald-600">
+                              → {new Date(antibioticDrafts[issue.id].stopDate).toLocaleDateString('en-AU')}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-gray-400 hover:text-gray-600"
+                              onClick={() => setAntibioticDrafts(prev => ({ ...prev, [issue.id]: { ...(prev[issue.id] || defaultAntibioticDraft()), stopDate: '' } }))}
+                              title="Clear stop date"
+                            >
+                              ×
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Day 1 starts on the date entered (first dose date)
+                      </div>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1228,7 +1666,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                       disabled={
                         (subpointEntryType[issue.id] || 'note') === 'note'
                           ? !(subpointDrafts[issue.id] || '').trim()
-                          : !((procedureDrafts[issue.id]?.name || '').trim() && (procedureDrafts[issue.id]?.date || ''))
+                          : (subpointEntryType[issue.id] || 'note') === 'antibiotic'
+                            ? !((antibioticDrafts[issue.id]?.name || '').trim() && (antibioticDrafts[issue.id]?.startDate || ''))
+                            : !((procedureDrafts[issue.id]?.name || '').trim() && (procedureDrafts[issue.id]?.date || ''))
                       }
                     >
                       Add
@@ -1237,8 +1677,9 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   </div>
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
           {sortedIssues.length === 0 && <p className="text-sm text-gray-500">No issues documented yet.</p>}
         </div>
       </div>
@@ -1330,7 +1771,7 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
                   >
                     <div className="font-medium text-left text-gray-900">{inv.name}</div>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{new Date(inv.lastUpdatedAt).toLocaleDateString()}</span>
+                      <span>{new Date(inv.lastUpdatedAt).toLocaleDateString('en-AU')}</span>
                       <ChevronDown className={`w-4 h-4 transition-transform ${openInvestigationMenuId === inv.id ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
@@ -1403,6 +1844,12 @@ export const PatientDetail: React.FC<PatientDetailProps> = ({ patient }) => {
           )}
         </div>
       </div>
+
+      {/* Billing Section */}
+      <BillingSection patient={patient} />
+
+      {/* Admission & Discharge Checklist */}
+      <DischargeChecklist patient={patient} />
 
       <div className="rounded-xl border border-green-500 p-4 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-3">

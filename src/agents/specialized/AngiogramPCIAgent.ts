@@ -1,6 +1,7 @@
 import { MedicalAgent } from '@/agents/base/MedicalAgent';
 import type {
   MedicalContext,
+  MedicalContextWithLockedFacts,
   ChatMessage,
   ReportSection,
   MedicalReport,
@@ -59,7 +60,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
     }
   }
 
-  async process(input: string, context?: MedicalContext): Promise<MedicalReport> {
+  async process(input: string, context?: MedicalContextWithLockedFacts): Promise<MedicalReport> {
     await this.initializeSystemPrompt();
 
     const startTime = Date.now();
@@ -79,7 +80,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
       // Detect procedure type from dictation
       const procedureType = await this.detectProcedureType(input);
       console.log(`🔍 Detected procedure type: ${procedureType}`);
-      
+
       // Store procedure type in memory for use in other methods
       this.updateMemory('detectedProcedureType', procedureType);
 
@@ -100,6 +101,22 @@ export class AngiogramPCIAgent extends MedicalAgent {
       const regexExtracted = this.extractAngioPCIData(correctedInput, procedureType);
       console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
 
+      // Check if this is a proof mode extraction request (early return before expensive LLM generation)
+      if (context?.requestProofMode) {
+        console.log('[AngioPCIAgent] Proof mode requested - extracting facts and pausing before LLM generation');
+        const keyFacts = this.extractKeyFacts(regexExtracted, procedureType);
+
+        // Return early with extracted data and facts for proof mode
+        const processingTime = Date.now() - startTime;
+        return {
+          ...this.createReport('', [], context, processingTime, 0.5),
+          status: 'awaiting_proof' as any,
+          extractedData: regexExtracted,
+          procedureType, // Include for resume
+          keyFacts
+        } as any;
+      }
+
       reportProgress(20, 'Validating stent and lesion data');
 
       const validation = await this.validateAndDetectGaps(regexExtracted, correctedInput);
@@ -107,6 +124,12 @@ export class AngiogramPCIAgent extends MedicalAgent {
       reportProgress(35, 'Applying data corrections');
 
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
+
+      // Apply locked facts to extracted data (if proof mode was used)
+      if (context?.lockedFacts && Object.keys(context.lockedFacts).length > 0) {
+        console.log('[AngioPCIAgent] Applying locked facts from proof mode');
+        this.applyLockedFacts(context.lockedFacts, correctedData);
+      }
 
       // INTERACTIVE CHECKPOINT: Check for critical gaps
       reportProgress(40, 'Checking registry fields');
@@ -137,7 +160,7 @@ export class AngiogramPCIAgent extends MedicalAgent {
 
       // Generate structured report content based on procedure type
       reportProgress(60, 'Generating report');
-      const reportContent = await this.generateStructuredReport(correctedInput, procedureData, procedureType);
+      const reportContent = await this.generateStructuredReport(correctedInput, procedureData, procedureType, context);
 
       // Validate dominance before normalization
       const dominanceValidation = this.validateDominance(correctedInput, reportContent);
@@ -377,12 +400,27 @@ Use the clinician's exact terminology as provided. Include all relevant details 
   private async generateStructuredReport(
     input: string,
     procedureData: any,
-    procedureType: ProcedureType
+    procedureType: ProcedureType,
+    context?: MedicalContextWithLockedFacts
   ): Promise<string> {
     console.log(`🏥 Generating ${procedureType} report with LMStudio ${MODEL_CONFIG.REASONING_MODEL}...`);
 
+    // Inject fact-locking instruction if user confirmed facts exist (Phase 4)
+    let enhancedSystemPrompt = this.systemPrompt;
+    const hasLockedFacts = context?.lockedFacts && Object.keys(context.lockedFacts).length > 0;
+
+    if (hasLockedFacts && context?.lockedFacts) {
+      const lockedFactsList = Object.entries(context.lockedFacts)
+        .map(([field, value]) => `  - ${field}: ${value}`)
+        .join('\n');
+
+      enhancedSystemPrompt += `\n\n**CRITICAL: USER-CONFIRMED FACTS (DO NOT MODIFY)**\n${lockedFactsList}\n\nYou MUST use these exact values in your narrative. Do NOT change, rephrase, or contradict these confirmed facts.`;
+
+      console.log('[AngioPCIAgent] Injected fact-locking instructions into LLM prompt');
+    }
+
     try {
-      const report = await this.lmStudioService.processWithAgent(this.systemPrompt, input);
+      const report = await this.lmStudioService.processWithAgent(enhancedSystemPrompt, input);
 
       console.log('✅ Report generated successfully');
       console.log('📄 Report length:', report.length, 'characters');
@@ -870,13 +908,52 @@ ${input}`;
 
   private extractVesselFindings(input: string): Record<string, string> {
     const findings: Record<string, string> = {};
-    const vessels = ['lm', 'lad', 'lcx', 'rca'];
+    const text = input.toLowerCase();
     
-    for (const vessel of vessels) {
-      const vesselPattern = new RegExp(`${vessel}[\\s:]+([^.]+)`, 'i');
-      const match = input.match(vesselPattern);
-      if (match) {
-        findings[vessel] = match[1].trim();
+    // Split into sentences for context-aware extraction
+    const sentences = input.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+    
+    // Vessel patterns with synonyms (natural speech patterns)
+    const vesselPatterns: Record<string, RegExp[]> = {
+      lm: [
+        /left\s*main[^.]*?(?=\.|$)/i,
+        /\blm\b[^.]*?(?=\.|$)/i
+      ],
+      lad: [
+        /(?:left\s*anterior\s*descending|\blad\b)[^.]*?(?=\.|$)/i,
+        /([^.]*?)(?:left\s*anterior\s*descending|\blad\b)([^.]*?)(?=\.|$)/i,
+        /diagonal[^.]*?(?=\.|$)/i  // D1, D2 are LAD branches
+      ],
+      lcx: [
+        /(?:left\s*)?circumflex[^.]*?(?=\.|$)/i,
+        /\blcx\b[^.]*?(?=\.|$)/i,
+        /([^.]*?)circumflex([^.]*?)(?=\.|$)/i,
+        /obtuse\s*marginal[^.]*?(?=\.|$)/i  // OM is LCx branch
+      ],
+      rca: [
+        /right\s*coronary\s*artery[^.]*?(?=\.|$)/i,
+        /\brca\b[^.]*?(?=\.|$)/i,
+        /([^.]*?)right\s*coronary([^.]*?)(?=\.|$)/i
+      ]
+    };
+    
+    // Extract findings for each vessel
+    for (const [vessel, patterns] of Object.entries(vesselPatterns)) {
+      for (const sentence of sentences) {
+        for (const pattern of patterns) {
+          const match = sentence.match(pattern);
+          if (match) {
+            // Combine match groups if multiple, otherwise use full match
+            const finding = match[0].trim();
+            if (finding && !findings[vessel]) {
+              findings[vessel] = finding;
+              break;
+            } else if (finding && findings[vessel]) {
+              // Append additional findings for same vessel
+              findings[vessel] += '. ' + finding;
+            }
+          }
+        }
       }
     }
     
@@ -1285,6 +1362,271 @@ If you have any questions about these results, please don't hesitate to contact 
     }
 
     return extracted;
+  }
+
+  /**
+   * Extract key facts from Angio/PCI data for proof mode verification
+   * Returns array of critical facts that must be verified before report generation
+   */
+  extractKeyFacts(extracted: AngioPCIExtractedData, procedureType: ProcedureType): import('@/types/medical.types').KeyFact[] {
+    const facts: import('@/types/medical.types').KeyFact[] = [];
+    let factId = 1;
+
+    // Category 1: Procedure Details
+	    if (extracted.accessSite) {
+	      facts.push({
+	        id: String(factId++),
+	        category: 'Procedure Details',
+	        label: 'Access Site',
+	        value: extracted.accessSite,
+	        sourceField: 'accessSite',
+	        critical: false,
+	        confidence: 0.95,
+	        status: 'pending'
+	      });
+	    }
+
+    // Procedure type (derived from parameter)
+    const procedureTypeDisplay = procedureType === 'DIAGNOSTIC_ANGIOGRAM' ? 'Diagnostic Angiogram' :
+                                 procedureType === 'PCI_INTERVENTION' ? 'PCI Intervention' :
+                                 'Combined Angiogram/PCI';
+	    facts.push({
+	      id: String(factId++),
+	      category: 'Procedure Details',
+	      label: 'Procedure Type',
+	      value: procedureTypeDisplay,
+	      sourceField: 'procedureType',
+	      critical: false,
+	      confidence: 0.98,
+	      status: 'pending'
+	    });
+
+    // Category 2: Lesion Details (only for PCI)
+    if (procedureType === 'PCI_INTERVENTION' || procedureType === 'COMBINED') {
+	      if (extracted.targetVessel) {
+	        facts.push({
+	          id: String(factId++),
+	          category: 'Lesion Details',
+	          label: 'Target Vessel',
+	          value: extracted.targetVessel,
+	          sourceField: 'targetVessel',
+	          critical: true, // Important for report accuracy
+	          confidence: 0.95,
+	          status: 'pending'
+	        });
+	      }
+
+	      if (extracted.stenosisPercent !== undefined) {
+	        facts.push({
+	          id: String(factId++),
+	          category: 'Lesion Details',
+	          label: 'Stenosis Severity',
+	          value: `${extracted.stenosisPercent}%`,
+	          sourceField: 'stenosisPercent',
+	          critical: false,
+	          confidence: 0.92,
+	          status: 'pending'
+	        });
+	      }
+
+      // Category 3: Stent Details (CRITICAL for registry)
+      if (extracted.intervention) {
+        const stentType = extracted.intervention.stentType;
+        const stentSize = extracted.intervention.stentSize;
+        const stentLength = extracted.intervention.stentLength;
+
+        // Combined stent field (most useful for verification)
+	        if (stentType && stentSize && stentLength) {
+	          facts.push({
+	            id: String(factId++),
+	            category: 'Stent Details',
+	            label: 'Stent Type & Size',
+	            value: `${stentType} ${stentSize} × ${stentLength}mm`,
+	            sourceField: 'intervention.stentType+size+length',
+	            critical: true, // REQUIRED for device tracking & registry
+	            confidence: 0.93,
+	            status: 'pending'
+	          });
+	        } else {
+          // Individual fields if combined isn't available
+	          if (stentType) {
+	            facts.push({
+	              id: String(factId++),
+	              category: 'Stent Details',
+	              label: 'Stent Type',
+	              value: stentType,
+	              sourceField: 'intervention.stentType',
+	              critical: true,
+	              confidence: 0.90,
+	              status: 'pending'
+	            });
+	          }
+	          if (stentSize) {
+	            facts.push({
+	              id: String(factId++),
+	              category: 'Stent Details',
+	              label: 'Stent Diameter',
+	              value: `${stentSize}mm`,
+	              sourceField: 'intervention.stentSize',
+	              critical: true,
+	              confidence: 0.88,
+	              status: 'pending'
+	            });
+	          }
+	          if (stentLength) {
+	            facts.push({
+	              id: String(factId++),
+	              category: 'Stent Details',
+	              label: 'Stent Length',
+	              value: `${stentLength}mm`,
+	              sourceField: 'intervention.stentLength',
+	              critical: true,
+	              confidence: 0.88,
+	              status: 'pending'
+	            });
+	          }
+	        }
+	      }
+
+      // Category 4: TIMI Flow (CRITICAL for success assessment)
+      if (extracted.timiFlow) {
+	        if (extracted.timiFlow.pre !== undefined) {
+	          facts.push({
+	            id: String(factId++),
+	            category: 'TIMI Flow',
+	            label: 'Pre-Intervention TIMI',
+	            value: `TIMI ${extracted.timiFlow.pre}`,
+	            sourceField: 'timiFlow.pre',
+	            critical: true, // REQUIRED for success documentation
+	            confidence: 0.95,
+	            status: 'pending'
+	          });
+	        }
+	        if (extracted.timiFlow.post !== undefined) {
+	          facts.push({
+	            id: String(factId++),
+	            category: 'TIMI Flow',
+	            label: 'Post-Intervention TIMI',
+	            value: `TIMI ${extracted.timiFlow.post}`,
+	            sourceField: 'timiFlow.post',
+	            critical: true, // REQUIRED for success documentation
+	            confidence: 0.95,
+	            status: 'pending'
+	          });
+	        }
+	      }
+	    }
+
+    // Category 5: Resources (safety documentation)
+    if (extracted.resources) {
+	      if (extracted.resources.contrastVolume !== undefined) {
+	        facts.push({
+	          id: String(factId++),
+	          category: 'Resources',
+	          label: 'Contrast Volume',
+	          value: `${extracted.resources.contrastVolume}mL`,
+	          sourceField: 'resources.contrastVolume',
+	          critical: false, // Important for safety but not blocking
+	          confidence: 0.92,
+	          status: 'pending'
+	        });
+	      }
+	      if (extracted.resources.fluoroscopyTime !== undefined) {
+	        facts.push({
+	          id: String(factId++),
+	          category: 'Resources',
+	          label: 'Fluoroscopy Time',
+	          value: `${extracted.resources.fluoroscopyTime} minutes`,
+	          sourceField: 'resources.fluoroscopyTime',
+	          critical: false, // Important for safety but not blocking
+	          confidence: 0.90,
+	          status: 'pending'
+	        });
+	      }
+    }
+
+    console.log(`[AngioPCIAgent] Extracted ${facts.length} key facts for proof mode`);
+    return facts;
+  }
+
+  /**
+   * Apply locked facts from proof mode to extracted data
+   * (Phase 3: Fact Locking Enforcement)
+   */
+  private applyLockedFacts(
+    lockedFacts: Record<string, string>,
+    extracted: AngioPCIExtractedData
+  ): void {
+    console.log('[AngioPCIAgent] Applying locked facts to extracted data...');
+
+    for (const [sourceField, confirmedValue] of Object.entries(lockedFacts)) {
+      const [dataType, ...fieldPath] = sourceField.split('.');
+      const field = fieldPath.join('.');
+
+      try {
+        if (dataType === 'accessSite') {
+          extracted.accessSite = confirmedValue;
+          console.log(`  ✅ Locked accessSite: ${confirmedValue}`);
+        } else if (dataType === 'targetVessel') {
+          extracted.targetVessel = confirmedValue;
+          console.log(`  ✅ Locked targetVessel: ${confirmedValue}`);
+        } else if (dataType === 'stenosisPercent') {
+          extracted.stenosisPercent = parseInt(confirmedValue);
+          console.log(`  ✅ Locked stenosisPercent: ${confirmedValue}%`);
+        } else if (dataType === 'intervention') {
+          // Handle stent details
+          if (field === 'stentType') {
+            if (!extracted.intervention) extracted.intervention = {};
+            extracted.intervention.stentType = confirmedValue;
+            console.log(`  ✅ Locked stentType: ${confirmedValue}`);
+          } else if (field === 'stentSize') {
+            if (!extracted.intervention) extracted.intervention = {};
+            extracted.intervention.stentSize = parseFloat(confirmedValue);
+            console.log(`  ✅ Locked stentSize: ${confirmedValue}mm`);
+          } else if (field === 'stentLength') {
+            if (!extracted.intervention) extracted.intervention = {};
+            extracted.intervention.stentLength = parseFloat(confirmedValue);
+            console.log(`  ✅ Locked stentLength: ${confirmedValue}mm`);
+          } else if (field === 'stentType+size+length') {
+            // Parse combined field "Xience 3.0 × 18mm"
+            const match = confirmedValue.match(/(\w+)\s+([\d.]+)\s*[×x]\s*([\d.]+)/i);
+            if (match) {
+              if (!extracted.intervention) extracted.intervention = {};
+              extracted.intervention.stentType = match[1];
+              extracted.intervention.stentSize = parseFloat(match[2]);
+              extracted.intervention.stentLength = parseFloat(match[3]);
+              console.log(`  ✅ Locked combined stent: ${confirmedValue}`);
+            }
+          }
+        } else if (dataType === 'timiFlow') {
+          // Handle TIMI flow
+          if (field === 'pre') {
+            if (!extracted.timiFlow) extracted.timiFlow = {};
+            extracted.timiFlow.pre = parseInt(confirmedValue.replace('TIMI ', ''));
+            console.log(`  ✅ Locked TIMI flow (pre): ${confirmedValue}`);
+          } else if (field === 'post') {
+            if (!extracted.timiFlow) extracted.timiFlow = {};
+            extracted.timiFlow.post = parseInt(confirmedValue.replace('TIMI ', ''));
+            console.log(`  ✅ Locked TIMI flow (post): ${confirmedValue}`);
+          }
+        } else if (dataType === 'resources') {
+          // Handle resources
+          if (field === 'contrastVolume') {
+            if (!extracted.resources) extracted.resources = {};
+            extracted.resources.contrastVolume = parseFloat(confirmedValue);
+            console.log(`  ✅ Locked contrast volume: ${confirmedValue}mL`);
+          } else if (field === 'fluoroscopyTime') {
+            if (!extracted.resources) extracted.resources = {};
+            extracted.resources.fluoroscopyTime = parseFloat(confirmedValue);
+            console.log(`  ✅ Locked fluoroscopy time: ${confirmedValue}min`);
+          }
+        }
+      } catch (error) {
+        console.warn(`  ⚠️ Failed to apply locked fact ${sourceField}:`, error);
+      }
+    }
+
+    console.log('[AngioPCIAgent] ✅ Locked facts applied successfully');
   }
 
   /**

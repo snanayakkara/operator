@@ -7,10 +7,43 @@
  * - Seamless fallback to existing LMStudioService when disabled or unavailable
  * - Localhost-only processing for privacy
  * - Configuration management via YAML
+ * - E15: Key Facts proof mode support for confirmed facts
+ * - B7: Controlled stage vocabulary for progress tracking
  */
 
 import { logger } from '@/utils/Logger';
 import { toError } from '@/utils/errorHelpers';
+import type { StageName } from '@/types/progress.types';
+
+/**
+ * E15: KeyFacts schema for proof mode
+ * Generic schema that works across agents, with agent-specific extensions possible
+ */
+export interface KeyFacts {
+  patient?: {
+    name?: string;
+    dob?: string;
+    age?: number;
+    sex?: string;
+    filingCode?: string;
+  };
+  context?: {
+    indication?: string;
+    procedure?: string;
+  };
+  medications?: string[];
+  problems?: string[];
+  investigations?: Record<string, string>;
+  freeform?: Record<string, string>;
+}
+
+/**
+ * E15: Versioned envelope for KeyFacts
+ */
+export interface KeyFactsEnvelope {
+  version: 1;
+  facts: KeyFacts;
+}
 
 export interface DSPyConfig {
   api_base: string;
@@ -303,13 +336,22 @@ export class DSPyService {
    * Process transcript using DSPy predictor with SDK streaming
    *
    * Provides real-time progress updates during prompt processing and token generation.
+   * 
+   * @param agentType - The agent type to process with
+   * @param transcript - The transcript text to process
+   * @param options - Processing options including callbacks
+   * @param options.onProgress - Callback for stage progress (stage, percent, detail)
+   * @param options.onToken - Callback for streaming tokens
+   * @param options.facts - E15: Confirmed key facts from proof mode
+   * @param options.signal - AbortSignal for cancellation
    */
   public async processWithDSpyStreaming(
     agentType: string,
     transcript: string,
     options: {
-      onProgress?: (phase: string, progress: number, details?: string) => void;
+      onProgress?: (stage: string, percent: number, detail?: string) => void;
       onToken?: (delta: string, fullText: string) => void;
+      facts?: KeyFactsEnvelope;
       signal?: AbortSignal;
     } = {}
   ): Promise<DSPyResult> {
@@ -329,6 +371,7 @@ export class DSPyService {
         component: 'DSPyService',
         agent_type: agentType,
         transcript_length: transcript.length,
+        has_facts: !!options.facts,
         request_id: requestId
       });
 
@@ -342,13 +385,22 @@ export class DSPyService {
         };
       }
 
-      // Prepare request payload
-      const payload = {
+      // Prepare request payload with optional facts (E15)
+      const payload: Record<string, unknown> = {
         agent_type: agentType,
         transcript: transcript,
         request_id: requestId,
         options: {}
       };
+      
+      // E15: Include confirmed key facts if provided
+      if (options.facts) {
+        payload.facts = options.facts;
+        logger.info('Including confirmed key facts in DSPy request', {
+          component: 'DSPyService',
+          facts_version: options.facts.version
+        });
+      }
 
       // Make streaming request to DSPy server
       const controller = new AbortController();
@@ -413,7 +465,11 @@ export class DSPyService {
 
           switch (event) {
             case 'progress':
-              options.onProgress?.(data.phase, data.progress, data.details);
+              // B7: Support both new (stage/percent/detail) and legacy (phase/progress/details) formats
+              const stage = data.stage || data.phase || 'reasoning';
+              const percent = data.percent ?? data.progress ?? 0;
+              const detail = data.detail || data.details;
+              options.onProgress?.(stage, percent, detail);
               break;
 
             case 'token':

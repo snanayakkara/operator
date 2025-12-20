@@ -36,7 +36,8 @@ import {
   Combine,
   Camera,
   CheckSquare,
-  Calendar
+  Calendar,
+  Moon
 } from 'lucide-react';
 import type { AgentType } from '@/types/medical.types';
 
@@ -195,18 +196,8 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
     complexity: 'medium',
     colorTheme: 'blue'
   },
-  {
-    id: 'tavi-workup',
-    label: 'TAVI Workup',
-    description: 'Pre-procedural TAVI anatomical and clinical workup summary',
-    icon: ClipboardList,
-    group: 'workflows',
-    modes: ['dictate'],
-    agentType: 'tavi-workup',
-    estimatedTime: '3-5 min',
-    complexity: 'medium',
-    colorTheme: 'red'
-  },
+  // NOTE: Old 'tavi-workup' dictation action removed in Phase 7.
+  // Use 'structural-workups' (Shift+S) for TAVI workup management.
   {
     id: 'angiogram-pci',
     label: 'Angiogram/PCI',
@@ -328,7 +319,7 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
   },
   {
     id: 'bloods',
-    label: 'Bloods',
+    label: 'Order Bloods',
     description: 'Blood test results and analysis',
     icon: TestTube,
     group: 'patient-context',
@@ -339,7 +330,7 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
   },
   {
     id: 'imaging',
-    label: 'Imaging',
+    label: 'Order Imaging',
     description: 'Medical imaging reports and analysis',
     icon: Scan,
     group: 'patient-context',
@@ -383,7 +374,8 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
     icon: ClipboardList,
     group: 'documentation',
     shortcut: 'P',
-    modes: ['click'],
+    modes: ['dictate', 'type'],
+    agentType: 'pre-op-plan',
     colorTheme: 'blue'
   },
 
@@ -485,6 +477,27 @@ export const UNIFIED_ACTIONS: UnifiedAction[] = [
     shortcut: 'R',
     modes: ['click'],
     colorTheme: 'emerald'
+  },
+  {
+    id: 'xestro-dark-mode',
+    label: 'Dark Mode',
+    alias: 'Night Mode',
+    description: 'Toggle dark mode for Xestro EMR',
+    icon: Moon,
+    group: 'utilities',
+    modes: ['click'],
+    colorTheme: 'violet'
+  },
+  {
+    id: 'structural-workups',
+    label: 'Structural Workups',
+    alias: 'TAVI/PFO',
+    description: 'TAVI, PFO, mTEER workup management with Notion sync',
+    icon: Heart,
+    group: 'utilities',
+    shortcut: 'S',
+    modes: ['click'],
+    colorTheme: 'purple'
   }
 ];
 

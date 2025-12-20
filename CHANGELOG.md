@@ -9,6 +9,35 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.2.0] - 2025-12-20
+
+### Added
+
+- **TAVI Workup Presentation System**
+  - New landscape-first presentation window for TAVI workup review during clinical meetings
+  - Bento board layout with three-column grid (patient context, clinical data tiles, pinnable procedure plan)
+  - Professional typography using Avenir-like system fonts with CSS custom properties
+  - Keyboard navigation with arrow keys, Enter/Space to expand, Escape to collapse, and number keys for page switching
+
+- **Presentation Components**
+  - `PatientStrip`: Header with patient demographics, category chips, status badges, and completion percentage
+  - `PageTabBar`: Multi-page navigation with Overview, Imaging, Labs tabs and pin plan toggle
+  - `BentoTile`: Expandable cards with accent bars, focus states, and summary/full-text views
+  - `PlanCommandCard`: Procedure planning card with expandable fields and CT summary grid
+  - `ImagingGrid`: Auto-fill grid for CT frames and echo clips with add slot functionality
+
+- **Design System**
+  - CSS-only styling (no Tailwind) for isolation and maintainability
+  - 8px spacing grid with standardized gap tokens (xs, sm, md, lg, xl)
+  - Subtle shadows (xs, sm, md, lg) and transitions respecting `prefers-reduced-motion`
+  - Purple accent (#8B5CF6) for focus states with glow effect
+  - Surface/ink/line color tokens for consistent theming
+
+- **Responsive Design**
+  - Full three-column layout at ≥1280px
+  - Two-column with plan below at 960-1279px
+  - Single-column stack at <960px with hidden keyboard hints
+
 ## [4.1.1] - 2025-12-18
 
 ### Added

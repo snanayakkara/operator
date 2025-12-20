@@ -13,3 +13,7 @@ export { WarningsPanel } from './WarningsPanel';
 export { TroubleshootingSection } from './TroubleshootingSection';
 export { TAVIWorkupDisplay } from './TAVIWorkupDisplay';
 export { RightHeartCathDisplay } from './RightHeartCathDisplay';
+export { NextStepSuggestionsCard } from './NextStepSuggestionsCard';
+export { VisualProofMode } from './VisualProofMode';
+export { AudioProofMode } from './AudioProofMode';
+export { KeyFactsProofDialog } from './KeyFactsProofDialog';

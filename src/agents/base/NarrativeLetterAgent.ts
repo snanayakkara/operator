@@ -110,8 +110,9 @@ Generate coherent narrative prose suitable for medical correspondence between co
       console.error(`❌ ${this.name} processing error:`, error);
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
-      const truncatedInput = input.substring(0, 100);
-      const fallbackContent = `${truncatedInput}${input.length > 100 ? '...' : ''}`;
+      // Use more of the input for fallback (500 chars instead of 100)
+      const truncatedInput = input.substring(0, 500);
+      const fallbackContent = `${truncatedInput}${input.length > 500 ? '...' : ''}`;
       
       return this.createReport(
         fallbackContent,
@@ -244,17 +245,31 @@ Generate coherent narrative prose suitable for medical correspondence between co
 
   /**
    * Validate content meets minimum requirements and format appropriately
+   * 
+   * Note: Even when validation fails, we return the GENERATED content (not truncated input)
+   * to avoid losing valuable letter output. The error flag allows the UI to show warnings.
    */
   protected validateAndFormatContent(content: string, originalInput: string, confidence: number): { content: string; hasError: boolean; errorMessage?: string } {
     const wordCount = content.trim().split(/\s+/).length;
     
     // Check minimum requirements
     if (wordCount < 50 || confidence < 0.3) {
-      const truncatedInput = originalInput.substring(0, 100);
+      // Still return the generated content (even if low quality) - don't truncate input
+      // Only fall back to truncated input if generated content is essentially empty
+      if (content.trim().length < 20) {
+        const truncatedInput = originalInput.substring(0, 500);
+        return {
+          content: `${truncatedInput}${originalInput.length > 500 ? '...' : ''}`,
+          hasError: true,
+          errorMessage: 'Letter generation failed - showing original dictation.'
+        };
+      }
+      
+      // Return the generated content with a warning
       return {
-        content: `${truncatedInput}${originalInput.length > 100 ? '...' : ''}`,
+        content,
         hasError: true,
-        errorMessage: 'Dictation could not be parsed coherently due to insufficient content or low confidence.'
+        errorMessage: 'Generated letter may require review due to low confidence or insufficient content.'
       };
     }
 

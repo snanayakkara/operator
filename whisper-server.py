@@ -54,6 +54,10 @@ REPEAT_LIMIT = int(os.getenv("REPEAT_LIMIT", "6"))
 model_loaded = False
 model_path = MODEL_NAME
 
+# TTS model tracking
+tts_model = None
+tts_model_loaded = False
+
 def vad_preprocess(audio_path):
     """
     Preprocess audio with Voice Activity Detection (VAD) to remove silence/noise.
@@ -357,46 +361,104 @@ def transcribe_with_guards(audio_path, language=None):
 def load_model():
     """Pre-warm the Whisper model by running a dummy transcription"""
     global model_loaded
-    
+
     if not model_loaded:
         print(f"🔄 Pre-warming Whisper model: {MODEL_NAME}")
         print("📝 This may take a few minutes on first run...")
         start_time = time.time()
-        
+
         try:
             # Create a tiny dummy audio file to warm up the model (1 second of silence)
             dummy_file = tempfile.mktemp(suffix='.wav')
-            
+
             # Create a simple WAV file with 1 second of silence
             with wave.open(dummy_file, 'w') as wav_file:
                 wav_file.setnchannels(1)  # Mono
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setframerate(16000)  # 16kHz
-                
+
                 # Write 1 second of silence (16000 samples of value 0)
                 silence = struct.pack('<' + 'h' * 16000, *([0] * 16000))
                 wav_file.writeframes(silence)
-            
+
             # Run dummy transcription to load model into memory
             result = mlx_whisper.transcribe(
                 dummy_file,
                 path_or_hf_repo=MODEL_NAME,
                 language=None
             )
-            
+
             # Clean up dummy file
             os.unlink(dummy_file)
-            
+
             load_time = time.time() - start_time
             print(f"✅ Model pre-warmed in {load_time:.2f} seconds")
             model_loaded = True
-            
+
         except Exception as e:
             print(f"⚠️ Model pre-warming failed: {e}")
             print("🔄 Model will load on first transcription request")
             # Don't set model_loaded = True, let it load on first request
-    
+
     return model_loaded
+
+def load_tts_model():
+    """Load MLX-Audio TTS model (Kokoro-82M)"""
+    global tts_model, tts_model_loaded
+
+    if tts_model_loaded:
+        return True
+
+    try:
+        print("🔊 Loading MLX-Audio TTS model...")
+        print("📝 Model: mlx-community/chatterbox-turbo-4bit (Chatterbox TTS)")
+        start_time = time.time()
+
+        # Try to import and load MLX-Audio TTS
+        try:
+            from mlx_audio.tts.utils import load_model
+            from mlx_audio.tts.models.kokoro import KokoroPipeline
+
+            # Load the Chatterbox-Turbo-4bit model
+            model_id = 'mlx-community/chatterbox-turbo-4bit'
+            model = load_model(model_id)
+
+            # Create pipeline with American English
+            # Using 'af_heart' voice for neutral, professional medical context
+            pipeline = KokoroPipeline(
+                lang_code='a',  # American English
+                model=model,
+                repo_id=model_id
+            )
+
+            tts_model = {
+                'pipeline': pipeline,
+                'sample_rate': 24000,
+                'voice': 'af_heart'  # Default voice
+            }
+
+            load_time = time.time() - start_time
+            print(f"✅ MLX-Audio TTS loaded in {load_time:.2f} seconds")
+            print("📊 Model: Chatterbox-Turbo-4bit (0.1B parameters)")
+            print("🎙️ Default voice: af_heart (professional, neutral)")
+            print("💬 Supports expressive tags: [chuckle], [laugh], [sigh], etc.")
+            tts_model_loaded = True
+            return True
+
+        except ImportError as ie:
+            print(f"⚠️ MLX-Audio dependencies not available: {ie}")
+            print("💡 TTS features will be disabled")
+            print("📦 To enable TTS, install: pip install mlx-audio")
+            tts_model = None
+            tts_model_loaded = False
+            return False
+
+    except Exception as e:
+        print(f"⚠️ TTS model loading failed: {e}")
+        print("💡 TTS features will be disabled - continuing with transcription only")
+        tts_model = None
+        tts_model_loaded = False
+        return False
 
 def convert_audio_to_wav(input_file):
     """Convert audio file to WAV format using ffmpeg"""
@@ -709,21 +771,117 @@ def transcribe_bloods():
             }
         }), 500
 
+@app.route('/v1/audio/synthesis', methods=['POST'])
+def synthesize_speech():
+    """
+    Text-to-Speech endpoint using MLX-Audio (Kokoro-82M).
+
+    Request JSON:
+    {
+      "text": "Valve size: 26 millimeter Evolut Pro Plus",
+      "speed": 0.9  // Optional, default 1.0, range 0.5-2.0
+    }
+
+    Returns: WAV audio (24kHz, mono, PCM)
+    """
+    try:
+        # Check if TTS model is available
+        if not tts_model_loaded or tts_model is None:
+            return jsonify({
+                'error': 'TTS model not loaded',
+                'message': 'MLX-Audio TTS is not available. TTS features disabled.',
+                'features': {'tts_enabled': False}
+            }), 503
+
+        # Parse request
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+
+        text = data.get('text', '')
+        speed = data.get('speed', 1.0)
+
+        if not text:
+            return jsonify({'error': 'No text provided'}), 400
+
+        print(f"🔊 TTS synthesis request: '{text[:50]}...' (speed: {speed}x)")
+
+        try:
+            # Generate speech using MLX-Audio Kokoro pipeline
+            pipeline = tts_model['pipeline']
+            sample_rate = tts_model['sample_rate']
+            voice = tts_model['voice']
+
+            # Clamp speed to valid range (0.5x - 2.0x)
+            speed = max(0.5, min(2.0, speed))
+
+            # Generate audio using the pipeline
+            # Pipeline returns iterator of (start_time, end_time, audio_chunk)
+            audio_chunks = []
+            for _, _, audio in pipeline(text, voice=voice, speed=speed):
+                # audio is shape (1, samples) - extract the 1D array
+                if audio.ndim > 1:
+                    audio = audio[0]
+                audio_chunks.append(audio)
+
+            # Concatenate all chunks
+            if len(audio_chunks) == 0:
+                # Fallback: return short silence if generation failed
+                audio_array = np.zeros(int(sample_rate * 0.1), dtype=np.float32)
+            else:
+                audio_array = np.concatenate(audio_chunks)
+
+            # Convert to WAV format
+            import io
+            wav_buffer = io.BytesIO()
+            sf.write(wav_buffer, audio_array, samplerate=sample_rate, format='WAV')
+            wav_buffer.seek(0)
+
+            duration = len(audio_array) / sample_rate
+            print(f"✅ TTS synthesis completed ({duration:.1f}s audio, {len(audio_array)} samples)")
+
+            from flask import send_file
+            return send_file(
+                wav_buffer,
+                mimetype='audio/wav',
+                as_attachment=False,
+                download_name='synthesized.wav'
+            )
+
+        except Exception as synthesis_error:
+            print(f"❌ TTS synthesis failed: {synthesis_error}")
+            return jsonify({
+                'error': 'Synthesis failed',
+                'message': str(synthesis_error)
+            }), 500
+
+    except Exception as e:
+        print(f"❌ TTS endpoint error: {e}")
+        return jsonify({
+            'error': 'Server error',
+            'message': str(e)
+        }), 500
+
 @app.route('/v1/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     try:
         # Check actual model loading status
         model_status = "loaded" if model_loaded else "not_loaded"
-        
+        tts_status = "loaded" if tts_model_loaded else "not_loaded"
+
         return jsonify({
             "status": "ok",
             "model": MODEL_NAME,
             "model_status": model_status,
-            "server": "MLX Whisper Server",
-            "version": "2.0.0",
+            "tts_model": "mlx-community/chatterbox-turbo-4bit" if tts_model_loaded else None,
+            "tts_status": tts_status,
+            "server": "MLX Whisper + MLX-Audio TTS Server",
+            "version": "3.0.0",
             "timestamp": int(time.time()),
             "features": {
+                "transcription": True,
+                "tts_enabled": tts_model_loaded,
                 "vad_enabled": VAD_ENABLED and VAD_AVAILABLE,
                 "vad_available": VAD_AVAILABLE,
                 "repetition_guard": True,
@@ -905,18 +1063,23 @@ def test_audio_upload():
 def root():
     """Root endpoint with server info"""
     return jsonify({
-        "message": "MLX Whisper Transcription Server with VAD + Repetition Guard",
+        "message": "MLX Whisper Transcription + MLX-Audio TTS Server",
         "model": MODEL_NAME,
-        "version": "2.0.0",
+        "tts_model": "mlx-community/chatterbox-turbo-4bit" if tts_model_loaded else None,
+        "version": "3.0.0",
         "endpoints": {
             "transcribe": "/v1/audio/transcriptions",
-            "health": "/v1/health", 
+            "transcribe_bloods": "/v1/audio/transcriptions/bloods",
+            "synthesize": "/v1/audio/synthesis",
+            "health": "/v1/health",
             "models": "/v1/models",
             "debug_test": "/debug/test-audio",
             "test_vad": "/test/vad",
             "test_repetition": "/test/repetition"
         },
         "features": {
+            "transcription": True,
+            "tts_enabled": tts_model_loaded,
             "vad_enabled": VAD_ENABLED and VAD_AVAILABLE,
             "repetition_guard": True,
             "no_prior_context": bool(WHISPER_NO_CONTEXT),
@@ -924,30 +1087,49 @@ def root():
         },
         "status": "running",
         "debug": {
-            "test_command": "curl -X POST -F 'file=@audio.webm' http://localhost:8001/v1/audio/transcriptions",
+            "transcribe_command": "curl -X POST -F 'file=@audio.webm' http://localhost:8001/v1/audio/transcriptions",
+            "tts_command": 'curl -X POST http://localhost:8001/v1/audio/synthesis -H "Content-Type: application/json" -d \'{"text":"Hello world","speed":1.0}\'',
             "vad_test": "curl http://localhost:8001/test/vad",
             "repetition_test": "curl http://localhost:8001/test/repetition"
         }
     })
 
 if __name__ == '__main__':
-    print("🚀 Starting MLX Whisper Transcription Server")
+    print("🚀 Starting MLX Whisper + MLX-Audio TTS Server")
     print(f"📍 Server will run on http://{HOST}:{PORT}")
-    print(f"🤖 Model: {MODEL_NAME}")
+    print(f"🤖 Whisper Model: {MODEL_NAME}")
+    print(f"🔊 TTS Model: mlx-community/chatterbox-turbo-4bit (Chatterbox)")
     print("🔗 Endpoints:")
     print(f"   - Transcription: http://{HOST}:{PORT}/v1/audio/transcriptions")
+    print(f"   - TTS Synthesis: http://{HOST}:{PORT}/v1/audio/synthesis")
     print(f"   - Health Check: http://{HOST}:{PORT}/v1/health")
     print(f"   - Models List: http://{HOST}:{PORT}/v1/models")
     print("\n💡 Usage:")
+    print("   # Transcription:")
     print("   curl -X POST -F 'file=@audio.webm' http://localhost:8001/v1/audio/transcriptions")
+    print("\n   # TTS Synthesis:")
+    print('   curl -X POST http://localhost:8001/v1/audio/synthesis \\')
+    print('     -H "Content-Type: application/json" \\')
+    print('     -d \'{"text":"Valve size 26 millimeters","speed":0.9}\'')
     print("\n🔧 To install dependencies:")
-    print("   pip install mlx-whisper flask flask-cors")
+    print("   pip install mlx-whisper mlx-audio flask flask-cors soundfile")
     print("\n" + "="*60)
-    
-    # Pre-warm the model on startup for better performance
-    print("\n🔥 Pre-warming model on startup...")
+
+    # Pre-warm the models on startup for better performance
+    print("\n🔥 Pre-warming Whisper model...")
     load_model()
-    
+
+    print("\n🔥 Loading TTS model...")
+    tts_loaded = load_tts_model()
+    if tts_loaded:
+        print("✅ TTS enabled - audio synthesis available")
+    else:
+        print("⚠️ TTS disabled - visual proof mode only")
+
+    print("\n" + "="*60)
+    print("✅ Server ready!")
+    print("="*60 + "\n")
+
     try:
         app.run(host=HOST, port=PORT, debug=False)
     except KeyboardInterrupt:

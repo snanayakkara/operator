@@ -242,51 +242,85 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-modal shadow-modal w-full max-w-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <div>
-            <div className="text-xs text-gray-500">Ward update</div>
-            <div className="text-base font-semibold text-gray-900">{patient.name}</div>
+    <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-200">
+      {/* Subtle backdrop that doesn't block clicks on content above */}
+      <div 
+        className="fixed inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" 
+        aria-hidden="true" 
+      />
+      
+      <div className="relative bg-white border-t border-gray-200 shadow-lg max-h-[60vh] overflow-y-auto">
+        {/* Header row */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <span className="text-xs text-gray-500">Ward update</span>
+              <span className="mx-2 text-gray-300">•</span>
+              <span className="text-sm font-medium text-gray-900">{patient.name}</span>
+            </div>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
-            aria-label="Close ward update modal"
+            className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="Close ward update"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
+
         <div className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
+          {/* Recording controls row */}
+          <div className="flex items-center gap-3 flex-wrap">
             <Button
-              variant={recorder.isRecording ? 'secondary' : 'outline'}
+              variant={recorder.isRecording ? 'danger' : 'primary'}
               size="sm"
               startIcon={recorder.isRecording ? StopCircle : Mic}
               onClick={handleRecordToggle}
+              className="shrink-0"
             >
-              {recorder.isRecording ? 'Stop recording' : 'Dictate ward update'}
+              {recorder.isRecording ? 'Stop' : 'Dictate'}
             </Button>
-            {dictationStatus && <span className="text-sm text-gray-600">{dictationStatus}</span>}
-            {transcribing && <Loader2 className="w-4 h-4 animate-spin text-gray-600" />}
+            {dictationStatus && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                {transcribing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{dictationStatus}</span>
+              </div>
+            )}
           </div>
+
+          {/* Transcript input */}
           <textarea
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-colors"
             placeholder="Dictation transcript..."
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
           />
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500">Output stays local; structured diff is previewed before apply.</div>
-              <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
-              <Button size="sm" onClick={handleParse} disabled={loading || !transcript.trim() || transcribing}>
-                {loading || transcribing ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> {transcribing ? 'Transcribing…' : 'Parsing...'}</> : 'Parse update'}
+
+          {/* Footer actions */}
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-xs text-gray-400 max-w-[200px]">
+              Output stays local; structured diff is previewed before apply.
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="ghost" size="sm" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={handleParse} 
+                disabled={loading || !transcript.trim() || transcribing}
+                isLoading={loading || transcribing}
+              >
+                {transcribing ? 'Transcribing' : loading ? 'Parsing' : 'Parse'}
               </Button>
             </div>
           </div>
 
-          {error && <div className="text-sm text-rose-600">{error}</div>}
+          {error && (
+            <div className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
 
           {assistantMessage && (
             <div className="border border-blue-100 rounded-lg p-3 bg-blue-50/70 space-y-1">
@@ -306,9 +340,13 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
             <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
               <div className="text-sm font-semibold text-gray-900">Proposed updates</div>
               {renderPreviewList(diff)}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={resetSession}>Reset</Button>
-                <Button size="sm" onClick={handleApply}>Apply</Button>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" size="sm" onClick={resetSession}>
+                  Reset
+                </Button>
+                <Button variant="success" size="sm" onClick={handleApply}>
+                  Apply
+                </Button>
               </div>
             </div>
           )}

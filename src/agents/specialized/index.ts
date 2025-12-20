@@ -19,5 +19,8 @@ export { RightHeartCathAgent } from './RightHeartCathAgent';
 export { BatchPatientReviewAgent } from './BatchPatientReviewAgent';
 export { PatientEducationAgent } from './PatientEducationAgent';
 
+// Post-processing agents
+export { NextStepInferenceAgent, getNextStepInferenceAgent } from './NextStepInferenceAgent';
+
 // Agent registration helper
 // All agents are exported above for lazy loading

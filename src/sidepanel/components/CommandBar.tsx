@@ -19,7 +19,7 @@ import React, {
   useCallback,
   useMemo
 } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { Search, Command, Mic, Keyboard, Camera, AlertCircle } from 'lucide-react';
 import { colors, animation, radius, shadows, zIndex } from '@/utils/designTokens';
 import {
@@ -48,6 +48,8 @@ export interface CommandBarProps {
   onOpen: () => void;
   /** Callback when drawer should close */
   onClose: () => void;
+  /** Whether hovering the bar should focus/open it (default: false) */
+  activateOnHover?: boolean;
   /** Optional callback when query changes (for coordinating surrounding UI) */
   onQueryChange?: (query: string) => void;
   /** Callback when action is selected (legacy - use executor when available) */
@@ -77,6 +79,44 @@ const modeSplitVariants = {
 };
 
 /**
+ * Motion tuning notes (CommandBar dropdown):
+ * - Panel: tweak `PANEL_SPRING` for the "mechanical lock-in" settle feel.
+ * - Active row: tweak `ACTIVE_ROW_SPRING` for the "magnetic" glide.
+ * - Item reveal: tweak `ITEM_STAGGER_SEC` and `ITEM_STAGGER_CAP` for subtle stagger.
+ */
+const PANEL_SPRING = {
+  type: 'spring',
+  stiffness: 520,
+  damping: 32,
+  mass: 1.0,
+  bounce: 0.22
+} as const;
+
+const ACTIVE_ROW_SPRING = {
+  type: 'spring',
+  stiffness: 800,
+  damping: 50,
+  mass: 0.7,
+  bounce: 0.08
+} as const;
+
+const ITEM_STAGGER_SEC = 0.01;
+const ITEM_STAGGER_CAP = 12;
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 6 },
+  visible: (index: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: animation.duration.fast / 1000,
+      ease: animation.easing.out,
+      delay: Math.min(index, ITEM_STAGGER_CAP) * ITEM_STAGGER_SEC
+    }
+  })
+} as const;
+
+/**
  * ActionRow - Individual action item with hover-reveal mode selector
  */
 interface ActionRowProps {
@@ -97,6 +137,7 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
   onMouseEnter
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [hoveredMode, setHoveredMode] = useState<SelectableMode | null>(null);
   const hasMultipleModes = action.modes.length > 1;
   const showModeSplit = hasMultipleModes && (isHovered || (isFocused && isKeyboardNavigating));
 
@@ -106,13 +147,16 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
         relative flex items-center gap-3 px-3 py-2
         cursor-pointer
         transition-colors
-        ${isFocused ? 'bg-violet-50' : 'hover:bg-neutral-50'}
+        ${isFocused ? '' : 'hover:bg-neutral-50'}
       `}
       onMouseEnter={() => {
         setIsHovered(true);
         onMouseEnter();
       }}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setHoveredMode(null);
+      }}
       onClick={() => onSelect(action)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -122,15 +166,31 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
       }}
       tabIndex={0}
     >
+      {isFocused && (
+        <motion.div
+          layoutId="commandbar-active-row"
+          transition={ACTIVE_ROW_SPRING}
+          className="absolute inset-0 rounded-md pointer-events-none"
+          style={{
+            backgroundImage: isKeyboardNavigating
+              ? 'linear-gradient(180deg, rgba(139, 92, 246, 0.18), rgba(139, 92, 246, 0.12))'
+              : 'linear-gradient(180deg, rgba(139, 92, 246, 0.14), rgba(139, 92, 246, 0.09))',
+            boxShadow: isKeyboardNavigating
+              ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.26), 0 1px 2px rgba(17, 24, 39, 0.06)'
+              : 'inset 0 0 0 1px rgba(139, 92, 246, 0.2), 0 1px 2px rgba(17, 24, 39, 0.04)'
+          }}
+        />
+      )}
+
       {/* Icon */}
       <action.icon
         size={16}
-        className={isFocused ? 'text-violet-600' : 'text-neutral-500'}
+        className={`${isFocused ? 'text-violet-600' : 'text-neutral-500'} relative z-10`}
         strokeWidth={1.5}
       />
 
       {/* Label & Description */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative z-10">
         <div className={`
           text-[13px] font-medium truncate
           ${isFocused ? 'text-violet-900' : 'text-neutral-700'}
@@ -143,7 +203,7 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
       </div>
 
       {/* Right side: Shortcut OR Mode split on hover */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 relative z-10">
         {/* Mode split - reveal on hover for multi-mode actions */}
         <AnimatePresence>
           {showModeSplit && (
@@ -156,86 +216,125 @@ const ActionRow: React.FC<ActionRowProps> = memo(({
               className="flex overflow-hidden rounded-md border border-neutral-200"
             >
               {action.modes.includes('dictate') && (
+                (() => {
+                  const isExpanded = selectedMode === 'dictate' || hoveredMode === 'dictate';
+                  return (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(action, 'dictate');
                   }}
-                  className="
-                    flex items-center gap-1 px-2 py-1
+                  onMouseEnter={() => setHoveredMode('dictate')}
+                  onMouseLeave={() => setHoveredMode(null)}
+                  className={`
+                    relative flex items-center gap-1 py-1
                     text-[10px] font-semibold
                     text-blue-600 bg-blue-50
                     hover:bg-blue-100
-                    transition-colors
+                    transition-all
                     border-r border-neutral-200
                     last:border-r-0
-                  "
-                  style={{
-                    ...(selectedMode === 'dictate'
-                      ? { boxShadow: 'inset 0 0 0 1px rgba(37, 99, 235, 0.45)' }
-                      : {})
-                  }}
+                    first:rounded-l-md last:rounded-r-md
+                    ${isExpanded ? 'px-2.5' : 'px-2'}
+                  `}
                   title="Dictate"
                   aria-pressed={selectedMode === 'dictate'}
                 >
                   <Mic size={14} strokeWidth={2} />
-                  <span>D</span>
+                  <span className="whitespace-nowrap">
+                    {selectedMode === 'dictate' || hoveredMode === 'dictate' ? 'Dictate' : 'D'}
+                  </span>
+                  {selectedMode === 'dictate' && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ borderRadius: 'inherit', boxShadow: 'inset 0 0 0 1px rgba(37, 99, 235, 0.55)' }}
+                    />
+                  )}
                 </button>
+                  );
+                })()
               )}
               {action.modes.includes('type') && (
+                (() => {
+                  const isExpanded = selectedMode === 'type' || hoveredMode === 'type';
+                  return (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(action, 'type');
                   }}
-                  className="
-                    flex items-center gap-1 px-2 py-1
+                  onMouseEnter={() => setHoveredMode('type')}
+                  onMouseLeave={() => setHoveredMode(null)}
+                  className={`
+                    relative flex items-center gap-1 py-1
                     text-[10px] font-semibold
                     text-purple-600 bg-purple-50
                     hover:bg-purple-100
-                    transition-colors
+                    transition-all
                     border-r border-neutral-200
                     last:border-r-0
-                  "
-                  style={{
-                    ...(selectedMode === 'type'
-                      ? { boxShadow: 'inset 0 0 0 1px rgba(147, 51, 234, 0.45)' }
-                      : {})
-                  }}
+                    first:rounded-l-md last:rounded-r-md
+                    ${isExpanded ? 'px-2.5' : 'px-2'}
+                  `}
                   title="Type"
                   aria-pressed={selectedMode === 'type'}
                 >
                   <Keyboard size={14} strokeWidth={2} />
-                  <span>T</span>
+                  <span className="whitespace-nowrap">
+                    {selectedMode === 'type' || hoveredMode === 'type' ? 'Type' : 'T'}
+                  </span>
+                  {selectedMode === 'type' && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ borderRadius: 'inherit', boxShadow: 'inset 0 0 0 1px rgba(147, 51, 234, 0.55)' }}
+                    />
+                  )}
                 </button>
+                  );
+                })()
               )}
               {action.modes.includes('vision') && (
+                (() => {
+                  const isExpanded = selectedMode === 'vision' || hoveredMode === 'vision';
+                  return (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(action, 'vision');
                   }}
-                  className="
-                    flex items-center gap-1 px-2 py-1
+                  onMouseEnter={() => setHoveredMode('vision')}
+                  onMouseLeave={() => setHoveredMode(null)}
+                  className={`
+                    relative flex items-center gap-1 py-1
                     text-[10px] font-semibold
                     text-cyan-600 bg-cyan-50
                     hover:bg-cyan-100
-                    transition-colors
-                  "
-                  style={{
-                    ...(selectedMode === 'vision'
-                      ? { boxShadow: 'inset 0 0 0 1px rgba(8, 145, 178, 0.45)' }
-                      : {})
-                  }}
+                    transition-all
+                    first:rounded-l-md last:rounded-r-md
+                    ${isExpanded ? 'px-2.5' : 'px-2'}
+                  `}
                   title="Vision (scan image)"
                   aria-pressed={selectedMode === 'vision'}
                 >
                   <Camera size={14} strokeWidth={2} />
-                  <span>V</span>
+                  <span className="whitespace-nowrap">
+                    {selectedMode === 'vision' || hoveredMode === 'vision' ? 'Vision' : 'V'}
+                  </span>
+                  {selectedMode === 'vision' && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ borderRadius: 'inherit', boxShadow: 'inset 0 0 0 1px rgba(8, 145, 178, 0.55)' }}
+                    />
+                  )}
                 </button>
+                  );
+                })()
               )}
             </motion.div>
           )}
@@ -263,6 +362,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
   isOpen,
   onOpen,
   onClose,
+  activateOnHover = false,
   onQueryChange,
   onActionSelect,
   useExecutor = true,
@@ -273,8 +373,11 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [focusedMode, setFocusedMode] = useState<SelectableMode | null>(null);
   const [isKeyboardNavigating, setIsKeyboardNavigating] = useState(false);
+  const [openedByHover, setOpenedByHover] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasAnimatedOpenRef = useRef(false);
+  const hoverCloseTimeoutRef = useRef<number | null>(null);
 
   // ActionExecutor integration for unified action dispatch and clarification (UI Intent Section 9)
   const {
@@ -358,9 +461,38 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
     setFocusedIndex(-1);
     setFocusedMode(null);
     setIsKeyboardNavigating(false);
+    setOpenedByHover(false);
     onClose();
     inputRef.current?.blur();
   }, [onClose, onQueryChange]);
+
+  const cancelHoverClose = useCallback(() => {
+    if (hoverCloseTimeoutRef.current !== null) {
+      window.clearTimeout(hoverCloseTimeoutRef.current);
+      hoverCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleHoverClose = useCallback(() => {
+    if (!activateOnHover) return;
+    if (!openedByHover) return;
+    cancelHoverClose();
+    hoverCloseTimeoutRef.current = window.setTimeout(() => {
+      handleClose();
+    }, 90);
+  }, [activateOnHover, cancelHoverClose, handleClose, openedByHover]);
+
+  useEffect(() => {
+    return () => cancelHoverClose();
+  }, [cancelHoverClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      hasAnimatedOpenRef.current = false;
+      return;
+    }
+    hasAnimatedOpenRef.current = true;
+  }, [isOpen]);
 
   // Handle global keyboard shortcuts
   useEffect(() => {
@@ -369,6 +501,7 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
       if ((e.metaKey && e.key === 'k') || (e.key === '/' && !isOpen)) {
         e.preventDefault();
         if (!isOpen) {
+          setOpenedByHover(false);
           onOpen();
           inputRef.current?.focus();
         }
@@ -443,6 +576,14 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
     }
   }, [isOpen, onOpen]);
 
+  const handleMouseEnter = useCallback(() => {
+    if (!activateOnHover) return;
+    cancelHoverClose();
+    if (document.activeElement === inputRef.current) return;
+    if (!isOpen) setOpenedByHover(true);
+    inputRef.current?.focus();
+  }, [activateOnHover, cancelHoverClose, isOpen]);
+
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -482,6 +623,8 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
         variants={inputVariants}
         animate={isOpen ? 'focused' : 'idle'}
         transition={{ duration: animation.duration.fast / 1000 }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={scheduleHoverClose}
       >
         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
           <Search size={16} className="text-neutral-400" />
@@ -491,11 +634,13 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
           ref={inputRef}
           type="text"
           value={query}
+          onMouseDown={() => setOpenedByHover(false)}
           onChange={(e) => {
             const nextQuery = e.target.value;
             setQuery(nextQuery);
             onQueryChange?.(nextQuery);
             setIsKeyboardNavigating(false);
+            setOpenedByHover(false);
           }}
           onFocus={handleFocus}
           onKeyDown={handleInputKeyDown}
@@ -579,63 +724,85 @@ export const CommandBar: React.FC<CommandBarProps> = memo(({
           <motion.div
             id="command-bar-dropdown"
             role="listbox"
-            initial={{ opacity: 0, y: -8, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -8, height: 0 }}
+            initial={{ opacity: 0, y: -12, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.99 }}
             transition={{
-              duration: animation.duration.normal / 1000,
-              ease: animation.easing.out
+              y: PANEL_SPRING,
+              scale: PANEL_SPRING,
+              opacity: { duration: animation.duration.normal / 1000, ease: animation.easing.out }
             }}
+            onMouseEnter={cancelHoverClose}
+            onMouseLeave={scheduleHoverClose}
             className="
               absolute top-full left-0 right-0 mt-1
-              bg-white border border-neutral-200
+              border border-neutral-200
               rounded-lg overflow-hidden
             "
             style={{
               borderRadius: radius.lg,
+              backgroundColor: 'rgba(255, 255, 255, 0.82)',
               boxShadow: shadows.dropdown,
               maxHeight: 'calc(100vh - 200px)',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              backdropFilter: 'blur(12px) saturate(1.15)',
+              WebkitBackdropFilter: 'blur(12px) saturate(1.15)',
+              willChange: 'transform, opacity'
             }}
           >
             {groupedActions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-neutral-500 text-sm">
+              <div className="relative px-4 py-8 text-center text-neutral-500 text-sm">
                 No actions found for "{query}"
               </div>
             ) : (
-              groupedActions.map((group, groupIndex) => (
-                <div key={group.id} className={groupIndex > 0 ? 'border-t border-neutral-100' : ''}>
-                  {/* Group Header */}
-                  <div className="px-3 py-2 bg-neutral-50">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-                      {group.label}
-                    </span>
-                  </div>
+              <LayoutGroup id="commandbar-results">
+                <div className="relative">
+                  {groupedActions.map((group, groupIndex) => (
+                    <div key={group.id} className={groupIndex > 0 ? 'border-t border-neutral-100' : ''}>
+                      {/* Group Header */}
+                      <div className="px-3 py-2 bg-neutral-50/70">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                          {group.label}
+                        </span>
+                      </div>
 
-                  {/* Actions */}
-                  <div className="py-1" role="group">
-                    {group.actions.map((action) => {
-                      const flatIndex = flatActions.indexOf(action);
-                      const isFocused = flatIndex === focusedIndex;
+                      {/* Actions */}
+                      <div className="py-1" role="group">
+                        {group.actions.map((action) => {
+                          const flatIndex = flatActions.indexOf(action);
+                          const isFocused = flatIndex === focusedIndex;
+                          const shouldAnimateItems = isOpen && !hasAnimatedOpenRef.current;
+                          const motionIndex = flatIndex >= 0 ? flatIndex : 0;
 
-                      return (
-                        <ActionRow
-                          key={action.id}
-                          action={action}
-                          isFocused={isFocused}
-                          isKeyboardNavigating={isKeyboardNavigating}
-                          selectedMode={isFocused ? focusedMode : null}
-                          onSelect={(a, mode) => {
-                            dispatchAction(a, mode);
-                            handleClose();
-                          }}
-                          onMouseEnter={() => setFocusedIndex(flatIndex)}
-                        />
-                      );
-                    })}
-                  </div>
+                          return (
+                            <motion.div
+                              key={action.id}
+                              custom={motionIndex}
+                              variants={itemVariants}
+                              initial={shouldAnimateItems ? 'hidden' : false}
+                              animate="visible"
+                            >
+                              <ActionRow
+                                action={action}
+                                isFocused={isFocused}
+                                isKeyboardNavigating={isKeyboardNavigating}
+                                selectedMode={isFocused ? focusedMode : null}
+                                onSelect={(a, mode) => {
+                                  dispatchAction(a, mode);
+                                  handleClose();
+                                }}
+                                onMouseEnter={() => {
+                                  if (flatIndex >= 0) setFocusedIndex(flatIndex);
+                                }}
+                              />
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))
+              </LayoutGroup>
             )}
 
             {/* Footer hint */}

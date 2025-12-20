@@ -988,6 +988,92 @@ class ContentScriptHandler {
         border-color: var(--operator-xestro-border) !important;
       }
 
+      /* Document views and attachments */
+      html.operator-xestro-dark-mode .documents,
+      html.operator-xestro-dark-mode .documents-list,
+      html.operator-xestro-dark-mode .document-item,
+      html.operator-xestro-dark-mode .document-preview,
+      html.operator-xestro-dark-mode .document-thumbnail,
+      html.operator-xestro-dark-mode .attachment,
+      html.operator-xestro-dark-mode .attachment-list,
+      html.operator-xestro-dark-mode .attachment-item,
+      html.operator-xestro-dark-mode .file-preview,
+      html.operator-xestro-dark-mode .file-list,
+      html.operator-xestro-dark-mode .preview-container,
+      html.operator-xestro-dark-mode .thumbnail-container {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Sidebar panels and sections */
+      html.operator-xestro-dark-mode .sidebar,
+      html.operator-xestro-dark-mode .side-panel,
+      html.operator-xestro-dark-mode .right-panel,
+      html.operator-xestro-dark-mode .left-panel,
+      html.operator-xestro-dark-mode .info-panel,
+      html.operator-xestro-dark-mode .detail-panel,
+      html.operator-xestro-dark-mode .patient-info,
+      html.operator-xestro-dark-mode .patient-details,
+      html.operator-xestro-dark-mode .summary-panel,
+      html.operator-xestro-dark-mode .context-panel {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Section headers and titles */
+      html.operator-xestro-dark-mode .section,
+      html.operator-xestro-dark-mode .section-header,
+      html.operator-xestro-dark-mode .section-title,
+      html.operator-xestro-dark-mode .section-content,
+      html.operator-xestro-dark-mode .section-body,
+      html.operator-xestro-dark-mode .content-section,
+      html.operator-xestro-dark-mode .box,
+      html.operator-xestro-dark-mode .box-header,
+      html.operator-xestro-dark-mode .box-body,
+      html.operator-xestro-dark-mode .box-content {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Generic div containers with white backgrounds */
+      html.operator-xestro-dark-mode .content,
+      html.operator-xestro-dark-mode .main-content,
+      html.operator-xestro-dark-mode .wrapper,
+      html.operator-xestro-dark-mode .container-fluid,
+      html.operator-xestro-dark-mode .inner,
+      html.operator-xestro-dark-mode .inner-content,
+      html.operator-xestro-dark-mode .view,
+      html.operator-xestro-dark-mode .view-content {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Lists and items */
+      html.operator-xestro-dark-mode .list,
+      html.operator-xestro-dark-mode .list-item,
+      html.operator-xestro-dark-mode .item,
+      html.operator-xestro-dark-mode .list-group,
+      html.operator-xestro-dark-mode .list-group-item {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Catch-all for common background colors inline styles */
+      html.operator-xestro-dark-mode [style*="background-color: white"],
+      html.operator-xestro-dark-mode [style*="background-color: #fff"],
+      html.operator-xestro-dark-mode [style*="background-color: #ffffff"],
+      html.operator-xestro-dark-mode [style*="background-color: rgb(255, 255, 255)"],
+      html.operator-xestro-dark-mode [style*="background: white"],
+      html.operator-xestro-dark-mode [style*="background: #fff"],
+      html.operator-xestro-dark-mode [style*="background: #ffffff"] {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
       /* Form controls (scoped to likely Xestro containers to avoid theming Operator overlays) */
       html.operator-xestro-dark-mode :is(
         .XestroBox,

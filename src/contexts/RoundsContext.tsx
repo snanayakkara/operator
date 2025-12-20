@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AdmissionDischargeChecklist,
+  BillingEntry,
   Clinician,
   HudPatientState,
   RoundsPatient,
@@ -10,7 +12,7 @@ import {
   WardConversationSession,
   WardConversationTurnResult
 } from '@/types/wardConversation.types';
-import { buildHudPatientState, isoNow } from '@/utils/rounds';
+import { buildHudPatientState, generateRoundsId, isoNow } from '@/utils/rounds';
 import { RoundsStorageService } from '@/services/RoundsStorageService';
 import {
   applyWardUpdateDiff,
@@ -19,6 +21,9 @@ import {
 } from '@/services/RoundsPatientService';
 import { RoundsLLMService } from '@/services/RoundsLLMService';
 import { WardConversationService } from '@/services/WardConversationService';
+import { notionBillingService } from '@/services/NotionBillingService';
+import { NOTION_CONFIG_KEY } from '@/config/notionConfig';
+import { setClinicalState } from '@/storage/clinicalStorage';
 
 type IntakeStatus = 'idle' | 'running' | 'error';
 
@@ -32,6 +37,7 @@ interface RoundsContextValue {
   activeWard: string;
   isPatientListCollapsed: boolean;
   clinicians: Clinician[];
+  notionAvailable: boolean;
   setSelectedPatientId: (id: string | null) => void;
   addPatient: (patient: RoundsPatient) => Promise<void>;
   quickAddPatient: (name: string, scratchpad: string, ward?: string) => Promise<RoundsPatient | null>;
@@ -56,6 +62,14 @@ interface RoundsContextValue {
   discardWardConversation: (sessionId: string) => void;
   runWardDictation: (patientId: string, text: string, sessionId?: string) => Promise<{ session: WardConversationSession; turn: WardConversationTurnResult; }>;
   getWardConversationSession: (sessionId: string) => WardConversationSession | undefined;
+  // Billing functions
+  addBillingEntry: (patientId: string, entry: Omit<BillingEntry, 'id' | 'createdAt'>) => Promise<void>;
+  updateBillingEntry: (patientId: string, entryId: string, updates: Partial<BillingEntry>) => Promise<void>;
+  deleteBillingEntry: (patientId: string, entryId: string) => Promise<void>;
+  markBillingEntered: (patientId: string, entryId: string) => Promise<void>;
+  // Checklist functions
+  updateChecklist: (patientId: string, updates: Partial<AdmissionDischargeChecklist>) => Promise<void>;
+  toggleDischargePlanning: (patientId: string, enabled: boolean) => Promise<void>;
 }
 
 const RoundsContext = createContext<RoundsContextValue | undefined>(undefined);
@@ -82,7 +96,28 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [lastWardSnapshots, setLastWardSnapshots] = useState<Record<string, RoundsPatient | null>>({});
   const [activeWard, setActiveWard] = useState<string>('1 South');
   const [isPatientListCollapsed, setIsPatientListCollapsed] = useState(false);
+  const [notionAvailable, setNotionAvailable] = useState(false);
   const quickAddInProgressRef = useRef(false);
+
+  // Check Notion availability on mount
+  useEffect(() => {
+    notionBillingService.isAvailable().then(setNotionAvailable);
+  }, []);
+
+  // Re-check Notion availability when settings change
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return;
+    const handler: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
+      if (areaName !== 'local') return;
+      if (!changes[NOTION_CONFIG_KEY]) return;
+      notionBillingService.isAvailable().then(setNotionAvailable);
+      notionBillingService.reloadConfig().catch(error => {
+        console.warn('[RoundsContext] Failed to reload Notion config', error);
+      });
+    };
+    chrome.storage.onChanged.addListener(handler);
+    return () => chrome.storage.onChanged.removeListener(handler);
+  }, []);
 
   // Load patients and clinicians on mount
   useEffect(() => {
@@ -404,15 +439,171 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ));
   }, [persistPatients]);
 
+  // ============================================================================
+  // Billing functions
+  // ============================================================================
+
+  const addBillingEntry = useCallback(async (
+    patientId: string,
+    entry: Omit<BillingEntry, 'id' | 'patientId' | 'createdAt' | 'updatedAt'>
+  ) => {
+    const timestamp = isoNow();
+    const newEntry: BillingEntry = {
+      ...entry,
+      id: generateRoundsId('bill'),
+      patientId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            billingEntries: [...(p.billingEntries || []), newEntry],
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
+  const updateBillingEntry = useCallback(async (
+    patientId: string,
+    entryId: string,
+    updates: Partial<BillingEntry>
+  ) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            billingEntries: (p.billingEntries || []).map(e =>
+              e.id === entryId ? { ...e, ...updates, updatedAt: timestamp } : e
+            ),
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
+  const deleteBillingEntry = useCallback(async (patientId: string, entryId: string) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            billingEntries: (p.billingEntries || []).filter(e => e.id !== entryId),
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
+  const markBillingEntered = useCallback(async (patientId: string, entryId: string) => {
+    const timestamp = isoNow();
+    const patient = patients.find(p => p.id === patientId);
+    const entry = patient?.billingEntries?.find(e => e.id === entryId);
+    
+    if (!entry || !patient) return;
+
+    // Update local state first
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            billingEntries: (p.billingEntries || []).map(e =>
+              e.id === entryId ? { ...e, status: 'entered' as const, updatedAt: timestamp, notionSyncError: undefined } : e
+            ),
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+
+    // Then sync to Notion if available
+    if (notionAvailable) {
+      try {
+        const existingNotionId = entry.notionId;
+        const notionId = existingNotionId
+          ? (await notionBillingService.updateBillingEntry(existingNotionId, { status: 'entered' }), existingNotionId)
+          : await notionBillingService.createBillingEntry({ ...entry, status: 'entered' }, patient.name);
+
+        // Update with Notion ID
+        persistPatients(prev => prev.map(p =>
+          p.id === patientId
+            ? {
+                ...p,
+                billingEntries: (p.billingEntries || []).map(e =>
+                  e.id === entryId ? { ...e, notionId, notionLastSyncedAt: isoNow(), notionSyncError: undefined, updatedAt: isoNow() } : e
+                ),
+                lastUpdatedAt: isoNow()
+              }
+            : p
+        ));
+        console.log(`[Billing] Synced entry ${entryId} to Notion: ${notionId}`);
+      } catch (error) {
+        console.error('[Billing] Failed to sync to Notion:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        persistPatients(prev => prev.map(p =>
+          p.id === patientId
+            ? {
+                ...p,
+                billingEntries: (p.billingEntries || []).map(e =>
+                  e.id === entryId ? { ...e, notionSyncError: message, updatedAt: isoNow() } : e
+                ),
+                lastUpdatedAt: isoNow()
+              }
+            : p
+        ));
+      }
+    }
+  }, [patients, persistPatients, notionAvailable]);
+
+  // ============================================================================
+  // Checklist functions
+  // ============================================================================
+
+  const updateChecklist = useCallback(async (
+    patientId: string,
+    updates: Partial<AdmissionDischargeChecklist>
+  ) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            checklist: {
+              ...p.checklist,
+              ...updates,
+              lastUpdatedAt: timestamp
+            },
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
+  const toggleDischargePlanning = useCallback(async (patientId: string, enabled: boolean) => {
+    const timestamp = isoNow();
+    persistPatients(prev => prev.map(p =>
+      p.id === patientId
+        ? {
+            ...p,
+            checklist: {
+              ...p.checklist,
+              dischargePlanning: enabled,
+              lastUpdatedAt: timestamp
+            },
+            lastUpdatedAt: timestamp
+          }
+        : p
+    ));
+  }, [persistPatients]);
+
   // Persist HUD projection for external consumers (e.g., smart glasses bridge)
   useEffect(() => {
     const persistHud = async () => {
       try {
-        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-          await chrome.storage.local.set({ rounds_hud_state: hudState });
-        } else {
-          localStorage.setItem('rounds_hud_state', JSON.stringify(hudState));
-        }
+        await setClinicalState({ roundsHudState: hudState });
       } catch (error) {
         console.warn('⚠️ Failed to persist HUD state', error);
       }
@@ -453,7 +644,16 @@ export const RoundsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateClinician,
     removeClinician,
     assignClinicianToPatient,
-    unassignClinicianFromPatient
+    unassignClinicianFromPatient,
+    // Billing functions
+    notionAvailable,
+    addBillingEntry,
+    updateBillingEntry,
+    deleteBillingEntry,
+    markBillingEntered,
+    // Discharge checklist functions
+    updateChecklist,
+    toggleDischargePlanning
   };
 
   return (

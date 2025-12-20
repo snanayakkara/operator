@@ -512,6 +512,7 @@ export interface TAVIWorkupReport extends MedicalReport {
 }
 
 // New interface for JSON narrative structure matching system prompt output
+// NOTE: CT data is NOT in structuredSections - it lives in TAVIWorkupItem.ctMeasurements
 export interface TAVIWorkupStructuredSections {
   patient: TAVIWorkupSection;
   clinical: TAVIWorkupSection;
@@ -522,7 +523,7 @@ export interface TAVIWorkupStructuredSections {
   social_history: TAVIWorkupSection;
   investigations: TAVIWorkupSection;
   echocardiography: TAVIWorkupSection;
-  enhanced_ct: TAVIWorkupSection;
+  // enhanced_ct REMOVED - CT data now lives in TAVIWorkupItem.ctMeasurements
   procedure_planning: TAVIWorkupSection;
   alerts: TAVIWorkupSection;
   missing_summary: TAVIWorkupMissingSummary;
@@ -599,21 +600,33 @@ export interface TAVIWorkupEchocardiography {
 }
 
 export interface TAVIWorkupCTMeasurements {
+  // Narrative summary (descriptive text from dictation)
+  narrative?: string;
+
+  // Annulus measurements
   annulusAreaMm2?: number;
   annulusPerimeterMm?: number;
   annulusMinDiameterMm?: number;
   annulusMaxDiameterMm?: number;
-  coronaryHeights: {
+
+  // Coronary heights
+  coronaryHeights?: {
     leftMainMm?: number;
     rightCoronaryMm?: number;
   };
-  sinusOfValsalva: {
+
+  // Sinus of Valsalva
+  sinusOfValsalva?: {
     leftMm?: number;
     rightMm?: number;
     nonCoronaryMm?: number;
   };
-  coplanarAngles: string[];
-  accessVessels: {
+
+  // Coplanar angles
+  coplanarAngles?: string[];
+
+  // Access vessels
+  accessVessels?: {
     rightCIAmm?: number;
     leftCIAmm?: number;
     rightEIAmm?: number;
@@ -621,14 +634,17 @@ export interface TAVIWorkupCTMeasurements {
     rightCFAmm?: number;
     leftCFAmm?: number;
   };
+
   // Enhanced LVOT measurements
   lvotAreaMm2?: number;
   lvotPerimeterMm?: number;
   stjDiameterMm?: number;
   stjHeightMm?: number;
+
   // Calcium scoring
   calciumScore?: number;
   lvotCalciumScore?: number;
+
   // Detailed aortic measurements
   aorticDimensions?: {
     [key: string]: number; // Flexible for various aortic measurements
@@ -788,6 +804,7 @@ export type SessionStatus =
   | 'error'
   | 'cancelled'
   | 'awaiting_validation'
+  | 'awaiting_proof' // Paused for TAVI proof mode verification
   | 'failed';
 
 export interface PatientSession {
@@ -806,6 +823,8 @@ export interface PatientSession {
   taviValidationResult?: ValidationResult | null;
   taviValidationStatus?: 'complete' | 'awaiting_validation';
   taviExtractedData?: TAVIExtractedData;
+  taviProofModeExtractedData?: any; // Temporary storage for proof mode extracted data (taviData, hemodynamics, etc.)
+  angiogramProofModeExtractedData?: any; // Temporary storage for Angio/PCI proof mode extracted data (extractedData, procedureType)
   angiogramValidationResult?: ValidationResult | null;
   angiogramValidationStatus?: 'complete' | 'awaiting_validation';
   angiogramExtractedData?: AngioPCIExtractedData;
@@ -1838,4 +1857,129 @@ export interface MitralTEERFields {
   nok_relationship?: string;
   nok_phone?: string;
   attach_latest_labs?: boolean;
+}
+
+// ============================================
+// KEY FACTS PROOF MODE
+// ============================================
+
+/**
+ * KeyFact represents a single critical piece of procedural data
+ * that must be verified before expensive narrative generation.
+ *
+ * Examples:
+ * - TAVI: "Valve size: 26mm Evolut Pro Plus"
+ * - Angio/PCI: "Stent: 3.0 x 18mm DES to LAD"
+ * - mTEER: "2 MitraClips deployed (NT + XTW)"
+ */
+export interface KeyFact {
+  /** Unique identifier for this fact */
+  id: string;
+
+  /** Fact category (e.g., "valve", "stent", "access", "haemodynamics") */
+  category: string;
+
+  /** Human-readable label (e.g., "Valve Size", "Stent Details") */
+  label: string;
+
+  /** The actual value/content of the fact */
+  value: string;
+
+  /**
+   * Source field path in extracted data
+   * e.g., "valveDetails.size" or "stentDetails.diameter"
+   */
+  sourceField: string;
+
+  /** Is this fact critical for the procedure? */
+  critical: boolean;
+
+  /**
+   * User confirmation status
+   * - 'pending': Not yet reviewed
+   * - 'confirmed': User approved
+   * - 'edited': User modified the value
+   * - 'rejected': User rejected/flagged as incorrect
+   */
+  status: 'pending' | 'confirmed' | 'edited' | 'rejected';
+
+  /** Original value before user edit (if status === 'edited') */
+  originalValue?: string;
+
+  /** Optional unit of measurement (e.g., "mm", "mg", "mL") */
+  unit?: string;
+
+  /** Optional confidence score from extraction (0-1) */
+  confidence?: number;
+}
+
+/**
+ * ProofModeConfig determines how facts are presented to the user
+ */
+export interface ProofModeConfig {
+  /** Which mode to use */
+  mode: 'audio' | 'visual';
+
+  /** TTS speed for audio mode (0.5 - 2.0) */
+  ttsSpeed?: number;
+
+  /** Auto-proceed after all facts confirmed (or show explicit "Continue" button) */
+  autoAdvance?: boolean;
+
+  /** Group facts by category in visual mode */
+  groupByCategory?: boolean;
+
+  /** Show confidence scores in visual mode */
+  showConfidence?: boolean;
+}
+
+/**
+ * KeyFactsProofResult contains the user's verification decisions
+ */
+export interface KeyFactsProofResult {
+  /** All facts after user review */
+  facts: KeyFact[];
+
+  /** User's overall decision */
+  action: 'confirmed' | 'cancelled';
+
+  /** Which mode was used */
+  modeUsed: 'audio' | 'visual';
+
+  /** Time spent in proof mode (ms) */
+  timeSpent: number;
+
+  /** Timestamp when proof completed */
+  completedAt: number;
+
+  /** Number of facts edited by user */
+  editsCount: number;
+
+  /** Number of facts rejected by user */
+  rejectsCount: number;
+}
+
+/**
+ * Extension to MedicalContext for fact locking enforcement
+ */
+export interface MedicalContextWithLockedFacts extends MedicalContext {
+  /**
+   * Request agent to extract facts and pause for proof mode verification
+   * When true, agent returns early with extracted data before expensive LLM generation
+   */
+  requestProofMode?: boolean;
+
+  /**
+   * Locked facts from proof mode that MUST NOT be changed
+   * during narrative generation.
+   *
+   * Format: Map<sourceField, confirmedValue>
+   * Example: { "valveDetails.size": "26", "valveDetails.type": "Evolut Pro Plus" }
+   */
+  lockedFacts?: Record<string, string>;
+
+  /**
+   * Proof mode result (if proof mode was used)
+   */
+  proofResult?: KeyFactsProofResult;
 }

@@ -72,7 +72,6 @@ const SECTION_CONFIGS: SectionConfig[] = [
   { key: 'ecg', title: 'ECG Assessment', icon: ActivityIcon, color: 'red', priority: 'medium', group: 'investigations' },
   { key: 'investigations', title: 'Investigation Summary', icon: FileTextIcon, color: 'indigo', priority: 'medium', group: 'investigations' },
   { key: 'echocardiography', title: 'Echocardiography', icon: HeartIcon, color: 'red', priority: 'high', group: 'investigations' },
-  { key: 'enhanced_ct', title: 'Enhanced CT Analysis', icon: ActivityIcon, color: 'emerald', priority: 'high', group: 'investigations' },
 
   // Planning Group
   { key: 'procedure_planning', title: 'Procedure Planning', icon: FileTextIcon, color: 'violet', priority: 'high', group: 'planning' },
@@ -154,6 +153,104 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
       return structuredSections;
     }
 
+    const blankStructure = (defaults?: Partial<TAVIWorkupStructuredSections>): TAVIWorkupStructuredSections => ({
+      patient: { content: 'No data available', missing: [] },
+      clinical: { content: 'No data available', missing: [] },
+      laboratory: { content: 'No data available', missing: [] },
+      ecg: { content: 'No data available', missing: [] },
+      background: { content: 'No data available', missing: [] },
+      medications: { content: 'No data available', missing: [] },
+      social_history: { content: 'No data available', missing: [] },
+      investigations: { content: 'No data available', missing: [] },
+      echocardiography: { content: 'No data available', missing: [] },
+      procedure_planning: { content: 'No data available', missing: [] },
+      alerts: { content: 'No alerts', missing: [] },
+      missing_summary: {
+        missing_clinical: [],
+        missing_diagnostic: [],
+        missing_measurements: [],
+        completeness_score: '0% (No data available)'
+      },
+      ...defaults
+    });
+
+    const normalizeSectionContent = (
+      content: string,
+      key: keyof Omit<TAVIWorkupStructuredSections, 'missing_summary'>
+    ): string => {
+      const trimmed = content.trim();
+      if (!trimmed) return key === 'alerts' ? 'No alerts' : 'Not provided';
+      const lower = trimmed.toLowerCase();
+      const indicatesMissing =
+        /\bnot available\b/.test(lower) ||
+        /\bno data available\b/.test(lower) ||
+        /\bnot provided\b/.test(lower) ||
+        /\bno\b.*\bprovided\b/.test(lower);
+      if (indicatesMissing) return key === 'alerts' ? 'No alerts' : 'Not provided';
+      return trimmed;
+    };
+
+    const mapTitleToKey = (
+      title: string
+    ): keyof Omit<TAVIWorkupStructuredSections, 'missing_summary'> | 'missing_summary' | null => {
+      const normalized = title.trim().toLowerCase();
+      if (normalized === 'patient' || normalized.includes('patient')) return 'patient';
+      if (normalized === 'clinical' || normalized.includes('clinical')) return 'clinical';
+      if (normalized === 'laboratory values' || normalized === 'bloods' || normalized.includes('laboratory')) return 'laboratory';
+      if (normalized === 'ecg assessment' || normalized === 'ecg' || normalized.includes('ecg')) return 'ecg';
+      if (normalized === 'background' || normalized.includes('background')) return 'background';
+      if (normalized.startsWith('medications')) return 'medications';
+      if (normalized === 'social history' || normalized.includes('social')) return 'social_history';
+      if (normalized.includes('investigation')) return 'investigations';
+      if (normalized === 'echocardiography' || normalized === 'echo' || normalized.includes('echo')) return 'echocardiography';
+      if (normalized === 'procedure planning' || normalized.includes('procedure') || normalized.includes('devices planned')) return 'procedure_planning';
+      if (normalized.includes('alerts')) return 'alerts';
+      if (normalized.includes('missing')) return 'missing_summary';
+      return null;
+    };
+
+    const exactHeadingMap = new Map<string, ReturnType<typeof mapTitleToKey>>([
+      ['patient', 'patient'],
+      ['patient demographics', 'patient'],
+      ['clinical', 'clinical'],
+      ['clinical assessment', 'clinical'],
+      ['laboratory values', 'laboratory'],
+      ['bloods', 'laboratory'],
+      ['ecg assessment', 'ecg'],
+      ['ecg', 'ecg'],
+      ['background', 'background'],
+      ['background history', 'background'],
+      ['medications', 'medications'],
+      ['medications (problem list)', 'medications'],
+      ['social history', 'social_history'],
+      ['investigation summary', 'investigations'],
+      ['investigations', 'investigations'],
+      ['other investigations', 'investigations'],
+      ['echocardiography', 'echocardiography'],
+      ['echo', 'echocardiography'],
+      ['procedure planning', 'procedure_planning'],
+      ['procedure plan', 'procedure_planning'],
+      ['devices planned', 'procedure_planning'],
+      ['alerts & anatomical considerations', 'alerts'],
+      ['alerts & considerations', 'alerts'],
+      ['alerts', 'alerts'],
+      ['missing / not stated', 'missing_summary'],
+      ['missing / not stated:', 'missing_summary']
+    ]);
+
+    const extractMissingList = (content: string): string[] => {
+      const cleaned = content
+        .replace(/\r\n/g, '\n')
+        .replace(/[•·]/g, '\n')
+        .replace(/;/g, '\n')
+        .trim();
+      if (!cleaned) return [];
+      return cleaned
+        .split('\n')
+        .map(item => item.trim())
+        .filter(Boolean);
+    };
+
     // Try to parse JSON from results field
     if (results) {
       try {
@@ -204,10 +301,6 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
               content: jsonData.echocardiography?.content || 'Not provided',
               missing: jsonData.echocardiography?.missing || []
             },
-            enhanced_ct: {
-              content: jsonData.enhanced_ct?.content || 'Not provided',
-              missing: jsonData.enhanced_ct?.missing || []
-            },
             procedure_planning: {
               content: jsonData.procedure_planning?.content || 'Not provided',
               missing: jsonData.procedure_planning?.missing || []
@@ -231,29 +324,110 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
       } catch (error) {
         console.warn('Failed to parse TAVI JSON from results:', error);
       }
+
+      // XML fallback: <section title="...">...</section>
+      try {
+        const xmlRegex = /<section\s+title="([^"]+)"\s*>([\s\S]*?)<\/section>/gi;
+        const parsed = blankStructure({
+          patient: { content: 'Not provided', missing: [] },
+          clinical: { content: 'Not provided', missing: [] },
+          laboratory: { content: 'Not provided', missing: [] },
+          ecg: { content: 'Not provided', missing: [] },
+          background: { content: 'Not provided', missing: [] },
+          medications: { content: 'Not provided', missing: [] },
+          social_history: { content: 'Not provided', missing: [] },
+          investigations: { content: 'Not provided', missing: [] },
+          echocardiography: { content: 'Not provided', missing: [] },
+          procedure_planning: { content: 'Not provided', missing: [] },
+          alerts: { content: 'No alerts', missing: [] },
+          missing_summary: {
+            missing_clinical: [],
+            missing_diagnostic: [],
+            missing_measurements: [],
+            completeness_score: 'Not assessed'
+          }
+        });
+
+        let match: RegExpExecArray | null;
+        let matched = false;
+        while ((match = xmlRegex.exec(results)) !== null) {
+          matched = true;
+          const title = match[1]?.trim() ?? '';
+          const rawContent = match[2] ?? '';
+          const content = rawContent.replace(/<\/?[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+          const key = mapTitleToKey(title);
+          if (!key) continue;
+          if (key === 'missing_summary') {
+            parsed.missing_summary.missing_measurements = extractMissingList(content);
+            continue;
+          }
+          parsed[key] = { content: normalizeSectionContent(content, key), missing: [] } as any;
+        }
+
+        if (matched) {
+          return parsed;
+        }
+      } catch (error) {
+        console.warn('Failed to parse TAVI XML from results:', error);
+      }
+
+      // Plain headings fallback: "Patient\n...\n\nClinical\n..."
+      try {
+        const normalized = results.replace(/\r\n/g, '\n').trim();
+        const lines = normalized.split('\n');
+
+        const headings: Array<{ lineIndex: number; key: ReturnType<typeof mapTitleToKey> }> = [];
+        for (let i = 0; i < lines.length; i++) {
+          const lineKey = lines[i].trim().toLowerCase();
+          const maybe = exactHeadingMap.get(lineKey) ?? null;
+          if (maybe) {
+            headings.push({ lineIndex: i, key: maybe });
+          }
+        }
+
+        if (headings.length > 0) {
+          const parsed = blankStructure({
+            patient: { content: 'Not provided', missing: [] },
+            clinical: { content: 'Not provided', missing: [] },
+            laboratory: { content: 'Not provided', missing: [] },
+            ecg: { content: 'Not provided', missing: [] },
+            background: { content: 'Not provided', missing: [] },
+            medications: { content: 'Not provided', missing: [] },
+            social_history: { content: 'Not provided', missing: [] },
+            investigations: { content: 'Not provided', missing: [] },
+            echocardiography: { content: 'Not provided', missing: [] },
+            procedure_planning: { content: 'Not provided', missing: [] },
+            alerts: { content: 'No alerts', missing: [] },
+            missing_summary: {
+              missing_clinical: [],
+              missing_diagnostic: [],
+              missing_measurements: [],
+              completeness_score: 'Not assessed'
+            }
+          });
+
+          for (let i = 0; i < headings.length; i++) {
+            const start = headings[i].lineIndex + 1;
+            const end = headings[i + 1]?.lineIndex ?? lines.length;
+            const content = lines.slice(start, end).join('\n').trim();
+            const key = headings[i].key;
+            if (!key) continue;
+            if (key === 'missing_summary') {
+              parsed.missing_summary.missing_measurements = extractMissingList(content);
+              continue;
+            }
+            parsed[key] = { content: normalizeSectionContent(content, key), missing: [] } as any;
+          }
+
+          return parsed;
+        }
+      } catch (error) {
+        console.warn('Failed to parse TAVI plain sections from results:', error);
+      }
     }
 
     // Ultimate fallback - empty structure
-    return {
-      patient: { content: 'No data available', missing: [] },
-      clinical: { content: 'No data available', missing: [] },
-      laboratory: { content: 'No data available', missing: [] },
-      ecg: { content: 'No data available', missing: [] },
-      background: { content: 'No data available', missing: [] },
-      medications: { content: 'No data available', missing: [] },
-      social_history: { content: 'No data available', missing: [] },
-      investigations: { content: 'No data available', missing: [] },
-      echocardiography: { content: 'No data available', missing: [] },
-      enhanced_ct: { content: 'No data available', missing: [] },
-      procedure_planning: { content: 'No data available', missing: [] },
-      alerts: { content: 'No alerts', missing: [] },
-      missing_summary: {
-        missing_clinical: [],
-        missing_diagnostic: [],
-        missing_measurements: [],
-        completeness_score: '0% (No data available)'
-      }
-    };
+    return blankStructure();
   }, [structuredSections, results]);
 
   // Calculate completion status
@@ -284,7 +458,7 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
       totalMissingItems,
       status: completionPercentage >= 80 ? 'excellent' : completionPercentage >= 60 ? 'good' : completionPercentage >= 40 ? 'fair' : 'incomplete'
     };
-  }, [structuredSections]);
+  }, [effectiveStructuredSections]);
 
   // Generate formatted clinical report
   const formattedReport = useMemo(() => {
@@ -312,7 +486,7 @@ export const TAVIWorkupDisplay: React.FC<TAVIWorkupDisplayProps> = ({
 
     const header = `TAVI WORKUP SUMMARY\nCompletion: ${completionStatus.percentage}% (${completionStatus.status})\n\n`;
     return header + reportSections;
-  }, [structuredSections, completionStatus]);
+  }, [effectiveStructuredSections, completionStatus]);
 
   const toggleSection = useCallback((sectionKey: string) => {
     setExpandedSections(prev => {

@@ -194,6 +194,26 @@ export class InvestigationSummaryAgent extends MedicalAgent {
     }
   }
 
+  // Australian spelling corrections for medical terminology
+  private readonly australianSpellingCorrections: Array<{ us: string; au: string }> = [
+    { us: 'ischemia', au: 'ischaemia' },
+    { us: 'ischemic', au: 'ischaemic' },
+    { us: 'anesthesia', au: 'anaesthesia' },
+    { us: 'anesthetic', au: 'anaesthetic' },
+    { us: 'hemoglobin', au: 'haemoglobin' },
+    { us: 'hemodynamic', au: 'haemodynamic' },
+    { us: 'hemodynamics', au: 'haemodynamics' },
+    { us: 'hemorrhage', au: 'haemorrhage' },
+    { us: 'color', au: 'colour' },
+    { us: 'optimize', au: 'optimise' },
+    { us: 'optimized', au: 'optimised' },
+    { us: 'maximize', au: 'maximise' },
+    { us: 'maximized', au: 'maximised' },
+    { us: 'center', au: 'centre' },
+    { us: 'catheterization', au: 'catheterisation' },
+    { us: 'revascularization', au: 'revascularisation' },
+  ];
+
   /**
    * Enhanced normalization combining Phase 2 + Investigation-specific rules
    */
@@ -210,16 +230,39 @@ export class InvestigationSummaryAgent extends MedicalAgent {
       }
 
       // Step 2: Apply investigation-specific legacy normalization
-      const investigationNormalized = preNormalizeInvestigationText(normalizedText);
+      normalizedText = preNormalizeInvestigationText(normalizedText);
+
+      // Step 3: Apply Australian spelling corrections
+      normalizedText = this.applyAustralianSpelling(normalizedText);
 
       console.log('📝 Enhanced normalization completed');
 
-      return investigationNormalized;
+      return normalizedText;
 
     } catch (error) {
       console.warn('Enhanced normalization failed, using legacy only:', error);
       return preNormalizeInvestigationText(input);
     }
+  }
+
+  /**
+   * Apply Australian spelling corrections to medical terminology
+   */
+  private applyAustralianSpelling(text: string): string {
+    let correctedText = text;
+
+    for (const { us, au } of this.australianSpellingCorrections) {
+      // Case-insensitive word-boundary replacement
+      const regex = new RegExp(`\\b${us}\\b`, 'gi');
+      correctedText = correctedText.replace(regex, (match) => {
+        // Preserve original case
+        if (match === match.toUpperCase()) return au.toUpperCase();
+        if (match[0] === match[0].toUpperCase()) return au.charAt(0).toUpperCase() + au.slice(1);
+        return au;
+      });
+    }
+
+    return correctedText;
   }
 
   /**

@@ -45,7 +45,7 @@ import { BatchAIReviewOrchestrator } from '@/orchestrators/BatchAIReviewOrchestr
 import { getTargetField, getFieldDisplayName, supportsFieldSpecificInsertion } from '@/config/insertionConfig';
 import { LANYARD_CARD_TEXTURE_KEY, parseLanyardTexturePreference } from '@/config/lanyardPreferences';
 import { patientNameValidator } from '@/utils/PatientNameValidator';
-import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport, ValidationResult, MedicalReport, MedicalContext } from '@/types/medical.types';
+import { AgentType, PatientSession, PatientInfo, FailedAudioRecording, BatchAIReviewInput, ProcessingStatus, PipelineProgress, PreOpPlanReport, RightHeartCathReport as _RightHeartCathReport, ValidationResult, MedicalReport, MedicalContext, KeyFact, KeyFactsProofResult } from '@/types/medical.types';
 import type { TranscriptionApprovalStatus } from '@/types/optimization';
 import { ModelLoadingError, isModelLoadingError } from '@/types/errors.types';
 import { PerformanceMonitoringService } from '@/services/PerformanceMonitoringService';
@@ -53,6 +53,7 @@ import { MetricsService } from '@/services/MetricsService';
 import { ProcessingTimePredictor } from '@/services/ProcessingTimePredictor';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useGlobalKeyboardShortcuts } from '@/hooks/useGlobalKeyboardShortcuts';
+import { useNextStepEngine } from '@/hooks/useNextStepEngine';
 import { getActionExecutor, type ActionResult } from '@/services/ActionExecutor';
 import { ToastService } from '@/services/ToastService';
 import { RecordingToasts } from '@/utils/toastHelpers';
@@ -74,6 +75,8 @@ import { ChevronDown, Calendar, Brain, Star, Keyboard } from 'lucide-react';
 import { RoundsView } from './components/rounds/RoundsView';
 import { QuickAddModal } from './components/rounds/QuickAddModal';
 import { AppointmentMatrixBuilder } from './components/AppointmentMatrixBuilder';
+import { StructuralWorkupsView } from './components/taviWorkup/StructuralWorkupsView';
+import { TAVIWorkupProvider } from '@/contexts/TAVIWorkupContext';
 
 interface CurrentDisplayData {
   transcription: string;
@@ -212,7 +215,9 @@ const OptimizedApp: React.FC = memo(() => {
       <QueryProvider>
         <AudioDeviceProvider>
           <RoundsProvider>
-            <OptimizedAppContent />
+            <TAVIWorkupProvider>
+              <OptimizedAppContent />
+            </TAVIWorkupProvider>
           </RoundsProvider>
         </AudioDeviceProvider>
       </QueryProvider>
@@ -225,8 +230,13 @@ const OptimizedAppContent: React.FC = memo(() => {
   const { state, actions, selectors } = useAppState();
   const audioDeviceContext = useAudioDeviceContext();
   const rounds = useRounds();
+  
+  // Next-Step Engine for post-letter clinical gap detection
+  const [nextStepState, nextStepActions] = useNextStepEngine();
+  
   const [roundsOpen, setRoundsOpen] = useState(false);
   const [appointmentBuilderOpen, setAppointmentBuilderOpen] = useState(false);
+  const [structuralWorkupsOpen, setStructuralWorkupsOpen] = useState(false);
   const [globalQuickAddOpen, setGlobalQuickAddOpen] = useState(false);
   const [extensionDarkMode, setExtensionDarkMode] = useState(false);
   const overlayState = {
@@ -297,6 +307,40 @@ const OptimizedAppContent: React.FC = memo(() => {
   const [pendingMobileAgent, setPendingMobileAgent] = useState<AgentType>('quick-letter');
   const [deletingMobileJobId, setDeletingMobileJobId] = useState<string | null>(null);
 
+  // TAVI Proof Mode state
+  const [taviProofModeData, setTAVIProofModeData] = useState<{
+    facts: KeyFact[];
+    onComplete: (result: KeyFactsProofResult) => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  // Angio/PCI Proof Mode state
+  const [angioProofModeData, setAngioProofModeData] = useState<{
+    facts: KeyFact[];
+    onComplete: (result: KeyFactsProofResult) => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  const syncXestroDarkModeToActiveTab = useCallback((enabled: boolean) => {
+    void (async () => {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tabId = activeTab?.id;
+        const url = activeTab?.url || '';
+        if (!tabId || !url.includes('my.xestro.com')) return;
+
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_ACTION',
+          action: 'xestro-dark-mode',
+          data: { force: enabled },
+          tabId
+        });
+      } catch (error) {
+        console.debug('Xestro dark mode sync skipped:', error);
+      }
+    })();
+  }, []);
+
   const applyExtensionDarkMode = useCallback((enabled: boolean) => {
     const root = document.documentElement;
     const body = document.body;
@@ -307,13 +351,14 @@ const OptimizedAppContent: React.FC = memo(() => {
     body?.classList.toggle('operator-extension-dark', enabled);
 
     setExtensionDarkMode(enabled);
+    syncXestroDarkModeToActiveTab(enabled);
 
     try {
       localStorage.setItem('operator-extension-dark-mode', enabled ? 'true' : 'false');
     } catch (error) {
       console.debug('Dark mode preference persistence failed:', error);
     }
-  }, []);
+  }, [syncXestroDarkModeToActiveTab]);
 
   const toggleExtensionDarkMode = useCallback(() => {
     const currentlyDark = extensionDarkMode || document.documentElement.classList.contains('operator-extension-dark');
@@ -1706,12 +1751,22 @@ const OptimizedAppContent: React.FC = memo(() => {
     modelUsed?: string;
   }
 
+  // IMPORTANT: The `input` parameter is the transcription text.
+  // Inside callbacks (like onEnd), we must use `input` directly instead of `state.transcription`
+  // because `state.transcription` is captured at callback creation time (stale closure).
   const startStreamingGeneration = useCallback(async (
     sessionId: string,
     agent: AgentType,
-    input: string,
+    input: string, // This is the transcription - use this in callbacks, NOT state.transcription
     medicalContext?: any
   ): Promise<StreamingGenerationOutcome> => {
+    console.log('🎬 Starting streaming generation:', {
+      sessionId,
+      agent,
+      inputLength: input?.length || 0,
+      inputPreview: input?.substring(0, 100) || '(empty)'
+    });
+    
     let systemPrompt = await getSystemPromptForAgent(agent);
     if (!systemPrompt) {
       return { handled: false, success: false };
@@ -1992,10 +2047,19 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         processingAbortRef.current = null;
+        
+        // Debug log to verify transcription is being saved
+        console.log('💾 Saving session with transcription:', {
+          sessionId,
+          transcriptionLength: input?.length || 0,
+          transcriptionPreview: input?.substring(0, 100) || '(empty)',
+          resultsLength: letterContent?.length || 0
+        });
+        
         actions.updatePatientSession(sessionId, {
           results: letterContent, // Store only letter content in results
           summary: extractedSummary, // Store summary separately
-          transcription: state.transcription || '', // Use state.transcription (already set during processing)
+          transcription: input || '', // Use input parameter (transcription) to avoid stale closure
           status: 'completed',
           completed: true,
           completedTime: Date.now(),
@@ -2014,12 +2078,29 @@ const OptimizedAppContent: React.FC = memo(() => {
             ...completedSession,
             results: letterContent,
             summary: extractedSummary,
-            transcription: state.transcription || '', // Use state.transcription (already set during processing)
+            transcription: input || '', // Use input parameter (transcription) to avoid stale closure
             status: 'completed',
             completed: true,
             completedTime: Date.now()
           });
         }
+
+        // Trigger Next-Step Engine inference for Quick Letter after letter generation completes
+	        if (agent === 'quick-letter' && letterContent) {
+	          console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter completion');
+	          const emrPatient = completedSession?.patient || state.currentPatientInfo;
+	          const patientContext = {
+	            demographics: {
+	              name: emrPatient?.name || 'Patient',
+	              age: emrPatient?.age
+	            }
+	          };
+	          // Run inference asynchronously - don't block the UI
+	          nextStepActions.runInference(letterContent, patientContext, sessionId, 'quick-letter')
+	            .catch(error => {
+	              console.error('❌ Next-Step Engine inference failed:', error);
+	            });
+	        }
 
         // Clear progress indicator after fade-out animation (300ms)
         // Clear any existing timeout to prevent race conditions
@@ -2598,6 +2679,15 @@ const OptimizedAppContent: React.FC = memo(() => {
         });
       }
 
+      // For TAVI and Angio/PCI, request proof mode (extract facts before expensive LLM generation)
+      if (workflowId === 'tavi-workup' || workflowId === 'angiogram-pci') {
+        medicalContext = {
+          ...medicalContext,
+          requestProofMode: true
+        };
+        console.log(`🔍 ${workflowId === 'tavi-workup' ? 'TAVI' : 'Angio/PCI'} Proof Mode: Requesting fact extraction before generation`);
+      }
+
       const result = await AgentFactory.processWithAgent(
         workflowId,
         correctedTranscription,
@@ -2614,6 +2704,236 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('✅ Agent processing complete for session:', sessionId);
 
       const resultStatus = (result as any).status;
+
+      // Handle TAVI proof mode checkpoint (before validation checkpoints)
+      if (resultStatus === 'awaiting_proof' && workflowId === 'tavi-workup') {
+        console.log('🔍 TAVI Proof Mode: Facts extracted, showing proof mode dialog');
+
+        const taviResult = result as any;
+        const keyFacts = taviResult.keyFacts || [];
+
+        // Store extracted data in session for later use (using taviStructuredSections as a temporary holder)
+        actions.updatePatientSession(sessionId, {
+          taviProofModeExtractedData: {
+            taviData: taviResult.taviData,
+            hemodynamics: taviResult.hemodynamics,
+            valveAssessment: taviResult.valveAssessment,
+            complications: taviResult.complications
+          } as any,
+          status: 'awaiting_proof',
+          processingProgress: undefined,
+          pipelineProgress: undefined
+        });
+
+        // Set proof mode data to trigger the dialog
+        setTAVIProofModeData({
+          facts: keyFacts,
+          onComplete: async (proofResult: KeyFactsProofResult) => {
+            console.log('✅ TAVI Proof Mode: Facts confirmed, resuming with locked facts', proofResult);
+
+            // Build locked facts map from confirmed facts
+            const lockedFacts: Record<string, string> = {};
+            proofResult.facts.forEach(fact => {
+              if (fact.status === 'confirmed' || fact.status === 'edited') {
+                lockedFacts[fact.sourceField] = fact.value;
+              }
+            });
+
+            // Resume processing with locked facts (no requestProofMode this time)
+            const contextWithLockedFacts = {
+              sessionId,
+              timestamp: Date.now(),
+              lockedFacts,
+              proofResult
+            };
+
+            try {
+              // Update session to show we're resuming
+              actions.updatePatientSession(sessionId, {
+                status: 'processing',
+                processingProgress: { phase: 'Generating report', progress: 0 }
+              });
+
+              // Re-run agent with locked facts
+              const finalResult = await AgentFactory.processWithAgent(
+                'tavi-workup',
+                correctedTranscription,
+                contextWithLockedFacts,
+                sessionProcessingAbort.signal,
+                processOptions
+              );
+
+              // Update session with final results (same as normal completion)
+              const sessionUpdate: any = {
+                results: finalResult.content,
+                summary: finalResult.summary || '',
+                agentName: finalResult.agentName,
+                modelUsed: finalResult.modelUsed,
+                status: 'completed',
+                completed: true,
+                completedTime: Date.now(),
+                processingTime: finalResult.processingTime,
+                warnings: finalResult.warnings,
+                errors: finalResult.errors,
+                taviStructuredSections: finalResult.taviStructuredSections,
+                processingProgress: undefined,
+                pipelineProgress: undefined,
+                transcription: correctedTranscription
+              };
+
+              actions.updatePatientSession(sessionId, sessionUpdate);
+
+              // Save completed session
+              const completedSession = state.patientSessions.find(s => s.id === sessionId);
+              if (completedSession) {
+                await saveSessionToPersistence({
+                  ...completedSession,
+                  ...sessionUpdate
+                });
+              }
+
+              console.log('✅ TAVI Proof Mode: Report generation complete');
+            } catch (error: any) {
+              console.error('❌ TAVI Proof Mode: Resume failed:', error);
+              actions.updatePatientSession(sessionId, {
+                status: 'error',
+                errors: [error.message || 'Failed to resume after proof mode']
+              });
+            } finally {
+              // Clear proof mode data
+              setTAVIProofModeData(null);
+            }
+          },
+          onCancel: () => {
+            console.log('🚫 TAVI Proof Mode: Cancelled by user');
+
+            // Mark session as cancelled
+            actions.updatePatientSession(sessionId, {
+              status: 'error',
+              errors: ['Proof mode cancelled by user'],
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+
+            // Clear proof mode data
+            setTAVIProofModeData(null);
+          }
+        });
+
+        // Clear pipeline progress
+        actions.clearPipelineProgress();
+        return; // Pause workflow here
+      }
+
+      // Handle Angio/PCI proof mode checkpoint
+      if (resultStatus === 'awaiting_proof' && workflowId === 'angiogram-pci') {
+        console.log('🔍 Angio/PCI Proof Mode: Facts extracted, showing proof mode dialog');
+
+        const angioResult = result as any;
+        const keyFacts = angioResult.keyFacts || [];
+
+        // Store extracted data in session
+        actions.updatePatientSession(sessionId, {
+          angiogramProofModeExtractedData: {
+            extractedData: angioResult.extractedData,
+            procedureType: angioResult.procedureType
+          } as any,
+          status: 'awaiting_proof',
+          processingProgress: undefined,
+          pipelineProgress: undefined
+        });
+
+        // Set proof mode data to trigger dialog
+        setAngioProofModeData({
+          facts: keyFacts,
+          onComplete: async (proofResult: KeyFactsProofResult) => {
+            console.log('✅ Angio/PCI Proof Mode: Facts confirmed, resuming with locked facts', proofResult);
+
+            // Build locked facts map
+            const lockedFacts: Record<string, string> = {};
+            proofResult.facts.forEach(fact => {
+              if (fact.status === 'confirmed' || fact.status === 'edited') {
+                lockedFacts[fact.sourceField] = fact.value;
+              }
+            });
+
+            // Resume processing with locked facts
+            const contextWithLockedFacts = {
+              sessionId,
+              timestamp: Date.now(),
+              lockedFacts,
+              proofResult
+            };
+
+            try {
+              actions.updatePatientSession(sessionId, {
+                status: 'processing',
+                processingProgress: { phase: 'Generating report', progress: 0 }
+              });
+
+              // Re-run agent with locked facts
+              const finalResult = await AgentFactory.processWithAgent(
+                'angiogram-pci',
+                correctedTranscription,
+                contextWithLockedFacts,
+                sessionProcessingAbort.signal,
+                processOptions
+              );
+
+              // Update session with final results
+              const sessionUpdate: any = {
+                results: finalResult.content,
+                summary: finalResult.summary || '',
+                agentName: finalResult.agentName,
+                modelUsed: finalResult.modelUsed,
+                status: 'completed',
+                completed: true,
+                completedTime: Date.now(),
+                processingTime: finalResult.processingTime,
+                warnings: finalResult.warnings,
+                errors: finalResult.errors,
+                processingProgress: undefined,
+                pipelineProgress: undefined,
+                transcription: correctedTranscription
+              };
+
+              actions.updatePatientSession(sessionId, sessionUpdate);
+
+              // Save completed session
+              const completedSession = state.patientSessions.find(s => s.id === sessionId);
+              if (completedSession) {
+                await saveSessionToPersistence({
+                  ...completedSession,
+                  ...sessionUpdate
+                });
+              }
+
+              console.log('✅ Angio/PCI Proof Mode: Report generation complete');
+            } catch (error: any) {
+              console.error('❌ Angio/PCI Proof Mode: Resume failed:', error);
+              actions.updatePatientSession(sessionId, {
+                status: 'error',
+                errors: [error.message || 'Failed to resume after proof mode']
+              });
+            } finally {
+              setAngioProofModeData(null);
+            }
+          },
+          onCancel: () => {
+            console.log('🚫 Angio/PCI Proof Mode: Cancelled by user');
+            actions.updatePatientSession(sessionId, {
+              status: 'error',
+              errors: ['Proof mode cancelled by user'],
+              processingProgress: undefined,
+              pipelineProgress: undefined
+            });
+            setAngioProofModeData(null);
+          }
+        });
+
+        actions.clearPipelineProgress();
+        return;
+      }
 
       if (resultStatus === 'awaiting_validation') {
         switch (workflowId) {
@@ -3254,6 +3574,9 @@ const OptimizedAppContent: React.FC = memo(() => {
     actions.setSelectedSessionId(null);
     actions.clearRecording();
     
+    // Reset Next-Step Engine for the new session
+    nextStepActions.reset();
+    
     // Show brief feedback that recording was sent for processing
     const currentSession = state.patientSessions.find(s => s.id === currentSessionId);
     const patientName = currentSession?.patient.name || 'Patient';
@@ -3340,6 +3663,25 @@ const OptimizedAppContent: React.FC = memo(() => {
         status: session.status,
         priorityLevel: 'PRIORITY 1 - User Explicit Selection'
       });
+
+      // Trigger Next-Step Engine for completed quick-letter sessions
+	      if (session.agentType === 'quick-letter' && session.results && session.status === 'completed') {
+	        console.log('🎯 NEXT-STEP ENGINE: Triggering inference for viewed Quick Letter session');
+	        const patientContext = {
+	          demographics: {
+	            name: session.patient?.name || 'Patient',
+	            age: session.patient?.age
+	          }
+	        };
+	        nextStepActions.reset();
+	        nextStepActions.runInference(session.results, patientContext, session.id, 'quick-letter')
+	          .catch(error => {
+	            console.error('❌ Next-Step Engine inference failed for viewed session:', error);
+	          });
+	      } else {
+        // Reset Next-Step Engine for non-quick-letter sessions
+        nextStepActions.reset();
+      }
 
       // Debug display state after session selection
       setTimeout(() => {
@@ -3955,12 +4297,27 @@ const OptimizedAppContent: React.FC = memo(() => {
       case 'ward-list':
         setRoundsOpen(true);
         break;
+      case 'structural-workups':
+        setStructuralWorkupsOpen(true);
+        break;
       case 'appointment-wrap-up':
         setAppointmentBuilderOpen(true);
         break;
       case 'ai-medical-review':
-        // Open AI review section/modal
-        console.log('🤖 Opening AI Medical Review');
+        // Scroll to AI Review section and provide feedback
+        {
+          const aiReviewSection = document.getElementById('ai-review-section');
+          if (aiReviewSection) {
+            aiReviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Flash effect to draw attention
+            aiReviewSection.classList.add('ring-2', 'ring-violet-400', 'ring-offset-2');
+            setTimeout(() => {
+              aiReviewSection.classList.remove('ring-2', 'ring-violet-400', 'ring-offset-2');
+            }, 2000);
+          }
+          const toast = ToastService.getInstance();
+          toast.info('AI Medical Review', 'Click the button below to analyze EMR data', 3000);
+        }
         break;
 
       // === Profile Photo - Capture from doxy.me tab ===
@@ -4031,10 +4388,31 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
         break;
 
-      // === Pre-Op Plan - Route to agent workflow ===
-      case 'pre-op-plan':
-        if (action.agentType) {
-          handleWorkflowSelect(action.agentType, action.quickActionField);
+      // === Xestro Dark Mode - Toggle EMR dark theme ===
+      case 'xestro-dark-mode':
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: 'EXECUTE_ACTION',
+            action: 'xestro-dark-mode',
+            data: {}
+          });
+          if (response?.success === false) {
+            const toast = ToastService.getInstance();
+            toast.warning('Dark Mode', response?.error || 'Only available on my.xestro.com', 3000);
+          } else {
+            const toast = ToastService.getInstance();
+            toast.success('Dark Mode', response?.enabled ? 'Enabled' : 'Disabled', 2000);
+          }
+        } catch (error) {
+          console.error('❌ Failed to toggle dark mode:', error);
+        }
+        break;
+
+      // === OHIF Viewer - Coming soon ===
+      case 'ohif-viewer':
+        {
+          const toast = ToastService.getInstance();
+          toast.info('Coming Soon', 'OHIF Viewer integration is under development', 3000);
         }
         break;
 
@@ -4433,6 +4811,25 @@ const OptimizedAppContent: React.FC = memo(() => {
 
       // Use atomic completion to ensure consistent state management
       actions.completeProcessingAtomic(state.currentSessionId || 'reprocess-session', result.content);
+
+      // Trigger Next-Step Engine for Quick Letter reprocessing
+	      if (newAgentType === 'quick-letter' && result.content) {
+	        console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter reprocessing');
+	        const session = state.patientSessions.find(s => s.id === targetSessionId);
+	        const emrPatient = session?.patient || state.currentPatientInfo;
+	        const patientContext = {
+	          demographics: {
+	            name: emrPatient?.name || 'Patient',
+	            age: emrPatient?.age
+	          }
+	        };
+	        // Reset and run inference asynchronously
+	        nextStepActions.reset();
+	        nextStepActions.runInference(result.content, patientContext, targetSessionId || 'reprocess-session', 'quick-letter')
+	          .catch(error => {
+	            console.error('❌ Next-Step Engine inference failed after reprocessing:', error);
+	          });
+	      }
 
       // Set warnings and errors if any
       if (result.warnings?.length) {
@@ -5850,6 +6247,12 @@ const OptimizedAppContent: React.FC = memo(() => {
     ];
     dictateAgents.forEach(actionId => {
       executor.registerHandler(actionId, async (action, mode, ctx) => {
+        console.log(`🎯 [ActionExecutor] Handler invoked for: ${action.id}`, {
+          mode,
+          agentType: action.agentType,
+          quickActionField: ctx.quickActionField || action.quickActionField
+        });
+
         if (mode === 'vision' && action.id === 'investigation-summary') {
           actions.openOverlay('image-investigation');
           actions.setUIMode('configuring', { sessionId: state.selectedSessionId, origin: 'user' });
@@ -5857,14 +6260,17 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         if (mode === 'type' && action.agentType) {
+          console.log(`⌨️ [ActionExecutor] Routing to handleTypeClick: ${action.agentType}`);
           return handleTypeClick(action.agentType, ctx.quickActionField || action.quickActionField);
         }
 
         if (action.agentType) {
+          console.log(`🎤 [ActionExecutor] Routing to handleWorkflowSelect: ${action.agentType}`);
           handleWorkflowSelect(action.agentType, ctx.quickActionField);
           return { success: true };
         }
 
+        console.error(`❌ [ActionExecutor] No agent type for action: ${action.id}`);
         return { success: false, error: 'No agent type for action' };
       });
     });
@@ -5887,6 +6293,11 @@ const OptimizedAppContent: React.FC = memo(() => {
 
     executor.registerHandler('ward-list', async () => {
       setRoundsOpen(true);
+      return { success: true };
+    });
+
+    executor.registerHandler('structural-workups', async () => {
+      setStructuralWorkupsOpen(true);
       return { success: true };
     });
 
@@ -6062,8 +6473,8 @@ const OptimizedAppContent: React.FC = memo(() => {
 
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
-      {/* Header - Hidden when Rounds overlay is open */}
-      {!roundsOpen && !appointmentBuilderOpen && (
+      {/* Header - Hidden when overlays are open */}
+      {!roundsOpen && !appointmentBuilderOpen && !structuralWorkupsOpen && (
         <AppHeader
           // Action callbacks
           onDictate={handleHeaderDictate}
@@ -6142,6 +6553,12 @@ const OptimizedAppContent: React.FC = memo(() => {
         {roundsOpen && (
           <div className="fixed inset-0 z-50 bg-white shadow-lg overflow-hidden flex flex-col">
             <RoundsView onClose={() => setRoundsOpen(false)} />
+          </div>
+        )}
+
+        {structuralWorkupsOpen && (
+          <div className="fixed inset-0 z-50 bg-white shadow-lg overflow-hidden flex flex-col">
+            <StructuralWorkupsView onClose={() => setStructuralWorkupsOpen(false)} />
           </div>
         )}
         
@@ -6570,6 +6987,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                 taviValidationResult={displayData.isDisplayingSession ? displayData.taviValidationResult : state.taviValidationResult}
                 taviValidationStatus={displayData.isDisplayingSession ? displayData.taviValidationStatus : state.taviValidationStatus}
                 onTAVIReprocessWithValidation={!displayData.isDisplayingSession ? handleTAVIReprocessWithValidation : undefined}
+                taviProofModeData={taviProofModeData}
+                angioProofModeData={angioProofModeData}
                 educationData={displayData.isDisplayingSession ? displayData.educationData : state.educationData}
                 preOpPlanData={displayData.isDisplayingSession ? displayData.preOpPlanData : state.preOpPlanData}
                 reviewData={displayData.isDisplayingSession ? displayData.reviewData : state.reviewData}
@@ -6597,6 +7016,40 @@ const OptimizedAppContent: React.FC = memo(() => {
                 isSavingRevision={isSavingRevision}
                 isSavingGoldenPair={isSavingGoldenPair}
                 ocrExplanation={displayData.ocrExplanation ?? null}
+                // Next-Step Engine props
+                nextStepStatus={nextStepState.status}
+                nextStepResult={nextStepState.result}
+                onNextStepIntegrate={async (suggestions) => {
+                  const updatedLetter = await nextStepActions.integrateSelected(suggestions);
+                  if (updatedLetter) {
+                    console.log('✅ NEXT-STEP INTEGRATION: Letter updated, length:', updatedLetter.length);
+                    // Update the results in state to reflect the new letter
+                    actions.setResults(updatedLetter);
+                    // Also update the session if we have one
+                    if (stableSelectedSessionId) {
+                      actions.updatePatientSession(stableSelectedSessionId, {
+                        results: updatedLetter
+                      });
+                    }
+                  }
+                }}
+                onNextStepUndo={() => {
+                  const previousLetter = nextStepActions.undo();
+                  if (previousLetter) {
+                    console.log('↩️ NEXT-STEP UNDO: Reverted letter, length:', previousLetter.length);
+                    // Update the results in state
+                    actions.setResults(previousLetter);
+                    // Also update the session if we have one
+                    if (stableSelectedSessionId) {
+                      actions.updatePatientSession(stableSelectedSessionId, {
+                        results: previousLetter
+                      });
+                    }
+                  }
+                }}
+                canNextStepUndo={nextStepState.canUndo}
+                isNextStepIntegrating={nextStepState.isIntegrating}
+                nextStepIntegrationError={nextStepState.integrationError}
                   />
                 );
               })()}

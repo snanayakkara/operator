@@ -4,6 +4,9 @@ import type {
   ReportSection,
   TAVIWorkupReport,
   TAVIWorkupStructuredSections,
+  TAVIWorkupData,
+  TAVIWorkupAlerts,
+  TAVIWorkupSection,
   ChatMessage,
   ValidationResult,
   TAVIExtractedData
@@ -92,14 +95,43 @@ export class TAVIWorkupAgent extends MedicalAgent {
       const validation = await this.validateAndDetectGaps(regexExtracted, input);
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
-      // INTERACTIVE CHECKPOINT: Check for critical gaps
-      // Only trigger checkpoint if there are ACTUALLY critical fields (critical: true)
-      const hasCriticalGaps = validation.missingCritical.some(field => field.critical === true);
-      const hasLowConfidenceCorrections = validation.corrections.some(c => c.confidence < 0.8);
+      // Merge any user-provided fields from validation modal (reprocessing flow)
+      let mergedExtractedData = correctedData;
+      if (context?.userProvidedFields && Object.keys(context.userProvidedFields).length > 0) {
+        console.log('🚨 TAVI AGENT: Merging user-provided fields...');
+        mergedExtractedData = this.mergeUserInput(correctedData, context.userProvidedFields);
+      }
 
-      if (hasCriticalGaps || hasLowConfidenceCorrections) {
-        const criticalCount = validation.missingCritical.filter(f => f.critical === true).length;
-        console.log(`⚠️ TAVI AGENT: Validation requires user input (${criticalCount} critical fields missing, ${validation.corrections.filter(c => c.confidence < 0.8).length} low-confidence corrections)`);
+      // INTERACTIVE CHECKPOINT: Check for unresolved critical gaps / low-confidence corrections
+      const unresolvedCritical = validation.missingCritical
+        .filter(field => field.critical === true)
+        .filter(field => this.isMissingNestedField(mergedExtractedData, field.field));
+
+      const unresolvedLowConfidence = validation.corrections
+        .filter(correction => correction.confidence < 0.8)
+        .filter(correction => {
+          if (this.isMissingNestedField(mergedExtractedData, correction.field)) return true;
+          const currentValue = this.getNestedField(mergedExtractedData, correction.field);
+          return String(currentValue) !== String(correction.correctValue);
+        });
+
+      if (unresolvedCritical.length > 0 || unresolvedLowConfidence.length > 0) {
+        console.log(
+          `⚠️ TAVI AGENT: Validation requires user input (${unresolvedCritical.length} critical fields missing, ${unresolvedLowConfidence.length} low-confidence corrections)`
+        );
+
+        const filteredValidation: ValidationResult = {
+          ...validation,
+          missingCritical: unresolvedCritical,
+          corrections: validation.corrections
+        };
+
+        const structuredFallback = this.buildStructuredSectionsFromWorkupData(
+          extractedWorkupData,
+          extractedAlerts,
+          extractedMissingFields,
+          emrData
+        );
 
         // Return incomplete report with validation state
         const baseReport = this.createReport('', [], context, 0, 0);
@@ -108,9 +140,10 @@ export class TAVIWorkupAgent extends MedicalAgent {
           workupData: extractedWorkupData,
           alerts: extractedAlerts,
           missingFields: extractedMissingFields,
+          structuredSections: structuredFallback,
           status: 'awaiting_validation',
-          validationResult: validation,
-          extractedData: correctedData
+          validationResult: filteredValidation,
+          extractedData: mergedExtractedData
         } as TAVIWorkupReport;
       }
 
@@ -118,7 +151,12 @@ export class TAVIWorkupAgent extends MedicalAgent {
 
       // Phase 2: LLM Processing
       reportProgress('Processing dictation with AI', 0, 'Preparing comprehensive TAVI analysis');
-      const llmPayload = this.buildLLMPayload(input, emrData, { isMinimalInput, wordCount });
+      const llmPayload = this.buildLLMPayload(input, emrData, {
+        isMinimalInput,
+        wordCount,
+        extractedData: mergedExtractedData,
+        userProvidedFields: context?.userProvidedFields
+      });
       reportProgress('Processing dictation with AI', 25, `Payload prepared (${llmPayload.length} chars)`);
 
       console.log(`🤖 Sending to MedGemma-27B for TAVI workup processing...`);
@@ -155,7 +193,10 @@ export class TAVIWorkupAgent extends MedicalAgent {
       );
 
       // Parse structured sections from JSON response
-      const structuredSections = this.parseStructuredSections(response);
+      let structuredSections = this.parseStructuredSections(response);
+      if (!structuredSections) {
+        structuredSections = this.buildStructuredSectionsFromReportSections(sections, missingInfo);
+      }
 
       // Create TAVI-specific report with both legacy and new structure
       const taviReport: TAVIWorkupReport = {
@@ -255,7 +296,7 @@ export class TAVIWorkupAgent extends MedicalAgent {
       { key: 'social_history', title: 'Social History' },
       { key: 'investigations', title: 'Other Investigations' },
       { key: 'echocardiography', title: 'Echocardiography' },
-      { key: 'enhanced_ct', title: 'Enhanced CT Analysis' },
+      // enhanced_ct REMOVED - CT data now in ctMeasurements
       { key: 'procedure_planning', title: 'Procedure Planning' },
       { key: 'alerts', title: 'Alerts & Anatomical Considerations' }
     ];
@@ -430,6 +471,237 @@ export class TAVIWorkupAgent extends MedicalAgent {
     return merged;
   }
 
+  private buildStructuredSectionsFromReportSections(
+    sections: ReportSection[],
+    missingInfo: string[]
+  ): TAVIWorkupStructuredSections {
+    const blank = (content: string): TAVIWorkupSection => ({ content, missing: [] });
+
+    const structured: TAVIWorkupStructuredSections = {
+      patient: blank('Not provided'),
+      clinical: blank('Not provided'),
+      laboratory: blank('Not provided'),
+      ecg: blank('Not provided'),
+      background: blank('Not provided'),
+      medications: blank('Not provided'),
+      social_history: blank('Not provided'),
+      investigations: blank('Not provided'),
+      echocardiography: blank('Not provided'),
+      // enhanced_ct REMOVED - CT data now in ctMeasurements
+      procedure_planning: blank('Not provided'),
+      alerts: blank('None'),
+      missing_summary: {
+        missing_clinical: [],
+        missing_diagnostic: [],
+        missing_measurements: [...missingInfo],
+        completeness_score: 'Not assessed'
+      }
+    };
+
+    const appendSection = (key: keyof Omit<TAVIWorkupStructuredSections, 'missing_summary'>, content: string) => {
+      const current = structured[key].content;
+      const next = this.normalizeStructuredSectionContent(content, key);
+      if (!next) return;
+      if (current && current !== 'Not provided' && current !== 'None') {
+        structured[key] = blank(`${current}\n${next}`);
+      } else {
+        structured[key] = blank(next);
+      }
+    };
+
+    for (const section of sections) {
+      const key = this.mapSectionTitleToKey(section.title);
+      if (!key) continue;
+
+      if (key === 'missing_summary') {
+        const extractedMissing = this.extractMissingListFromText(section.content);
+        structured.missing_summary.missing_measurements = this.mergeMissingFields(
+          structured.missing_summary.missing_measurements,
+          extractedMissing
+        );
+        continue;
+      }
+
+      appendSection(key, section.content);
+    }
+
+    return structured;
+  }
+
+  private buildStructuredSectionsFromWorkupData(
+    workupData: TAVIWorkupData,
+    alerts: TAVIWorkupAlerts,
+    missingFields: string[],
+    emrData: { background: string; investigations: string; medications: string; socialHistory: string; patientData?: any }
+  ): TAVIWorkupStructuredSections {
+    const blank = (content: string): TAVIWorkupSection => ({ content, missing: [] });
+
+    const patientParts: string[] = [];
+    const emrPatient = this.formatPatientData(emrData.patientData);
+    if (emrPatient && emrPatient !== 'Not available') {
+      patientParts.push(emrPatient);
+    }
+
+    const dictatedPatientParts: string[] = [];
+    if (workupData.patient.name) dictatedPatientParts.push(`Name: ${workupData.patient.name}`);
+    if (workupData.patient.dob) dictatedPatientParts.push(`DOB: ${workupData.patient.dob}`);
+    if (workupData.patient.ageYears != null) dictatedPatientParts.push(`Age: ${workupData.patient.ageYears} years`);
+    if (workupData.patient.heightCm != null) dictatedPatientParts.push(`Height: ${workupData.patient.heightCm} cm`);
+    if (workupData.patient.weightKg != null) dictatedPatientParts.push(`Weight: ${workupData.patient.weightKg} kg`);
+    if (workupData.patient.bmi != null) dictatedPatientParts.push(`BMI: ${workupData.patient.bmi}`);
+    if (workupData.patient.bsaMosteller != null) dictatedPatientParts.push(`BSA (Mosteller): ${workupData.patient.bsaMosteller} m²`);
+    if (dictatedPatientParts.length > 0) {
+      patientParts.push(dictatedPatientParts.join(', '));
+    }
+    const patientContent = patientParts.length > 0 ? patientParts.join('\n') : 'Not provided';
+
+    const clinicalParts: string[] = [];
+    if (workupData.clinical.indication) clinicalParts.push(`Indication: ${workupData.clinical.indication}`);
+    if (workupData.clinical.nyhaClass) clinicalParts.push(`NYHA: ${workupData.clinical.nyhaClass}`);
+    if (workupData.clinical.stsPercent != null) clinicalParts.push(`STS: ${workupData.clinical.stsPercent}%`);
+    if (workupData.clinical.euroScorePercent != null) clinicalParts.push(`EuroSCORE II: ${workupData.clinical.euroScorePercent}%`);
+    const clinicalContent = clinicalParts.length > 0 ? clinicalParts.join('\n') : 'Not provided';
+
+    const labParts: string[] = [];
+    if (workupData.laboratory.creatinine != null) labParts.push(`Creatinine: ${workupData.laboratory.creatinine} μmol/L`);
+    if (workupData.laboratory.egfr != null) labParts.push(`eGFR: ${workupData.laboratory.egfr} mL/min/1.73m²`);
+    if (workupData.laboratory.hemoglobin != null) labParts.push(`Haemoglobin: ${workupData.laboratory.hemoglobin} g/L`);
+    if (workupData.laboratory.albumin != null) labParts.push(`Albumin: ${workupData.laboratory.albumin} g/L`);
+    const labContent = labParts.length > 0 ? labParts.join('\n') : 'Not provided';
+
+    const ecgParts: string[] = [];
+    if (workupData.ecg.rate != null) ecgParts.push(`Rate: ${workupData.ecg.rate} bpm`);
+    if (workupData.ecg.rhythm) ecgParts.push(`Rhythm: ${workupData.ecg.rhythm}`);
+    if (workupData.ecg.morphology) ecgParts.push(`QRS morphology: ${workupData.ecg.morphology}`);
+    if (workupData.ecg.qrsWidthMs != null) ecgParts.push(`QRS: ${workupData.ecg.qrsWidthMs} ms`);
+    if (workupData.ecg.prIntervalMs != null) ecgParts.push(`PR: ${workupData.ecg.prIntervalMs} ms`);
+    const ecgContent = ecgParts.length > 0 ? ecgParts.join('\n') : 'Not provided';
+
+    const echoParts: string[] = [];
+    if (workupData.echocardiography.studyDate) echoParts.push(`Study date: ${workupData.echocardiography.studyDate}`);
+    if (workupData.echocardiography.ejectionFractionPercent != null) echoParts.push(`EF: ${workupData.echocardiography.ejectionFractionPercent}%`);
+    if (workupData.echocardiography.septalThicknessMm != null) echoParts.push(`Septal thickness: ${workupData.echocardiography.septalThicknessMm} mm`);
+    if (workupData.echocardiography.meanGradientMmHg != null) echoParts.push(`Mean gradient: ${workupData.echocardiography.meanGradientMmHg} mmHg`);
+    if (workupData.echocardiography.aorticValveAreaCm2 != null) echoParts.push(`AVA: ${workupData.echocardiography.aorticValveAreaCm2} cm²`);
+    if (workupData.echocardiography.dimensionlessIndex != null) echoParts.push(`Dimensionless index: ${workupData.echocardiography.dimensionlessIndex}`);
+    if (workupData.echocardiography.mitralRegurgitationGrade) echoParts.push(`MR: ${workupData.echocardiography.mitralRegurgitationGrade}`);
+    if (workupData.echocardiography.rightVentricularSystolicPressureMmHg != null) {
+      echoParts.push(`RVSP: ${workupData.echocardiography.rightVentricularSystolicPressureMmHg} mmHg`);
+    }
+    if (workupData.echocardiography.comments) echoParts.push(workupData.echocardiography.comments);
+    const echoContent = echoParts.length > 0 ? echoParts.join('\n') : 'Not provided';
+
+    // CT data now stored in ctMeasurements (numeric fields) instead of enhanced_ct text section
+
+    const planParts: string[] = [];
+    if (workupData.procedurePlan.valveSelection.type) planParts.push(`Valve: ${workupData.procedurePlan.valveSelection.type}`);
+    if (workupData.procedurePlan.valveSelection.size) planParts.push(`Valve size: ${workupData.procedurePlan.valveSelection.size}`);
+    if (workupData.procedurePlan.valveSelection.model) planParts.push(`Valve model: ${workupData.procedurePlan.valveSelection.model}`);
+    if (workupData.procedurePlan.valveSelection.reason) planParts.push(`Rationale: ${workupData.procedurePlan.valveSelection.reason}`);
+    if (workupData.procedurePlan.access.primary) planParts.push(`Primary access: ${workupData.procedurePlan.access.primary}`);
+    if (workupData.procedurePlan.access.secondary) planParts.push(`Secondary access: ${workupData.procedurePlan.access.secondary}`);
+    if (workupData.procedurePlan.access.wire) planParts.push(`Wire: ${workupData.procedurePlan.access.wire}`);
+    if (workupData.procedurePlan.strategy.pacing) planParts.push(`Pacing: ${workupData.procedurePlan.strategy.pacing}`);
+    if (workupData.procedurePlan.strategy.bav) planParts.push(`BAV: ${workupData.procedurePlan.strategy.bav}`);
+    if (workupData.procedurePlan.strategy.closure) planParts.push(`Closure: ${workupData.procedurePlan.strategy.closure}`);
+    if (workupData.procedurePlan.strategy.protamine != null) {
+      planParts.push(`Protamine: ${workupData.procedurePlan.strategy.protamine ? 'Yes' : 'No'}`);
+    }
+    if (workupData.procedurePlan.goals) planParts.push(`Goals: ${workupData.procedurePlan.goals}`);
+    if (workupData.procedurePlan.caseNotes) planParts.push(`Case notes: ${workupData.procedurePlan.caseNotes}`);
+    if (workupData.devicesPlanned) planParts.push(`Devices planned: ${workupData.devicesPlanned}`);
+    const planContent = planParts.length > 0 ? planParts.join('\n') : 'Not provided';
+
+    const backgroundContent = this.normalizeStructuredSectionContent(emrData.background || '', 'background') || 'Not provided';
+    const medicationsContent = this.normalizeStructuredSectionContent(emrData.medications || '', 'medications') || 'Not provided';
+    const socialContent = this.normalizeStructuredSectionContent(emrData.socialHistory || '', 'social_history') || 'Not provided';
+    const investigationsContent = this.normalizeStructuredSectionContent(emrData.investigations || '', 'investigations') || 'Not provided';
+
+    const alertsContent =
+      alerts.alertMessages.length > 0 ? alerts.alertMessages.join('\n') : 'None';
+
+    return {
+      patient: blank(patientContent),
+      clinical: blank(clinicalContent),
+      laboratory: blank(labContent),
+      ecg: blank(ecgContent),
+      background: blank(backgroundContent),
+      medications: blank(medicationsContent),
+      social_history: blank(socialContent),
+      investigations: blank(investigationsContent),
+      echocardiography: blank(echoContent),
+      // enhanced_ct REMOVED - CT content moved to ctMeasurements.narrative
+      procedure_planning: blank(planContent),
+      alerts: blank(alertsContent),
+      missing_summary: {
+        missing_clinical: [],
+        missing_diagnostic: [],
+        missing_measurements: [...missingFields],
+        completeness_score: 'Validation pending'
+      }
+    };
+  }
+
+  private mapSectionTitleToKey(
+    title: string
+  ): keyof Omit<TAVIWorkupStructuredSections, 'missing_summary'> | 'missing_summary' | null {
+    const normalized = title.trim().toLowerCase();
+
+    if (normalized === 'patient' || normalized.includes('patient')) return 'patient';
+    if (normalized === 'clinical' || normalized.includes('clinical')) return 'clinical';
+    if (normalized === 'laboratory values' || normalized === 'bloods' || normalized.includes('laboratory')) return 'laboratory';
+    if (normalized === 'ecg assessment' || normalized === 'ecg' || normalized.includes('ecg')) return 'ecg';
+    if (normalized === 'background' || normalized.includes('background')) return 'background';
+    if (normalized.startsWith('medications')) return 'medications';
+    if (normalized === 'social history' || normalized.includes('social')) return 'social_history';
+    if (normalized.includes('investigation')) return 'investigations';
+    if (normalized === 'echocardiography' || normalized === 'echo' || normalized.includes('echo')) return 'echocardiography';
+    // CT measurements now handled separately via ctMeasurements field (not enhanced_ct section)
+    if (normalized === 'procedure planning' || normalized.includes('procedure')) return 'procedure_planning';
+    if (normalized.includes('alerts')) return 'alerts';
+    if (normalized.includes('missing')) return 'missing_summary';
+
+    return null;
+  }
+
+  private normalizeStructuredSectionContent(
+    content: string,
+    sectionKey: keyof Omit<TAVIWorkupStructuredSections, 'missing_summary'>
+  ): string {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return sectionKey === 'alerts' ? 'None' : 'Not provided';
+    }
+
+    const lower = trimmed.toLowerCase();
+    const indicatesMissing =
+      /\bnot available\b/.test(lower) ||
+      /\bno data available\b/.test(lower) ||
+      /\bnot provided\b/.test(lower) ||
+      /\bno\b.*\bprovided\b/.test(lower);
+
+    if (indicatesMissing) {
+      return sectionKey === 'alerts' ? 'None' : 'Not provided';
+    }
+
+    return trimmed;
+  }
+
+  private extractMissingListFromText(content: string): string[] {
+    const cleaned = content
+      .replace(/\r\n/g, '\n')
+      .replace(/[•·]/g, '\n')
+      .replace(/;/g, '\n')
+      .trim();
+
+    if (!cleaned) return [];
+
+    return cleaned
+      .split('\n')
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+
   /**
    * Extract EMR data using standard pattern (like other agents)
    */
@@ -578,7 +850,16 @@ export class TAVIWorkupAgent extends MedicalAgent {
   /**
    * Build comprehensive LLM payload with dictation and EMR data
    */
-  private buildLLMPayload(input: string, emrData: any, validation?: { isMinimalInput: boolean; wordCount: number }): string {
+  private buildLLMPayload(
+    input: string,
+    emrData: any,
+    validation?: {
+      isMinimalInput?: boolean;
+      wordCount?: number;
+      extractedData?: TAVIExtractedData;
+      userProvidedFields?: Record<string, unknown>;
+    }
+  ): string {
     let payload = `
 DICTATED TAVI WORKUP:
 ${input}`;
@@ -598,6 +879,15 @@ Investigation Summary: ${emrData.investigations || 'Not available'}
 Medications: ${emrData.medications || 'Not available'}
 Social History: ${emrData.socialHistory || 'Not available'}
 Patient Demographics: ${this.formatPatientData(emrData.patientData)}
+
+STRUCTURED DATA CONTEXT (if present):
+Auto-extracted (regex + validation): ${validation?.extractedData ? JSON.stringify(validation.extractedData) : 'Not available'}
+Clinician-provided overrides (take precedence): ${validation?.userProvidedFields ? JSON.stringify(validation.userProvidedFields) : 'Not available'}
+
+INSTRUCTIONS:
+- Prefer clinician-provided overrides when present, even if not stated verbatim in dictation.
+- Prefer auto-extracted structured values when they match the dictation.
+- If a value is not present in dictation/EMR/validated overrides, explicitly mark as missing.
 
 Please process this comprehensive TAVI workup dictation and format according to the system prompt instructions.`;
 
@@ -670,10 +960,7 @@ Please process this comprehensive TAVI workup dictation and format according to 
           content: jsonData.echocardiography?.content || 'Not provided',
           missing: jsonData.echocardiography?.missing || []
         },
-        enhanced_ct: {
-          content: jsonData.enhanced_ct?.content || 'Not provided',
-          missing: jsonData.enhanced_ct?.missing || []
-        },
+        // enhanced_ct REMOVED - CT data now in ctMeasurements
         procedure_planning: {
           content: jsonData.procedure_planning?.content || 'Not provided',
           missing: jsonData.procedure_planning?.missing || []
@@ -817,9 +1104,9 @@ Please process this comprehensive TAVI workup dictation and format according to 
     const extracted: TAVIExtractedData = {};
 
     // Valve Sizing from CT
-    const annulusDiamMatch = text.match(/annulus\s+diameter\s+(\d+(?:\.\d+)?)\s*mm/i);
-    const annulusPerimMatch = text.match(/annulus\s+perimeter\s+(\d+(?:\.\d+)?)\s*mm/i);
-    const annulusAreaMatch = text.match(/(?:annulus|ct)\s+area\s+(\d+(?:\.\d+)?)\s*(?:mm²|mm2|sq\s*mm)/i);
+    const annulusDiamMatch = text.match(/annulus\s+diameter\s+(\d+(?:\.\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i);
+    const annulusPerimMatch = text.match(/(?:annulus\s+)?perimeter\s+(\d+(?:\.\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i);
+    const annulusAreaMatch = text.match(/(?:annulus|ct)\s+area\s+(\d+(?:\.\d+)?)(?:\s*(?:mm²|mm2|sq\s*mm))?/i);
 
     if (annulusDiamMatch || annulusPerimMatch || annulusAreaMatch) {
       extracted.valveSizing = {
@@ -831,7 +1118,9 @@ Please process this comprehensive TAVI workup dictation and format according to 
 
     // Access Assessment
     const accessSiteMatch = text.match(/(?:access|approach)\s+(?:via|through)\s+(femoral|radial|subclavian|transapical|transaortic)/i);
-    const iliofemoralMatch = text.match(/(?:iliac|femoral)\s+(?:arteries|vessels)\s+(\d+(?:-\d+)?)\s*mm/i);
+    const iliofemoralMatch =
+      text.match(/(?:iliac|femoral)\s+(?:arteries|vessels)\s+(\d+(?:-\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i) ||
+      text.match(/\bcfa\s+(?:diameter|min(?:imum)?\s+diameter)\s+(\d+(?:\.\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i);
 
     if (accessSiteMatch || iliofemoralMatch) {
       extracted.accessAssessment = {
@@ -841,8 +1130,8 @@ Please process this comprehensive TAVI workup dictation and format according to 
     }
 
     // Coronary Heights
-    const leftCoronaryMatch = text.match(/left\s+coronary\s+height\s+(\d+(?:\.\d+)?)\s*mm/i);
-    const rightCoronaryMatch = text.match(/right\s+coronary\s+height\s+(\d+(?:\.\d+)?)\s*mm/i);
+    const leftCoronaryMatch = text.match(/left\s+(?:main|coronary)\s+height\s+(\d+(?:\.\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i);
+    const rightCoronaryMatch = text.match(/right\s+coronary\s+height\s+(\d+(?:\.\d+)?)(?:\s*(?:mm|millimeters|millimetres))?/i);
 
     if (leftCoronaryMatch || rightCoronaryMatch) {
       extracted.coronaryHeights = {
@@ -852,9 +1141,9 @@ Please process this comprehensive TAVI workup dictation and format according to 
     }
 
     // Aortic Valve Assessment from Echo
-    const peakGradMatch = text.match(/(?:peak|max)\s+gradient\s+(\d+(?:\.\d+)?)\s*mmhg/i);
-    const meanGradMatch = text.match(/mean\s+gradient\s+(\d+(?:\.\d+)?)\s*mmhg/i);
-    const avAreaMatch = text.match(/(?:aortic\s+valve\s+area|ava)\s+(\d+(?:\.\d+)?)\s*cm²/i);
+    const peakGradMatch = text.match(/(?:peak|max)\s+gradient\s+(\d+(?:\.\d+)?)(?:\s*(?:mmhg|mm\s*hg))?/i);
+    const meanGradMatch = text.match(/mean\s+gradient\s+(\d+(?:\.\d+)?)(?:\s*(?:mmhg|mm\s*hg))?/i);
+    const avAreaMatch = text.match(/(?:aortic\s+valve\s+area|ava)\s+(\d+(?:\.\d+)?)(?:\s*(?:cm²|cm2))?/i);
 
     if (peakGradMatch || meanGradMatch || avAreaMatch) {
       extracted.aorticValve = {
@@ -878,8 +1167,10 @@ Please process this comprehensive TAVI workup dictation and format according to 
     }
 
     // Procedure Details - Valve selection
-    const valveTypeMatch = text.match(/(sapien\s+(?:3|ultra)|evolut\s+(?:r|pro|fx)|acurate\s+(?:neo|neo2))/i);
-    const valveSizeMatch = text.match(/(\d+)\s*mm\s+valve/i);
+    const valveTypeMatch = text.match(/(sapien\s*(?:3|iii|ultra)|evolut\s+(?:r|pro|fx)|acurate\s+(?:neo|neo2))/i);
+    const valveSizeMatch =
+      text.match(/(\d+)\s*mm\s+(?:sapien|evolut|acurate|navitor|valve)\b/i) ||
+      text.match(/planned\s+valve\s+(\d+)\s*mm/i);
     const deploymentDepthMatch = text.match(/deployment\s+depth\s+(\d+(?:\.\d+)?)\s*mm/i);
 
     if (valveTypeMatch || valveSizeMatch || deploymentDepthMatch) {
@@ -999,5 +1290,25 @@ Please process this comprehensive TAVI workup dictation and format according to 
     }
 
     current[keys[keys.length - 1]] = value;
+  }
+
+  private getNestedField(obj: any, path: string): unknown {
+    const keys = path.split('.');
+    let current = obj;
+    for (const key of keys) {
+      if (current == null || typeof current !== 'object' || !(key in current)) {
+        return undefined;
+      }
+      current = current[key];
+    }
+    return current;
+  }
+
+  private isMissingNestedField(obj: any, path: string): boolean {
+    const value = this.getNestedField(obj, path);
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim().length === 0;
+    if (typeof value === 'number') return Number.isNaN(value);
+    return false;
   }
 }

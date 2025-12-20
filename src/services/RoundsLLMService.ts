@@ -207,6 +207,63 @@ export class RoundsLLMService {
     return typeof raw === 'string' ? raw.trim() : '';
   }
 
+  public async generateHandoverSummary(patients: RoundsPatient[]): Promise<string> {
+    await this.lmStudio.ensureModelLoaded(MODEL_CONFIG.REASONING_MODEL);
+
+    const snapshot = patients.map(p => ({
+      name: p.name,
+      mrn: p.mrn,
+      bed: p.bed,
+      ward: p.site,
+      oneLiner: p.oneLiner,
+      issues: p.issues.filter(i => i.status === 'open').map(i => ({
+        title: i.title,
+        latest: i.subpoints[i.subpoints.length - 1]?.text
+      })),
+      investigations: p.investigations.map(inv => ({
+        type: inv.type,
+        name: inv.name,
+        summary: inv.summary,
+        labTrend: inv.type === 'lab' ? inv.labSeries?.slice(-3) : undefined
+      })),
+      openTasks: p.tasks.filter(t => t.status === 'open').map(t => t.text)
+    }));
+
+    const request: LMStudioRequest = {
+      model: MODEL_CONFIG.REASONING_MODEL,
+      temperature: 0.25,
+      max_tokens: 1200,
+      context_length: 8000,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are writing a clinician-to-clinician ward handover message for multiple inpatients.',
+            'For each patient, summarise: active issues, key investigations (pending/results), and outstanding tasks.',
+            'Be concise, accurate, and avoid repeating irrelevant detail.',
+            'Formatting:',
+            '- One paragraph per patient.',
+            '- Start each paragraph with: "<Name> – Bed <bed> – <one-liner>" (omit missing fields).',
+            '- Write a short narrative covering active issues, key investigations in the context of those issues, and then the plan.',
+            'Use Australian spelling. Return plain text only.'
+          ].join(' ')
+        },
+        {
+          role: 'user',
+          content: [
+            'Patients JSON:',
+            JSON.stringify(snapshot),
+            '',
+            'Write the handover message:'
+          ].join('\n')
+        }
+      ]
+    };
+
+    const raw = await this.lmStudio.makeRequest(request, undefined, 'rounds-handover-summary');
+    return typeof raw === 'string' ? raw.trim() : '';
+  }
+
   public async refineGpLetter(patient: RoundsPatient, currentLetter: string, instruction: string): Promise<string> {
     await this.lmStudio.ensureModelLoaded(MODEL_CONFIG.REASONING_MODEL);
     const request: LMStudioRequest = {

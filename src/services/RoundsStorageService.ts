@@ -1,13 +1,14 @@
 import { Clinician, RoundsPatient } from '@/types/rounds.types';
 import { roundsBackendService } from '@/services/RoundsBackendService';
+import { CLINICAL_STORAGE_KEYS, getClinicalState, setClinicalState } from '@/storage/clinicalStorage';
 
-const STORAGE_KEY = 'operator_rounds_patients_v1';
-const CLINICIANS_STORAGE_KEY = 'operator_rounds_clinicians_v1';
 const SAVE_DEBOUNCE_MS = 250;
 
 /**
  * Lightweight storage wrapper for Rounds data.
  * Persists to chrome.storage.local when available, otherwise falls back to localStorage.
+ *
+ * Clinical data must never be stored in chrome.storage.sync.
  */
 export class RoundsStorageService {
   private static instance: RoundsStorageService | null = null;
@@ -25,8 +26,8 @@ export class RoundsStorageService {
   private constructor() {
     if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
       chrome.storage.onChanged.addListener((changes, areaName) => {
-        if (areaName === 'local' && changes[STORAGE_KEY]) {
-          const storageValue = (changes[STORAGE_KEY].newValue as RoundsPatient[]) || [];
+        if (areaName === 'local' && changes[CLINICAL_STORAGE_KEYS.ROUNDS_PATIENTS]) {
+          const storageValue = (changes[CLINICAL_STORAGE_KEYS.ROUNDS_PATIENTS].newValue as RoundsPatient[]) || [];
 
           // Preserve optimistic patients when storage changes
           const optimisticPatients = this.cache.filter(p => this.isOptimistic(p.id));
@@ -84,17 +85,6 @@ export class RoundsStorageService {
     }
 
     this.lastLocalSaveTime = this.getNewestTimestamp(this.cache);
-
-    // If local is empty and no optimistic patients, try to recover from Chrome sync storage
-    if (this.cache.length === 0) {
-      const syncPatients = await this.loadPatientsFromSync();
-      if (syncPatients.length > 0) {
-        this.cache = [...syncPatients];
-        this.lastLocalSaveTime = this.getNewestTimestamp(syncPatients);
-        // Persist back to local so it sticks even if sync is unavailable
-        this.schedulePersist();
-      }
-    }
 
     // Try to merge in backend data, but never wipe out a populated local cache with an empty backend
     const backendPatients = await this.fetchFromBackend();
@@ -338,25 +328,15 @@ export class RoundsStorageService {
   }
 
   private async persist(): Promise<void> {
-    const payload = { [STORAGE_KEY]: this.cache };
-
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        await chrome.storage.local.set(payload);
-        // Best-effort sync backup (persists across most extension reloads)
-        if (chrome.storage?.sync) {
-          chrome.storage.sync.set(payload).catch(err => {
-            console.warn('⚠️ Failed to persist rounds patients to chrome.storage.sync', err);
-          });
-        }
-        return;
-      }
+      await setClinicalState({ roundsPatients: this.cache });
+      return;
     } catch (error) {
       console.warn('⚠️ Failed to persist rounds patients to chrome.storage.local, attempting localStorage', error);
     }
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.cache));
+      localStorage.setItem(CLINICAL_STORAGE_KEYS.ROUNDS_PATIENTS, JSON.stringify(this.cache));
     } catch (error) {
       console.error('❌ Failed to persist rounds patients to localStorage', error);
       throw error;
@@ -365,17 +345,15 @@ export class RoundsStorageService {
 
   private async loadPatientsFromLocal(): Promise<RoundsPatient[]> {
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        const result = await chrome.storage.local.get(STORAGE_KEY);
-        const patients = (result?.[STORAGE_KEY] as RoundsPatient[]) || [];
-        return [...patients];
-      }
+      const state = await getClinicalState();
+      const patients = state.roundsPatients || [];
+      return [...patients];
     } catch (error) {
       console.warn('⚠️ Failed to load rounds patients from chrome.storage.local, falling back to localStorage', error);
     }
 
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(CLINICAL_STORAGE_KEYS.ROUNDS_PATIENTS);
       if (raw) {
         const parsed = JSON.parse(raw) as RoundsPatient[];
         return [...parsed];
@@ -384,19 +362,6 @@ export class RoundsStorageService {
       console.warn('⚠️ Failed to load rounds patients from localStorage', error);
     }
 
-    return [];
-  }
-
-  private async loadPatientsFromSync(): Promise<RoundsPatient[]> {
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.sync) {
-        const result = await chrome.storage.sync.get(STORAGE_KEY);
-        const patients = (result?.[STORAGE_KEY] as RoundsPatient[]) || [];
-        return [...patients];
-      }
-    } catch (error) {
-      console.warn('⚠️ Failed to load rounds patients from chrome.storage.sync', error);
-    }
     return [];
   }
 
@@ -415,18 +380,16 @@ export class RoundsStorageService {
   // Clinician management methods
   public async loadClinicians(): Promise<Clinician[]> {
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        const result = await chrome.storage.local.get(CLINICIANS_STORAGE_KEY);
-        const clinicians = (result?.[CLINICIANS_STORAGE_KEY] as Clinician[]) || [];
-        this.cliniciansCache = clinicians;
-        return [...clinicians];
-      }
+      const state = await getClinicalState();
+      const clinicians = state.roundsClinicians || [];
+      this.cliniciansCache = clinicians;
+      return [...clinicians];
     } catch (error) {
       console.warn('⚠️ Failed to load clinicians from chrome.storage.local, falling back to localStorage', error);
     }
 
     try {
-      const raw = localStorage.getItem(CLINICIANS_STORAGE_KEY);
+      const raw = localStorage.getItem(CLINICAL_STORAGE_KEYS.ROUNDS_CLINICIANS);
       if (raw) {
         const parsed = JSON.parse(raw) as Clinician[];
         this.cliniciansCache = parsed;
@@ -459,19 +422,15 @@ export class RoundsStorageService {
   }
 
   private async persistClinicians(): Promise<void> {
-    const payload = { [CLINICIANS_STORAGE_KEY]: this.cliniciansCache };
-
     try {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-        await chrome.storage.local.set(payload);
-        return;
-      }
+      await setClinicalState({ roundsClinicians: this.cliniciansCache });
+      return;
     } catch (error) {
       console.warn('⚠️ Failed to persist clinicians to chrome.storage.local, attempting localStorage', error);
     }
 
     try {
-      localStorage.setItem(CLINICIANS_STORAGE_KEY, JSON.stringify(this.cliniciansCache));
+      localStorage.setItem(CLINICAL_STORAGE_KEYS.ROUNDS_CLINICIANS, JSON.stringify(this.cliniciansCache));
     } catch (error) {
       console.error('❌ Failed to persist clinicians to localStorage', error);
       throw error;

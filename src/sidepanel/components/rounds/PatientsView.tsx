@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Plus, BedDouble, Users, GripVertical, Download, ChevronUp, ChevronDown } from 'lucide-react';
+import { CheckCircle2, Plus, BedDouble, Users, GripVertical, Download, ChevronUp, ChevronDown, DollarSign, Clock } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useRounds } from '@/contexts/RoundsContext';
 import { createEmptyPatient } from '@/services/RoundsPatientService';
 import { PatientDetail } from './PatientDetail';
+import { BillingPromptModal } from './BillingPromptModal';
 import { RoundsPatient } from '@/types/rounds.types';
 import { isoNow } from '@/utils/rounds';
 import { WardRoundCardExporter } from '@/services/WardRoundCardExporter';
@@ -48,6 +49,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
   const [pendingUpdates, setPendingUpdates] = useState<PendingWardRoundUpdate[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
   const [showExportSection, setShowExportSection] = useState(false);
+  // Billing prompt state
+  const [billingPromptPatient, setBillingPromptPatient] = useState<RoundsPatient | null>(null);
+  const [billingPromptDate, setBillingPromptDate] = useState<string>('');
   const { applyWardDiff } = useRounds();
   const exportFolder = useMemo(
     () => getWardExportsRoot(roundIdInput || '<round id>', { icloudRoot: '', wardRoundRoot: DEFAULT_WARD_ROUND_ROOT }),
@@ -143,8 +147,30 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
 
   const toggleCompleted = (patient: RoundsPatient) => {
     const todayKey = getTodayKey();
-    const nextValue = isCompletedToday(patient) ? undefined : todayKey;
-    updatePatient(patient.id, p => ({ ...p, roundCompletedDate: nextValue, lastUpdatedAt: isoNow() }));
+    const isCurrentlyCompleted = isCompletedToday(patient);
+    
+    if (!isCurrentlyCompleted) {
+      // Marking as done - show billing prompt
+      setBillingPromptPatient(patient);
+      setBillingPromptDate(todayKey);
+    } else {
+      // Unmarking - just toggle directly
+      updatePatient(patient.id, p => ({ ...p, roundCompletedDate: undefined, lastUpdatedAt: isoNow() }));
+    }
+  };
+
+  const completeBillingPrompt = () => {
+    if (billingPromptPatient) {
+      const todayKey = getTodayKey();
+      updatePatient(billingPromptPatient.id, p => ({ ...p, roundCompletedDate: todayKey, lastUpdatedAt: isoNow() }));
+    }
+    setBillingPromptPatient(null);
+    setBillingPromptDate('');
+  };
+
+  const cancelBillingPrompt = () => {
+    setBillingPromptPatient(null);
+    setBillingPromptDate('');
   };
 
   const handleDragStart = (patientId: string) => {
@@ -201,6 +227,24 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
     const parsing = intakeParsing[patient.id] === 'running';
     const wardLabel = patient.site?.trim() || 'Unassigned';
     const completed = isCompletedToday(patient);
+    const todayKey = getTodayKey();
+    const todaysBilling = (patient.billingEntries || []).filter(e => (e.serviceDate || '').slice(0, 10) === todayKey);
+    const enteredTodayCount = todaysBilling.filter(e => e.status === 'entered').length;
+    const pendingTodayCount = todaysBilling.filter(e => e.status === 'pending').length;
+    const hasBillingToday = todaysBilling.length > 0;
+    const billingIcon = enteredTodayCount > 0 ? DollarSign : Clock;
+    const billingTone =
+      enteredTodayCount > 0 && pendingTodayCount === 0
+        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+        : enteredTodayCount > 0
+        ? 'text-blue-700 bg-blue-50 border-blue-200'
+        : 'text-amber-700 bg-amber-50 border-amber-200';
+    const billingTitle =
+      enteredTodayCount > 0
+        ? `Billed today (${enteredTodayCount}${pendingTodayCount ? ` entered, ${pendingTodayCount} pending` : ' entered'})`
+        : pendingTodayCount > 0
+        ? `Billing pending today (${pendingTodayCount})`
+        : '';
     
     // Collapsed card for completed patients - more faded and minimal
     const cardClasses = completed
@@ -245,6 +289,14 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
                 />
               </label>
               <span className="text-sm font-medium text-gray-600 truncate">{patient.name}</span>
+              {hasBillingToday && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${billingTone}`}
+                  title={billingTitle}
+                >
+                  {React.createElement(billingIcon, { className: 'w-3 h-3' })}
+                </span>
+              )}
               <span className="text-xs text-gray-400">•</span>
               <span className="text-xs text-gray-500">{wardLabel}{patient.bed ? ` • ${patient.bed}` : ''}</span>
             </div>
@@ -292,6 +344,17 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
             {parsing && (
               <span className="inline-flex items-center gap-1 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded-full">
                 parsing intake…
+              </span>
+            )}
+            {hasBillingToday && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${billingTone}`}
+                title={billingTitle}
+              >
+                {React.createElement(billingIcon, { className: 'w-3 h-3' })}
+                <span className="font-mono text-[11px]">
+                  {enteredTodayCount > 0 ? enteredTodayCount : pendingTodayCount}
+                </span>
               </span>
             )}
             {updatedRecently(patient) && (
@@ -373,9 +436,18 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
         {selectedPatient && selectedPatient.status === 'active' ? (
           <PatientDetail patient={selectedPatient} />
         ) : (
-          <div className="h-full flex items-center justify-center text-sm text-gray-500">
-            Select an active patient to view details.
-          </div>
+          <button
+            onClick={togglePatientList}
+            className="h-full w-full flex flex-col items-center justify-center gap-3 text-sm text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+          >
+            <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
+              <Users className="w-6 h-6 text-indigo-500" />
+            </div>
+            <div className="text-center">
+              <p className="font-medium text-gray-700">No patient selected</p>
+              <p className="text-xs text-gray-400 mt-1">Tap here to open patient list</p>
+            </div>
+          </button>
         )}
       </div>
 
@@ -598,6 +670,16 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenQuickAdd }) =>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Billing Prompt Modal */}
+      {billingPromptPatient && (
+        <BillingPromptModal
+          patient={billingPromptPatient}
+          serviceDate={billingPromptDate}
+          onClose={cancelBillingPrompt}
+          onComplete={completeBillingPrompt}
+        />
       )}
     </div>
   );

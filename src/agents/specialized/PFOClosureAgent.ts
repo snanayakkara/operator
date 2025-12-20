@@ -120,13 +120,16 @@ export class PFOClosureAgent extends MedicalAgent {
       const complications = this.identifyComplications(correctedInput);
 
       // Generate structured report content
-      const reportContent = await this.generateStructuredReport(
+      const rawReportContent = await this.generateStructuredReport(
         pfoClosureData, 
         pfoAnatomy, 
         deviceAssessment, 
         complications,
         correctedInput
       );
+
+      // Clean report content to remove conversational preamble
+      const reportContent = this.cleanReportContent(rawReportContent);
 
       // Parse response into sections
       const sections = this.parseResponse(reportContent, context);
@@ -220,6 +223,41 @@ Generate a comprehensive PFO closure procedural report with device deployment an
     }
 
     return sections;
+  }
+
+  /**
+   * Clean report content by stripping conversational preamble and markdown artifacts
+   * Applied before creating the final report to ensure clean display
+   */
+  private cleanReportContent(content: string): string {
+    let cleaned = content
+      // Remove markdown code fences
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      // Strip conversational preamble patterns
+      .replace(
+        /^(?:okay|sure|alright|here(?:'s| is)|let me|i'll|i will|i understand|based on|certainly|of course|absolutely|right|medical report)[^*]*?(?=\*\*)/i,
+        ''
+      )
+      .replace(
+        /^[^*]*?(?:i understand|you want me to|i'll structure|here is a comprehensive|i'll|i will|let me)[^*]*?(?=\*\*)/i,
+        ''
+      )
+      .trim();
+    
+    // If still not starting with section header, find and extract from first header
+    if (!cleaned.startsWith('**')) {
+      const headerMatch = cleaned.match(/\*\*(?:PREAMBLE|PROCEDURE|INDICATION|PATENT|PFO)/i);
+      if (headerMatch && headerMatch.index !== undefined && headerMatch.index > 0) {
+        console.log('⚠️ PFOClosureAgent: Stripping preamble before section header');
+        cleaned = cleaned.substring(headerMatch.index);
+      }
+    }
+    
+    // Final cleanup
+    return cleaned
+      .replace(/^\s*`+\s*/gm, '')  // Strip orphaned backticks
+      .trim();
   }
 
   private correctPFOTerminology(text: string): string {

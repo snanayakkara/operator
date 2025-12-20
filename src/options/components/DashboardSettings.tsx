@@ -8,6 +8,7 @@ import { PerformanceMetricsSection } from './PerformanceMetricsSection';
 import { UIPreferencesSection } from './UIPreferencesSection';
 import { LanyardPreferencesSection } from './LanyardPreferencesSection';
 import { StorageManagementSection } from './StorageManagementSection';
+import { NotionSettingsSection } from './NotionSettingsSection';
 
 export const DashboardSettings: React.FC = () => {
   const lmStudioService = useMemo(() => LMStudioService.getInstance(), []);
@@ -212,6 +213,8 @@ export const DashboardSettings: React.FC = () => {
 
       {/* UI Preferences Section */}
       <UIPreferencesSection />
+
+      <NotionSettingsSection />
 
       {/* Storage Management Section */}
       <StorageManagementSection />

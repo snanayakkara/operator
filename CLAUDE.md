@@ -5,6 +5,7 @@
 - 14+ specialty **agents** (TAVI, Angio/PCI, mTEER, PFO, RHC, Quick Letter, Consultation, Investigation Summary, Aus Review, Background, Medication, Bloods, Imaging, Patient Education, Batch Review)
 - **ActionExecutor + command bar**: single registry drives command bar, favourites, and global `Shift+Letter` shortcuts; command bar now surfaces background errors and inline clarification forms before running actions.
 - **Ranked action search**: command bar search scores and ranks matches across label/alias/description/shortcut with lightweight fuzzy matching.
+- **TAVI Workup Presentation**: Landscape-first bento board layout for clinical meeting review with keyboard navigation, expandable tiles, and pinnable procedure plan
 - **Transcription**: MLX Whisper (`whisper-large-v3-turbo`) at `http://localhost:8001`
 - **Generation**: LM Studio at `http://localhost:1234` (MedGemma‑27B for complex; Gemma‑3n‑e4b for simple)
 - **DSPy/GEPA** optimisation server at `http://localhost:8002`
@@ -344,12 +345,22 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **3.42.0**
+**Current Version**: **4.2.0**
 **Last Updated**: December 2025
 
 ---
 
 ## 15) Recent Major Updates (highlights)
+
+**v4.2.0 (Dec 2025)**
+- **TAVI Workup Presentation System**: Landscape-first bento board layout for clinical meeting review
+  - Three-column grid with patient context, clinical data tiles, and pinnable procedure plan
+  - Keyboard navigation (arrows, Enter/Space, Escape, number keys for pages, P to toggle plan)
+  - Professional Avenir-like typography with CSS custom properties theming
+  - Responsive breakpoints for desktop, tablet, and mobile layouts
+  - Focus states with purple glow and dimming of non-focused tiles
+- **Presentation Components**: PatientStrip, PageTabBar, BentoTile, PlanCommandCard, ImagingGrid
+- **CSS-only Design System**: 8px grid, shadow tokens, transitions respecting reduced motion
 
 **v3.42.0 (Dec 2025)**
 - **Ward Conversation Engine**: Multi-turn conversational ward rounds with structured checklist flow (issues → results → plan → EDD) and condition-specific items (ADHF, aortic stenosis, HFpEF, AF).

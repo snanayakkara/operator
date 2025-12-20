@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Users,
@@ -596,6 +596,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   onToggleSessionCheck,
   persistedSessionIds = new Set()
 }) => {
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const pendingAutoScrollRef = useRef<number | null>(null);
+
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   // Local state for lazy loading
   const [showAllCompleted, setShowAllCompleted] = useState(false);
@@ -736,26 +740,39 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     return result;
   }, [sessionCategories, showAllCompleted, showAllInProgress, showAllErrored, isSearchActive]);
 
-  const expandBottomCategory = useCallback(() => {
-    if (isSearchActive) return;
+  const expandBottomCategory = useCallback((): boolean => {
+    if (isSearchActive) return false;
 
     // Expand only the bottom-most visible category to avoid shifting items the user is already looking at.
     if (sessionCategories.completed.length > 0) {
-      if (visibleSessions.hasMoreCompleted) setShowAllCompleted(true);
-      return;
+      if (visibleSessions.hasMoreCompleted && !showAllCompleted) {
+        setShowAllCompleted(true);
+        return true;
+      }
+      return false;
     }
     if (sessionCategories.errored.length > 0) {
-      if (visibleSessions.hasMoreErrored) setShowAllErrored(true);
-      return;
+      if (visibleSessions.hasMoreErrored && !showAllErrored) {
+        setShowAllErrored(true);
+        return true;
+      }
+      return false;
     }
     if (sessionCategories.inProgress.length > 0) {
-      if (visibleSessions.hasMoreInProgress) setShowAllInProgress(true);
+      if (visibleSessions.hasMoreInProgress && !showAllInProgress) {
+        setShowAllInProgress(true);
+        return true;
+      }
     }
+    return false;
   }, [
     isSearchActive,
     sessionCategories.completed.length,
     sessionCategories.errored.length,
     sessionCategories.inProgress.length,
+    showAllCompleted,
+    showAllErrored,
+    showAllInProgress,
     visibleSessions.hasMoreCompleted,
     visibleSessions.hasMoreErrored,
     visibleSessions.hasMoreInProgress
@@ -772,17 +789,61 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     }
   }, [expandBottomCategory, isSearchActive]);
 
-  const handleListWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (event.deltaY <= 0) return;
+  const handleListWheelNative = useCallback((event: any) => {
+    const el = listRef.current;
+    if (!el) return;
+
+    const deltaY = Number(event?.deltaY ?? 0);
+    if (deltaY === 0) return;
     if (isSearchActive) return;
 
-    const target = event.currentTarget;
-    const isNearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24;
+    const eventTarget = event?.target as Node | null | undefined;
+    const shouldRouteScrollToList = !!eventTarget && !el.contains(eventTarget);
+
+    // If the wheel gesture starts on the header/search/etc, route it to the list and prevent
+    // the underlying app from scrolling.
+    if (shouldRouteScrollToList) {
+      event.preventDefault();
+      event.stopPropagation();
+      const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTop = Math.min(Math.max(0, el.scrollTop + deltaY), maxScrollTop);
+    }
+
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+    // If we're in the middle of expanding + auto-scrolling, keep the scroll "inside" the dropdown
+    // and accumulate additional wheel deltas so one gesture both loads and advances.
+    if (pendingAutoScrollRef.current !== null) {
+      if (deltaY > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        pendingAutoScrollRef.current += Math.min(240, deltaY);
+      } else if (atTop) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      return;
+    }
 
     // If the list isn't scrollable yet (e.g. only the initial items are rendered),
-    // a downward scroll gesture should still reveal the rest.
-    if (isNearBottom) {
-      expandBottomCategory();
+    // a downward scroll gesture should reveal more AND not scroll the background.
+    if (atBottom && deltaY > 0) {
+      const didExpand = expandBottomCategory();
+      if (didExpand) {
+        event.preventDefault();
+        event.stopPropagation();
+        pendingAutoScrollRef.current = el.scrollTop + Math.min(240, deltaY);
+        return;
+      }
+      // No more to expand; keep scroll locked to the dropdown.
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (atTop && deltaY < 0) {
+      event.preventDefault();
+      event.stopPropagation();
     }
   }, [expandBottomCategory, isSearchActive]);
 
@@ -867,12 +928,12 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   }, [isOpen, recalcPosition]);
 
   const getCascadeMotionProps = useCallback((extraIndex: number) => {
-    const delay = Math.min(0.35, extraIndex * 0.025);
+    const delay = Math.min(0.7, extraIndex * 0.05);
     return {
-      initial: { opacity: 0, y: 8 },
-      animate: { opacity: 1, y: 0 },
-      exit: { opacity: 0, y: -6 },
-      transition: { duration: 0.16, ease: 'easeOut' as const, delay }
+      initial: { y: 8 },
+      animate: { y: 0 },
+      exit: { y: -6 },
+      transition: { duration: 0.32, ease: 'easeOut' as const, delay }
     };
   }, []);
 
@@ -898,6 +959,71 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
     };
   }, [computedPos]);
 
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    if (pendingAutoScrollRef.current === null) return;
+
+    let cancelled = false;
+    let rafId = 0;
+    let attempts = 0;
+
+    const applyUntilScrollable = () => {
+      if (cancelled) return;
+      attempts += 1;
+
+      const desiredScrollTop = pendingAutoScrollRef.current ?? 0;
+      const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTop = Math.min(desiredScrollTop, maxScrollTop);
+
+      // During the fold-in height animation, the list might not be scrollable yet.
+      // Keep trying for a few frames until enough content height exists.
+      if (attempts < 30 && maxScrollTop < desiredScrollTop) {
+        rafId = requestAnimationFrame(applyUntilScrollable);
+        return;
+      }
+
+      // Done: either we reached the desired position, or the list can't scroll further.
+      pendingAutoScrollRef.current = null;
+    };
+
+    rafId = requestAnimationFrame(applyUntilScrollable);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    showAllCompleted,
+    showAllErrored,
+    showAllInProgress,
+    visibleSessions.completed.length,
+    visibleSessions.errored.length,
+    visibleSessions.inProgress.length
+  ]);
+
+  // Track when dropdown ref is mounted (needed because portal renders async)
+  const [dropdownMounted, setDropdownMounted] = useState(false);
+  
+  // Callback ref to detect when the dropdown element is actually in the DOM
+  const dropdownRefCallback = useCallback((node: HTMLDivElement | null) => {
+    dropdownRef.current = node;
+    setDropdownMounted(!!node);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !dropdownMounted) return;
+    const el = dropdownRef.current;
+    if (!el) return;
+
+    // React's synthetic onWheel can be passive in some setups; attach a non-passive listener
+    // so we can prevent background scroll while we expand + auto-scroll.
+    const handler = handleListWheelNative;
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handler);
+    };
+  }, [handleListWheelNative, isOpen, dropdownMounted]);
+
   // Early return AFTER all hooks to avoid React hook rule violations
   if (!isOpen) {
     return null;
@@ -907,10 +1033,15 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
   const matchingSessionsCount = filteredSessions.length;
 
   const dropdownContent = (
-    <div
+    <motion.div
+      ref={dropdownRefCallback}
       style={getDropdownStyle()}
       className="bg-white rounded-card shadow-modal border border-gray-200 overflow-hidden"
       data-dropdown-menu
+      initial={{ height: 0 }}
+      animate={{ height: 'auto' }}
+      exit={{ height: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
     >
       {/* Header */}
       <div className="p-3 border-b border-gray-100 bg-gray-50">
@@ -978,9 +1109,9 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
 
       {/* Sessions List */}
       <div
-        className="max-h-[calc(100vh-160px)] overflow-y-auto"
+        ref={listRef}
+        className="max-h-[calc(100vh-160px)] overflow-y-auto overscroll-contain"
         onScroll={handleListScroll}
-        onWheel={handleListWheel}
       >
         {matchingSessionsCount === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-gray-500">
@@ -1034,10 +1165,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       <motion.div
                         key="inProgress-extra"
                         className="overflow-hidden"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                        initial={{ height: 0 }}
+                        animate={{ height: 'auto' }}
+                        exit={{ height: 0 }}
+                        transition={{ duration: 0.44, ease: 'easeOut' }}
                       >
                         <div className="space-y-2">
                           {visibleSessions.inProgress.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
@@ -1119,10 +1250,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       <motion.div
                         key="errored-extra"
                         className="overflow-hidden"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                        initial={{ height: 0 }}
+                        animate={{ height: 'auto' }}
+                        exit={{ height: 0 }}
+                        transition={{ duration: 0.44, ease: 'easeOut' }}
                       >
                         <div className="space-y-2">
                           {visibleSessions.errored.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
@@ -1206,10 +1337,10 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
                       <motion.div
                         key="completed-extra"
                         className="overflow-hidden"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                        initial={{ height: 0 }}
+                        animate={{ height: 'auto' }}
+                        exit={{ height: 0 }}
+                        transition={{ duration: 0.44, ease: 'easeOut' }}
                       >
                         <div className="space-y-2">
                           {visibleSessions.completed.slice(INITIAL_VISIBLE_SESSIONS).map(({ session, isChecked }, extraIndex) => {
@@ -1255,12 +1386,14 @@ export const SessionDropdown: React.FC<SessionDropdownProps> = memo(({
           </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 
   return (
     <DropdownPortal isOpen={isOpen} onClickOutside={onClose}>
-      {dropdownContent}
+      <AnimatePresence mode="wait">
+        {dropdownContent}
+      </AnimatePresence>
     </DropdownPortal>
   );
 }, (prev, next) => {

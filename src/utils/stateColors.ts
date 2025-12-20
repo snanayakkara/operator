@@ -234,6 +234,24 @@ export function pipelineStageToState(stage: 'audio-processing' | 'transcribing' 
 }
 
 /**
+ * B7: Map controlled stage names to processing states
+ * Supports the full stage taxonomy from progress.types.ts
+ */
+export function stageNameToState(stage: string): ProcessingState {
+  const mapping: Record<string, ProcessingState> = {
+    'collecting': 'recording',
+    'transcribing': 'transcribing',
+    'extracting': 'ai-analysis',
+    'reasoning': 'ai-analysis',
+    'formatting': 'generation',
+    'validating': 'generation',
+    'inserting': 'generation',
+    'complete': 'completed'
+  };
+  return mapping[stage] || 'processing';
+}
+
+/**
  * Map session status to processing state
  */
 export function sessionStatusToState(status: string): ProcessingState {

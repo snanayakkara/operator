@@ -90,6 +90,9 @@ export const getSubpointDisplay = (subpoint?: IssueSubpoint): string | undefined
   if (subpoint.type === 'procedure') {
     return subpoint.procedure?.name || subpoint.text;
   }
+  if (subpoint.type === 'antibiotic') {
+    return subpoint.antibiotic?.name || subpoint.text;
+  }
   return subpoint.text;
 };
 

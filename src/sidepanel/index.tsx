@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import OptimizedApp from './OptimizedApp';
 import './styles/globals.css';
+import { installClinicalSyncWriteGuard, migrateClinicalStateFromSyncToLocal } from '@/storage/clinicalStorage';
 
 // Hard-stop default browser handling of OS file drops in the side panel
 // Attach ASAP at module load with capture + non-passive listeners
@@ -88,7 +89,10 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Initialize React app
-function initializeApp() {
+async function initializeApp() {
+  installClinicalSyncWriteGuard();
+  await migrateClinicalStateFromSyncToLocal();
+
   console.log('🏥 Initializing Operator Chrome Extension...', new Date().toISOString());
   console.log('🔧 Extension context check:', typeof chrome !== 'undefined' && chrome.runtime);
   

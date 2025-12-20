@@ -5,6 +5,7 @@ import type {
   ScreenshotCaptureResult
 } from '@/types/medical.types';
 import { WhisperServerService } from '@/services/WhisperServerService';
+import { installClinicalSyncWriteGuard, migrateClinicalStateFromSyncToLocal } from '@/storage/clinicalStorage';
 
 interface ExtensionMessage {
   type: string;
@@ -35,6 +36,10 @@ class BackgroundService {
     }
 
     console.log('🚀 Initializing background service...');
+
+    // Guardrail + one-time best-effort migration for legacy versions that used sync storage.
+    installClinicalSyncWriteGuard();
+    await migrateClinicalStateFromSyncToLocal();
 
     // Set up event listeners
     this.setupEventListeners();

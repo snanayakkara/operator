@@ -347,6 +347,7 @@ export const AppointmentMatrixBuilder: React.FC<AppointmentMatrixBuilderProps> =
               { short: 'Cap Rad', full: 'Capital Radiology Carlton' },
               { short: 'Bayside', full: 'Bayside Heart' },
               { short: 'Vision Rad', full: 'Vision Radiology Shepparton' },
+              { short: 'Shepp', full: 'Shepparton Medical Suites' },
               { short: 'Cabrini', full: 'Cabrini' }
             ].map(({ short, full }) => (
               <button
