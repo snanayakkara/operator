@@ -608,6 +608,11 @@ export interface TAVIWorkupCTMeasurements {
   annulusPerimeterMm?: number;
   annulusMinDiameterMm?: number;
   annulusMaxDiameterMm?: number;
+  annulusMeanDiameterMm?: number;
+
+  // Aliases for cleaner usage (same as annulusAreaMm2/annulusPerimeterMm)
+  annulusArea?: number;
+  annulusPerimeter?: number;
 
   // Coronary heights
   coronaryHeights?: {
@@ -1210,6 +1215,27 @@ export interface TAVIExtractedData {
 // Angiogram/PCI Validation Types
 // ============================================================
 
+/**
+ * Single lesion entry in angiogram findings
+ */
+export type LesionEntry = {
+  id: string;
+  branch: string;
+  severity: string;
+  description: string;
+};
+
+/**
+ * Lesion tree organized by vessel
+ */
+export type LesionTree = {
+  lm: LesionEntry[];
+  lad: LesionEntry[];
+  lcx: LesionEntry[];
+  rca: LesionEntry[];
+  grafts: LesionEntry[];
+};
+
 export interface AngioPCIExtractedData {
   accessSite?: string;
   targetVessel?: string;
@@ -1229,6 +1255,10 @@ export interface AngioPCIExtractedData {
     contrastVolume?: number;
     fluoroscopyTime?: number;
   };
+  /** Pre-extracted lesion tree from transcription */
+  lesions?: LesionTree;
+  /** Method used for lesion extraction */
+  lesionExtractionMethod?: 'regex' | 'quick-model';
 }
 
 // ============================================================
@@ -1918,7 +1948,7 @@ export interface KeyFact {
  */
 export interface ProofModeConfig {
   /** Which mode to use */
-  mode: 'audio' | 'visual';
+  mode: 'audio' | 'visual' | 'lesions';
 
   /** TTS speed for audio mode (0.5 - 2.0) */
   ttsSpeed?: number;
@@ -1944,7 +1974,7 @@ export interface KeyFactsProofResult {
   action: 'confirmed' | 'cancelled';
 
   /** Which mode was used */
-  modeUsed: 'audio' | 'visual';
+  modeUsed: 'audio' | 'visual' | 'lesions';
 
   /** Time spent in proof mode (ms) */
   timeSpent: number;
@@ -1957,6 +1987,9 @@ export interface KeyFactsProofResult {
 
   /** Number of facts rejected by user */
   rejectsCount: number;
+
+  /** User-refined lesion tree (when lesion mode used) */
+  refinedLesions?: LesionTree;
 }
 
 /**
@@ -1977,6 +2010,12 @@ export interface MedicalContextWithLockedFacts extends MedicalContext {
    * Example: { "valveDetails.size": "26", "valveDetails.type": "Evolut Pro Plus" }
    */
   lockedFacts?: Record<string, string>;
+
+  /**
+   * Locked lesions from proof mode (AngioPCI) that MUST NOT be changed
+   * during report generation. User-verified lesion tree.
+   */
+  lockedLesions?: LesionTree;
 
   /**
    * Proof mode result (if proof mode was used)

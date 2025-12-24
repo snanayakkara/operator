@@ -43,7 +43,7 @@ export class AudioOptimizationService {
     const originalSize = audioBlob.size;
 
     try {
-      // Default compression settings optimized for MLX Whisper
+      // Default compression settings optimized for local ASR
       const {
         bitrate = 64000,      // 64kbps - good balance of quality/size for voice
         sampleRate = 16000,   // 16kHz - sufficient for speech recognition

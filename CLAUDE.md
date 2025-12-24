@@ -345,7 +345,7 @@ npm run optim:quick-letter
 - Patch = fixes/tweaks; Minor = new features/UX; Major = breaking/architecture
 - **Update both** `package.json` and `manifest.json` for significant changes
 
-**Current Version**: **4.2.0**
+**Current Version**: **4.3.0**
 **Last Updated**: December 2025
 
 ---

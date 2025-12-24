@@ -49,29 +49,28 @@ export class TranscriptionService {
     this.isInitializing = true;
 
     try {
-      console.log('🎙️ Initializing transcription service with MLX Whisper...');
+      console.log('🎙️ Initializing transcription service...');
       
-      // Check if MLX Whisper transcription service is working
+      // Check if transcription service is working
       const transcriptionStatus = await this.lmStudioService.checkTranscriptionService();
       if (!transcriptionStatus.available) {
-        console.warn('⚠️ MLX Whisper server not available:', transcriptionStatus.error);
+        console.warn('⚠️ Transcription server not available:', transcriptionStatus.error);
         console.warn('💡 Common fixes:');
-        console.warn('   1. Start server: ./start-whisper-server.sh');
-        console.warn('   2. Or manually: source venv-whisper/bin/activate && python whisper-server.py');
-        console.warn('   3. Check server logs for errors');
-        console.warn('   4. Verify port 8001 is not in use: lsof -i :8001');
+        console.warn('   1. Start server: ./dev (select MLX Whisper or MedASR)');
+        console.warn('   2. Check server logs for errors');
+        console.warn('   3. Verify port 8001 is not in use: lsof -i :8001');
         console.warn('🔄 Transcription will use fallback mode with placeholder text');
       } else {
-        console.log('✅ MLX Whisper server is available and ready');
-        console.log(`🤖 Model: ${transcriptionStatus.model || 'whisper-large-v3-turbo'}`);
+        console.log('✅ Transcription server is available and ready');
+        console.log(`🤖 Model: ${transcriptionStatus.model || 'unknown'}`);
       }
 
       this.isInitialized = true;
-      console.log(`✅ Transcription service initialized with MLX Whisper${transcriptionStatus.available ? '' : ' (fallback mode)'}`);
+      console.log(`✅ Transcription service initialized${transcriptionStatus.available ? '' : ' (fallback mode)'}`);
 
     } catch (error) {
-      console.error('❌ MLX Whisper transcription service initialization failed:', error);
-      throw new Error(`MLX Whisper initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Transcription service initialization failed:', error);
+      throw new Error(`Transcription initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       this.isInitializing = false;
     }
@@ -84,9 +83,9 @@ export class TranscriptionService {
 
     try {
       const startTime = Date.now();
-      console.log('🎙️ Transcribing audio with MLX Whisper Large v3 Turbo...');
+      console.log('🎙️ Transcribing audio with transcription engine...');
 
-      // Call MLX Whisper transcription service via LMStudioService
+      // Call transcription service via LMStudioService
       const rawText = await this.lmStudioService.transcribeAudio(recording.audioData, undefined, agentType);
       
       // Apply medical terminology corrections if enabled
@@ -108,14 +107,14 @@ export class TranscriptionService {
         processingTime
       };
 
-      console.log(`✅ MLX Whisper transcription completed in ${processingTime}ms`);
+      console.log(`✅ Transcription completed in ${processingTime}ms`);
       console.log(`📝 Text length: ${result.text.length} chars, Confidence: ${(result.confidence * 100).toFixed(1)}%`);
       console.log(`🔤 Preview: ${result.text.substring(0, 100)}${result.text.length > 100 ? '...' : ''}`);
       return result;
 
     } catch (error) {
-      console.error('❌ MLX Whisper transcription processing failed:', error);
-      throw new Error(`MLX Whisper transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Transcription processing failed:', error);
+      throw new Error(`Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

@@ -1,13 +1,14 @@
 /**
- * Valve Recommendation Card - Phase 8.3
+ * Valve Recommendation Card - Phase 9
  *
  * Displays automated TAVI valve prosthesis recommendations based on CT measurements.
- * Shows primary recommendation + alternatives with suitability scores and warnings.
+ * Uses ValveSizingServiceV2 with accurate algorithms ported from tavitool.pages.dev.
+ * Shows best valve per manufacturer with oversizing percentages and optimal indicators.
  */
 
 import React, { useMemo } from 'react';
-import { Award, AlertTriangle, ChevronDown, ChevronUp, Info } from 'lucide-react';
-import { ValveSizingService, type ValveRecommendation } from '@/services/ValveSizingService';
+import { Award, ChevronDown, ChevronUp, Info, Check } from 'lucide-react';
+import { ValveSizingServiceV2, type ValveBrand, type ValveResult } from '@/services/ValveSizingServiceV2';
 import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
 
 interface ValveRecommendationCardProps {
@@ -16,46 +17,68 @@ interface ValveRecommendationCardProps {
 
 export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = ({ measurements }) => {
   const [expanded, setExpanded] = React.useState(true);
-  const [showAllAlternatives, setShowAllAlternatives] = React.useState(false);
 
-  const recommendations = useMemo(() => {
-    if (!measurements) return [];
-    const service = ValveSizingService.getInstance();
-    return service.calculateRecommendations(measurements);
-  }, [measurements]);
+  const service = ValveSizingServiceV2.getInstance();
 
-  const primary = recommendations.length > 0 ? recommendations[0] : null;
-  const alternatives = recommendations.slice(1, showAllAlternatives ? undefined : 3);
-  const hasMoreAlternatives = recommendations.length > 4;
+  // Get best valve per manufacturer
+  const { bestPerBrand, hasData, overallBest } = useMemo(() => {
+    const area = measurements?.annulusArea;
+    const perimeter = measurements?.annulusPerimeter;
 
-  // Check if we have required measurements
-  const hasRequiredData = measurements?.annulusAreaMm2 && measurements?.annulusPerimeterMm;
+    if (!area || !perimeter) {
+      return { bestPerBrand: null, hasData: false, overallBest: null };
+    }
 
-  // Get suitability color
-  const getSuitabilityColor = (category: ValveRecommendation['sizeCategory']) => {
-    switch (category) {
-      case 'optimal':
-        return 'text-emerald-700 bg-emerald-100 border-emerald-300';
-      case 'within_range':
-        return 'text-blue-700 bg-blue-100 border-blue-300';
-      case 'borderline':
-        return 'text-amber-700 bg-amber-100 border-amber-300';
-      case 'outside_range':
-        return 'text-rose-700 bg-rose-100 border-rose-300';
+    const validation = service.validateMeasurements(area, perimeter);
+    if (!validation.valid) {
+      return { bestPerBrand: null, hasData: false, overallBest: null };
+    }
+
+    const best = service.getBestValvePerBrand(area, perimeter);
+
+    // Find overall best (optimal valve with highest score)
+    let overall: ValveResult | null = null;
+    for (const brand of service.getBrandOrder()) {
+      const result = best[brand];
+      if (result?.isOptimal) {
+        if (!overall || result.oversizing < overall.oversizing) {
+          overall = result;
+        }
+      }
+    }
+    // If no optimal found, pick first result
+    if (!overall) {
+      for (const brand of service.getBrandOrder()) {
+        if (best[brand]) {
+          overall = best[brand];
+          break;
+        }
+      }
+    }
+
+    return { bestPerBrand: best, hasData: true, overallBest: overall };
+  }, [measurements, service]);
+
+  // Brand display colors
+  const getBrandColor = (brand: ValveBrand) => {
+    switch (brand) {
+      case 'evolut':
+        return 'bg-blue-50 border-blue-200 text-blue-700';
+      case 'sapien':
+        return 'bg-red-50 border-red-200 text-red-700';
+      case 'navitor':
+        return 'bg-purple-50 border-purple-200 text-purple-700';
+      case 'myval':
+        return 'bg-teal-50 border-teal-200 text-teal-700';
     }
   };
 
-  const getCategoryLabel = (category: ValveRecommendation['sizeCategory']) => {
-    switch (category) {
-      case 'optimal':
-        return 'Optimal';
-      case 'within_range':
-        return 'Within Range';
-      case 'borderline':
-        return 'Borderline';
-      case 'outside_range':
-        return 'Outside Range';
-    }
+  const getOversizingColor = (result: ValveResult) => {
+    if (result.isOptimal) return 'text-emerald-600';
+    const range = service.getOptimalRange(result.brand);
+    if (result.oversizing < range.min) return 'text-amber-600';
+    if (result.oversizing > range.max) return 'text-rose-600';
+    return 'text-ink-secondary';
   };
 
   return (
@@ -65,9 +88,9 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
         type="button"
         onClick={() => setExpanded(!expanded)}
         className={`w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors ${
-          primary && primary.sizeCategory === 'optimal'
+          overallBest?.isOptimal
             ? 'bg-emerald-50 border-l-4 border-l-emerald-500'
-            : hasRequiredData
+            : hasData
             ? 'bg-blue-50 border-l-4 border-l-blue-500'
             : 'bg-gray-50 border-l-4 border-l-gray-300'
         }`}
@@ -75,11 +98,11 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
         <div className="flex items-center gap-2">
           <Award className="w-4 h-4 text-purple-600" />
           <div className="text-left">
-            <h3 className="text-sm font-semibold text-ink-primary">Valve Recommendation</h3>
+            <h3 className="text-sm font-semibold text-ink-primary">AI Recommendation</h3>
             <p className="text-xs text-ink-tertiary">
-              {primary
-                ? `${primary.valve.model} ${primary.size.size}mm`
-                : hasRequiredData
+              {overallBest
+                ? `${service.getManufacturer(overallBest.brand).displayName} ${overallBest.size}mm (${overallBest.oversizing.toFixed(1)}%)`
+                : hasData
                 ? 'Calculating...'
                 : 'Enter annulus area & perimeter'}
             </p>
@@ -96,7 +119,7 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
       {expanded && (
         <div className="p-3 border-t border-line-primary space-y-3">
           {/* No Data State */}
-          {!hasRequiredData && (
+          {!hasData && (
             <div className="flex items-start gap-2 p-3 bg-gray-50 rounded border border-gray-200">
               <Info className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-gray-700">
@@ -106,127 +129,47 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
             </div>
           )}
 
-          {/* Primary Recommendation */}
-          {primary && (
+          {/* Best per manufacturer */}
+          {bestPerBrand && (
             <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-ink-primary">Primary Recommendation</h4>
-              <div className={`p-3 rounded border ${getSuitabilityColor(primary.sizeCategory)}`}>
-                {/* Valve Info */}
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-semibold">{primary.valve.model} {primary.size.size}mm</p>
-                    <p className="text-xs text-ink-secondary mt-0.5">
-                      {primary.valve.manufacturer} · {primary.valve.deploymentMethod}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-medium">{primary.suitabilityScore}%</span>
-                    <p className="text-xs text-ink-tertiary">{getCategoryLabel(primary.sizeCategory)}</p>
-                  </div>
-                </div>
+              <h4 className="text-xs font-semibold text-ink-primary">Best by Manufacturer</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {service.getBrandOrder().map((brand) => {
+                  const result = bestPerBrand[brand];
+                  if (!result) return null;
 
-                {/* Oversizing */}
-                <div className="mb-2">
-                  <p className="text-xs">
-                    <span className="font-medium">Oversizing:</span> {primary.oversizing.toFixed(1)}%
-                    <span className="text-ink-tertiary ml-1">
-                      (target {primary.size.oversizingMin}-{primary.size.oversizingMax}%)
-                    </span>
-                  </p>
-                  <p className="text-xs">
-                    <span className="font-medium">Catheter:</span> {primary.size.catheterSize}F
-                  </p>
-                </div>
+                  const manufacturer = service.getManufacturer(brand);
 
-                {/* Reasoning */}
-                {primary.reasoning.length > 0 && (
-                  <div className="mb-2">
-                    <ul className="text-xs space-y-0.5">
-                      {primary.reasoning.map((reason, idx) => (
-                        <li key={idx} className="flex items-start gap-1">
-                          <span className="text-emerald-600 mt-0.5">✓</span>
-                          <span>{reason}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Warnings */}
-                {primary.warnings.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-current opacity-60">
-                    <div className="flex items-start gap-1">
-                      <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                      <div className="text-xs space-y-0.5">
-                        {primary.warnings.map((warning, idx) => (
-                          <p key={idx}>{warning}</p>
-                        ))}
+                  return (
+                    <div
+                      key={brand}
+                      className={`p-2 rounded border ${getBrandColor(brand)}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold">{manufacturer.displayName}</span>
+                        {result.isOptimal && (
+                          <span className="flex items-center gap-0.5 text-xs text-emerald-600">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
                       </div>
+                      <p className="text-sm font-bold">{result.sizeName}</p>
+                      <p className={`text-xs font-medium ${getOversizingColor(result)}`}>
+                        {result.oversizing.toFixed(1)}% oversizing
+                      </p>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Alternatives */}
-          {alternatives.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-ink-primary">Alternatives</h4>
-              <div className="space-y-2">
-                {alternatives.map((rec, idx) => (
-                  <div
-                    key={`${rec.valve.id}-${rec.size.size}`}
-                    className="p-2 rounded border border-gray-200 bg-gray-50"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-ink-primary">
-                          {rec.valve.model} {rec.size.size}mm
-                        </p>
-                        <p className="text-xs text-ink-tertiary">
-                          {rec.oversizing.toFixed(1)}% oversizing · {rec.size.catheterSize}F catheter
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${getSuitabilityColor(rec.sizeCategory)}`}>
-                          {rec.suitabilityScore}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Warnings for alternatives */}
-                    {rec.warnings.length > 0 && (
-                      <div className="mt-1.5 flex items-start gap-1">
-                        <AlertTriangle className="w-3 h-3 text-amber-600 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-ink-secondary">{rec.warnings[0]}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Show More/Less */}
-              {hasMoreAlternatives && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllAlternatives(!showAllAlternatives)}
-                  className="w-full text-xs text-purple-600 hover:text-purple-700 py-1 transition-colors"
-                >
-                  {showAllAlternatives
-                    ? 'Show fewer alternatives'
-                    : `Show ${recommendations.length - 4} more alternatives`}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Sizing Chart Reference */}
-          {primary && (
+          {/* Reference note */}
+          {hasData && measurements && (
             <div className="pt-2 border-t border-line-primary">
               <p className="text-xs text-ink-tertiary">
-                Based on annulus area ({measurements!.annulusAreaMm2!.toFixed(0)}mm²) and perimeter ({measurements!.annulusPerimeterMm!.toFixed(1)}mm).
-                Recommendations follow manufacturer IFU guidelines.
+                Based on annulus area ({measurements.annulusArea!.toFixed(0)}mm²) and perimeter ({measurements.annulusPerimeter!.toFixed(1)}mm).
+                Optimal ranges: Evolut/Navitor 15-25%, Sapien 0-10%, MyVal 5-15%.
               </p>
             </div>
           )}

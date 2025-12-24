@@ -2,11 +2,11 @@
  * Dictate Section Modal - Phase 4
  *
  * Modal for recording and parsing incremental dictation to append to any TAVI workup section.
- * Pattern: Record → Whisper → Parse → Preview → Merge
+ * Pattern: Record → Transcribe → Parse → Preview → Merge
  *
  * Features:
  * - Audio recording with live visualizer
- * - Whisper transcription
+ * - Transcription
  * - Quick model parsing for cleanup
  * - Preview before merging
  * - Simple append strategy

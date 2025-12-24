@@ -11,7 +11,7 @@
 import React, { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileTextIcon, AlertCircleIcon, CheckIcon, SquareIcon } from '../icons/OptimizedIcons';
-import { EyeOff, Eye, Download, Sparkles, Loader2, X, Tag, GitBranch } from 'lucide-react';
+import { EyeOff, Eye, Download, Sparkles, Loader2, X, Tag, GitBranch, Volume2 } from 'lucide-react';
 import Button, { IconButton } from '../buttons/Button';
 import { calculateWordCount, calculateReadTime, formatAbsoluteTime } from '@/utils/formatting';
 import { 
@@ -250,7 +250,7 @@ interface OptimizedResultsPanelProps {
   currentAgent?: AgentType | null;
   onAgentReprocess?: (agentType: AgentType) => void;
   /**
-   * Retry transcription from stored audio when Whisper server was unavailable.
+   * Retry transcription from stored audio when Transcription server was unavailable.
    */
   onRetryTranscription?: () => void;
   /**
@@ -312,6 +312,8 @@ interface OptimizedResultsPanelProps {
     facts: KeyFact[];
     onComplete: (result: KeyFactsProofResult) => void;
     onCancel: () => void;
+    lesionTree?: import('@/types/medical.types').LesionTree;
+    lesionExtractionMethod?: 'regex' | 'quick-model';
   } | null;
   angiogramValidationResult?: ValidationResult | null;
   angiogramValidationStatus?: 'complete' | 'awaiting_validation';
@@ -477,7 +479,25 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   // TAVI Proof Mode state
   const [showProofMode, setShowProofMode] = useState(false);
   const [proofFacts, setProofFacts] = useState<KeyFact[]>([]);
-  const [proofConfig] = useState<Partial<ProofModeConfig>>({ mode: 'visual' });
+  const [proofConfig, setProofConfig] = useState<Partial<ProofModeConfig>>({ mode: 'visual' });
+  const isTaviProofAgent = agentType === 'tavi' || agentType === 'tavi-workup';
+  const proofModeFacts = useMemo(() => {
+    if (isTaviProofAgent && taviProofModeData) {
+      return taviProofModeData.facts;
+    }
+    if (agentType === 'angiogram-pci' && angioProofModeData) {
+      return angioProofModeData.facts;
+    }
+    return [];
+  }, [agentType, isTaviProofAgent, taviProofModeData, angioProofModeData]);
+  const hasProofModeFacts = proofModeFacts.length > 0;
+
+  const handleReviewWithAudio = useCallback(() => {
+    if (!hasProofModeFacts) return;
+    setProofFacts(proofModeFacts);
+    setProofConfig(prev => ({ ...prev, mode: 'audio' }));
+    setShowProofMode(true);
+  }, [hasProofModeFacts, proofModeFacts]);
 
   const {
     showValidationModal: showAngioValidation,
@@ -537,16 +557,18 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
 
   // Proof Mode effect (TAVI and Angio/PCI)
   useEffect(() => {
-    if (agentType === 'tavi' && taviProofModeData) {
+    if (isTaviProofAgent && taviProofModeData) {
       setProofFacts(taviProofModeData.facts);
+      setProofConfig(prev => ({ ...prev, mode: 'visual' }));
       setShowProofMode(true);
     } else if (agentType === 'angiogram-pci' && angioProofModeData) {
       setProofFacts(angioProofModeData.facts);
+      setProofConfig(prev => ({ ...prev, mode: 'visual' }));
       setShowProofMode(true);
     } else {
       setShowProofMode(false);
     }
-  }, [agentType, taviProofModeData, angioProofModeData]);
+  }, [agentType, angioProofModeData, isTaviProofAgent, taviProofModeData]);
 
   // Memoized calculations for performance
   const reportMetrics = useMemo(() => {
@@ -578,6 +600,48 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
   const isRevisionOpen = !!(revisionPanel?.isEditing);
   const canEditAndTrain = Boolean(onRevisionToggle);
   const canReprocessQuickLetter = agentType === 'quick-letter' && !!onAgentReprocess && !!originalTranscription?.trim();
+  const showProofFirstBadge = processingStatus !== 'complete' &&
+    (agentType === 'angiogram-pci' || agentType === 'tavi-workup');
+  const proofFirstLabel = agentType === 'angiogram-pci' ? 'Angio/PCI' : 'TAVI Workup';
+  const actionRowCustomActions = useMemo(() => [
+    ...(agentType === 'angiogram-pci' && onOpenLesionReview ? [{
+      id: 'review-lesions',
+      label: 'Lesions',
+      icon: ({ className }: { className?: string }) => <GitBranch className={className} />,
+      onClick: onOpenLesionReview,
+      variant: 'secondary' as const
+    }] : []),
+    ...(hasProofModeFacts ? [{
+      id: 'review-audio',
+      label: 'Review Audio',
+      icon: ({ className }: { className?: string }) => <Volume2 className={className} />,
+      onClick: handleReviewWithAudio,
+      variant: 'secondary' as const
+    }] : []),
+    ...(agentType === 'angiogram-pci' && onGeneratePatientVersion ? [{
+      id: 'generate-patient-version',
+      label: isGeneratingPatientVersion ? 'Generating...' : 'Patient Version',
+      icon: ({ className }: { className?: string }) => (
+        isGeneratingPatientVersion ? (
+          <div className={`border-2 border-blue-300 border-t-transparent rounded-full animate-spin ${className}`}></div>
+        ) : (
+          <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+        )
+      ),
+      onClick: onGeneratePatientVersion,
+      disabled: isGeneratingPatientVersion,
+      variant: 'secondary' as const
+    }] : [])
+  ], [
+    agentType,
+    handleReviewWithAudio,
+    hasProofModeFacts,
+    isGeneratingPatientVersion,
+    onGeneratePatientVersion,
+    onOpenLesionReview
+  ]);
 
   // Button action handlers with feedback
   const handleSummaryCopy = useCallback(async () => {
@@ -969,6 +1033,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       variants={withReducedMotion(cardVariants)}
     >
       {renderHeader()}
+
+      {showProofFirstBadge && (
+        <div className="px-4 pt-3">
+          <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+            <span className="font-semibold">{proofFirstLabel} proof-first</span>
+            <span className="text-amber-700">Review key facts before report generation.</span>
+          </div>
+        </div>
+      )}
 
       {/* TAVI Workup Progress - Uses unified progress for consistency */}
       <AnimatePresence>
@@ -1681,33 +1755,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
               onEditAndTrain={onRevisionToggle ? () => onRevisionToggle(!isRevisionOpen) : undefined}
               editAndTrainActive={isRevisionOpen}
               disableEditAndTrain={isProcessing || !results}
-              customActions={agentType === 'angiogram-pci'
-                ? [
-                    ...(onOpenLesionReview ? [{
-                      id: 'review-lesions',
-                      label: 'Lesions',
-                      icon: ({ className }: { className?: string }) => <GitBranch className={className} />,
-                      onClick: onOpenLesionReview,
-                      variant: 'secondary' as const
-                    }] : []),
-                    ...(onGeneratePatientVersion ? [{
-                      id: 'generate-patient-version',
-                      label: isGeneratingPatientVersion ? 'Generating...' : 'Patient Version',
-                      icon: ({ className }: { className?: string }) => (
-                        isGeneratingPatientVersion ? (
-                          <div className={`border-2 border-blue-300 border-t-transparent rounded-full animate-spin ${className}`}></div>
-                        ) : (
-                          <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        )
-                      ),
-                      onClick: onGeneratePatientVersion,
-                      disabled: isGeneratingPatientVersion,
-                      variant: 'secondary' as const
-                    }] : [])
-                  ]
-                : []}
+              customActions={actionRowCustomActions}
             />
           </motion.div>
         )}
@@ -1980,16 +2028,16 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
       )}
 
       {/* Proof Mode Dialog (TAVI or Angio/PCI) */}
-      {((agentType === 'tavi' && taviProofModeData) ||
+      {((isTaviProofAgent && taviProofModeData) ||
         (agentType === 'angiogram-pci' && angioProofModeData)) &&
         showProofMode && proofFacts.length > 0 && (
         <KeyFactsProofDialog
           facts={proofFacts}
-          agentLabel={agentType === 'tavi' ? 'TAVI Procedure' : 'Angiogram/PCI'}
+          agentLabel={isTaviProofAgent ? 'TAVI Procedure' : 'Angiogram/PCI'}
           onComplete={(result) => {
             console.log(`✅ ${agentType} Proof Mode: Facts confirmed`, result);
             setShowProofMode(false);
-            if (agentType === 'tavi' && taviProofModeData) {
+            if (isTaviProofAgent && taviProofModeData) {
               taviProofModeData.onComplete(result);
             } else if (agentType === 'angiogram-pci' && angioProofModeData) {
               angioProofModeData.onComplete(result);
@@ -1998,7 +2046,7 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           onCancel={() => {
             console.log(`🚫 ${agentType} Proof Mode: Cancelled`);
             setShowProofMode(false);
-            if (agentType === 'tavi' && taviProofModeData) {
+            if (isTaviProofAgent && taviProofModeData) {
               taviProofModeData.onCancel();
             } else if (agentType === 'angiogram-pci' && angioProofModeData) {
               angioProofModeData.onCancel();
@@ -2006,6 +2054,8 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           }}
           isOpen={showProofMode}
           initialConfig={proofConfig}
+          lesionTree={agentType === 'angiogram-pci' ? angioProofModeData?.lesionTree : undefined}
+          lesionExtractionMethod={agentType === 'angiogram-pci' ? angioProofModeData?.lesionExtractionMethod : undefined}
         />
       )}
 

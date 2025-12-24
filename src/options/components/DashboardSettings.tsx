@@ -156,11 +156,11 @@ export const DashboardSettings: React.FC = () => {
           </div>
         </div>
 
-        {/* Whisper Server */}
+        {/* Transcription Server */}
         <div className="bg-surface-secondary border-2 border-line-primary rounded-xl p-5">
           <div className="flex items-center space-x-2 mb-3">
             <Mic className="w-5 h-5 text-ink-primary" />
-            <span className="font-medium text-ink-primary">Whisper Server</span>
+            <span className="font-medium text-ink-primary">Transcription Server</span>
           </div>
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">

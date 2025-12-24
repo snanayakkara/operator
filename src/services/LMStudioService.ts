@@ -97,7 +97,7 @@ export class LMStudioService {
       baseUrl: 'http://localhost:1234',
       processorModel: MODEL_CONFIG.REASONING_MODEL,
       transcriptionModel: 'whisper-large-v3-turbo',
-      transcriptionUrl: 'http://localhost:8001', // Separate MLX Whisper server
+      transcriptionUrl: 'http://localhost:8001', // Separate transcription server (MLX Whisper or MedASR)
       timeout: 300000, // 5 minutes for local LLM medical report generation
       retryAttempts: 3,
       // LM Studio legacy (0.3.x) defaults to /v1/chat/completions; newer builds expose /api/v1/chat/completions.
@@ -333,21 +333,21 @@ export class LMStudioService {
       const audioDurationMs = audioBlob.size / 16; // Rough estimate: 16 bytes per ms of audio
       const estimatedTranscriptionTime = Math.min(Math.max(audioDurationMs / 50, 3000), 120000); // 50x realtime, min 3s, max 2min
 
-      reportProgress(5, 'Checking MLX Whisper server status');
+      reportProgress(5, 'Checking Transcription server status');
 
-      // Ensure Whisper server is running before attempting transcription
+      // Ensure Transcription server is running before attempting transcription
       const serverStatus = await this.whisperServerService.ensureServerRunning();
       if (!serverStatus.running) {
-        logger.warn('MLX Whisper server is not running', {
+        logger.warn('Transcription server is not running', {
           component: 'lm-studio',
           operation: 'transcribe-whisper-check',
-          instructions: ['./start-whisper-server.sh', 'source venv-whisper/bin/activate && python whisper-server.py']
+          instructions: ['./dev']
         });
 
-        return `[MLX Whisper server not running. ${serverStatus.error || 'Please start the server manually.'}]`;
+        return `[Transcription server not running. ${serverStatus.error || 'Please start the server manually.'}]`;
       }
 
-      reportProgress(10, 'MLX Whisper server ready');
+      reportProgress(10, 'Transcription server ready');
 
       // Audio optimization for better performance
       reportProgress(15, 'Optimizing audio for transcription');
@@ -447,7 +447,7 @@ export class LMStudioService {
         timeout: this.config.timeout
       });
 
-      reportProgress(35, 'Sending audio to MLX Whisper for transcription');
+      reportProgress(35, 'Sending audio to transcription server');
 
       // Combine user signal with timeout signal for robust cancellation
       const timeoutSignal = AbortSignal.timeout(this.config.timeout);
@@ -515,26 +515,25 @@ export class LMStudioService {
           // Log the error but don't throw yet - try fallback
           console.warn(`Transcription endpoint returned ${response.status}: ${response.statusText}`);
 
-          // Check if this is the MLX Whisper server
+          // Check if this is the Transcription server
           if (this.config.transcriptionUrl && this.config.transcriptionUrl.includes('8001')) {
             const errorText = await response.text().catch(() => 'Unknown error');
-            const placeholderText = `[MLX Whisper server unavailable (HTTP ${response.status}). To resolve: 1) Run './start-whisper-server.sh' or 2) Check server logs for errors. The audio was recorded successfully and can be reprocessed once the server is running.]`;
+            const placeholderText = `[Transcription server unavailable (HTTP ${response.status}). To resolve: 1) Run './dev' and select MLX Whisper or MedASR or 2) Check server logs for errors. The audio was recorded successfully and can be reprocessed once the server is running.]`;
 
-            console.error('❌ MLX Whisper server error:', response.status, errorText);
+            console.error('❌ Transcription server error:', response.status, errorText);
             console.warn('💡 To fix this:');
             console.warn('   1. Check server status: curl http://localhost:8001/v1/health');
-            console.warn('   2. Start server: ./start-whisper-server.sh');
-            console.warn('   3. Or manually: source venv-whisper/bin/activate && python whisper-server.py');
-            console.warn('   4. Check that port 8001 is available');
+            console.warn('   2. Start server: ./dev (select MLX Whisper or MedASR)');
+            console.warn('   3. Check that port 8001 is available');
 
             return placeholderText;
           } else {
             // Generic transcription service error
-            const placeholderText = '[Audio transcription unavailable. Set up MLX Whisper server by running "./start-whisper-server.sh" or configure an alternative transcription service. Your audio recording is saved and ready for processing.]';
+            const placeholderText = '[Audio transcription unavailable. Set up the transcription server by running "./dev" (select MLX Whisper or MedASR) or configure an alternative transcription service. Your audio recording is saved and ready for processing.]';
 
             console.warn('⚠️ Transcription service not available. Returning placeholder text.');
             console.warn('💡 To fix this:');
-            console.warn('   1. Set up MLX Whisper server (recommended)');
+            console.warn('   1. Set up Transcription server (recommended)');
             console.warn('   2. Use OpenAI Whisper API');
             console.warn('   3. Configure alternative transcription provider');
 
@@ -553,9 +552,9 @@ export class LMStudioService {
 
       // Check if this is a timeout error
       if (error instanceof Error && error.name === 'TimeoutError') {
-        const timeoutMessage = `[MLX Whisper server timeout after ${this.config.timeout / 1000}s. First-time model loading can take 2-5 minutes. Your audio is saved - try reprocessing after the server finishes loading.]`;
+        const timeoutMessage = `[Transcription server timeout after ${this.config.timeout / 1000}s. First-time model loading can take 2-5 minutes. Your audio is saved - try reprocessing after the server finishes loading.]`;
 
-        console.error('❌ MLX Whisper timeout:', error.message);
+        console.error('❌ Transcription server timeout:', error.message);
         console.warn('💡 This is normal for the first transcription. The model is loading...');
         console.warn('   - Subsequent transcriptions should be much faster');
         console.warn('   - You can check server logs for progress');
@@ -565,12 +564,12 @@ export class LMStudioService {
       }
 
       // Provide helpful error message for other errors
-      const errorMessage = `[Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check if MLX Whisper server is running with './start-whisper-server.sh'. Audio is saved for later processing.]`;
+      const errorMessage = `[Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}. Check if the transcription server is running via './dev'. Audio is saved for later processing.]`;
 
       console.error('❌ Transcription error:', error);
       console.warn('💡 To fix this:');
-      console.warn('   1. Check if MLX Whisper server is running: curl http://localhost:8001/v1/health');
-      console.warn('   2. Start server: source venv-whisper/bin/activate && python whisper-server.py');
+      console.warn('   1. Check if Transcription server is running: curl http://localhost:8001/v1/health');
+      console.warn('   2. Start server: ./dev (select MLX Whisper or MedASR)');
       console.warn('   3. Check server logs for errors');
 
       return errorMessage;
@@ -1346,7 +1345,7 @@ export class LMStudioService {
       this.modelStatus.latency = 0;
     }
 
-    // Check Whisper server status with caching
+    // Check Transcription server status with caching
     try {
       const whisperStatus = await this.whisperServerService.checkServerStatus();
       this.modelStatus.whisperServer = {
@@ -1357,7 +1356,7 @@ export class LMStudioService {
         error: whisperStatus.error
       };
     } catch (error) {
-      console.warn('Failed to check Whisper server status:', error);
+      console.warn('Failed to check Transcription server status:', error);
       this.modelStatus.whisperServer = {
         running: false,
         model: this.config.transcriptionModel,
@@ -1620,7 +1619,7 @@ export class LMStudioService {
       currentProgress = Math.min(currentProgress + increment, endProgress - 1); // Stop 1% before end
 
       const details = currentProgress < 50
-        ? 'Processing audio with MLX Whisper...'
+        ? 'Processing audio with transcription engine...'
         : 'Generating transcription...';
 
       onProgress(Math.round(currentProgress), details);

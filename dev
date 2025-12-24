@@ -16,11 +16,12 @@
 #    - Parallel model loading for faster startup
 #    - Automatic health checking and retry logic
 #
-# 2. MLX Whisper Server (localhost:8001)
-#    - Python virtual environment management (venv-whisper)
+# 2. Transcription Server (localhost:8001)
+#    - MLX Whisper (default, fast) or Google MedASR (medical vocab testing)
+#    - Python virtual environment management (venv-whisper / venv-medasr)
 #    - Automatic dependency installation
 #    - Runs in background without macOS dock appearance
-#    - Called via: ./start-whisper-server.sh
+#    - Called via: ./start-whisper-server.sh or ./start-medasr-server.sh
 #
 # 3. DSPy Server (localhost:8002)
 #    - Prompt optimization and evaluation server
@@ -46,14 +47,15 @@
 # DEPENDENCIES:
 # ─────────────────────────────────────────────────────────────────────────────
 # - LM Studio CLI (lms) - Install: https://lmstudio.ai/docs/cli
-# - Python 3.8+ - For Whisper and DSPy servers
+# - Python 3.8+ - For transcription and DSPy servers
 # - Node.js & npm - For TypeScript ward round watcher
 # - ffmpeg - For audio conversion (brew install ffmpeg)
 #
 # INDIVIDUAL SERVICE MANAGEMENT:
 # ─────────────────────────────────────────────────────────────────────────────
 # If you need to manage services individually:
-#   ./start-whisper-server.sh        # Start Whisper only
+#   ./start-whisper-server.sh        # Start MLX Whisper only
+#   ./start-medasr-server.sh         # Start Google MedASR only
 #   ./start-dspy-server.sh start     # Start DSPy only
 #   ./start-dspy-server.sh stop      # Stop DSPy
 #   ./start-dspy-server.sh restart   # Restart DSPy
@@ -69,16 +71,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Port conflicts:
 #   lsof -i :1234  # Check what's using LMStudio port
-#   lsof -i :8001  # Check what's using Whisper port
+#   lsof -i :8001  # Check what's using Transcription port
 #   lsof -i :8002  # Check what's using DSPy port
 #
 # Service health checks:
 #   curl http://localhost:1234/v1/models  # LMStudio
-#   curl http://localhost:8001/v1/health  # Whisper
+#   curl http://localhost:8001/v1/health  # Transcription
 #   curl http://localhost:8002/v1/health  # DSPy
 #
 # Reset virtual environments:
-#   rm -rf venv-whisper dspy-env mac_daemon/.venv-ingest
+#   rm -rf venv-whisper venv-medasr dspy-env mac_daemon/.venv-ingest
 #   ./dev  # Will recreate environments
 #
 # ═══════════════════════════════════════════════════════════════════════════
@@ -108,39 +110,134 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
+section() {
+    echo
+    echo -e "${BOLD}$1${NC}"
+}
+
 log() {
-    echo -e "${GREEN}[Dev Environment]${NC} $1"
+    echo -e "${DIM}  $1${NC}"
 }
 
 warn() {
-    echo -e "${YELLOW}[Dev Environment] WARNING:${NC} $1"
+    echo -e "${YELLOW}[!]${NC} $1"
 }
 
 error() {
-    echo -e "${RED}[Dev Environment] ERROR:${NC} $1"
+    echo -e "${RED}[x]${NC} $1"
 }
 
 info() {
-    echo -e "${BLUE}[Dev Environment] INFO:${NC} $1"
+    echo -e "${BLUE}[i]${NC} $1"
 }
 
 success() {
-    echo -e "${PURPLE}[Dev Environment] SUCCESS:${NC} $1"
+    echo -e "${GREEN}[ok]${NC} $1"
+}
+
+clear_line() {
+    local cols
+    cols=$(tput cols 2>/dev/null || echo 80)
+    printf "\r%*s\r" "$cols" ""
+}
+
+start_progress_bar() {
+    local label="$1"
+    local total="$2"
+    local width="${3:-24}"
+
+    PROGRESS_PID=""
+    if [ ! -t 1 ]; then
+        return 0
+    fi
+
+    (
+        local start
+        start=$(date +%s)
+        while true; do
+            local now elapsed percent filled empty filled_bar empty_bar mins secs
+            now=$(date +%s)
+            elapsed=$((now - start))
+            if [ "$total" -gt 0 ] && [ "$elapsed" -gt "$total" ]; then
+                elapsed="$total"
+            fi
+            if [ "$total" -gt 0 ]; then
+                percent=$((elapsed * 100 / total))
+            else
+                percent=0
+            fi
+            if [ "$percent" -gt 100 ]; then
+                percent=100
+            fi
+            filled=$((percent * width / 100))
+            empty=$((width - filled))
+            filled_bar=$(printf "%*s" "$filled" "" | tr ' ' '#')
+            empty_bar=$(printf "%*s" "$empty" "" | tr ' ' '-')
+            mins=$((elapsed / 60))
+            secs=$((elapsed % 60))
+            printf "\r%s [%s%s] %3d%% %02dm%02ds" "$label" "$filled_bar" "$empty_bar" "$percent" "$mins" "$secs"
+            sleep 1
+        done
+    ) &
+    PROGRESS_PID=$!
+}
+
+stop_progress_bar() {
+    local pid="$1"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+    if [ -t 1 ]; then
+        clear_line
+    fi
+}
+
+start_spinner() {
+    local label="$1"
+    SPINNER_PID=""
+    if [ ! -t 1 ]; then
+        return 0
+    fi
+
+    (
+        local spin='|/-\'
+        local i=0
+        while true; do
+            printf "\r%s %c" "$label" "${spin:i++%4:1}"
+            sleep 0.2
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    local pid="$1"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+    if [ -t 1 ]; then
+        clear_line
+    fi
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPERATOR_INGEST_VENV="$SCRIPT_DIR/mac_daemon/.venv-ingest"
 OPERATOR_INGEST_REQ="$SCRIPT_DIR/mac_daemon/requirements.txt"
+FORCE_RESTART_TRANSCRIPTION="${FORCE_RESTART_TRANSCRIPTION:-1}"
 
 # Check if service is running on a port
 check_port() {
     local port=$1
     local service_name=$2
-    
-    if lsof -i ":$port" > /dev/null 2>&1; then
-        return 0  # Port is in use
+
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN > /dev/null 2>&1; then
+        return 0  # Port has a listener
     else
         return 1  # Port is free
     fi
@@ -158,6 +255,28 @@ check_service_health() {
     fi
 }
 
+# Read TTS status from the transcription server health endpoint
+get_tts_status() {
+    local health_json
+    health_json=$(curl -s --max-time 3 "http://localhost:8001/v1/health" 2>/dev/null || true)
+    if [ -z "$health_json" ]; then
+        return 1
+    fi
+
+    echo "$health_json" | python3 - <<'PY'
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+
+enabled = bool(data.get("features", {}).get("tts_enabled"))
+status = data.get("tts_status") or ("loaded" if enabled else "not_loaded")
+model = data.get("tts_model") or "none"
+print(f"{'enabled' if enabled else 'disabled'}|{status}|{model}")
+PY
+}
+
 # Cleanup background jobs (prevents zombie processes)
 cleanup_background_jobs() {
     local load_pid=$1
@@ -172,9 +291,8 @@ cleanup_background_jobs() {
     fi
 
     # Stop progress indicator
-    if [ -n "$progress_pid" ] && kill -0 "$progress_pid" 2>/dev/null; then
-        kill -TERM "$progress_pid" 2>/dev/null || true
-        wait "$progress_pid" 2>/dev/null || true
+    if [ -n "$progress_pid" ]; then
+        stop_progress_bar "$progress_pid"
     fi
 }
 
@@ -182,13 +300,14 @@ cleanup_background_jobs() {
 cleanup_on_exit() {
     # Clean up any temp files matching our pattern (older than 60 minutes)
     find /tmp -maxdepth 1 -name "whisper-startup-*.log" -user $(whoami) -mmin +60 -delete 2>/dev/null || true
+    find /tmp -maxdepth 1 -name "medasr-startup-*.log" -user $(whoami) -mmin +60 -delete 2>/dev/null || true
 }
 
 # Check if lms CLI is available
 check_lms_cli() {
     if ! command -v lms &> /dev/null; then
-        warn "LMStudio CLI (lms) not found in PATH"
-        warn "Please install LMStudio CLI: https://lmstudio.ai/docs/cli"
+        warn "LM Studio CLI (lms) not found in PATH"
+        warn "Please install LM Studio CLI: https://lmstudio.ai/docs/cli"
         warn "Or bootstrap: ~/.lmstudio/bin/lms bootstrap"
         return 1
     fi
@@ -203,11 +322,11 @@ display_model_menu() {
     local models=("$@")
 
     if [ ${#models[@]} -eq 0 ]; then
-        echo "No LM Studio models detected."
+        echo "No models detected."
         return
     fi
 
-    echo "Available LM Studio models:"
+    echo "Available models:"
     local idx=1
     for model in "${models[@]}"; do
         local annotations=""
@@ -229,7 +348,7 @@ display_model_menu() {
         fi
         ((idx++))
     done
-    printf "  [0] Skip loading for this slot\n"
+    printf "  [0] Skip this slot\n"
     echo
 }
 
@@ -248,14 +367,15 @@ prompt_model_selection() {
 
     local prompt_msg
     if [ -n "$default_model" ]; then
-        prompt_msg="Select $role model by number [$default_model] (Enter for default, 0 to skip): "
+        prompt_msg="Select ${role} model [default: ${default_model}] (Enter to accept, 0 to skip): "
     else
-        prompt_msg="Select $role model by number (choose index, 0 to skip): "
+        prompt_msg="Select ${role} model (0 to skip): "
     fi
 
     while true; do
         local response
-        read -p "$prompt_msg" response
+        printf "%s" "$prompt_msg" >&2
+        read response
 
         if [ -z "$response" ]; then
             echo "$default_model"
@@ -274,28 +394,253 @@ prompt_model_selection() {
             fi
         fi
 
-        echo "Invalid selection. Please enter a number between 0 and $total."
+        echo "Invalid selection. Please enter a number between 0 and $total." >&2
     done
+}
+
+# Normalize ASR engine selection
+normalize_asr_engine() {
+    local value
+    value=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+
+    case "$value" in
+        ""|1|whisper|mlx|mlx-whisper|mlx_whisper)
+            echo "mlx-whisper"
+            return 0
+            ;;
+        2|medasr|med-asr|google|google-medasr|google/medasr)
+            echo "medasr"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+format_asr_engine() {
+    case "$1" in
+        medasr)
+            echo "Google MedASR"
+            ;;
+        mlx-whisper)
+            echo "MLX Whisper"
+            ;;
+        *)
+            echo "$1"
+            ;;
+    esac
+}
+
+# Prompt the user to choose ASR engine
+prompt_asr_engine() {
+    local default_engine="${1:-mlx-whisper}"
+    local default_choice="1"
+    local default_label="MLX Whisper"
+    if [ "$default_engine" = "medasr" ]; then
+        default_choice="2"
+        default_label="Google MedASR"
+    fi
+
+    {
+        echo
+        echo "Transcription engine:"
+        if [ "$default_engine" = "medasr" ]; then
+            echo "  [1] MLX Whisper (fast)"
+            echo "  [2] Google MedASR (medical accuracy testing) - default"
+        else
+            echo "  [1] MLX Whisper (fast) - default"
+            echo "  [2] Google MedASR (medical accuracy testing)"
+        fi
+        echo
+    } >&2
+
+    while true; do
+        local response
+        printf "Choose transcription engine [%s]: " "$default_choice" >&2
+        read response
+
+        if [ -z "$response" ]; then
+            echo "$default_engine"
+            return 0
+        fi
+
+        local normalized
+        normalized=$(normalize_asr_engine "$response") || true
+        if [ -n "$normalized" ]; then
+            echo "$normalized"
+            return 0
+        fi
+
+        echo "Invalid selection. Please enter 1 or 2." >&2
+    done
+}
+
+# Determine ASR engine selection (env override or prompt)
+select_asr_engine() {
+    local env_choice="${OPERATOR_ASR_ENGINE:-}"
+    local default_engine="mlx-whisper"
+    if [ -n "$env_choice" ]; then
+        local normalized
+        normalized=$(normalize_asr_engine "$env_choice") || true
+        if [ -n "$normalized" ]; then
+            default_engine="$normalized"
+        else
+            warn "Invalid OPERATOR_ASR_ENGINE value: $env_choice (defaulting to MLX Whisper)"
+        fi
+    fi
+
+    if [ -t 0 ]; then
+        prompt_asr_engine "$default_engine"
+    else
+        echo "$default_engine"
+    fi
+}
+
+# Detect running transcription engine from health endpoint
+detect_transcription_engine() {
+    local health_json
+    health_json=$(curl -s "http://localhost:8001/v1/health" 2>/dev/null || echo "")
+    if [ -z "$health_json" ]; then
+        return 1
+    fi
+
+    echo "$health_json" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+engine = data.get('engine')
+if not engine:
+    model = str(data.get('model', '')).lower()
+    server = str(data.get('server', '')).lower()
+    if 'whisper' in model or 'whisper' in server:
+        engine = 'mlx-whisper'
+    elif 'medasr' in model or 'medasr' in server:
+        engine = 'medasr'
+if engine:
+    print(engine)
+" 2>/dev/null
+}
+
+stop_transcription_port() {
+    local pids
+    local pid_list
+    local parent_list
+    local attempts=0
+    local max_attempts=4
+
+    echo "Processes listening on port 8001:"
+    lsof -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null || true
+    pids=$(lsof -t -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null | sort -u)
+
+    if [ -z "$pids" ]; then
+        warn "No listening process found on port 8001."
+        return 1
+    fi
+
+    pid_list=$(echo "$pids" | tr '\n' ',' | sed 's/,$//')
+    if [ -n "$pid_list" ]; then
+        echo "Listener command lines:"
+        ps -p "$pid_list" -o pid=,ppid=,stat=,user=,command= 2>/dev/null || true
+        parent_list=$(ps -p "$pid_list" -o ppid= 2>/dev/null | tr -d ' ' | sort -u | tr '\n' ',' | sed 's/,$//')
+        if [ -n "$parent_list" ]; then
+            echo "Listener parent processes:"
+            ps -p "$parent_list" -o pid=,user=,command= 2>/dev/null || true
+        fi
+    fi
+
+    info "Stopping processes on port 8001..."
+    for pid in $pids; do
+        if kill -0 "$pid" 2>/dev/null; then
+            if ! kill -TERM "$pid" 2>/dev/null; then
+                warn "Failed to send SIGTERM to PID $pid."
+            fi
+        fi
+    done
+
+    while [ $attempts -lt $max_attempts ]; do
+        sleep 1
+        pids=$(lsof -t -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null | sort -u)
+        if [ -z "$pids" ]; then
+            return 0
+        fi
+
+        attempts=$((attempts + 1))
+        warn "Port 8001 still in use; forcing stop (attempt ${attempts}/${max_attempts})..."
+        for pid in $pids; do
+            if kill -0 "$pid" 2>/dev/null; then
+                if ! kill -KILL "$pid" 2>/dev/null; then
+                    warn "Failed to send SIGKILL to PID $pid."
+                fi
+            fi
+        done
+    done
+
+    if check_port 8001; then
+        warn "Port 8001 still in use after stop attempts."
+        echo "Remaining listeners on port 8001:"
+        lsof -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null || true
+        pids=$(lsof -t -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null | sort -u)
+        pid_list=$(echo "$pids" | tr '\n' ',' | sed 's/,$//')
+        if [ -n "$pid_list" ]; then
+            echo "Remaining listener command lines:"
+            ps -p "$pid_list" -o pid=,ppid=,stat=,user=,command= 2>/dev/null || true
+            if ps -p "$pid_list" -o stat= 2>/dev/null | grep -q "U"; then
+                warn "One or more listeners appear stuck in uninterruptible sleep."
+                warn "macOS will not kill these until the kernel unblocks; a reboot may be required."
+            fi
+            parent_list=$(ps -p "$pid_list" -o ppid= 2>/dev/null | tr -d ' ' | sort -u | tr '\n' ',' | sed 's/,$//')
+            if [ -n "$parent_list" ]; then
+                echo "Remaining listener parent processes:"
+                ps -p "$parent_list" -o pid=,user=,command= 2>/dev/null || true
+                if ps -p "$parent_list" -o command= 2>/dev/null | grep -q "launchd"; then
+                    local launchd_label=""
+                    local launchd_label_found=0
+                    for pid in $pids; do
+                        launchd_label=$(launchctl list 2>/dev/null | awk -v target="$pid" '$1 == target {print $3}')
+                        if [ -n "$launchd_label" ]; then
+                            launchd_label_found=1
+                            warn "Launchd job for PID ${pid}: ${launchd_label}"
+                        fi
+                    done
+                    if [ "$launchd_label_found" -eq 1 ]; then
+                        warn "Transcription server appears to be supervised by launchd."
+                        warn "Check LaunchAgents: launchctl list | grep -i whisper"
+                        warn "Stop job: launchctl stop <label> (or bootout gui/$(id -u)/<label>)"
+                    else
+                        warn "Parent is launchd (PID 1), but no launchd label was found for the listener."
+                        warn "That usually means the process is orphaned, so launchctl list won't show it."
+                    fi
+                fi
+            fi
+        fi
+        warn "If these are not owned by your user, you may need elevated permissions to stop them."
+        return 1
+    fi
+
+    return 0
 }
 
 # Start LMStudio server and load both models
 ensure_lmstudio_server() {
-    info "Checking LMStudio server (localhost:1234)..."
+    info "LM Studio: checking server (localhost:1234)..."
     
     # Check if CLI is available
     if ! check_lms_cli; then
-        warn "Falling back to manual LMStudio startup instructions"
-        warn "Please start LMStudio manually and load both models:"
-        warn "1. Reasoning model: lmstudio-community/medgemma-27b-text-it-MLX-4bit"
-        warn "2. Quick model: qwen/qwen3-4b-2507"
+        warn "LM Studio CLI missing; please start LM Studio manually."
+        warn "Load models:"
+        warn "  1. Reasoning: lmstudio-community/medgemma-27b-text-it-MLX-4bit"
+        warn "  2. Quick: qwen/qwen3-4b-2507"
         return 1
     fi
     
     # Check if server is running
     if ! check_service_health "http://localhost:1234/v1/models" 3; then
-        info "Starting LMStudio server..."
+        info "LM Studio: starting server..."
         if ! lms server start > /dev/null 2>&1; then
-            error "Failed to start LMStudio server via CLI"
+            error "Failed to start LM Studio server via CLI"
             return 1
         fi
         
@@ -303,7 +648,7 @@ ensure_lmstudio_server() {
         local retries=0
         while [ $retries -lt 30 ]; do
             if check_service_health "http://localhost:1234/v1/models" 3; then
-                log "LMStudio server started successfully"
+                success "LM Studio server started"
                 break
             fi
             sleep 1
@@ -311,11 +656,11 @@ ensure_lmstudio_server() {
         done
         
         if [ $retries -eq 30 ]; then
-            error "LMStudio server failed to start within 30 seconds"
+            error "LM Studio server failed to start within 30 seconds"
             return 1
         fi
     else
-        log "LMStudio server is already running"
+        success "LM Studio server already running"
     fi
     
     # Ensure both models are loaded
@@ -325,10 +670,10 @@ ensure_lmstudio_server() {
 
 # Load both medical models (reasoning + quick)
 ensure_dual_models_loaded() {
-    info "Verifying medical models are loaded..."
+    info "LM Studio: verifying models..."
 
     # First, discover what models are actually downloaded
-    info "Discovering available models..."
+    info "LM Studio: discovering available models..."
     local available_models=$(lms ls 2>/dev/null || echo "")
 
     if [ -z "$available_models" ]; then
@@ -375,8 +720,7 @@ ensure_dual_models_loaded() {
     local quick_user_skipped=0
 
     if [ -t 0 ] && [ ${#models_for_prompt[@]} -gt 0 ]; then
-        echo
-        info "Select LM Studio models to load:"
+        section "LM Studio Models"
         display_model_menu "$reasoning_model" "$quick_model" "${models_for_prompt[@]}"
 
         local selected_reasoning
@@ -399,23 +743,23 @@ ensure_dual_models_loaded() {
         echo
     fi
 
-    log "📋 Selected LM Studio models:"
+    info "Selected models:"
     if [ -n "$reasoning_model" ]; then
-        log "   Reasoning: $reasoning_model"
+        log "Reasoning: $reasoning_model"
     else
         if [ $reasoning_user_skipped -eq 1 ]; then
-            warn "   Reasoning: skipped by user"
+            warn "Reasoning: skipped"
         else
-            warn "   No MedGemma reasoning model found"
+            warn "Reasoning: no MedGemma model detected"
         fi
     fi
     if [ -n "$quick_model" ]; then
-        log "   Quick: $quick_model"
+        log "Quick: $quick_model"
     else
         if [ $quick_user_skipped -eq 1 ]; then
-            warn "   Quick: skipped by user"
+            warn "Quick: skipped"
         else
-            warn "   No Gemma quick model found"
+            warn "Quick: no quick model detected"
         fi
     fi
 
@@ -426,12 +770,12 @@ ensure_dual_models_loaded() {
     local loaded_models=$(lms ps 2>/dev/null || echo "")
     if echo "$loaded_models" | grep -q "medgemma" 2>/dev/null; then
         reasoning_loaded=1
-        log "✅ Reasoning model already loaded"
+        success "Reasoning model already loaded"
     fi
 
     if echo "$loaded_models" | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null; then
         quick_loaded=1
-        log "✅ Quick model already loaded"
+        success "Quick model already loaded"
     fi
 
     # Load models in parallel if both needed (saves ~2-3 minutes)
@@ -439,9 +783,9 @@ ensure_dual_models_loaded() {
     local need_quick=$([[ $quick_loaded -eq 0 && ! -z "$quick_model" ]] && echo 1 || echo 0)
 
     if [ $need_reasoning -eq 1 ] && [ $need_quick -eq 1 ]; then
-        info "Loading both models in parallel (faster startup)..."
-        info "Reasoning: $reasoning_model | Quick: $quick_model"
-        info "You can also load them manually in LM Studio - we'll detect automatically"
+        info "Loading models in parallel (faster startup)..."
+        log "Reasoning: $reasoning_model"
+        log "Quick: $quick_model"
 
         local parallel_start=$(date +%s)
 
@@ -453,17 +797,9 @@ ensure_dual_models_loaded() {
         local quick_pid=$!
 
         # Single progress indicator for both
-        (
-            echo -n "   Loading both models"
-            while true; do
-                sleep 3
-                local elapsed=$(($(date +%s) - parallel_start))
-                local minutes=$((elapsed / 60))
-                local seconds=$((elapsed % 60))
-                echo -n " [${minutes}m ${seconds}s]."
-            done
-        ) &
-        local progress_pid=$!
+        local progress_pid
+        start_progress_bar "Loading models" 600
+        progress_pid=$PROGRESS_PID
 
         # Poll for both models with unified timeout (10 min max)
         local poll_count=0
@@ -476,13 +812,11 @@ ensure_dual_models_loaded() {
             # Check reasoning model
             if [ $reasoning_loaded -eq 0 ] && echo "$loaded_models" | grep -q "medgemma" 2>/dev/null; then
                 reasoning_loaded=1
-                log "✅ Reasoning model loaded"
             fi
 
             # Check quick model
             if [ $quick_loaded -eq 0 ] && echo "$loaded_models" | grep -qiE "(qwen.*3.*4b|gemma.*(3n|3-n|-3n|3_n))" 2>/dev/null; then
                 quick_loaded=1
-                log "✅ Quick model loaded"
             fi
 
             # Exit when both loaded or both processes finished
@@ -507,34 +841,28 @@ ensure_dual_models_loaded() {
         cleanup_background_jobs "$reasoning_pid" "$progress_pid"
         [ -n "$quick_pid" ] && kill -TERM "$quick_pid" 2>/dev/null || true
         wait "$quick_pid" 2>/dev/null || true
-        echo ""
 
         local parallel_time=$(($(date +%s) - parallel_start))
         if [ $reasoning_loaded -eq 1 ] && [ $quick_loaded -eq 1 ]; then
-            success "Both models loaded in parallel (took ${parallel_time}s)"
+            success "Models ready (reasoning + quick, ${parallel_time}s)"
         elif [ $reasoning_loaded -eq 1 ] || [ $quick_loaded -eq 1 ]; then
-            warn "Partial success after ${parallel_time}s - retrying failed model..."
+            warn "Partial load after ${parallel_time}s - retrying missing model..."
         else
-            warn "Parallel load timeout after ${parallel_time}s - retrying sequentially..."
+            warn "Parallel load timed out after ${parallel_time}s - retrying sequentially..."
         fi
 
     fi
 
     # Load reasoning model individually if still needed
     if [ $reasoning_loaded -eq 0 ] && [ ! -z "$reasoning_model" ]; then
-        info "Loading reasoning model: $reasoning_model"
-        info "This may take several minutes (timeout: 10 minutes)..."
+        info "Loading reasoning model..."
+        log "$reasoning_model"
+        log "Timeout: 10 minutes"
 
         local start_time=$(date +%s)
-        (
-            echo -n "   Loading"
-            while true; do
-                sleep 3
-                local elapsed=$(($(date +%s) - start_time))
-                echo -n " [${elapsed}s]."
-            done
-        ) &
-        local progress_pid=$!
+        local progress_pid
+        start_progress_bar "Loading reasoning" 600
+        progress_pid=$PROGRESS_PID
 
         (run_with_timeout 600 lms load "$reasoning_model" 2>&1) > /dev/null 2>&1 &
         local load_pid=$!
@@ -556,10 +884,9 @@ ensure_dual_models_loaded() {
         done
 
         cleanup_background_jobs "$load_pid" "$progress_pid"
-        echo ""
 
         if [ $reasoning_loaded -eq 1 ]; then
-            log "✅ Reasoning model loaded (took $(($(date +%s) - start_time))s)"
+            success "Reasoning model ready ($(($(date +%s) - start_time))s)"
         else
             # Try short name fallback
             local short_name=$(echo "$reasoning_model" | cut -d'/' -f2)
@@ -572,18 +899,14 @@ ensure_dual_models_loaded() {
 
     # Load quick model individually if still needed
     if [ $quick_loaded -eq 0 ] && [ ! -z "$quick_model" ]; then
-        info "Loading quick model: $quick_model"
-        info "Timeout: 5 minutes..."
+        info "Loading quick model..."
+        log "$quick_model"
+        log "Timeout: 5 minutes"
 
         local start_time=$(date +%s)
-        (
-            echo -n "   Loading"
-            while true; do
-                sleep 2
-                echo -n " [$(($(date +%s) - start_time))s]."
-            done
-        ) &
-        local progress_pid=$!
+        local progress_pid
+        start_progress_bar "Loading quick" 300
+        progress_pid=$PROGRESS_PID
 
         (run_with_timeout 300 lms load "$quick_model" 2>&1) > /dev/null 2>&1 &
         local load_pid=$!
@@ -605,10 +928,9 @@ ensure_dual_models_loaded() {
         done
 
         cleanup_background_jobs "$load_pid" "$progress_pid"
-        echo ""
 
         if [ $quick_loaded -eq 1 ]; then
-            log "✅ Quick model loaded (took $(($(date +%s) - start_time))s)"
+            success "Quick model ready ($(($(date +%s) - start_time))s)"
         else
             # Try short name fallback
             local short_name=$(echo "$quick_model" | cut -d'/' -f2)
@@ -621,88 +943,228 @@ ensure_dual_models_loaded() {
     
     # Verify both models are loaded
     if [ $reasoning_loaded -eq 1 ] && [ $quick_loaded -eq 1 ]; then
-        success "Both medical models loaded and ready!"
+        success "All models ready"
         return 0
     elif [ $reasoning_loaded -eq 1 ] || [ $quick_loaded -eq 1 ]; then
-        warn "Partial success - some models loaded but not all"
+        warn "Some models are missing; functionality may be limited"
         if [ $reasoning_loaded -eq 0 ]; then
             if [ $reasoning_user_skipped -eq 1 ]; then
-                info "Reasoning model skipped by user selection"
+                info "Reasoning model skipped by user"
             else
-                warn "Missing reasoning model - complex analysis may be limited"
+                warn "Missing reasoning model"
             fi
         fi
         if [ $quick_loaded -eq 0 ]; then
             if [ $quick_user_skipped -eq 1 ]; then
-                info "Quick model skipped by user selection"
+                info "Quick model skipped by user"
             else
-                warn "Missing quick model - simple tasks may be slower"
+                warn "Missing quick model"
             fi
         fi
-        warn "Extension will work but with reduced capabilities"
+        warn "Extension will run with reduced capabilities"
         return 1
     else
         if [ $reasoning_user_skipped -eq 1 ] && [ $quick_user_skipped -eq 1 ]; then
-            warn "No models were loaded because both selections were skipped"
-            warn "You can load models later in LM Studio and rerun ./dev to detect them"
+            warn "No models loaded (both selections skipped)"
+            warn "Load models in LM Studio and rerun ./dev"
             return 1
         fi
-        error "No models loaded successfully"
-        error "Please check:"
+        error "No models loaded"
+        error "Check:"
         error "  1. Models are downloaded in LM Studio"
-        error "  2. LM Studio server is running and accessible"
-        error "  3. Sufficient system memory available"
-        error "  4. Try loading models manually: lms load <model-name>"
+        error "  2. LM Studio server is running"
+        error "  3. System memory is available"
+        error "  4. Try: lms load <model-name>"
         return 1
+    fi
+}
+
+# Start Google MedASR server if needed
+ensure_medasr_server() {
+    info "MedASR: checking server (localhost:8001)..."
+
+    if check_service_health "http://localhost:8001/v1/health"; then
+        success "MedASR server already running"
+        return 0
+    fi
+
+    if [ -f "./start-medasr-server.sh" ]; then
+        info "MedASR: starting server..."
+
+        local medasr_log="/tmp/medasr-startup-$$.log"
+
+        ./start-medasr-server.sh >"$medasr_log" 2>&1 &
+        local medasr_pid=$!
+        local progress_pid
+        start_progress_bar "Starting MedASR" 90
+        progress_pid=$PROGRESS_PID
+
+        local retries=0
+        while [ $retries -lt 90 ]; do
+            if check_service_health "http://localhost:8001/v1/health"; then
+                stop_progress_bar "$progress_pid"
+                success "MedASR server ready"
+                rm -f "$medasr_log"
+                return 0
+            fi
+
+            if ! kill -0 $medasr_pid 2>/dev/null; then
+                stop_progress_bar "$progress_pid"
+                error "MedASR server failed to start (process exited)"
+                if [ -f "$medasr_log" ]; then
+                    error "Startup log (last 30 lines):"
+                    tail -30 "$medasr_log" | while IFS= read -r line; do
+                        log "$line"
+                    done
+                    error "Common fixes:"
+                    error "  1. source venv-medasr/bin/activate && pip install -r requirements-medasr.txt"
+                    error "  2. python3 --version (requires 3.8+)"
+                    error "  3. rm -rf venv-medasr && ./start-medasr-server.sh"
+                    rm -f "$medasr_log"
+                fi
+                return 1
+            fi
+
+            sleep 1
+            ((retries++))
+        done
+
+        stop_progress_bar "$progress_pid"
+        error "MedASR server failed to start (timeout after 90s)"
+        if [ -f "$medasr_log" ]; then
+            warn "Startup log (last 30 lines):"
+            tail -30 "$medasr_log" | while IFS= read -r line; do
+                log "$line"
+            done
+            rm -f "$medasr_log"
+        fi
+        return 1
+    else
+        warn "MedASR startup script not found: ./start-medasr-server.sh"
+        warn "Please start MedASR manually"
+        return 1
+    fi
+}
+
+# Start transcription server based on selected engine
+ensure_transcription_server() {
+    local engine="${1:-mlx-whisper}"
+    local desired_engine
+    desired_engine=$(normalize_asr_engine "$engine") || desired_engine="mlx-whisper"
+
+    info "Transcription: checking server (localhost:8001)..."
+    if check_port 8001; then
+        if [ "$FORCE_RESTART_TRANSCRIPTION" = "1" ]; then
+            local running_engine=""
+            if check_service_health "http://localhost:8001/v1/health"; then
+                running_engine=$(detect_transcription_engine || echo "")
+            fi
+            if [ -n "$running_engine" ]; then
+                warn "Transcription already running (${running_engine}); restarting for a clean boot."
+            else
+                warn "Port 8001 in use; restarting transcription server for a clean boot."
+            fi
+            if ! stop_transcription_port; then
+                return 1
+            fi
+        else
+            if check_service_health "http://localhost:8001/v1/health"; then
+                local running_engine
+                running_engine=$(detect_transcription_engine || echo "")
+                if [ -z "$running_engine" ]; then
+                    running_engine="unknown"
+                fi
+
+                if [ "$running_engine" = "$desired_engine" ]; then
+                    log "Transcription server is already running (${running_engine})"
+                    return 0
+                fi
+
+                warn "Transcription already running (${running_engine})."
+                warn "Stop it to start ${desired_engine} on port 8001."
+
+                if [ -t 0 ]; then
+                    local response
+                    echo "Processes on port 8001:"
+                    lsof -i :8001 2>/dev/null || true
+                    read -p "Stop existing transcription server to switch to ${desired_engine}? [y/N]: " response
+                    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+                    if [[ "$response" == "y" || "$response" == "yes" ]]; then
+                        if ! stop_transcription_port; then
+                            return 1
+                        fi
+                    else
+                        return 1
+                    fi
+                else
+                    warn "Use: lsof -i :8001 && kill <pid>"
+                    return 1
+                fi
+            else
+                warn "Port 8001 in use but /v1/health is not responding."
+                warn "Stop the process on port 8001 and retry."
+                return 1
+            fi
+        fi
+    fi
+
+    if check_port 8001; then
+        warn "Port 8001 still in use after stop attempt."
+        return 1
+    fi
+
+    if [ "$desired_engine" = "medasr" ]; then
+        ensure_medasr_server
+    else
+        ensure_whisper_server
     fi
 }
 
 # Start MLX Whisper server if needed
 ensure_whisper_server() {
-    info "Checking MLX Whisper server (localhost:8001)..."
+    info "MLX Whisper: checking server (localhost:8001)..."
 
     if check_service_health "http://localhost:8001/v1/health"; then
-        log "MLX Whisper server is already running and healthy"
+        success "MLX Whisper server already running"
         return 0
     fi
 
     if [ -f "./start-whisper-server.sh" ]; then
-        info "Starting MLX Whisper server..."
+        info "MLX Whisper: starting server..."
 
         # Create a temporary log file for startup errors
         local whisper_log="/tmp/whisper-startup-$$.log"
 
         # Start the server and capture output
-        # Show dependency installation but hide routine startup messages
-        info "Installing/verifying Python dependencies..."
-        (
-            # Run startup script, show pip output but hide other noise
-            ./start-whisper-server.sh 2>&1 | tee "$whisper_log" | grep -E "(Installing|Collecting|Successfully|Failed|ERROR|✅|❌|📦|🌐)" || true
-        ) &
+        ./start-whisper-server.sh >"$whisper_log" 2>&1 &
         local whisper_pid=$!
+        local progress_pid
+        start_progress_bar "Starting MLX Whisper" 60
+        progress_pid=$PROGRESS_PID
 
         # Wait for server to start (longer timeout to allow for dependency installation)
         local retries=0
         while [ $retries -lt 60 ]; do
             if check_service_health "http://localhost:8001/v1/health"; then
-                log "MLX Whisper server started successfully"
+                stop_progress_bar "$progress_pid"
+                success "MLX Whisper server ready"
                 rm -f "$whisper_log"
                 return 0
             fi
 
             # Check if the process is still running
             if ! kill -0 $whisper_pid 2>/dev/null; then
-                error "Failed to start MLX Whisper server - process died"
+                stop_progress_bar "$progress_pid"
+                error "MLX Whisper server failed to start (process exited)"
                 if [ -f "$whisper_log" ]; then
                     error "Startup log (last 30 lines):"
                     tail -30 "$whisper_log" | while IFS= read -r line; do
-                        error "  $line"
+                        log "$line"
                     done
-                    error ""
                     error "Common fixes:"
-                    error "  1. Install dependencies manually: source venv-whisper/bin/activate && pip install -r requirements-whisper.txt"
-                    error "  2. Check Python version: python3 --version (requires 3.8+)"
-                    error "  3. Try recreating venv: rm -rf venv-whisper && ./start-whisper-server.sh"
+                    error "  1. source venv-whisper/bin/activate && pip install -r requirements-whisper.txt"
+                    error "  2. python3 --version (requires 3.8+)"
+                    error "  3. rm -rf venv-whisper && ./start-whisper-server.sh"
                     rm -f "$whisper_log"
                 fi
                 return 1
@@ -712,47 +1174,48 @@ ensure_whisper_server() {
             ((retries++))
         done
 
-        error "Failed to start MLX Whisper server - timeout after 60 seconds"
+        stop_progress_bar "$progress_pid"
+        error "MLX Whisper server failed to start (timeout after 60s)"
         if [ -f "$whisper_log" ]; then
-            warn "Check startup log for details (last 30 lines):"
+            warn "Startup log (last 30 lines):"
             tail -30 "$whisper_log" | while IFS= read -r line; do
-                warn "  $line"
+                log "$line"
             done
             rm -f "$whisper_log"
         fi
         return 1
     else
         warn "MLX Whisper startup script not found: ./start-whisper-server.sh"
-        warn "Please ensure MLX Whisper server is running manually"
+        warn "Please start MLX Whisper manually"
         return 1
     fi
 }
 
 # Start DSPy server if needed  
 ensure_dspy_server() {
-    info "Checking DSPy server (localhost:8002)..."
+    info "DSPy: checking server (localhost:8002)..."
     
     if check_service_health "http://localhost:8002/v1/health"; then
-        log "DSPy server is already running and healthy"
+        success "DSPy server already running"
         return 0
     fi
     
     if [ -f "./start-dspy-server.sh" ]; then
-        info "Starting DSPy server..."
+        info "DSPy: starting server..."
         ./start-dspy-server.sh start > /dev/null 2>&1
         
         # Wait for server to start
         local retries=0
         while [ $retries -lt 20 ]; do
             if check_service_health "http://localhost:8002/v1/health"; then
-                log "DSPy server started successfully"
+                success "DSPy server ready"
                 return 0
             fi
             sleep 1
             ((retries++))
         done
         
-        error "Failed to start DSPy server"
+        error "DSPy server failed to start"
         return 1
     else
         error "DSPy startup script not found: ./start-dspy-server.sh"
@@ -806,10 +1269,10 @@ ensure_operator_ingest_env() {
 
 # Start Operator Ingest menubar app if not already running
 start_operator_ingest_app() {
-    info "Checking Operator Ingest menubar app (mac_daemon)..."
+    info "Operator Ingest: checking menubar app..."
 
     if pgrep -f "mac_daemon.main" >/dev/null 2>&1; then
-        log "Operator Ingest already running"
+        success "Operator Ingest already running"
         return 0
     fi
 
@@ -826,7 +1289,7 @@ start_operator_ingest_app() {
         return 1
     fi
 
-    info "Launching Operator Ingest menubar app (logs: $log_file)"
+    info "Operator Ingest: starting (logs: $log_file)"
 
     local app_pid
     # Note: mac_daemon is a menubar app, so we let it show its menubar icon
@@ -839,17 +1302,17 @@ start_operator_ingest_app() {
 
     if [ -n "$app_pid" ]; then
         echo "$app_pid" > /tmp/operator-ingest.pid
-        log "Operator Ingest started (pid $app_pid)"
+        success "Operator Ingest started (pid $app_pid)"
     else
         warn "Failed to start Operator Ingest (see $log_file)"
     fi
 }
 
 start_wardround_watcher() {
-    info "Checking ward round watcher (TypeScript)..."
+    info "Ward round watcher: checking..."
 
     if pgrep -f "wardround:watch" >/dev/null 2>&1; then
-        log "Ward round watcher already running"
+        success "Ward round watcher already running"
         return 0
     fi
 
@@ -859,7 +1322,7 @@ start_wardround_watcher() {
     fi
 
     local log_file="/tmp/wardround-watcher-$(date +%s).log"
-    info "Launching ward round watcher (logs: $log_file)"
+    info "Ward round watcher: starting (logs: $log_file)"
 
     local watcher_pid
     watcher_pid=$(
@@ -870,7 +1333,7 @@ start_wardround_watcher() {
 
     if [ -n "$watcher_pid" ]; then
         echo "$watcher_pid" > /tmp/wardround-watcher.pid
-        log "Ward round watcher started (pid $watcher_pid)"
+        success "Ward round watcher started (pid $watcher_pid)"
     else
         warn "Failed to start ward round watcher (see $log_file)"
     fi
@@ -878,13 +1341,11 @@ start_wardround_watcher() {
 
 # Display comprehensive service status with model information
 show_service_status() {
-    echo
-    success "=== Medical AI Development Environment ==="
-    echo
+    section "Service Status"
     
     # LMStudio (Model Serving) with dual model status
     if check_service_health "http://localhost:1234/v1/models" 3; then
-        log "✅ LMStudio Server: http://localhost:1234"
+        success "LM Studio: http://localhost:1234"
         
         # Show loaded models with details
         if command -v lms &> /dev/null; then
@@ -893,9 +1354,9 @@ show_service_status() {
                 # Detect reasoning model (medgemma)
                 local reasoning_model=$(echo "$models_info" | grep -i "medgemma" | head -1 | awk '{print $1}')
                 if [ ! -z "$reasoning_model" ]; then
-                    echo -e "${GREEN}   ├── Reasoning Model: $reasoning_model ✅${NC}"
+                    log "Reasoning model: $reasoning_model"
                 else
-                    echo -e "${YELLOW}   ├── Reasoning Model: Not loaded ❌${NC}"
+                    warn "Reasoning model: not loaded"
                 fi
 
                 # Detect quick model (qwen or gemma variants)
@@ -904,26 +1365,40 @@ show_service_status() {
                     quick_model=$(echo "$models_info" | grep -iE "gemma.*(3n|3-n|-3n|3_n)" | grep -v "medgemma" | head -1 | awk '{print $1}')
                 fi
                 if [ ! -z "$quick_model" ]; then
-                    echo -e "${GREEN}   └── Quick Model: $quick_model ✅${NC}"
+                    log "Quick model: $quick_model"
                 else
-                    echo -e "${YELLOW}   └── Quick Model: Not loaded ❌${NC}"
+                    warn "Quick model: not loaded"
                 fi
             fi
         fi
     else
-        warn "❌ LMStudio Server: http://localhost:1234 - NOT ACCESSIBLE"
+        warn "LM Studio: http://localhost:1234 (not reachable)"
     fi
     
-    # MLX Whisper (Transcription)
+    # Transcription (ASR)
     if check_service_health "http://localhost:8001/v1/health"; then
-        log "✅ MLX Whisper: http://localhost:8001"
+        local asr_engine
+        asr_engine=$(detect_transcription_engine || echo "unknown")
+        success "Transcription: http://localhost:8001 ($(format_asr_engine "$asr_engine"))"
+        local tts_info
+        tts_info=$(get_tts_status 2>/dev/null || echo "")
+        if [ -n "$tts_info" ]; then
+            local tts_state tts_status tts_model
+            IFS='|' read -r tts_state tts_status tts_model <<< "$tts_info"
+            if [ "$tts_state" = "enabled" ]; then
+                log "TTS: enabled (${tts_model})"
+            else
+                warn "TTS: disabled (${tts_status})"
+                log "Enable: pip install mlx-audio librosa mlx-lm einops"
+            fi
+        fi
     else
-        warn "❌ MLX Whisper: http://localhost:8001 - NOT ACCESSIBLE"
+        warn "Transcription: http://localhost:8001 (not reachable)"
     fi
     
     # DSPy Server (Optimization + SDK Streaming)
     if check_service_health "http://localhost:8002/v1/health"; then
-        log "✅ DSPy Server: http://localhost:8002"
+        success "DSPy: http://localhost:8002"
 
         # Get DSPy server details including SDK status
         local dspy_status=$(curl -s "http://localhost:8002/v1/health" 2>/dev/null || echo "")
@@ -938,35 +1413,35 @@ try:
     sdk_enabled = sdk_info.get('enabled', False)
     sdk_connected = sdk_info.get('connected', False)
 
-    print(f'   ├── Enabled agents: {len(agents)}')
-    print(f'   ├── Requests processed: {requests}')
+    print(f'Enabled agents: {len(agents)}')
+    print(f'Requests processed: {requests}')
     if sdk_enabled and sdk_connected:
-        print(f'   └── LM Studio SDK: ✅ Connected (streaming enabled)')
+        print(f'LM Studio SDK: connected (streaming enabled)')
     elif sdk_enabled:
-        print(f'   └── LM Studio SDK: ⚠️  Enabled but not connected')
+        print(f'LM Studio SDK: enabled, not connected')
     else:
-        print(f'   └── LM Studio SDK: ❌ Disabled')
+        print(f'LM Studio SDK: disabled')
 except:
     pass
-" 2>/dev/null || echo "   └── Status details unavailable")
-            echo -e "${BLUE}$stats_info${NC}"
+" 2>/dev/null || echo "Status details unavailable")
+            while IFS= read -r line; do
+                log "$line"
+            done <<< "$stats_info"
         fi
     else
-        warn "❌ DSPy Server: http://localhost:8002 - NOT ACCESSIBLE"
+        warn "DSPy: http://localhost:8002 (not reachable)"
     fi
     
-    echo
-    info "=== Quick Commands ==="
-    echo "./dev                                    # Restart all servers"
-    echo "curl http://localhost:1234/v1/models     # Check LMStudio models"
-    echo "curl http://localhost:8001/v1/health     # Check MLX Whisper"  
-    echo "curl http://localhost:8002/v1/health     # Check DSPy Server"
-    echo
-    info "=== Development Workflow ==="
-    echo "npm run eval:angiogram                   # Evaluate with DSPy"
-    echo "npm run optim:angiogram                  # GEPA optimization"
-    echo "USE_DSPY=true npm run eval:quick-letter  # Enable DSPy mode"
-    echo
+    section "Quick Commands"
+    log "./dev                                    # Restart all servers"
+    log "curl http://localhost:1234/v1/models     # Check LM Studio"
+    log "curl http://localhost:8001/v1/health     # Check transcription"
+    log "curl http://localhost:8002/v1/health     # Check DSPy"
+
+    section "Development Workflow"
+    log "npm run eval:angiogram                   # Evaluate with DSPy"
+    log "npm run optim:angiogram                  # GEPA optimization"
+    log "USE_DSPY=true npm run eval:quick-letter  # Enable DSPy mode"
 }
 
 # Main execution
@@ -974,12 +1449,13 @@ main() {
     # Set up cleanup trap for temp files
     trap cleanup_on_exit EXIT
 
-    log "🚀 Starting Medical AI Development Environment..."
-    echo
+    section "Operator Dev Environment"
+    info "Starting services..."
 
     local lmstudio_ok=0
     local whisper_ok=0
     local dspy_ok=0
+    local asr_engine="mlx-whisper"
 
     local interactive_shell=0
     if [ -t 0 ] && [ -t 1 ]; then
@@ -997,10 +1473,13 @@ main() {
             lmstudio_ok=0
         fi
 
-        # Now start Whisper and DSPy in parallel (no user input needed)
-        info "Starting Whisper and DSPy servers in parallel..."
+        asr_engine=$(select_asr_engine)
+        info "Transcription engine: $(format_asr_engine "$asr_engine")"
 
-        (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
+        # Now start transcription and DSPy in parallel (no user input needed)
+        info "Starting transcription + DSPy..."
+
+        (ensure_transcription_server "$asr_engine" && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
         local whisper_pid=$!
 
         (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
@@ -1016,7 +1495,8 @@ main() {
         (ensure_lmstudio_server && echo "1" > /tmp/lmstudio-ok.$$ || echo "0" > /tmp/lmstudio-ok.$$) &
         local lms_pid=$!
 
-        (ensure_whisper_server && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
+        asr_engine=$(select_asr_engine)
+        (ensure_transcription_server "$asr_engine" && echo "1" > /tmp/whisper-ok.$$ || echo "0" > /tmp/whisper-ok.$$) &
         local whisper_pid=$!
 
         (ensure_dspy_server && echo "1" > /tmp/dspy-ok.$$ || echo "0" > /tmp/dspy-ok.$$) &
@@ -1044,14 +1524,14 @@ main() {
     local running_services=$((lmstudio_ok + whisper_ok + dspy_ok))
     
     if [ $running_services -eq $total_services ]; then
-        success "🎉 Complete environment ready! All services running with dual models."
-        success "Chrome extension can now use full Medical AI + DSPy SDK streaming capabilities."
+        success "Environment ready (all services running)"
+        log "Operator extension: full Medical AI + DSPy streaming enabled"
     elif [ $running_services -gt 0 ]; then
-        warn "⚠️  $running_services/$total_services services running. Some functionality may be limited."
-        warn "Check the status above and restart failed services manually."
+        warn "$running_services/$total_services services running (limited functionality)"
+        warn "Check status above and restart failed services"
     else
-        error "❌ No services are running. Please check the logs and try again."
-        error "Ensure LMStudio CLI is installed and models are available."
+        error "No services are running"
+        error "Check logs and ensure LM Studio CLI + models are available"
         exit 1
     fi
 
@@ -1072,7 +1552,7 @@ case "${1:-}" in
         echo ""
         echo "This script starts all required services:"
         echo "  - LMStudio (localhost:1234) with dual models"
-        echo "  - MLX Whisper (localhost:8001) for transcription"
+        echo "  - Transcription (localhost:8001) for MLX Whisper or Google MedASR"
         echo "  - DSPy Server (localhost:8002) for optimization"
         exit 0
         ;;

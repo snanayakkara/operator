@@ -203,7 +203,7 @@ export class PerformanceMonitoringService {
 
       // Check for slow transcription
       if (metrics.processingPhase === 'transcription' && duration > 10000) {
-        issues.push(`Slow transcription (${duration}ms) - check MLX Whisper server`);
+        issues.push(`Slow transcription (${duration}ms) - check Transcription server`);
       }
 
       // Check for slow agent processing
@@ -344,8 +344,8 @@ export class PerformanceMonitoringService {
 
     // Transcription recommendations
     if (avgTranscriptionTime > 8000) {
-      recommendations.push('Transcription is slow - check MLX Whisper server performance');
-      recommendations.push('Consider restarting the Whisper server: ./start-whisper-server.sh');
+      recommendations.push('Transcription is slow - check Transcription server performance');
+      recommendations.push('Consider restarting the transcription server: ./dev');
     }
 
     // Processing recommendations

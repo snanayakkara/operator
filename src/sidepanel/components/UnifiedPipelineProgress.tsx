@@ -3,7 +3,7 @@
  *
  * Single horizontal segmented progress bar showing live updates through the entire processing pipeline:
  * 1. Audio Processing (0-10%) - Recording validation, format conversion
- * 2. Transcribing (10-40%) - Whisper transcription with queue status
+ * 2. Transcribing (10-40%) - Transcription engine with queue status
  * 3. AI Analysis (40-90%) - Agent-specific processing with model name
  * 4. Generation (90-100%) - Final formatting, streaming tokens
  *

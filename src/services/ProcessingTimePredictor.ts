@@ -491,7 +491,7 @@ export class ProcessingTimePredictor {
    */
   private estimateTranscriptionTime(transcriptionLength: number): number {
     // Base transcription time + length factor
-    // MLX Whisper is very fast (~50x real-time), so this is mostly I/O overhead
+    // Local ASR engines are typically fast, so this is mostly I/O overhead
     const baseTime = 1500; // 1.5s base
     const lengthFactor = Math.log(transcriptionLength / 100 + 1) * 200;
     return baseTime + lengthFactor;

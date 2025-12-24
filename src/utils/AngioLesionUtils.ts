@@ -1,17 +1,7 @@
-export type LesionEntry = {
-  id: string;
-  branch: string;
-  severity: string;
-  description: string;
-};
+import { LesionEntry, LesionTree } from '../types/medical.types';
 
-export type LesionTree = {
-  lm: LesionEntry[];
-  lad: LesionEntry[];
-  lcx: LesionEntry[];
-  rca: LesionEntry[];
-  grafts: LesionEntry[];
-};
+// Re-export types for backward compatibility
+export type { LesionEntry, LesionTree };
 
 const VESSEL_LABELS: Record<keyof LesionTree, string> = {
   lm: 'LM (left main)',

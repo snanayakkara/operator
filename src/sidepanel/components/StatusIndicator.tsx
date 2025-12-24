@@ -332,13 +332,13 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       } else if (lmStudioOk || whisperOk) {
         // Partial - surface in command bar as warning
         executor.errorFromBackground(
-          `${lmStudioOk ? 'LMStudio connected' : 'LMStudio offline'}, ${whisperOk ? 'Whisper running' : 'Whisper stopped'}`,
+          `${lmStudioOk ? 'LMStudio connected' : 'LMStudio offline'}, ${whisperOk ? 'Transcription running' : 'Transcription stopped'}`,
           { suggestion: 'Check Settings for details', category: 'service', autoClearMs: 8000 }
         );
       } else {
         // Both offline - surface in command bar
         executor.errorFromBackground(
-          'Both LMStudio and Whisper server are offline',
+          'Both LMStudio and Transcription server are offline',
           { suggestion: 'Start services to enable dictation', category: 'service' }
         );
       }
@@ -712,12 +712,12 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
               </div>
             </div>
 
-            {/* Whisper Server Status Section */}
+            {/* Transcription Server Status Section */}
             <div className="bg-gradient-to-br from-emerald-50/40 to-teal-50/30 border border-emerald-100/60 rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Mic className="w-4 h-4 text-ink-primary" />
-                  <span className="text-ink-primary text-sm font-medium">Whisper Server</span>
+                  <span className="text-ink-primary text-sm font-medium">Transcription Server</span>
                 </div>
                 <div className={`flex items-center space-x-1 ${modelStatus.whisperServer?.running ? 'text-accent-emerald' : 'text-accent-red'}`}>
                   <div className={`w-2 h-2 rounded-full ${modelStatus.whisperServer?.running ? 'bg-accent-emerald' : 'bg-accent-red'}`} />
@@ -733,12 +733,12 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                 <div>
                   <span className="text-ink-secondary">Model:</span>
                   <span className="text-ink-secondary ml-1 break-words leading-snug">
-                    {modelStatus.whisperServer?.model || 'whisper-large-v3-turbo'}
+                    {modelStatus.whisperServer?.model || 'unknown'}
                   </span>
                 </div>
               </div>
               
-              {/* Whisper Server Controls - Show guidance when not running */}
+              {/* Transcription Server Controls - Show guidance when not running */}
               {!modelStatus.whisperServer?.running && (
                 <div className="bg-amber-50 border border-amber-200 rounded p-2">
                   <div className="flex items-start space-x-2">
@@ -751,7 +751,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
                         {modelStatus.whisperServer?.error?.includes('timeout') ? (
                           <>Server may be initializing. Use "Refresh All Services" button above to check again.</>
                         ) : (
-                          <>Run in terminal: <code className="bg-amber-100 px-1 rounded">./start-whisper-server.sh</code></>
+                          <>Run in terminal: <code className="bg-amber-100 px-1 rounded">./dev</code></>
                         )}
                       </p>
                     </div>

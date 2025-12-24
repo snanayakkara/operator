@@ -7,6 +7,7 @@
 
 import type { TAVIWorkupStructuredSections, ValidationResult, TAVIExtractedData, TAVIWorkupCTMeasurements } from './medical.types';
 import type { DicomSnapshot } from './dicom.types';
+import type { ValveSelection } from '@/services/ValveSizingServiceV2';
 
 /**
  * Core workup item - represents a single TAVI patient workup
@@ -59,6 +60,9 @@ export interface TAVIWorkupItem {
 
   // === DICOM SNAPSHOTS (Phase 8) ===
   snapshots?: DicomSnapshot[]; // Captured CT viewport images with metadata
+
+  // === VALVE SELECTION (Phase 9) ===
+  selectedValve?: ValveSelection; // User's selected valve (may differ from AI recommendation)
 }
 
 /**

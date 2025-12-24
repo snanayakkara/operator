@@ -42,7 +42,7 @@ interface ResultsContainerProps {
   };
   onAgentReprocess?: (agentType: AgentType) => void;
   /**
-   * Retry transcription from stored audio when Whisper server was unavailable.
+   * Retry transcription from stored audio when Transcription server was unavailable.
    */
   onRetryTranscription?: () => void;
   /**

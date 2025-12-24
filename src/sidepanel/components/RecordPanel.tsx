@@ -456,7 +456,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
     // Generate tooltip with server status information
     const getTooltip = () => {
       if (!whisperServerRunning) {
-        return "Whisper server not running. Please start server: ./start-whisper-server.sh";
+        return "Transcription server not running. Please run: ./dev";
       }
       return `${workflow.description} • ${workflow.estimatedTime} • ${workflow.complexity} complexity`;
     };
@@ -704,7 +704,7 @@ export const RecordPanel: React.FC<RecordPanelProps> = memo(({
             {!isRecording && !whisperServerRunning && (
               <div className="text-center text-red-600 text-xs font-medium flex items-center justify-center gap-2">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />
-                Whisper server not running
+                Transcription server not running - run ./dev
               </div>
             )}
             

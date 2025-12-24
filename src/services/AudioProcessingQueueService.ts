@@ -1,8 +1,8 @@
 /**
  * AudioProcessingQueueService - Intelligent Queuing for Audio Processing
  * 
- * Manages a queue of audio processing jobs to prevent overwhelming the MLX Whisper
- * transcription server with too many concurrent requests. Provides intelligent
+ * Manages a queue of audio processing jobs to prevent overwhelming the transcription
+ * server with too many concurrent requests. Provides intelligent
  * concurrency control, priority handling, and graceful degradation.
  * 
  * Features:

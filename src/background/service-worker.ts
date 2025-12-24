@@ -49,9 +49,9 @@ class BackgroundService {
     await this.setupSidePanel();
     console.log('✅ Side panel initialized');
     
-    // Initialize Whisper server
+    // Initialize Transcription server
     await this.initializeWhisperServer();
-    console.log('✅ Whisper server initialized');
+    console.log('✅ Transcription server initialized');
     
     this.isInitialized = true;
     console.log('🎉 Background service fully initialized');
@@ -870,30 +870,29 @@ class BackgroundService {
 
   private async initializeWhisperServer(): Promise<void> {
     try {
-      console.log('🎙️ Initializing MLX Whisper server...');
+      console.log('🎙️ Initializing Transcription server...');
       
       const status = await this.whisperServerService.checkServerStatus();
       
       if (status.running) {
-        console.log('✅ MLX Whisper server is already running');
+        console.log('✅ Transcription server is already running');
         console.log(`📍 Model: ${status.model}, Port: ${status.port}`);
       } else {
-        console.log('⚠️ MLX Whisper server is not running');
+        console.log('⚠️ Transcription server is not running');
         console.log('💡 Starting server automatically...');
         
         const startResult = await this.whisperServerService.startServer();
         
         if (startResult.running) {
-          console.log('✅ MLX Whisper server started successfully');
+          console.log('✅ Transcription server started successfully');
         } else {
-          console.warn('❌ Failed to start MLX Whisper server automatically');
-          console.warn('💡 Manual start required: ./start-whisper-server.sh');
-          console.warn('💡 Or run: source venv-whisper/bin/activate && python whisper-server.py');
+          console.warn('❌ Failed to start Transcription server automatically');
+          console.warn('💡 Manual start required: ./dev (select MLX Whisper or MedASR)');
         }
       }
       
     } catch (error) {
-      console.error('❌ MLX Whisper server initialization failed:', error);
+      console.error('❌ Transcription server initialization failed:', error);
     }
   }
 

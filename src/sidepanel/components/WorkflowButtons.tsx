@@ -117,7 +117,7 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
     // Generate tooltip with server status information
     const getTooltip = () => {
       if (!whisperServerRunning) {
-        return "Whisper server not running. Please start server: ./start-whisper-server.sh";
+        return "Transcription server not running. Please run: ./dev";
       }
       return `${workflow.description} • ${workflow.estimatedTime} • ${workflow.complexity} complexity`;
     };
@@ -448,7 +448,7 @@ export const WorkflowButtons: React.FC<WorkflowButtonsProps> = memo(({
                   ease: "easeInOut"
                 }}
               >
-                ⚠️ Whisper server not running - Please start server first
+                ⚠️ Transcription server not running - Run ./dev first
               </motion.p>
             )}
           </motion.div>

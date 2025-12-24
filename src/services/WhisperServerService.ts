@@ -34,14 +34,14 @@ export class WhisperServerService {
     // Return cached result if within TTL to prevent excessive requests (unless explicitly skipping cache)
     if (!skipCache && this.lastStatusResult &&
         now - this.lastStatusCheckTime < this.STATUS_CACHE_TTL) {
-      console.debug('🔄 Returning cached Whisper server status (within 5s TTL)');
+      console.debug('🔄 Returning cached Transcription server status (within 5s TTL)');
       return { ...this.lastStatusResult };
     }
 
     // Retry logic for resilient status checking
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.debug(`🔍 Checking Whisper server status (attempt ${attempt}/${retries})`, this.healthCheckUrl);
+        console.debug(`🔍 Checking Transcription server status (attempt ${attempt}/${retries})`, this.healthCheckUrl);
 
         const response = await fetch(this.healthCheckUrl, {
           method: 'GET',
@@ -69,7 +69,7 @@ export class WhisperServerService {
             lastChecked: now
           };
 
-          console.debug('✅ Whisper server is running:', result);
+          console.debug('✅ Transcription server is running:', result);
 
           // Cache the successful result
           this.lastStatusCheckTime = now;
@@ -84,7 +84,7 @@ export class WhisperServerService {
             lastChecked: now
           };
 
-          console.warn('⚠️ Whisper server health check failed:', result.error);
+          console.warn('⚠️ Transcription server health check failed:', result.error);
 
           // For non-OK responses, don't retry - cache the failed result
           this.lastStatusCheckTime = now;
@@ -98,7 +98,7 @@ export class WhisperServerService {
 
         // If timeout and we have more attempts, wait and retry
         if (isTimeout && attempt < retries) {
-          console.warn(`⏳ Whisper server timeout on attempt ${attempt}/${retries}, retrying...`);
+          console.warn(`⏳ Transcription server timeout on attempt ${attempt}/${retries}, retrying...`);
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
           continue;
         }
@@ -126,7 +126,7 @@ export class WhisperServerService {
           lastChecked: now
         };
 
-        console.warn(`❌ Whisper server connection failed after ${attempt} attempt${attempt > 1 ? 's' : ''}:`, errorMessage);
+        console.warn(`❌ Transcription server connection failed after ${attempt} attempt${attempt > 1 ? 's' : ''}:`, errorMessage);
 
         // Cache failed results but with reduced TTL for timeout errors (allow quicker retry)
         this.lastStatusCheckTime = now;
@@ -141,19 +141,19 @@ export class WhisperServerService {
   }
 
   public invalidateCache(): void {
-    console.debug('🗑️ Invalidating Whisper server status cache - CALL STACK:', new Error().stack);
+    console.debug('🗑️ Invalidating Transcription server status cache - CALL STACK:', new Error().stack);
     this.lastStatusCheckTime = 0;
     this.lastStatusResult = null;
   }
 
   public async startServer(): Promise<ServerStatus> {
-    console.log('🚀 Starting MLX Whisper server...');
+    console.log('🚀 Starting Transcription server...');
     
     // Invalidate cache and check if already running
     this.invalidateCache();
     const status = await this.checkServerStatus(true);
     if (status.running) {
-      console.log('✅ MLX Whisper server is already running');
+      console.log('✅ Transcription server is already running');
       return status;
     }
 
@@ -162,8 +162,8 @@ export class WhisperServerService {
       // However, we can try to open a new tab with instructions
       // or provide clear guidance to the user
       
-      console.log('🔧 MLX Whisper server not detected');
-      console.log('💡 Starting server requires running: ./start-whisper-server.sh');
+      console.log('🔧 Transcription server not detected');
+      console.log('💡 Starting server requires running: ./dev (select MLX Whisper or MedASR)');
       
       // Create a helpful notification
       if (chrome.notifications) {
@@ -171,8 +171,8 @@ export class WhisperServerService {
           await chrome.notifications.create({
             type: 'basic',
             iconUrl: chrome.runtime.getURL('assets/icons/icon-48.png'),
-            title: 'MLX Whisper Server Required',
-            message: 'Please start the MLX Whisper server by running: ./start-whisper-server.sh'
+            title: 'Transcription Server Required',
+            message: 'Please start the transcription server by running: ./dev'
           });
         } catch (notificationError) {
           console.log('Notification failed:', notificationError);
@@ -187,12 +187,12 @@ export class WhisperServerService {
       return {
         running: false,
         port: this.port,
-        error: 'Server startup requires manual intervention. Please run: ./start-whisper-server.sh',
+        error: 'Server startup requires manual intervention. Please run: ./dev',
         lastChecked: Date.now()
       };
 
     } catch (error) {
-      console.error('❌ Failed to start MLX Whisper server:', error);
+      console.error('❌ Failed to start Transcription server:', error);
       return {
         running: false,
         port: this.port,
@@ -206,7 +206,7 @@ export class WhisperServerService {
     const status = await this.checkServerStatus();
     
     if (!status.running) {
-      console.log('🔄 MLX Whisper server not running, attempting to start...');
+      console.log('🔄 Transcription server not running, attempting to start...');
       return await this.startServer();
     }
     
@@ -219,7 +219,7 @@ export class WhisperServerService {
     while (Date.now() - startTime < maxWaitMs) {
       const status = await this.checkServerStatus();
       if (status.running) {
-        console.log('✅ MLX Whisper server is ready');
+        console.log('✅ Transcription server is ready');
         return status;
       }
       

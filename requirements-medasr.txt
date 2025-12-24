@@ -1,0 +1,15 @@
+flask>=2.3.0
+flask-cors>=4.0.0
+transformers>=4.38.0
+torch>=2.1.0
+soundfile
+numpy
+sentencepiece
+mlx-audio>=0.1.0
+loguru
+librosa
+mlx-lm
+einops
+spacy
+phonemizer
+espeakng_loader

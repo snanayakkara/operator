@@ -122,13 +122,16 @@ export class OptimizationService {
         method: options.method || 'GET'
       });
 
+      const headers = new Headers(options.headers || {});
+      const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+      if (!isFormData && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+      }
+
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
       });
 
       clearTimeout(timeoutId);

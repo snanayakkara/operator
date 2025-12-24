@@ -5,7 +5,7 @@
  * quick access to startup commands for development workflow.
  * 
  * Features:
- * - Real-time server health monitoring (LMStudio, Whisper, DSPy)
+ * - Real-time server health monitoring (LMStudio, Transcription, DSPy)
  * - Dual model status for LMStudio (reasoning + quick models)
  * - Copy-to-clipboard functionality for startup command
  * - Compact/expanded view modes
@@ -244,7 +244,7 @@ export const ServerManagementPanel: React.FC<ServerManagementPanelProps> = ({
         />
         
         <ServerStatusIndicator
-          name="MLX Whisper"
+          name="Transcription Server"
           url="http://localhost:8001"
           isHealthy={modelStatus.whisperServer?.running || false}
           details={whisperDetails}

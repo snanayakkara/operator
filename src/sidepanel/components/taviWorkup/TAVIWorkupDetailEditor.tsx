@@ -11,15 +11,20 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Calendar, MapPin, User, Stethoscope, CheckCircle2, RefreshCw, Database, Eye } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, User, Stethoscope, CheckCircle2, RefreshCw, Database, Eye, FileDown } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useTAVIWorkup } from '@/contexts/TAVIWorkupContext';
 import { EditableTAVIWorkupDisplay } from './EditableTAVIWorkupDisplay';
 import { CTMeasurementsCard } from './CTMeasurementsCard';
 import { ValveRecommendationCard } from './ValveRecommendationCard';
+import { ValveSelectorCard } from './ValveSelectorCard';
+import { DicomViewerCard } from './DicomViewerCard';
 import { PresentationPreviewModal } from './PresentationPreviewModal';
 import { calculateCompletion } from '@/types/taviWorkup.types';
 import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
+import type { DicomSnapshot } from '@/types/dicom.types';
+import type { ValveSelection } from '@/services/ValveSizingServiceV2';
+import { taviWorkupPDFService } from '@/services/TAVIWorkupPDFService';
 
 interface TAVIWorkupDetailEditorProps {
   workupId: string;
@@ -34,6 +39,7 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
   const [extractError, setExtractError] = useState<string | null>(null);
   const [presenting, setPresenting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   // === EMR AUTO-EXTRACTION (Phase 3) ===
   const extractEMRData = useCallback(async () => {
@@ -132,6 +138,44 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
       ctMeasurements: measurements
     }));
   }, [workupId, updateWorkup]);
+
+  // === DICOM SNAPSHOTS UPDATE (Phase 8.2) ===
+  const handleSnapshotCapture = useCallback(async (snapshot: DicomSnapshot) => {
+    await updateWorkup(workupId, w => ({
+      ...w,
+      snapshots: [...(w.snapshots || []), snapshot]
+    }));
+  }, [workupId, updateWorkup]);
+
+  const handleSnapshotsChange = useCallback(async (snapshots: DicomSnapshot[]) => {
+    await updateWorkup(workupId, w => ({
+      ...w,
+      snapshots
+    }));
+  }, [workupId, updateWorkup]);
+
+  // === VALVE SELECTION (Phase 9) ===
+  const handleValveSelect = useCallback(async (selection: ValveSelection | undefined) => {
+    await updateWorkup(workupId, w => ({
+      ...w,
+      selectedValve: selection
+    }));
+  }, [workupId, updateWorkup]);
+
+  // === PDF EXPORT (Phase 8.4) ===
+  const handleExportPDF = useCallback(async () => {
+    if (!workup) return;
+
+    setExportingPDF(true);
+    try {
+      await taviWorkupPDFService.downloadPDF(workup);
+      console.log(`[TAVIWorkupDetailEditor] PDF exported for workup ${workupId}`);
+    } catch (error) {
+      console.error('[TAVIWorkupDetailEditor] PDF export failed:', error);
+    } finally {
+      setExportingPDF(false);
+    }
+  }, [workup, workupId]);
 
   if (!workup) {
     return (
@@ -326,6 +370,21 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
         {/* Valve Recommendation Card */}
         <ValveRecommendationCard measurements={workup.ctMeasurements} />
 
+        {/* Valve Selector Card (Phase 9) */}
+        <ValveSelectorCard
+          area={workup.ctMeasurements?.annulusArea}
+          perimeter={workup.ctMeasurements?.annulusPerimeter}
+          selectedValve={workup.selectedValve}
+          onSelectValve={handleValveSelect}
+        />
+
+        {/* DICOM Viewer Card (Phase 8.2 Stub) */}
+        <DicomViewerCard
+          snapshots={workup.snapshots}
+          onSnapshotCapture={handleSnapshotCapture}
+          onSnapshotsChange={handleSnapshotsChange}
+        />
+
         {/* Editable Sections */}
         <EditableTAVIWorkupDisplay
           workup={workup}
@@ -336,6 +395,15 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
       {/* Sticky Action Bar */}
       <div className="border-t border-line-primary bg-white px-4 py-3">
         <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPDF}
+            disabled={exportingPDF}
+            icon={<FileDown className="w-3 h-3" />}
+          >
+            {exportingPDF ? 'Exporting...' : 'PDF'}
+          </Button>
           <Button
             variant="outline"
             size="sm"

@@ -176,19 +176,19 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
     <div className="visual-proof-mode">
       {/* Header */}
       <div className="proof-mode-header">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
           Verify Key Facts — {agentLabel}
         </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
           Review critical procedural details before generating the report.
           Use keyboard to confirm (✓) or edit values.
         </p>
       </div>
 
       {/* Stats bar */}
-      <div className="stats-bar flex gap-4 text-sm mt-4 mb-4">
+      <div className="stats-bar flex flex-wrap gap-3 text-xs mt-3 mb-4">
         <div className="stat">
-          <span className="font-medium text-gray-700 dark:text-gray-300">Total:</span>{' '}
+          <span className="font-medium text-gray-600 dark:text-gray-300">Total:</span>{' '}
           <span className="text-gray-900 dark:text-gray-100">{facts.length}</span>
         </div>
         <div className="stat">
@@ -216,14 +216,14 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
       </div>
 
       {/* Fact groups */}
-      <div className="fact-groups space-y-3 max-h-[60vh] overflow-y-auto">
+      <div className="fact-groups space-y-2 max-h-[56vh] overflow-y-auto">
         {factGroups.map(group => (
           <div key={group.category} className="fact-group">
             {/* Category header */}
             {groupByCategory && (
               <button
                 onClick={() => handleToggleCategory(group.category)}
-                className="category-header w-full flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-t hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="category-header w-full flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-t hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {expandedCategories.has(group.category) ? (
@@ -231,10 +231,10 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
                   ) : (
                     <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                   )}
-                  <span className="font-medium text-gray-900 dark:text-gray-100 capitalize">
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 capitalize">
                     {group.category}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-500">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-500">
                     ({group.facts.length})
                   </span>
                 </div>
@@ -273,7 +273,8 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
         <Button
           onClick={handleCancelAll}
           variant="secondary"
-          className="flex-1"
+          size="sm"
+          className="flex-1 h-auto py-2 text-sm leading-tight"
         >
           Cancel
         </Button>
@@ -281,11 +282,12 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
           onClick={handleConfirmAll}
           variant="primary"
           disabled={!allFactsReviewed}
-          className="flex-1"
+          size="sm"
+          className="flex-1 h-auto py-2 text-sm leading-tight whitespace-normal"
         >
           {allFactsReviewed
-            ? `Confirm & Generate Report`
-            : `Review ${stats.pendingCount} Remaining`}
+            ? `Generate Report`
+            : `Review ${stats.pendingCount} remaining`}
         </Button>
       </div>
     </div>
@@ -333,23 +335,23 @@ const FactCard: React.FC<FactCardProps> = ({
 
   return (
     <div
-      className={`fact-card border-l-4 p-3 rounded ${statusColors[fact.status]}`}
+      className={`fact-card border-l-4 p-2.5 rounded-md ${statusColors[fact.status]}`}
     >
       <div className="fact-header flex items-start justify-between mb-2">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
+            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
               {fact.label}
             </span>
             {statusIcons[fact.status]}
             {fact.critical && (
-              <span className="text-xs px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 rounded font-medium">
                 CRITICAL
               </span>
             )}
           </div>
           {showConfidence && fact.confidence !== undefined && (
-            <span className="text-xs text-gray-500 dark:text-gray-500">
+            <span className="text-[11px] text-gray-500 dark:text-gray-500">
               Confidence: {(fact.confidence * 100).toFixed(0)}%
             </span>
           )}
@@ -363,7 +365,7 @@ const FactCard: React.FC<FactCardProps> = ({
             type="text"
             value={editValue}
             onChange={e => onEditValueChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
+            className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
             autoFocus
             onKeyDown={e => {
               if (e.key === 'Enter') onSaveEdit();
@@ -373,13 +375,13 @@ const FactCard: React.FC<FactCardProps> = ({
           <div className="flex gap-2">
             <button
               onClick={onSaveEdit}
-              className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              className="px-3 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
             >
               Save
             </button>
             <button
               onClick={onCancelEdit}
-              className="px-3 py-1 text-sm bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 rounded transition-colors"
+              className="px-3 py-1 text-xs font-medium bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 rounded transition-colors"
             >
               Cancel
             </button>
@@ -387,9 +389,9 @@ const FactCard: React.FC<FactCardProps> = ({
         </div>
       ) : (
         <div className="value-display">
-          <p className="text-base font-mono text-gray-900 dark:text-gray-100 mb-2">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
             {fact.value}
-            {fact.unit && <span className="text-gray-600 dark:text-gray-400 ml-1">{fact.unit}</span>}
+            {fact.unit && <span className="text-xs text-gray-600 dark:text-gray-400 ml-1">{fact.unit}</span>}
           </p>
           {fact.status === 'edited' && fact.originalValue && (
             <p className="text-xs text-gray-500 dark:text-gray-500">
@@ -402,21 +404,21 @@ const FactCard: React.FC<FactCardProps> = ({
             <div className="action-buttons flex gap-2 mt-2">
               <button
                 onClick={onConfirm}
-                className="px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1 transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1 transition-colors"
               >
                 <Check className="w-3 h-3" />
                 Confirm
               </button>
               <button
                 onClick={onStartEdit}
-                className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1 transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1 transition-colors"
               >
                 <Edit3 className="w-3 h-3" />
                 Edit
               </button>
               <button
                 onClick={onReject}
-                className="px-3 py-1 text-sm bg-rose-600 hover:bg-rose-700 text-white rounded flex items-center gap-1 transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-rose-600 hover:bg-rose-700 text-white rounded flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" />
                 Flag

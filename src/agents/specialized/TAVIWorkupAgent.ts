@@ -95,6 +95,12 @@ export class TAVIWorkupAgent extends MedicalAgent {
       const validation = await this.validateAndDetectGaps(regexExtracted, input);
       const correctedData = this.applyCorrections(regexExtracted, validation.corrections, 0.8);
 
+      // Apply locked facts from proof mode if present (Phase 3)
+      if (context?.lockedFacts && Object.keys(context.lockedFacts).length > 0) {
+        console.log('[TAVIWorkupAgent] Applying locked facts from proof mode');
+        this.applyLockedFacts(context.lockedFacts, correctedData);
+      }
+
       // Merge any user-provided fields from validation modal (reprocessing flow)
       let mergedExtractedData = correctedData;
       if (context?.userProvidedFields && Object.keys(context.userProvidedFields).length > 0) {
@@ -144,6 +150,23 @@ export class TAVIWorkupAgent extends MedicalAgent {
           status: 'awaiting_validation',
           validationResult: filteredValidation,
           extractedData: mergedExtractedData
+        } as TAVIWorkupReport;
+      }
+
+      // Check if this is a proof mode extraction request (early return before expensive LLM generation)
+      if (context?.requestProofMode) {
+        console.log('[TAVIWorkupAgent] Proof mode requested - extracting facts and pausing before LLM generation');
+        const keyFacts = this.extractKeyFacts(correctedData);
+
+        // Return early with extracted data and facts for proof mode
+        const processingTime = Date.now() - startTime;
+        return {
+          ...this.createReport('', [], context, processingTime, 0.5),
+          status: 'awaiting_proof',
+          keyFacts,
+          taviData: correctedData,  // Store extracted data for later use
+          extractedData: correctedData,  // For consistency with other agents
+          message: 'Key facts extracted. Please review and confirm before report generation.'
         } as TAVIWorkupReport;
       }
 
@@ -1310,5 +1333,280 @@ Please process this comprehensive TAVI workup dictation and format according to 
     if (typeof value === 'string') return value.trim().length === 0;
     if (typeof value === 'number') return Number.isNaN(value);
     return false;
+  }
+
+  /**
+   * Extract key facts from TAVI data for proof mode verification
+   * Returns array of critical facts that must be verified before report generation
+   */
+  extractKeyFacts(extracted: TAVIExtractedData): import('@/types/medical.types').KeyFact[] {
+    const facts: import('@/types/medical.types').KeyFact[] = [];
+    let factId = 1;
+
+    // Category 1: Valve Sizing (CRITICAL for prosthesis selection)
+    if (extracted.valveSizing?.annulusDiameter) {
+      facts.push({
+        id: String(factId++),
+        category: 'Valve Sizing',
+        label: 'Annulus Diameter',
+        value: `${extracted.valveSizing.annulusDiameter} mm`,
+        sourceField: 'valveSizing.annulusDiameter',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.valveSizing?.annulusPerimeter) {
+      facts.push({
+        id: String(factId++),
+        category: 'Valve Sizing',
+        label: 'Annulus Perimeter',
+        value: `${extracted.valveSizing.annulusPerimeter} mm`,
+        sourceField: 'valveSizing.annulusPerimeter',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.valveSizing?.annulusArea) {
+      facts.push({
+        id: String(factId++),
+        category: 'Valve Sizing',
+        label: 'Annulus Area',
+        value: `${extracted.valveSizing.annulusArea} mm²`,
+        sourceField: 'valveSizing.annulusArea',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    // Category 2: Coronary Heights (CRITICAL for safety - coronary occlusion risk)
+    if (extracted.coronaryHeights?.leftCoronary) {
+      facts.push({
+        id: String(factId++),
+        category: 'Coronary Heights',
+        label: 'Left Coronary Height',
+        value: `${extracted.coronaryHeights.leftCoronary} mm`,
+        sourceField: 'coronaryHeights.leftCoronary',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.coronaryHeights?.rightCoronary) {
+      facts.push({
+        id: String(factId++),
+        category: 'Coronary Heights',
+        label: 'Right Coronary Height',
+        value: `${extracted.coronaryHeights.rightCoronary} mm`,
+        sourceField: 'coronaryHeights.rightCoronary',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    // Category 3: Access Assessment
+    if (extracted.accessAssessment?.site) {
+      facts.push({
+        id: String(factId++),
+        category: 'Access Assessment',
+        label: 'Access Site',
+        value: extracted.accessAssessment.site,
+        sourceField: 'accessAssessment.site',
+        critical: false,
+        confidence: 0.90,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.accessAssessment?.iliofemoralDimensions) {
+      facts.push({
+        id: String(factId++),
+        category: 'Access Assessment',
+        label: 'Iliofemoral Dimensions',
+        value: extracted.accessAssessment.iliofemoralDimensions,
+        sourceField: 'accessAssessment.iliofemoralDimensions',
+        critical: false,
+        confidence: 0.85,
+        status: 'pending'
+      });
+    }
+
+    // Category 4: Aortic Valve Assessment
+    if (extracted.aorticValve?.peakGradient) {
+      facts.push({
+        id: String(factId++),
+        category: 'Aortic Valve',
+        label: 'Peak Gradient',
+        value: `${extracted.aorticValve.peakGradient} mmHg`,
+        sourceField: 'aorticValve.peakGradient',
+        critical: false,
+        confidence: 0.90,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.aorticValve?.meanGradient) {
+      facts.push({
+        id: String(factId++),
+        category: 'Aortic Valve',
+        label: 'Mean Gradient',
+        value: `${extracted.aorticValve.meanGradient} mmHg`,
+        sourceField: 'aorticValve.meanGradient',
+        critical: false,
+        confidence: 0.90,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.aorticValve?.avArea) {
+      facts.push({
+        id: String(factId++),
+        category: 'Aortic Valve',
+        label: 'AV Area',
+        value: `${extracted.aorticValve.avArea} cm²`,
+        sourceField: 'aorticValve.avArea',
+        critical: false,
+        confidence: 0.90,
+        status: 'pending'
+      });
+    }
+
+    // Category 5: LV Assessment
+    if (extracted.lvAssessment?.ef) {
+      facts.push({
+        id: String(factId++),
+        category: 'LV Assessment',
+        label: 'Ejection Fraction',
+        value: `${extracted.lvAssessment.ef}%`,
+        sourceField: 'lvAssessment.ef',
+        critical: false,
+        confidence: 0.90,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.lvAssessment?.lvidd) {
+      facts.push({
+        id: String(factId++),
+        category: 'LV Assessment',
+        label: 'LVIDD',
+        value: `${extracted.lvAssessment.lvidd} mm`,
+        sourceField: 'lvAssessment.lvidd',
+        critical: false,
+        confidence: 0.85,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.lvAssessment?.lvids) {
+      facts.push({
+        id: String(factId++),
+        category: 'LV Assessment',
+        label: 'LVIDS',
+        value: `${extracted.lvAssessment.lvids} mm`,
+        sourceField: 'lvAssessment.lvids',
+        critical: false,
+        confidence: 0.85,
+        status: 'pending'
+      });
+    }
+
+    // Category 6: Procedure Details
+    if (extracted.procedureDetails?.valveType) {
+      facts.push({
+        id: String(factId++),
+        category: 'Procedure Details',
+        label: 'Valve Type',
+        value: extracted.procedureDetails.valveType,
+        sourceField: 'procedureDetails.valveType',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.procedureDetails?.valveSize) {
+      facts.push({
+        id: String(factId++),
+        category: 'Procedure Details',
+        label: 'Valve Size',
+        value: `${extracted.procedureDetails.valveSize} mm`,
+        sourceField: 'procedureDetails.valveSize',
+        critical: true,
+        confidence: 0.95,
+        status: 'pending'
+      });
+    }
+
+    if (extracted.procedureDetails?.deploymentDepth) {
+      facts.push({
+        id: String(factId++),
+        category: 'Procedure Details',
+        label: 'Deployment Depth',
+        value: `${extracted.procedureDetails.deploymentDepth} mm`,
+        sourceField: 'procedureDetails.deploymentDepth',
+        critical: false,
+        confidence: 0.85,
+        status: 'pending'
+      });
+    }
+
+    console.log(`[TAVIWorkupAgent] Extracted ${facts.length} key facts for proof mode`);
+    return facts;
+  }
+
+  /**
+   * Apply user-confirmed facts back to extracted data
+   * (Phase 3: Fact Locking Enforcement)
+   */
+  private applyLockedFacts(
+    lockedFacts: Record<string, string>,
+    extracted: TAVIExtractedData
+  ): void {
+    console.log('[TAVIWorkupAgent] Applying locked facts to extracted data...');
+
+    Object.entries(lockedFacts).forEach(([sourceField, value]) => {
+      console.log(`  Locking: ${sourceField} = "${value}"`);
+
+      // Parse nested field paths and apply values
+      const parts = sourceField.split('.');
+
+      if (parts.length === 2) {
+        const [category, field] = parts;
+
+        // Ensure category object exists
+        if (!extracted[category as keyof TAVIExtractedData]) {
+          (extracted as any)[category] = {};
+        }
+
+        // Parse numeric values for measurement fields
+        const numericFields = [
+          'annulusDiameter', 'annulusPerimeter', 'annulusArea',
+          'leftCoronary', 'rightCoronary',
+          'peakGradient', 'meanGradient', 'avArea',
+          'ef', 'lvidd', 'lvids',
+          'valveSize', 'deploymentDepth'
+        ];
+
+        if (numericFields.includes(field)) {
+          // Extract numeric value from string like "25 mm" or "65%"
+          const match = value.match(/(\d+(?:\.\d+)?)/);
+          if (match) {
+            (extracted as any)[category][field] = parseFloat(match[1]);
+          }
+        } else {
+          // String field (accessSite, iliofemoralDimensions, valveType)
+          (extracted as any)[category][field] = value;
+        }
+      }
+    });
+
+    console.log('[TAVIWorkupAgent] Locked facts applied successfully');
   }
 }

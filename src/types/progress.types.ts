@@ -60,7 +60,7 @@ export const STAGE_SHORT_LABELS: Record<StageName, string> = {
  */
 export const STAGE_DESCRIPTIONS: Record<StageName, string> = {
   collecting: 'Gathering transcript and patient data from the EMR',
-  transcribing: 'Converting your voice recording to text using Whisper',
+  transcribing: 'Converting your voice recording to text using the transcription engine',
   extracting: 'Identifying key clinical facts from the transcript',
   reasoning: 'AI model is analysing the data and generating insights',
   formatting: 'Structuring the output into the final format',

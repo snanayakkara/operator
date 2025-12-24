@@ -1,13 +1,16 @@
 /**
- * CT Measurements Card - Phase 7
+ * CT Measurements Card - Phase 7/8
  *
  * Displays and allows editing of structured CT measurement fields.
  * Shows annulus sizing, coronary heights, access vessels, LVOT, and calcium scores.
+ *
+ * Phase 8.5: Added "Dictate CT" button with audio parsing integration.
  */
 
 import React, { useState, useCallback } from 'react';
-import { Activity, ChevronDown, ChevronUp, Edit2, Check, X } from 'lucide-react';
+import { Activity, ChevronDown, ChevronUp, Edit2, Check, X, Mic, Loader2 } from 'lucide-react';
 import Button from '../buttons/Button';
+import { DictateCTModal } from './DictateCTModal';
 import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
 
 interface CTMeasurementsCardProps {
@@ -58,6 +61,7 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDictating, setIsDictating] = useState(false);
   const [editValues, setEditValues] = useState<TAVIWorkupCTMeasurements>(
     measurements || createEmptyMeasurements()
   );
@@ -66,6 +70,36 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
     setEditValues(measurements || createEmptyMeasurements());
     setIsEditing(true);
   }, [measurements]);
+
+  // Handle dictated CT measurements merge
+  const handleDictatedMeasurements = useCallback((newMeasurements: Partial<TAVIWorkupCTMeasurements>, narrative?: string) => {
+    // Merge new measurements into existing, keeping existing values where new is undefined
+    const merged: TAVIWorkupCTMeasurements = {
+      ...measurements,
+      ...newMeasurements,
+      // Deep merge nested objects
+      coronaryHeights: {
+        ...measurements?.coronaryHeights,
+        ...newMeasurements.coronaryHeights
+      },
+      accessVessels: {
+        ...measurements?.accessVessels,
+        ...newMeasurements.accessVessels
+      },
+      sinusOfValsalva: {
+        ...measurements?.sinusOfValsalva,
+        ...newMeasurements.sinusOfValsalva
+      },
+      coplanarAngles: newMeasurements.coplanarAngles || measurements?.coplanarAngles || [],
+      // Append narrative if provided
+      narrative: narrative
+        ? (measurements?.narrative ? `${measurements.narrative}\n\n${narrative}` : narrative)
+        : measurements?.narrative
+    };
+
+    onUpdate(merged);
+    setIsDictating(false);
+  }, [measurements, onUpdate]);
 
   const handleSave = useCallback(() => {
     onUpdate(editValues);
@@ -124,17 +158,30 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
         </div>
         <div className="flex items-center gap-2">
           {!isEditing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleStartEdit();
-              }}
-              icon={<Edit2 className="w-3 h-3" />}
-            >
-              Edit
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDictating(true);
+                }}
+                icon={<Mic className="w-3 h-3" />}
+              >
+                Dictate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStartEdit();
+                }}
+                icon={<Edit2 className="w-3 h-3" />}
+              >
+                Edit
+              </Button>
+            </>
           )}
           {expanded ? (
             <ChevronUp className="w-4 h-4 text-ink-tertiary" />
@@ -347,6 +394,14 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Dictate CT Modal */}
+      {isDictating && (
+        <DictateCTModal
+          onClose={() => setIsDictating(false)}
+          onMerge={handleDictatedMeasurements}
+        />
       )}
     </div>
   );

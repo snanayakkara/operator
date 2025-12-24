@@ -57,7 +57,7 @@ interface TranscriptionSectionProps {
   };
   onAgentReprocess?: (agentType: AgentType) => void;
   /**
-   * Retry transcription from stored audio when Whisper server was unavailable.
+   * Retry transcription from stored audio when Transcription server was unavailable.
    * Only shown when transcription failed and audioBlob is available.
    */
   onRetryTranscription?: () => void;
@@ -185,7 +185,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                     variant="primary"
                     size="sm"
                     className="bg-amber-600 hover:bg-amber-700"
-                    title="Retry transcription by reloading the saved audio and sending it to Whisper"
+                    title="Retry transcription by reloading the saved audio and sending it to the transcription server"
                   >
                     {isRetryingTranscription ? 'Retrying transcription…' : 'Retry transcription from saved audio'}
                   </Button>
@@ -311,33 +311,54 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
   };
 
   // Available agents for reprocessing - grouped by category
-  const availableAgents = [
-    // Letters & Correspondence
-    { id: 'quick-letter', label: 'Quick Letter', icon: '📝' },
-    { id: 'consultation', label: 'Consultation', icon: '👨‍⚕️' },
-    { id: 'patient-education', label: 'Patient Education', icon: '📚' },
-    // Clinical Data
-    { id: 'background', label: 'Background', icon: '📋' },
-    { id: 'investigation-summary', label: 'Investigation', icon: '🔬' },
-    { id: 'medication', label: 'Medications', icon: '💊' },
-    { id: 'bloods', label: 'Bloods', icon: '🩸' },
-    { id: 'imaging', label: 'Imaging', icon: '🖼️' },
-    // Procedures - Structural
-    { id: 'tavi', label: 'TAVI', icon: '🫀' },
-    { id: 'tavi-workup', label: 'TAVI Workup', icon: '📊' },
-    { id: 'mteer', label: 'mTEER', icon: '🔧' },
-    { id: 'tteer', label: 'tTEER', icon: '🔩' },
-    { id: 'pfo-closure', label: 'PFO Closure', icon: '🩹' },
-    { id: 'asd-closure', label: 'ASD Closure', icon: '🫁' },
-    { id: 'pvl-plug', label: 'PVL Plug', icon: '🔌' },
-    // Procedures - Coronary
-    { id: 'angiogram-pci', label: 'Angiogram/PCI', icon: '🩺' },
-    { id: 'bypass-graft', label: 'Bypass Graft', icon: '🔀' },
-    // Procedures - Diagnostic
-    { id: 'right-heart-cath', label: 'Right Heart Cath', icon: '💓' },
-    // Planning
-    { id: 'pre-op-plan', label: 'Pre-Op Plan', icon: '📑' },
+  const agentGroups = [
+    {
+      name: 'Letters',
+      agents: [
+        { id: 'quick-letter', label: 'Quick Letter', icon: '📝' },
+        { id: 'consultation', label: 'Consultation', icon: '👨‍⚕️' },
+        { id: 'patient-education', label: 'Patient Education', icon: '📚' },
+      ],
+    },
+    {
+      name: 'Clinical',
+      agents: [
+        { id: 'background', label: 'Background', icon: '📋' },
+        { id: 'investigation-summary', label: 'Investigation', icon: '🔬' },
+        { id: 'medication', label: 'Medications', icon: '💊' },
+        { id: 'bloods', label: 'Bloods', icon: '🩸' },
+        { id: 'imaging', label: 'Imaging', icon: '🖼️' },
+      ],
+    },
+    {
+      name: 'Structural',
+      agents: [
+        { id: 'tavi', label: 'TAVI', icon: '🫀' },
+        { id: 'tavi-workup', label: 'TAVI Workup', icon: '📊' },
+        { id: 'mteer', label: 'mTEER', icon: '🔧' },
+        { id: 'tteer', label: 'tTEER', icon: '🔩' },
+        { id: 'pfo-closure', label: 'PFO Closure', icon: '🩹' },
+        { id: 'asd-closure', label: 'ASD Closure', icon: '🫁' },
+        { id: 'pvl-plug', label: 'PVL Plug', icon: '🔌' },
+      ],
+    },
+    {
+      name: 'Coronary',
+      agents: [
+        { id: 'angiogram-pci', label: 'Angiogram/PCI', icon: '🩺' },
+        { id: 'bypass-graft', label: 'Bypass Graft', icon: '🔀' },
+        { id: 'right-heart-cath', label: 'Right Heart Cath', icon: '💓' },
+      ],
+    },
+    {
+      name: 'Planning',
+      agents: [
+        { id: 'pre-op-plan', label: 'Pre-Op Plan', icon: '📑' },
+      ],
+    },
   ] as const;
+  
+  const availableAgents = agentGroups.flatMap(g => g.agents);
 
   const handleTranscriptionCopy = async () => {
     if (onTranscriptionCopy) {
@@ -586,7 +607,7 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
                     Transcription Failed - Audio Available
                   </p>
                   <p className="text-xs text-amber-700 mt-1">
-                    The Whisper server wasn't running when this was recorded. Your audio is still available and can be re-transcribed.
+                    The Transcription server wasn't running when this was recorded. Your audio is still available and can be re-transcribed.
                   </p>
                   <Button
                     onClick={onRetryTranscription}
@@ -638,26 +659,33 @@ const TranscriptionSection: React.FC<TranscriptionSectionProps> = memo(({
               </Button>
 
               {reprocessExpanded && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {availableAgents.map((agent) => (
-                    <Button
-                      key={agent.id}
-                      onClick={() => handleReprocess(agent.id as AgentType)}
-                      disabled={isProcessing}
-                      variant={currentAgent === agent.id ? 'outline' : 'ghost'}
-                      size="sm"
-                      className={`text-xs ${
-                        currentAgent === agent.id
-                          ? 'bg-blue-50 border-blue-200 text-blue-700'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <span>{agent.icon}</span>
-                      <span className="ml-1">{agent.label}</span>
-                      {currentAgent === agent.id && (
-                        <span className="ml-1 text-xs text-blue-500">•</span>
-                      )}
-                    </Button>
+                <div className="mt-2 space-y-2">
+                  {agentGroups.map((group) => (
+                    <div key={group.name} className="space-y-1">
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider px-1">{group.name}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {group.agents.map((agent) => (
+                          <Button
+                            key={agent.id}
+                            onClick={() => handleReprocess(agent.id as AgentType)}
+                            disabled={isProcessing}
+                            variant={currentAgent === agent.id ? 'outline' : 'ghost'}
+                            size="sm"
+                            className={`text-xs px-2 py-1 h-7 ${
+                              currentAgent === agent.id
+                                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700'
+                            }`}
+                          >
+                            <span className="text-sm">{agent.icon}</span>
+                            <span className="ml-1">{agent.label}</span>
+                            {currentAgent === agent.id && (
+                              <span className="ml-1 text-blue-500">•</span>
+                            )}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

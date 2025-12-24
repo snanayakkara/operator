@@ -174,7 +174,7 @@ export const WardUpdateModal: React.FC<WardUpdateModalProps> = ({ open, onClose,
   const recorder = useRecorder({
     onRecordingComplete: async (audioBlob) => {
       setTranscribing(true);
-      setDictationStatus('Transcribing with Whisper…');
+      setDictationStatus('Transcribing audio…');
       try {
         const transcriptText = await LMStudioService.getInstance().transcribeAudio(audioBlob, undefined, 'rounds-ward-update');
         setTranscript(transcriptText);

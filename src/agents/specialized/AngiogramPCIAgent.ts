@@ -7,11 +7,13 @@ import type {
   MedicalReport,
   MedicalCode,
   ValidationResult,
-  AngioPCIExtractedData
+  AngioPCIExtractedData,
+  LesionTree
 } from '@/types/medical.types';
 import { systemPromptLoader } from '@/services/SystemPromptLoader';
 import { ANGIOGRAM_PCI_SYSTEM_PROMPTS, ANGIOGRAM_PCI_MEDICAL_KNOWLEDGE } from './AngiogramPCISystemPrompts';
 import { LMStudioService, MODEL_CONFIG } from '@/services/LMStudioService';
+import { LesionExtractionService } from '@/utils/LesionExtractionUtils';
 
 type ProcedureType = 'DIAGNOSTIC_ANGIOGRAM' | 'PCI_INTERVENTION' | 'COMBINED';
 
@@ -96,10 +98,10 @@ export class AngiogramPCIAgent extends MedicalAgent {
         this.updateMemory('criticalFindings', criticalFindingsDetected);
       }
 
-      // Validation Workflow: Regex Extraction + Quick Model Validation
+      // Validation Workflow: Quick Model Lesion Extraction
       console.log('🚨 ANGIO/PCI AGENT: Starting validation workflow...');
-      const regexExtracted = this.extractAngioPCIData(correctedInput, procedureType);
-      console.log('📋 Regex extracted:', JSON.stringify(regexExtracted, null, 2));
+      const regexExtracted = await this.extractAngioPCIData(correctedInput, procedureType);
+      console.log('📋 Extracted data:', JSON.stringify(regexExtracted, null, 2));
 
       // Check if this is a proof mode extraction request (early return before expensive LLM generation)
       if (context?.requestProofMode) {
@@ -397,6 +399,30 @@ Use the clinician's exact terminology as provided. Include all relevant details 
     return baseData;
   }
 
+  /**
+   * Format lesion tree for LLM prompt injection
+   */
+  private formatLesionTreeForPrompt(tree: LesionTree): string {
+    const vesselNames = {
+      lm: 'Left Main',
+      lad: 'Left Anterior Descending',
+      lcx: 'Left Circumflex',
+      rca: 'Right Coronary Artery',
+      grafts: 'Grafts'
+    };
+
+    return Object.entries(tree)
+      .filter(([_, lesions]) => lesions.length > 0)
+      .map(([vessel, lesions]) => {
+        const vesselName = vesselNames[vessel as keyof typeof vesselNames];
+        const lesionList = lesions.map(l =>
+          `    • ${l.branch || vessel.toUpperCase()}: ${l.severity}${l.description ? ` - ${l.description}` : ''}`
+        ).join('\n');
+        return `  ${vesselName}:\n${lesionList}`;
+      })
+      .join('\n\n');
+  }
+
   private async generateStructuredReport(
     input: string,
     procedureData: any,
@@ -417,6 +443,17 @@ Use the clinician's exact terminology as provided. Include all relevant details 
       enhancedSystemPrompt += `\n\n**CRITICAL: USER-CONFIRMED FACTS (DO NOT MODIFY)**\n${lockedFactsList}\n\nYou MUST use these exact values in your narrative. Do NOT change, rephrase, or contradict these confirmed facts.`;
 
       console.log('[AngioPCIAgent] Injected fact-locking instructions into LLM prompt');
+    }
+
+    // Inject locked lesions if user confirmed lesion tree exists (AngioPCI proof mode)
+    const hasLockedLesions = context?.lockedLesions && Object.values(context.lockedLesions).some(l => l.length > 0);
+
+    if (hasLockedLesions && context?.lockedLesions) {
+      const lesionsSummary = this.formatLesionTreeForPrompt(context.lockedLesions);
+
+      enhancedSystemPrompt += `\n\n**CRITICAL: USER-VERIFIED LESION DATA (DO NOT MODIFY)**\n\nThe user has reviewed and confirmed the following lesion findings. You MUST use these exact lesion descriptions in the FINDINGS section. Do NOT hallucinate different stenosis percentages, vessels, or lesion locations:\n\n${lesionsSummary}\n\nYou MUST incorporate these lesions into the FINDINGS section using the exact stenosis percentages and descriptions provided above.`;
+
+      console.log('[AngioPCIAgent] Injected locked lesion tree into LLM prompt');
     }
 
     try {
@@ -1301,8 +1338,9 @@ If you have any questions about these results, please don't hesitate to contact 
 
   /**
    * Extract structured data for validation (simplified wrapper around existing extraction)
+   * Now async to support quick model lesion extraction
    */
-  private extractAngioPCIData(input: string, procedureType: ProcedureType): AngioPCIExtractedData {
+  private async extractAngioPCIData(input: string, procedureType: ProcedureType): Promise<AngioPCIExtractedData> {
     const text = input.toLowerCase();
     const extracted: AngioPCIExtractedData = {};
 
@@ -1360,6 +1398,18 @@ If you have any questions about these results, please don't hesitate to contact 
         fluoroscopyTime: fluoroscopyTimeValue
       };
     }
+
+    // Quick model lesion extraction (10-30s)
+    console.log('🌳 Extracting lesions with quick model...');
+    const lesionTree = await LesionExtractionService.extractLesionsFromTranscription(
+      input,
+      this.lmStudioService
+    );
+    const stats = LesionExtractionService.getExtractionStats(lesionTree);
+    console.log(`📊 Lesion extraction stats: ${stats.totalLesions} total, vessels: ${stats.vesselsWithLesions.join(', ')}`);
+
+    extracted.lesions = lesionTree;
+    extracted.lesionExtractionMethod = 'quick-model';
 
     return extracted;
   }

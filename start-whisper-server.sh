@@ -69,6 +69,26 @@ else
             echo "   Attempting direct install..."
             python -m pip install "mlx-whisper>=0.4.2"
         fi
+        if ! python -c "import mlx_audio" 2>/dev/null; then
+            echo "❌ mlx-audio not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install "mlx-audio>=0.1.0"
+        fi
+        if ! python -c "import librosa" 2>/dev/null; then
+            echo "❌ librosa not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install "librosa"
+        fi
+        if ! python -c "import mlx_lm" 2>/dev/null; then
+            echo "❌ mlx-lm not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install "mlx-lm"
+        fi
+        if ! python -c "import einops" 2>/dev/null; then
+            echo "❌ einops not found after installation"
+            echo "   Attempting direct install..."
+            python -m pip install "einops"
+        fi
     fi
 fi
 

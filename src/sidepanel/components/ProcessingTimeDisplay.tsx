@@ -249,7 +249,7 @@ export const ProcessingTimeDisplay: React.FC<ProcessingTimeDisplayProps> = ({ ap
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
                   <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                  <span className="text-gray-700">Transcription (MLX Whisper)</span>
+                  <span className="text-gray-700">Transcription (ASR)</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-20 bg-gray-200 rounded-full h-1.5">

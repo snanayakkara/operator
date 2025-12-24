@@ -9,6 +9,40 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.3.0] - 2025-12-24
+
+### Added
+
+- **TAVI Workup Agent Proof Mode**: Complete audio/visual key facts review workflow
+  - Audio playback with synchronized transcription highlighting
+  - Visual proof mode for validating extracted key facts
+  - User confirmation system for locked facts application
+  - Integration with reasoning model generation (MedGemma-27B)
+
+- **Enhanced TAVI Key Facts Extraction**: 17 potential fields across 6 categories
+  - Valve sizing (annulus diameter/perimeter/area - CRITICAL)
+  - Coronary heights (left/right coronary heights - CRITICAL)
+  - Access assessment (site, iliofemoral dimensions)
+  - Aortic valve (peak/mean gradient, AV area)
+  - LV assessment (EF, LVIDD, LVIDS)
+  - Procedure details (valve type/size, deployment depth - CRITICAL)
+
+- **New Services and Components**:
+  - `TAVIWorkupPDFService.ts`: PDF generation for TAVI workups
+  - `ValveSizingServiceV2.ts`: Enhanced valve sizing calculations
+  - `LesionProofMode.tsx`: Proof mode for angiogram lesion validation
+  - Multiple valve-related UI components (ValveCard, ValveSelectorCard, ValveSizingBar, ValveSizingTab)
+
+- **Audio Processing Enhancements**:
+  - Improved audio optimization and processing queue services
+  - Enhanced transcription service with better performance monitoring
+  - New audio testing utilities and server management
+
+- **Medical AI Integration**:
+  - MedASR server integration for advanced speech recognition
+  - Enhanced LMStudio service with better model management
+  - Improved performance monitoring and processing time prediction
+
 ## [4.2.0] - 2025-12-20
 
 ### Added

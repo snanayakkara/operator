@@ -403,7 +403,7 @@ def load_model():
     return model_loaded
 
 def load_tts_model():
-    """Load MLX-Audio TTS model (Kokoro-82M)"""
+    """Load MLX-Audio Chatterbox TTS model."""
     global tts_model, tts_model_loaded
 
     if tts_model_loaded:
@@ -416,26 +416,9 @@ def load_tts_model():
 
         # Try to import and load MLX-Audio TTS
         try:
-            from mlx_audio.tts.utils import load_model
-            from mlx_audio.tts.models.kokoro import KokoroPipeline
+            from tts_chatterbox import load_chatterbox_model
 
-            # Load the Chatterbox-Turbo-4bit model
-            model_id = 'mlx-community/chatterbox-turbo-4bit'
-            model = load_model(model_id)
-
-            # Create pipeline with American English
-            # Using 'af_heart' voice for neutral, professional medical context
-            pipeline = KokoroPipeline(
-                lang_code='a',  # American English
-                model=model,
-                repo_id=model_id
-            )
-
-            tts_model = {
-                'pipeline': pipeline,
-                'sample_rate': 24000,
-                'voice': 'af_heart'  # Default voice
-            }
+            tts_model = load_chatterbox_model()
 
             load_time = time.time() - start_time
             print(f"✅ MLX-Audio TTS loaded in {load_time:.2f} seconds")
@@ -448,7 +431,7 @@ def load_tts_model():
         except ImportError as ie:
             print(f"⚠️ MLX-Audio dependencies not available: {ie}")
             print("💡 TTS features will be disabled")
-            print("📦 To enable TTS, install: pip install mlx-audio")
+            print("📦 To enable TTS, install: pip install mlx-audio librosa mlx-lm einops")
             tts_model = None
             tts_model_loaded = False
             return False
@@ -774,7 +757,7 @@ def transcribe_bloods():
 @app.route('/v1/audio/synthesis', methods=['POST'])
 def synthesize_speech():
     """
-    Text-to-Speech endpoint using MLX-Audio (Kokoro-82M).
+    Text-to-Speech endpoint using MLX-Audio (Chatterbox).
 
     Request JSON:
     {
@@ -807,19 +790,16 @@ def synthesize_speech():
         print(f"🔊 TTS synthesis request: '{text[:50]}...' (speed: {speed}x)")
 
         try:
-            # Generate speech using MLX-Audio Kokoro pipeline
-            pipeline = tts_model['pipeline']
+            # Generate speech using the Chatterbox pipeline
+            model = tts_model['model']
             sample_rate = tts_model['sample_rate']
-            voice = tts_model['voice']
 
-            # Clamp speed to valid range (0.5x - 2.0x)
+            # Clamp speed to valid range (0.5x - 2.0x) even if unused
             speed = max(0.5, min(2.0, speed))
 
-            # Generate audio using the pipeline
-            # Pipeline returns iterator of (start_time, end_time, audio_chunk)
             audio_chunks = []
-            for _, _, audio in pipeline(text, voice=voice, speed=speed):
-                # audio is shape (1, samples) - extract the 1D array
+            for result in model.generate(text):
+                audio = np.array(result.audio)
                 if audio.ndim > 1:
                     audio = audio[0]
                 audio_chunks.append(audio)
@@ -872,6 +852,7 @@ def health_check():
 
         return jsonify({
             "status": "ok",
+            "engine": "mlx-whisper",
             "model": MODEL_NAME,
             "model_status": model_status,
             "tts_model": "mlx-community/chatterbox-turbo-4bit" if tts_model_loaded else None,

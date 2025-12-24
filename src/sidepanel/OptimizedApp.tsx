@@ -319,6 +319,8 @@ const OptimizedAppContent: React.FC = memo(() => {
     facts: KeyFact[];
     onComplete: (result: KeyFactsProofResult) => void;
     onCancel: () => void;
+    lesionTree?: LesionTree;
+    lesionExtractionMethod?: 'regex' | 'quick-model';
   } | null>(null);
 
   const syncXestroDarkModeToActiveTab = useCallback((enabled: boolean) => {
@@ -2154,7 +2156,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, []);
 
   // Store failed audio recording for troubleshooting (non-blocking)
-  // Also persists audio to disk for retry when Whisper server is unavailable
+  // Also persists audio to disk for retry when Transcription server is unavailable
   const storeFailedAudioRecording = useCallback((
     audioBlob: Blob, 
     agentType: AgentType, 
@@ -2266,6 +2268,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     console.log('🔄 Starting background processing for session:', sessionId);
     console.log('🎯 Current selectedSessionId at start:', state.selectedSessionId);
     let transcriptionResult = '';
+    const transcriptionModelLabel = state.modelStatus.whisperServer?.model || 'ASR engine';
 
     // Create dedicated AbortControllers for this session
     const sessionProcessingAbort = new AbortController();
@@ -2283,7 +2286,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         progress: 15,
         stageProgress: 10,
         details: 'Queued for transcription',
-        modelName: 'MLX Whisper v3-turbo'
+        modelName: transcriptionModelLabel
       });
       actions.updatePatientSession(sessionId, {
         pipelineProgress: {
@@ -2291,7 +2294,7 @@ const OptimizedAppContent: React.FC = memo(() => {
           progress: 15,
           stageProgress: 10,
           details: 'Queued for transcription',
-          modelName: 'MLX Whisper v3-turbo'
+          modelName: transcriptionModelLabel
         }
       });
 
@@ -2317,8 +2320,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                 stage: 'transcribing',
                 progress: 30,
                 stageProgress: 60,
-                details: 'Transcribing with Whisper',
-                modelName: 'MLX Whisper v3-turbo'
+                details: 'Transcribing audio',
+                modelName: transcriptionModelLabel
               });
               actions.updatePatientSession(sessionId, {
                 status: 'transcribing',
@@ -2326,8 +2329,8 @@ const OptimizedAppContent: React.FC = memo(() => {
                   stage: 'transcribing',
                   progress: 30,
                   stageProgress: 60,
-                  details: 'Transcribing with Whisper',
-                  modelName: 'MLX Whisper v3-turbo'
+                  details: 'Transcribing audio',
+                  modelName: transcriptionModelLabel
                 }
               });
             } else if (status === 'failed' || status === 'cancelled') {
@@ -2439,8 +2442,8 @@ const OptimizedAppContent: React.FC = memo(() => {
 
           const suggestion = isTranscriptionEmpty ? 'Try speaking closer to the microphone' :
             isTranscriptionTooShort ? 'Record for at least 2 seconds' :
-            isTranscriptionPlaceholder ? 'Check Whisper server status' :
-            'Check Whisper server connection';
+            isTranscriptionPlaceholder ? 'Check Transcription server status' :
+            'Check Transcription server connection';
 
           getActionExecutor().errorFromBackground(
             `Transcription failed: ${errorMessage}`,
@@ -2555,7 +2558,14 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       // Try streaming generation first for supported agents
-      const streamingResult = await startStreamingGeneration(sessionId, workflowId, transcriptionResult, streamingMedicalContext);
+      const skipStreamingForProofMode = workflowId === 'angiogram-pci' || workflowId === 'tavi-workup';
+      if (skipStreamingForProofMode) {
+        const proofAgentLabel = workflowId === 'angiogram-pci' ? 'Angio/PCI' : 'TAVI Workup';
+        console.log(`⏭️ Skipping streaming for ${proofAgentLabel} so proof mode can run first`);
+      }
+      const streamingResult = skipStreamingForProofMode
+        ? { handled: false, success: false }
+        : await startStreamingGeneration(sessionId, workflowId, transcriptionResult, streamingMedicalContext);
       if (streamingResult.handled) {
         if (streamingResult.success) {
           const totalDuration = Date.now() - transcriptionStartTime;
@@ -2831,6 +2841,11 @@ const OptimizedAppContent: React.FC = memo(() => {
 
         const angioResult = result as any;
         const keyFacts = angioResult.keyFacts || [];
+        const extractedData = angioResult.extractedData || {};
+        const lesionTree = extractedData.lesions;
+        const lesionExtractionMethod = extractedData.lesionExtractionMethod || 'regex';
+
+        console.log('🌳 Lesion tree extracted for proof mode:', lesionTree);
 
         // Store extracted data in session
         actions.updatePatientSession(sessionId, {
@@ -2846,6 +2861,8 @@ const OptimizedAppContent: React.FC = memo(() => {
         // Set proof mode data to trigger dialog
         setAngioProofModeData({
           facts: keyFacts,
+          lesionTree,
+          lesionExtractionMethod,
           onComplete: async (proofResult: KeyFactsProofResult) => {
             console.log('✅ Angio/PCI Proof Mode: Facts confirmed, resuming with locked facts', proofResult);
 
@@ -2857,11 +2874,12 @@ const OptimizedAppContent: React.FC = memo(() => {
               }
             });
 
-            // Resume processing with locked facts
+            // Resume processing with locked facts AND locked lesions
             const contextWithLockedFacts = {
               sessionId,
               timestamp: Date.now(),
               lockedFacts,
+              lockedLesions: proofResult.refinedLesions, // Pass refined lesions from proof mode
               proofResult
             };
 
@@ -3997,7 +4015,10 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, []);
 
   // Handle workflow selection with optimized state updates
-  const handleWorkflowSelect = useCallback(async (workflowId: AgentType, quickActionField?: string) => {
+  const handleWorkflowSelect = useCallback(async (
+    workflowId: AgentType,
+    quickActionField?: string
+  ): Promise<ActionResult> => {
     console.log('🎯 Workflow selected:', workflowId, quickActionField ? `(Quick Action field: ${quickActionField})` : '');
     console.log('🔍 handleWorkflowSelect state:', {
       isRecording: recorder.isRecording,
@@ -4005,6 +4026,13 @@ const OptimizedAppContent: React.FC = memo(() => {
       workflowId,
       willStop: recorder.isRecording && state.ui.activeWorkflow === workflowId
     });
+
+    const reportWorkflowError = (message: string, suggestion?: string): ActionResult => {
+      actions.setErrors([message]);
+      getActionExecutor().errorFromBackground(message, { suggestion, category: 'service', autoClearMs: 8000 });
+      actions.setProcessingStatus('idle');
+      return { success: false, error: message, suggestion };
+    };
 
     // Auto-reset from error state when user attempts new recording
     if (state.processingStatus === 'error') {
@@ -4037,26 +4065,46 @@ const OptimizedAppContent: React.FC = memo(() => {
       // Already recording for this workflow - clicking again means stop
       console.log('🛑 Stopping current recording for:', workflowId);
       recorder.stopRecording();
-      return; // Exit early to prevent immediate restart
+      return { success: true }; // Exit early to prevent immediate restart
     }
 
-    if (!recorder.isRecording) {
-      // Check if we have too many active sessions (max 3 concurrent processing)
-      if (activeSessions.length >= 3) {
-        actions.setErrors([`Too many active sessions (${activeSessions.length}). Please wait for some to complete before starting new recordings.`]);
-        return;
-      }
+    if (recorder.isRecording) {
+      return reportWorkflowError(
+        'A recording is already in progress. Stop it before starting a new one.',
+        'Stop the current recording and try again'
+      );
+    }
 
-      // Allow concurrent recordings - removed single recording session limit
-      console.log(`📊 Current active sessions: ${activeSessions.length}/3 - proceeding with new recording`);
+    // Check if we have too many active sessions (max 3 concurrent processing)
+    if (activeSessions.length >= 3) {
+      return reportWorkflowError(
+        `Too many active sessions (${activeSessions.length}). Please wait for some to complete before starting new recordings.`,
+        'Wait for processing to finish, then retry'
+      );
+    }
 
-      // Check Whisper server status before allowing recording
-      console.log('🔍 Checking Whisper server status before recording...');
-      if (!state.modelStatus.whisperServer?.running) {
-        console.error('❌ Whisper server not running');
-        actions.setErrors(['Whisper server is not running. Please start the server first using: ./start-whisper-server.sh']);
-        return;
-      }
+    // Allow concurrent recordings - removed single recording session limit
+    console.log(`📊 Current active sessions: ${activeSessions.length}/3 - proceeding with new recording`);
+
+    // Check Transcription server status before allowing recording
+    console.log('🔍 Checking Transcription server status before recording...');
+    const whisperStatus = await whisperServerService.checkServerStatus(true, {
+      timeout: 5000,
+      retries: 1
+    });
+    actions.setModelStatus({
+      ...state.modelStatus,
+      whisperServer: whisperStatus
+    });
+
+    if (!whisperStatus.running) {
+      console.error('❌ Transcription server not running');
+      const errorDetail = whisperStatus.error ? ` (${whisperStatus.error})` : '';
+      return reportWorkflowError(
+        `Transcription server is not running${errorDetail}.`,
+        'Start it with ./dev'
+      );
+    }
       
       // Extract fresh patient data for accurate recording (always invalidate cache to avoid reusing old patient data)
       console.log('📋 Extracting patient data for new recording...');
@@ -4126,14 +4174,14 @@ const OptimizedAppContent: React.FC = memo(() => {
       console.log('📝 Created new session:', sessionId, 'for patient:', patientSession.patient.name);
       
       // Start recording for selected workflow
-      console.log('✅ Whisper server is running, starting recording...');
+      console.log('✅ Transcription server is running, starting recording...');
       actions.setActiveWorkflow(workflowId);
       activeWorkflowRef.current = workflowId;
       actions.setUIMode('recording', { sessionId, origin: 'user' });
-      recorder.startRecording();
-      actions.setProcessingStartTime(Date.now());
-    }
-  }, [recorder, state.ui.activeWorkflow, actions, extractPatientData, state.patientSessions, state.modelStatus]);
+    recorder.startRecording();
+    actions.setProcessingStartTime(Date.now());
+    return { success: true };
+  }, [recorder, state.ui.activeWorkflow, actions, extractPatientData, state.patientSessions, state.modelStatus, whisperServerService]);
 
   const _handleReturnHome = useCallback(() => {
     if (recorder.isRecording) {
@@ -4868,7 +4916,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   }, [state.transcription, state.isProcessing, state.selectedSessionId, state.currentSessionId, state.displaySession.isDisplayingSession, state.displaySession.displaySessionId, state.displaySession.displayTranscription, actions]);
 
   /**
-   * Retry transcription from stored audio when the Whisper server was unavailable
+   * Retry transcription from stored audio when the Transcription server was unavailable
    * This allows users to re-transcribe recordings that failed due to server issues.
    * Audio is retrieved from:
    * 1. In-memory session audioBlob (if still in memory)
@@ -4930,15 +4978,15 @@ const OptimizedAppContent: React.FC = memo(() => {
             progress: 20,
             stageProgress: 50,
             details: 'Retrying transcription...',
-            modelName: 'MLX Whisper v3-turbo'
+            modelName: state.modelStatus.whisperServer?.model || 'ASR engine'
           }
         });
       }
 
-      // Check if Whisper server is running
+      // Check if Transcription server is running
       const serverStatus = await WhisperServerService.getInstance().checkServerStatus(true);
       if (!serverStatus.running) {
-        throw new Error(`Whisper server still not running. ${serverStatus.error || 'Please run ./start-whisper-server.sh'}`);
+        throw new Error(`Transcription server still not running. ${serverStatus.error || 'Please run ./dev'}`);
       }
 
       // Attempt transcription
@@ -5978,7 +6026,7 @@ const OptimizedAppContent: React.FC = memo(() => {
     console.time('⏱️ Total checkModelStatus Duration');
 
     try {
-      // Check both LMStudio and Whisper server status
+      // Check both LMStudio and Transcription server status
       const status = await lmStudioService.checkConnection();
       
       // Use resilient status checking with retry logic for post-processing scenarios
@@ -5988,7 +6036,7 @@ const OptimizedAppContent: React.FC = memo(() => {
         retries: 2     // Retry once if timeout occurs
       });
       
-      // Update the status with the fresh Whisper server data
+      // Update the status with the fresh Transcription server data
       const updatedStatus = {
         ...status,
         whisperServer: freshWhisperStatus
@@ -6230,8 +6278,7 @@ const OptimizedAppContent: React.FC = memo(() => {
       }
 
       if (mode === 'dictate' || mode === undefined) {
-        handleWorkflowSelect(action.agentType, ctx.quickActionField);
-        return { success: true };
+        return handleWorkflowSelect(action.agentType, ctx.quickActionField);
       } else if (mode === 'type') {
         return handleTypeClick(action.agentType, ctx.quickActionField);
       }
@@ -6266,8 +6313,7 @@ const OptimizedAppContent: React.FC = memo(() => {
 
         if (action.agentType) {
           console.log(`🎤 [ActionExecutor] Routing to handleWorkflowSelect: ${action.agentType}`);
-          handleWorkflowSelect(action.agentType, ctx.quickActionField);
-          return { success: true };
+          return handleWorkflowSelect(action.agentType, ctx.quickActionField);
         }
 
         console.error(`❌ [ActionExecutor] No agent type for action: ${action.id}`);
@@ -6474,7 +6520,7 @@ const OptimizedAppContent: React.FC = memo(() => {
   return (
     <div className="relative h-full max-h-full flex flex-col bg-surface-secondary overflow-hidden">
       {/* Header - Hidden when overlays are open */}
-      {!roundsOpen && !appointmentBuilderOpen && !structuralWorkupsOpen && (
+      {!roundsOpen && !appointmentBuilderOpen && !structuralWorkupsOpen && !lesionReviewState.open && (
         <AppHeader
           // Action callbacks
           onDictate={handleHeaderDictate}

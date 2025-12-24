@@ -1,13 +1,18 @@
 /**
- * DICOM Viewer Card - Phase 8.2 (Stub)
+ * DICOM Viewer Card - Phase 8.2 (Intentionally Deferred)
  *
- * Placeholder component for future CornerstoneJS DICOM viewer integration.
- * Currently shows a placeholder with instructions for loading DICOM files.
+ * Stub component providing snapshot gallery and instructions for CT image capture.
+ * Full CornerstoneJS integration deferred due to:
+ * - Bundle size (~2-3MB for CornerstoneJS)
+ * - Chrome extension CSP/WebAssembly complexity
+ * - Current workflow uses external viewers (Horos, OsiriX, 3D Slicer)
  *
- * Future: Will integrate CornerstoneJS 3D for:
- * - CT volume viewing with scroll, window/level, zoom, pan
- * - Snapshot capture with viewport state
- * - Measurement tools
+ * Current Features:
+ * - Snapshot gallery with remove functionality
+ * - Workaround instructions for external viewer workflow
+ * - Proper TypeScript types (DicomSnapshot)
+ *
+ * Future (if needed): CornerstoneJS 3D integration for native DICOM viewing
  */
 
 import React, { useState } from 'react';

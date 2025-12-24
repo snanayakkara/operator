@@ -44,6 +44,51 @@ curl http://localhost:8001/v1/health
 curl -X POST -F 'file=@test.webm' http://localhost:8001/v1/audio/transcriptions
 ```
 
+## MedASR Option (A/B Testing)
+
+You can optionally run Google MedASR (`google/medasr`) for medical vocabulary accuracy testing. This uses the same API and port 8001, so you can switch by restarting `./dev`.
+
+### Install MedASR Dependencies
+
+```bash
+pip install -r requirements-medasr.txt
+```
+
+### Start MedASR Server
+
+```bash
+# Option 1: Use the consolidated startup script (choose MedASR when prompted)
+./dev
+
+# Option 2: Start MedASR only
+./start-medasr-server.sh
+
+# Option 3: Run directly
+python3 medasr-server.py
+```
+
+### Device Selection (Apple Silicon)
+
+```bash
+# auto (default), mps, or cpu
+export OPERATOR_MEDASR_DEVICE=auto
+```
+
+### Test MedASR
+
+```bash
+curl -X POST http://localhost:8001/v1/audio/transcriptions \
+  -F 'file=@audio.webm' \
+  -F 'model=google/medasr' \
+  -F 'response_format=json'
+```
+
+Optional smoke test:
+
+```bash
+./test-asr.sh path/to/audio.webm
+```
+
 ## Server Configuration
 
 ### Default Settings
