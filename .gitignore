@@ -4,6 +4,7 @@ dist/
 
 # Python
 venv-whisper/
+venv-medasr/
 __pycache__/
 *.pyc
 *.pyo
