@@ -18,12 +18,13 @@
  * - Presentation mode (Phase 6)
  */
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
-import type { TAVIWorkupItem, NotionTAVIPatient } from '@/types/taviWorkup.types';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode, useRef } from 'react';
+import type { TAVIWorkupItem, NotionTAVIPatient, NotionWorkupFields, NotionSyncConflict } from '@/types/taviWorkup.types';
 import { createEmptyStructuredSections, calculateCompletion } from '@/types/taviWorkup.types';
 import { TAVIWorkupStorageService } from '@/services/TAVIWorkupStorageService';
 import { NotionStructuralWorkupService } from '@/services/NotionStructuralWorkupService';
 import type { TAVIWorkupStructuredSections } from '@/types/medical.types';
+import { NOTION_CONFIG_KEY } from '@/config/notionConfig';
 
 // === CONTEXT INTERFACE ===
 
@@ -41,7 +42,7 @@ interface TAVIWorkupContextValue {
   // === CRUD OPERATIONS ===
   setSelectedWorkupId: (id: string | null) => void;
   createWorkup: (notionPatient?: NotionTAVIPatient) => Promise<TAVIWorkupItem>;
-  updateWorkup: (id: string, updater: (w: TAVIWorkupItem) => TAVIWorkupItem) => Promise<void>;
+  updateWorkup: (id: string, updater: (w: TAVIWorkupItem) => TAVIWorkupItem, options?: UpdateWorkupOptions) => Promise<void>;
   deleteWorkup: (id: string) => Promise<void>;
 
   // === DICTATION (Phase 4 & 5) ===
@@ -50,16 +51,87 @@ interface TAVIWorkupContextValue {
 
   // === NOTION SYNC (Phase 2) ===
   refreshNotionList: () => Promise<void>;
-  syncWorkupStatus: (workupId: string, status: 'pending' | 'in-progress' | 'presented') => Promise<void>;
-  linkToNotion: (workupId: string, notionPageId: string) => Promise<void>;
+  retryNotionSync: (workupId: string) => Promise<void>;
+  resolveNotionConflict: (workupId: string, resolution: 'local' | 'notion') => Promise<void>;
 
   // === PRESENTATION (Phase 6) ===
   generatePresentation: (workupId: string) => Promise<string>; // Returns file path
 }
 
+type UpdateWorkupOptions = {
+  source?: 'local' | 'notion';
+  clearSyncError?: boolean;
+  clearSyncConflict?: boolean;
+};
+
 // === CONTEXT CREATION ===
 
 const TAVIWorkupContext = createContext<TAVIWorkupContextValue | undefined>(undefined);
+
+const NOTION_FIELD_KEYS: Array<keyof NotionWorkupFields> = [
+  'patient',
+  'status',
+  'category',
+  'referrer',
+  'location',
+  'procedureDate',
+  'referralDate',
+  'notes',
+  'datePresented'
+];
+
+const LEGACY_STATUS_MAP: Record<string, string> = {
+  draft: 'Undergoing Workup',
+  ready: 'Workup Complete Awaiting Presentation',
+  presented: 'Presentation Complete Awaiting Booking',
+  pending: 'Undergoing Workup',
+  'in-progress': 'Undergoing Workup'
+};
+
+const normalizeNotionValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (value === undefined || value === null) return undefined;
+  return String(value);
+};
+
+const getNotionFieldSnapshot = (source: Partial<TAVIWorkupItem>): Partial<NotionWorkupFields> => {
+  const snapshot: Partial<NotionWorkupFields> = {};
+  NOTION_FIELD_KEYS.forEach((key) => {
+    snapshot[key] = normalizeNotionValue(source[key]);
+  });
+  return snapshot;
+};
+
+const diffNotionFields = (
+  local: Partial<NotionWorkupFields>,
+  notion: Partial<NotionWorkupFields>
+): { local: Partial<NotionWorkupFields>; notion: Partial<NotionWorkupFields> } => {
+  const localDiff: Partial<NotionWorkupFields> = {};
+  const notionDiff: Partial<NotionWorkupFields> = {};
+  NOTION_FIELD_KEYS.forEach((key) => {
+    const localValue = normalizeNotionValue(local[key]);
+    const notionValue = normalizeNotionValue(notion[key]);
+    if (localValue !== notionValue) {
+      localDiff[key] = localValue as NotionWorkupFields[typeof key];
+      notionDiff[key] = notionValue as NotionWorkupFields[typeof key];
+    }
+  });
+  return { local: localDiff, notion: notionDiff };
+};
+
+const normalizeWorkup = (workup: TAVIWorkupItem): TAVIWorkupItem => {
+  const trimmedStatus = workup.status?.trim();
+  const normalizedStatus = trimmedStatus ? (LEGACY_STATUS_MAP[trimmedStatus] || trimmedStatus) : 'Undergoing Workup';
+
+  return {
+    ...workup,
+    status: normalizedStatus,
+    notionFieldsUpdatedAt: workup.notionFieldsUpdatedAt ?? workup.lastUpdatedAt
+  };
+};
 
 // === PROVIDER COMPONENT ===
 
@@ -71,6 +143,8 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
   const [workups, setWorkups] = useState<TAVIWorkupItem[]>([]);
   const [selectedWorkupId, setSelectedWorkupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const workupsRef = useRef<TAVIWorkupItem[]>([]);
+  const syncingWorkupsRef = useRef(new Set<string>());
 
   // === NOTION STATE (Phase 2) ===
   const [notionAvailable, setNotionAvailable] = useState(false);
@@ -82,23 +156,27 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
     [workups, selectedWorkupId]
   );
 
+  useEffect(() => {
+    workupsRef.current = workups;
+  }, [workups]);
+
   // === NOTION SYNC (Phase 2) ===
+  useEffect(() => {
+    notionService.isAvailable().then(setNotionAvailable);
+  }, [notionService]);
 
-  const refreshNotionList = useCallback(async (): Promise<void> => {
-    try {
-      const available = await notionService.isAvailable();
-      setNotionAvailable(available);
-
-      if (available) {
-        const patients = await notionService.fetchPatientList();
-        setNotionPatients(patients);
-        console.log(`[TAVIWorkupContext] Fetched ${patients.length} Notion patients`);
-      }
-    } catch (error) {
-      console.error('[TAVIWorkupContext] Failed to fetch Notion patient list:', error);
-      setNotionAvailable(false);
-      setNotionPatients([]);
-    }
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return;
+    const handler: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, areaName) => {
+      if (areaName !== 'local') return;
+      if (!changes[NOTION_CONFIG_KEY]) return;
+      notionService.isAvailable().then(setNotionAvailable);
+      notionService.reloadConfig().catch(error => {
+        console.warn('[TAVIWorkupContext] Failed to reload Notion config', error);
+      });
+    };
+    chrome.storage.onChanged.addListener(handler);
+    return () => chrome.storage.onChanged.removeListener(handler);
   }, [notionService]);
 
   // === LOAD WORKUPS ON MOUNT ===
@@ -109,7 +187,15 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
       try {
         const loaded = await storage.loadWorkups();
         if (mounted) {
-          setWorkups(loaded);
+          const normalized = loaded.map(normalizeWorkup);
+          const changed = loaded.some((workup, index) => (
+            workup.status !== normalized[index].status ||
+            workup.notionFieldsUpdatedAt !== normalized[index].notionFieldsUpdatedAt
+          ));
+          setWorkups(normalized);
+          if (changed) {
+            await storage.saveWorkups(normalized);
+          }
           setLoading(false);
         }
       } catch (error) {
@@ -131,28 +217,13 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
   // === SUBSCRIBE TO STORAGE CHANGES ===
   useEffect(() => {
     const unsubscribe = storage.subscribe(updatedWorkups => {
-      setWorkups(updatedWorkups);
+      setWorkups(updatedWorkups.map(normalizeWorkup));
     });
 
     return () => {
       unsubscribe();
     };
   }, [storage]);
-
-  // === NOTION POLLING (Phase 2) ===
-  useEffect(() => {
-    // Initial fetch
-    refreshNotionList();
-
-    // Poll every 60 seconds
-    const interval = setInterval(() => {
-      refreshNotionList();
-    }, 60000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshNotionList]);
 
   // === CRUD OPERATIONS ===
 
@@ -161,23 +232,29 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
    */
   const createWorkup = useCallback(
     async (notionPatient?: NotionTAVIPatient): Promise<TAVIWorkupItem> => {
+      const now = Date.now();
+      const isImported = Boolean(notionPatient?.notionPageId);
+      const initialStatus = notionPatient?.status?.trim() || 'Undergoing Workup';
       const newWorkup: TAVIWorkupItem = {
-        id: `workup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `workup-${now}-${Math.random().toString(36).substr(2, 9)}`,
         patient: notionPatient?.patient || 'New TAVI Workup',
-        notionPageId: notionPatient?.notionPageId,
-        notionStatus: notionPatient?.status === 'Pending' ? 'pending' : undefined,
-        notionUrl: notionPatient?.notionUrl,
+        notionPageId: isImported ? notionPatient?.notionPageId : undefined,
+        notionUrl: isImported ? notionPatient?.notionUrl : undefined,
         referralDate: notionPatient?.referralDate,
         referrer: notionPatient?.referrer,
         location: notionPatient?.location,
         procedureDate: notionPatient?.procedureDate,
-        readyToPresent: notionPatient?.readyToPresent,
         category: notionPatient?.category,
+        notes: notionPatient?.notes,
+        datePresented: notionPatient?.datePresented,
         structuredSections: createEmptyStructuredSections(),
-        createdAt: Date.now(),
-        lastUpdatedAt: Date.now(),
+        createdAt: now,
+        lastUpdatedAt: now,
         completionPercentage: 0,
-        status: 'draft'
+        status: initialStatus,
+        lastSyncedAt: isImported ? now : undefined,
+        notionLastEditedAt: isImported ? notionPatient?.lastEditedTime : undefined,
+        notionFieldsUpdatedAt: isImported ? undefined : now
       };
 
       await storage.addWorkup(newWorkup);
@@ -192,11 +269,36 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
    * Update a workup using an updater function
    */
   const updateWorkup = useCallback(
-    async (id: string, updater: (w: TAVIWorkupItem) => TAVIWorkupItem): Promise<void> => {
-      await storage.updateWorkup(id, w => ({
-        ...updater(w),
-        lastUpdatedAt: Date.now()
-      }));
+    async (
+      id: string,
+      updater: (w: TAVIWorkupItem) => TAVIWorkupItem,
+      options: UpdateWorkupOptions = {}
+    ): Promise<void> => {
+      const source = options.source ?? 'local';
+      await storage.updateWorkup(id, w => {
+        const now = Date.now();
+        const next = updater(w);
+        const prevSnapshot = getNotionFieldSnapshot(w);
+        const nextSnapshot = getNotionFieldSnapshot(next);
+        const notionFieldsChanged = source !== 'notion' && NOTION_FIELD_KEYS.some((key) => (
+          normalizeNotionValue(prevSnapshot[key]) !== normalizeNotionValue(nextSnapshot[key])
+        ));
+
+        const updated: TAVIWorkupItem = {
+          ...next,
+          lastUpdatedAt: now,
+          notionFieldsUpdatedAt: notionFieldsChanged ? now : w.notionFieldsUpdatedAt
+        };
+
+        if (options.clearSyncError) {
+          updated.notionSyncError = undefined;
+        }
+        if (options.clearSyncConflict) {
+          updated.notionSyncConflict = undefined;
+        }
+
+        return updated;
+      });
     },
     [storage]
   );
@@ -215,40 +317,235 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
   );
 
   // === NOTION SYNC (Phase 2) ===
+  const getWorkupNotionFields = useCallback((workup: TAVIWorkupItem): NotionWorkupFields => ({
+    patient: workup.patient || 'New TAVI Workup',
+    status: workup.status?.trim() || 'Undergoing Workup',
+    category: workup.category,
+    referrer: workup.referrer,
+    location: workup.location,
+    procedureDate: workup.procedureDate,
+    referralDate: workup.referralDate,
+    notes: workup.notes,
+    datePresented: workup.datePresented
+  }), []);
 
-  const syncWorkupStatus = useCallback(
-    async (workupId: string, status: 'pending' | 'in-progress' | 'presented'): Promise<void> => {
-      const workup = workups.find(w => w.id === workupId);
-      if (!workup?.notionPageId) {
-        console.warn('[TAVIWorkupContext] Cannot sync status - workup not linked to Notion');
+  const getPatientNotionFields = useCallback((patient: NotionTAVIPatient): NotionWorkupFields => ({
+    patient: patient.patient || 'New TAVI Workup',
+    status: patient.status?.trim() || 'Undergoing Workup',
+    category: patient.category,
+    referrer: patient.referrer,
+    location: patient.location,
+    procedureDate: patient.procedureDate,
+    referralDate: patient.referralDate,
+    notes: patient.notes,
+    datePresented: patient.datePresented
+  }), []);
+
+  const syncWorkupToNotion = useCallback(async (
+    workup: TAVIWorkupItem,
+    options: { force?: boolean; clearConflict?: boolean } = {}
+  ): Promise<void> => {
+    if (!notionAvailable) return;
+    if (workup.notionSyncConflict) return;
+    if (workup.notionSyncError && !options.force) return;
+
+    const payload = getWorkupNotionFields(workup);
+    const now = Date.now();
+
+    try {
+      if (!workup.notionPageId) {
+        const created = await notionService.createWorkupPage(payload);
+        const notionEditedAt = created.last_edited_time
+          ? new Date(created.last_edited_time).getTime()
+          : now;
+        await updateWorkup(workup.id, w => ({
+          ...w,
+          notionPageId: created.id,
+          notionUrl: created.url ?? w.notionUrl,
+          lastSyncedAt: now,
+          notionLastEditedAt: notionEditedAt
+        }), { source: 'notion', clearSyncError: true, clearSyncConflict: options.clearConflict });
+        console.log(`[TAVIWorkupContext] Created Notion workup: ${created.id}`);
+      } else {
+        const updated = await notionService.updateWorkupPage(workup.notionPageId, payload);
+        const notionEditedAt = updated.last_edited_time
+          ? new Date(updated.last_edited_time).getTime()
+          : now;
+        await updateWorkup(workup.id, w => ({
+          ...w,
+          lastSyncedAt: now,
+          notionLastEditedAt: notionEditedAt,
+          notionUrl: updated.url ?? w.notionUrl
+        }), { source: 'notion', clearSyncError: true, clearSyncConflict: options.clearConflict });
+        console.log(`[TAVIWorkupContext] Updated Notion workup: ${workup.notionPageId}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await updateWorkup(workup.id, w => ({
+        ...w,
+        notionSyncError: message
+      }), { source: 'notion' });
+      console.error('[TAVIWorkupContext] Failed to sync workup to Notion:', error);
+    }
+  }, [getWorkupNotionFields, notionAvailable, notionService, updateWorkup]);
+
+  const applyNotionUpdates = useCallback(async (patients: NotionTAVIPatient[]): Promise<void> => {
+    const workupsByNotionId = new Map<string, TAVIWorkupItem>();
+    workupsRef.current.forEach((workup) => {
+      if (workup.notionPageId) {
+        workupsByNotionId.set(workup.notionPageId, workup);
+      }
+    });
+
+    for (const patient of patients) {
+      const workup = workupsByNotionId.get(patient.notionPageId);
+      if (!workup || workup.notionSyncConflict) continue;
+
+      const notionFields = getPatientNotionFields(patient);
+      const localSnapshot = getNotionFieldSnapshot(workup);
+      const { local: localDiff, notion: notionDiff } = diffNotionFields(localSnapshot, notionFields);
+      const hasDiff = Object.keys(localDiff).length > 0;
+
+      const notionEditedAt = patient.lastEditedTime;
+      const localEditedAt = workup.notionFieldsUpdatedAt || 0;
+      const lastSyncedAt = workup.lastSyncedAt || 0;
+      const localChanged = localEditedAt > lastSyncedAt;
+      const notionChanged = notionEditedAt > (workup.notionLastEditedAt || 0);
+
+      if (!hasDiff) {
+        if (notionChanged) {
+          await updateWorkup(workup.id, w => ({
+            ...w,
+            notionLastEditedAt: notionEditedAt,
+            notionUrl: patient.notionUrl,
+            lastSyncedAt: Date.now()
+          }), { source: 'notion', clearSyncError: true });
+        }
+        continue;
+      }
+
+      if (localChanged && notionChanged) {
+        const conflict: NotionSyncConflict = {
+          detectedAt: Date.now(),
+          localEditedAt: workup.notionFieldsUpdatedAt,
+          notionEditedAt,
+          preferredSource: notionEditedAt >= localEditedAt ? 'notion' : 'local',
+          local: localDiff,
+          notion: notionDiff
+        };
+        await updateWorkup(workup.id, w => ({
+          ...w,
+          notionSyncConflict: conflict
+        }), { source: 'notion' });
+        continue;
+      }
+
+      if (notionChanged && !localChanged) {
+        await updateWorkup(workup.id, w => ({
+          ...w,
+          ...notionFields,
+          notionUrl: patient.notionUrl,
+          lastSyncedAt: Date.now(),
+          notionLastEditedAt: notionEditedAt
+        }), { source: 'notion', clearSyncError: true, clearSyncConflict: true });
+      }
+    }
+  }, [getPatientNotionFields, updateWorkup]);
+
+  const refreshNotionList = useCallback(async (): Promise<void> => {
+    try {
+      const available = await notionService.isAvailable();
+      setNotionAvailable(available);
+
+      if (!available) {
+        setNotionPatients([]);
         return;
       }
 
-      try {
-        await notionService.updateWorkupStatus(workup.notionPageId, status);
+      const patients = await notionService.fetchPatientList({ includePresented: true });
+      setNotionPatients(patients);
+      await applyNotionUpdates(patients);
+      console.log(`[TAVIWorkupContext] Fetched ${patients.length} Notion patients`);
+    } catch (error) {
+      console.error('[TAVIWorkupContext] Failed to fetch Notion patient list:', error);
+    }
+  }, [applyNotionUpdates, notionService]);
+
+  const retryNotionSync = useCallback(async (workupId: string): Promise<void> => {
+    const workup = workupsRef.current.find(w => w.id === workupId);
+    if (!workup) return;
+
+    await updateWorkup(workupId, w => ({
+      ...w,
+      notionSyncError: undefined
+    }), { source: 'notion', clearSyncError: true });
+
+    await syncWorkupToNotion({ ...workup, notionSyncError: undefined }, { force: true });
+  }, [syncWorkupToNotion, updateWorkup]);
+
+  const resolveNotionConflict = useCallback(
+    async (workupId: string, resolution: 'local' | 'notion'): Promise<void> => {
+      const workup = workupsRef.current.find(w => w.id === workupId);
+      if (!workup?.notionSyncConflict) return;
+
+      const conflict = workup.notionSyncConflict;
+      if (resolution === 'notion') {
         await updateWorkup(workupId, w => ({
           ...w,
-          notionStatus: status,
-          lastSyncedAt: Date.now()
-        }));
-        console.log(`[TAVIWorkupContext] Synced status to Notion: ${status}`);
-      } catch (error) {
-        console.error('[TAVIWorkupContext] Failed to sync status to Notion:', error);
-        throw error;
+          ...conflict.notion,
+          notionSyncError: undefined,
+          notionSyncConflict: undefined,
+          lastSyncedAt: Date.now(),
+          notionLastEditedAt: conflict.notionEditedAt ?? w.notionLastEditedAt
+        }), { source: 'notion', clearSyncError: true, clearSyncConflict: true });
+        return;
       }
-    },
-    [notionService, updateWorkup, workups]
-  );
 
-  const linkToNotion = useCallback(
-    async (workupId: string, notionPageId: string): Promise<void> => {
       await updateWorkup(workupId, w => ({
         ...w,
-        notionPageId
-      }));
+        notionSyncError: undefined,
+        notionSyncConflict: undefined
+      }), { source: 'notion', clearSyncError: true, clearSyncConflict: true });
+
+      await syncWorkupToNotion({ ...workup, notionSyncConflict: undefined }, { force: true, clearConflict: true });
     },
-    [updateWorkup]
+    [syncWorkupToNotion, updateWorkup]
   );
+
+  // === NOTION POLLING (Phase 2) ===
+  useEffect(() => {
+    refreshNotionList();
+
+    const interval = setInterval(() => {
+      refreshNotionList();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshNotionList]);
+
+  // === LOCAL -> NOTION AUTO SYNC ===
+  useEffect(() => {
+    if (loading || !notionAvailable) return;
+
+    workups.forEach((workup) => {
+      if (workup.notionSyncConflict || workup.notionSyncError) return;
+
+      const localEditedAt = workup.notionFieldsUpdatedAt || 0;
+      const lastSyncedAt = workup.lastSyncedAt || 0;
+      const needsSync = localEditedAt > lastSyncedAt;
+      if (!needsSync) return;
+
+      if (syncingWorkupsRef.current.has(workup.id)) return;
+      syncingWorkupsRef.current.add(workup.id);
+
+      syncWorkupToNotion(workup)
+        .finally(() => {
+          syncingWorkupsRef.current.delete(workup.id);
+        });
+    });
+  }, [loading, notionAvailable, syncWorkupToNotion, workups]);
 
   // === DICTATION (Phase 4 & 5 stubs) ===
 
@@ -266,14 +563,16 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
     const patientName = result.patientData?.name || 'New TAVI Workup';
 
     // Create new workup with generated content
+    const now = Date.now();
     const newWorkup: TAVIWorkupItem = {
-      id: `workup-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `workup-${now}-${Math.random().toString(36).substr(2, 9)}`,
       patient: patientName,
       structuredSections: result.structuredSections || createEmptyStructuredSections(),
-      createdAt: Date.now(),
-      lastUpdatedAt: Date.now(),
+      createdAt: now,
+      lastUpdatedAt: now,
       completionPercentage: calculateCompletion(result.structuredSections || createEmptyStructuredSections()),
-      status: 'draft',
+      status: 'Undergoing Workup',
+      notionFieldsUpdatedAt: now,
       validationResult: result.validationResult,
       extractedData: result.extractedData
     };
@@ -352,8 +651,8 @@ export const TAVIWorkupProvider: React.FC<{ children: ReactNode }> = ({ children
     generateFullWorkup,
     appendToSection,
     refreshNotionList,
-    syncWorkupStatus,
-    linkToNotion,
+    retryNotionSync,
+    resolveNotionConflict,
     generatePresentation
   };
 

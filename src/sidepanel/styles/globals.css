@@ -92,42 +92,53 @@
 }
 
 /* Extension-level dark mode (toggled via quick action) */
+/* Material-inspired pure black palette matching Xestro dark mode */
 html.operator-extension-dark,
 body.operator-extension-dark {
-  background-color: #0b1220;
-  color: #e5e7eb;
+  --operator-ext-bg: #000000;
+  --operator-ext-surface-0: #121212;
+  --operator-ext-surface-1: #1e1e1e;
+  --operator-ext-surface-2: #2a2a2a;
+  --operator-ext-surface-3: #333333;
+  --operator-ext-text-primary: rgba(255, 255, 255, 0.87);
+  --operator-ext-text-secondary: rgba(255, 255, 255, 0.60);
+  --operator-ext-border: rgba(255, 255, 255, 0.12);
+  --operator-ext-border-strong: rgba(255, 255, 255, 0.20);
+
+  background-color: var(--operator-ext-bg);
+  color: var(--operator-ext-text-primary);
   color-scheme: dark;
 }
 
 .operator-extension-dark .bg-white,
 .operator-extension-dark .bg-gray-50,
 .operator-extension-dark .bg-gray-100 {
-  background-color: #0f172a !important;
+  background-color: var(--operator-ext-surface-0) !important;
 }
 
 /* Override translucent light surfaces in dark mode */
 .operator-extension-dark [class*="bg-white/"],
 .operator-extension-dark [class*="bg-gray-50/"],
 .operator-extension-dark [class*="bg-gray-100/"] {
-  background-color: #0f172a !important;
+  background-color: var(--operator-ext-surface-0) !important;
 }
 
 .operator-extension-dark [class*="border-gray-100"],
 .operator-extension-dark [class*="border-gray-200"],
 .operator-extension-dark [class*="border-gray-300"] {
-  border-color: #1f2937 !important;
+  border-color: var(--operator-ext-border) !important;
 }
 
 .operator-extension-dark .operator-results-container {
-  background-color: #0f172a !important;
-  border-color: #1f2937 !important;
-  color: #e5e7eb;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45) !important;
+  background-color: var(--operator-ext-surface-0) !important;
+  border-color: var(--operator-ext-border) !important;
+  color: var(--operator-ext-text-primary);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6) !important;
 }
 
 .operator-extension-dark .operator-results-header {
-  background: linear-gradient(135deg, #0b1220, #0f172a) !important;
-  border-color: #1f2937 !important;
+  background: linear-gradient(135deg, var(--operator-ext-bg), var(--operator-ext-surface-0)) !important;
+  border-color: var(--operator-ext-border) !important;
 }
 
 .operator-extension-dark .operator-results-container .bg-white,
@@ -139,7 +150,7 @@ body.operator-extension-dark {
 .operator-extension-dark .operator-results-container [class*="bg-white/"],
 .operator-extension-dark .operator-results-container [class*="bg-gray-50/"],
 .operator-extension-dark .operator-results-container [class*="bg-gray-100/"] {
-  background-color: #0f172a !important;
+  background-color: var(--operator-ext-surface-0) !important;
 }
 
 .operator-extension-dark .operator-results-container .border-gray-100,
@@ -148,12 +159,12 @@ body.operator-extension-dark {
 .operator-extension-dark .operator-results-container [class*="border-gray-100"],
 .operator-extension-dark .operator-results-container [class*="border-gray-200"],
 .operator-extension-dark .operator-results-container [class*="border-gray-300"] {
-  border-color: #1f2937 !important;
+  border-color: var(--operator-ext-border) !important;
 }
 
 .operator-extension-dark .operator-results-container .text-gray-900,
 .operator-extension-dark .operator-results-container .text-gray-800 {
-  color: #f3f4f6 !important;
+  color: var(--operator-ext-text-primary) !important;
 }
 
 .operator-extension-dark .operator-results-container .text-gray-700,
@@ -162,7 +173,7 @@ body.operator-extension-dark {
 .operator-extension-dark .operator-results-container .text-gray-400,
 .operator-extension-dark .operator-results-container .text-gray-300,
 .operator-extension-dark .operator-results-container .text-gray-200 {
-  color: #cbd5e1 !important;
+  color: var(--operator-ext-text-secondary) !important;
 }
 
 .operator-extension-dark .bg-surface-primary,
@@ -170,7 +181,7 @@ body.operator-extension-dark {
 .operator-extension-dark .bg-surface-tertiary,
 .operator-extension-dark .bg-surface-elevated,
 .operator-extension-dark #results-section {
-  background-color: #0b1220 !important;
+  background-color: var(--operator-ext-bg) !important;
 }
 
 .operator-extension-dark .text-gray-700,
@@ -179,38 +190,91 @@ body.operator-extension-dark {
 .operator-extension-dark .text-gray-400,
 .operator-extension-dark .text-gray-300,
 .operator-extension-dark .text-gray-200 {
-  color: #cbd5e1 !important;
+  color: var(--operator-ext-text-secondary) !important;
 }
 
 .operator-extension-dark .dot-grid-background-light {
-  background-color: #0b1220;
+  background-color: var(--operator-ext-bg);
   background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
 }
 
 .operator-extension-dark .border-gray-100,
 .operator-extension-dark .border-gray-200,
 .operator-extension-dark .border-gray-300 {
-  border-color: #1f2937 !important;
+  border-color: var(--operator-ext-border) !important;
 }
 
 .operator-extension-dark .text-gray-900,
 .operator-extension-dark .text-gray-800 {
-  color: #f3f4f6 !important;
+  color: var(--operator-ext-text-primary) !important;
 }
 
 .operator-extension-dark .text-gray-700,
 .operator-extension-dark .text-gray-600 {
-  color: #cbd5e1 !important;
-}
-
-.operator-extension-dark .dot-grid-background-light {
-  background-color: #0b1220;
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  color: var(--operator-ext-text-secondary) !important;
 }
 
 .operator-extension-dark .glass {
-  background: rgba(17, 24, 39, 0.35);
-  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(18, 18, 18, 0.85);
+  border-color: var(--operator-ext-border);
+}
+
+/* Extension dark mode scrollbar */
+.operator-extension-dark ::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.operator-extension-dark ::-webkit-scrollbar-thumb {
+  background: #333333;
+}
+
+.operator-extension-dark ::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* QuickSettingsDrawer dark mode text fixes */
+.operator-extension-dark h3.text-neutral-500 {
+  color: var(--operator-ext-text-secondary) !important;
+}
+
+.operator-extension-dark .text-neutral-900 {
+  color: var(--operator-ext-text-primary) !important;
+}
+
+.operator-extension-dark .text-neutral-500 {
+  color: var(--operator-ext-text-secondary) !important;
+}
+
+/* QuickSettingsDrawer footer (white section) */
+.operator-extension-dark .border-neutral-200 {
+  border-color: var(--operator-ext-border) !important;
+}
+
+.operator-extension-dark .bg-neutral-50 {
+  background-color: var(--operator-ext-surface-1) !important;
+}
+
+/* Status box in dark mode */
+.operator-extension-dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.operator-extension-dark .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+
+.operator-extension-dark .text-emerald-700 {
+  color: rgb(52, 211, 153) !important; /* emerald-400 for better contrast */
+}
+
+/* Dropdown button styling */
+.operator-extension-dark button:not(.bg-neutral-900) {
+  background-color: var(--operator-ext-surface-1) !important;
+  border-color: var(--operator-ext-border) !important;
+}
+
+.operator-extension-dark button:not(.bg-neutral-900):hover {
+  background-color: var(--operator-ext-surface-2) !important;
 }
 
 /* Fluent Design Components */

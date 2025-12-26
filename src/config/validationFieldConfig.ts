@@ -239,22 +239,67 @@ export const PREOP_VALIDATION_COPY: ValidationPromptCopy = {
 };
 
 // =============================================================================
+// Bloods/Pathology Configuration
+// =============================================================================
+
+export const BLOODS_FIELD_CONFIG: Record<string, FieldDisplayConfig> = {
+  // Test Names (CRITICAL - only critical if empty)
+  'tests': {
+    label: 'Pathology Tests',
+    inputType: 'text',
+    placeholder: 'Comma-separated test names (e.g., FBE, EUC, CRP)',
+    helperText: 'List of pathology tests to order (REQUIRED)'
+  },
+
+  // Fasting Requirement
+  'fastingRequired': {
+    label: 'Fasting Required',
+    inputType: 'checkbox',
+    helperText: 'Check if patient needs to fast before collection'
+  },
+
+  // Urgency Level
+  'urgency': {
+    label: 'Urgency',
+    inputType: 'select',
+    placeholder: 'routine | urgent | stat',
+    helperText: 'Priority level for pathology processing'
+  },
+
+  // Clinical Indication
+  'clinicalIndication': {
+    label: 'Clinical Indication',
+    inputType: 'text',
+    placeholder: 'Reason for ordering tests',
+    helperText: 'Clinical reason (improves laboratory processing and interpretation)'
+  }
+};
+
+export const BLOODS_VALIDATION_COPY: ValidationPromptCopy = {
+  heading: 'Pathology Tests Validation Required',
+  description: 'The quick model detected ambiguous test names or an empty extraction. Please clarify which specific tests should be ordered.',
+  criticalHelper: 'REQUIRED for generating a valid pathology requisition.',
+  optionalHelper: 'Improves pathology documentation and laboratory interpretation.'
+};
+
+// =============================================================================
 // Agent Type Mapping
 // =============================================================================
 
-export type ValidatableAgentType = 'rhc' | 'tavi' | 'angio-pci' | 'mteer' | 'pre-op-plan';
+export type ValidatableAgentType = 'rhc' | 'tavi' | 'angio-pci' | 'mteer' | 'pre-op-plan' | 'bloods';
 
 export const VALIDATION_CONFIG_MAP = {
   rhc: { fieldConfig: RHC_FIELD_CONFIG, copy: RHC_VALIDATION_COPY },
   tavi: { fieldConfig: TAVI_FIELD_CONFIG, copy: TAVI_VALIDATION_COPY },
   'angio-pci': { fieldConfig: ANGIO_PCI_FIELD_CONFIG, copy: ANGIO_PCI_VALIDATION_COPY },
   mteer: { fieldConfig: MTEER_FIELD_CONFIG, copy: MTEER_VALIDATION_COPY },
-  'pre-op-plan': { fieldConfig: PREOP_FIELD_CONFIG, copy: PREOP_VALIDATION_COPY }
+  'pre-op-plan': { fieldConfig: PREOP_FIELD_CONFIG, copy: PREOP_VALIDATION_COPY },
+  bloods: { fieldConfig: BLOODS_FIELD_CONFIG, copy: BLOODS_VALIDATION_COPY }
 } as const;
 
 /**
  * Get validation field configuration for a specific agent type
- * @param agentType - The agent type (rhc, tavi, angio-pci, mteer, pre-op-plan)
+ * @param agentType - The agent type (rhc, tavi, angio-pci, mteer, pre-op-plan, bloods)
  * @returns Field configuration and copy text for validation modal
  */
 export function getValidationConfig(agentType: ValidatableAgentType) {

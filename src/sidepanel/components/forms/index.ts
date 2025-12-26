@@ -6,6 +6,8 @@
 export { default as FormInput, FormTextarea, FormSelect } from './FormInput';
 export type { InputVariant, InputSize, InputState } from './FormInput';
 
+export { default as Combobox } from './Combobox';
+
 export {
   default as ValidationMessage,
   InlineValidationMessage,

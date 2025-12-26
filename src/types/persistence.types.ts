@@ -6,6 +6,7 @@
 
 import type { PatientInfo, AgentType, SessionStatus, PreOpPlanReport, RightHeartCathReport } from './medical.types';
 import type { PipelineProgress } from './medical.types';
+import type { NextStepEngineResult, NextStepPatientContext } from './nextStep.types';
 
 /**
  * Persisted session data structure
@@ -19,6 +20,8 @@ export interface PersistedSession {
   transcription?: string;
   results?: string;
   summary?: string;
+  nextStepResult?: NextStepEngineResult | null;
+  nextStepContext?: NextStepPatientContext;
   taviStructuredSections?: any;
   educationData?: any;
   preOpPlanData?: PreOpPlanReport['planData'];

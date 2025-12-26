@@ -211,6 +211,10 @@ export const ASRCorrections: ASRCorrectionCategories = {
     // Date format: remove leading zeros from day numbers in medical reports
     [/\b0(\d)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/gi, '$1 $2'],
 
+    // Coronary vessel ASR corrections
+    [/\bLED\b/g, 'LAD'],  // Common ASR mistake: "LED" -> "LAD" (Left Anterior Descending)
+    [/\bled\b/g, 'LAD'],  // Lowercase variant
+
     // Heart Rate common ASR errors
     [/\bhard\s+rate\b/gi, 'heart rate'],
     [/\bhart\s+rate\b/gi, 'heart rate'],

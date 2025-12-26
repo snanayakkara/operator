@@ -758,7 +758,7 @@ export const RECORDING_PROMPTS: readonly RecordingPromptConfig[] = [
     terminology: [
       'Access: radial, femoral, basilic, jugular',
       'Antiseptics: chlorhexidine, betadine',
-      'TAVI valves: Sapien 3 Ultra, Evolut R/Pro',
+      'TAVI valves: Sapien 3 Ultra, Evolut R/Pro, Navitor',
       'Wires: Safari, Confida, Lunderquist',
       'Closure: ProStyle, Angio-Seal, Perclose',
       'Sedation: light, moderate, GA',

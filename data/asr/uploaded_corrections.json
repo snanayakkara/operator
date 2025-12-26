@@ -178,5 +178,44 @@
     "sessionId": "session-1764410800943-ig80u9fqo",
     "timestamp": 1764410935435,
     "userExplicitlyApproved": true
+  },
+  {
+    "rawText": "Latovastatin 40mg daily, Apixaban 5mg BD, Amitriptyline 10mg Nocte, Feruzumide 40mg BD, Ipilimumab, Empagliflozin 10mg daily, Phenofibrate 145mg daily, Metoprolol 25mg BD, Prazosin 5mg TDS, Paracetamol, Pantoprazole 40mg daily, Allopurinol 50mg daily.",
+    "correctedText": "Atorvastatin 40mg daily, Apixaban 5mg BD, Amitriptyline 10mg Nocte, Frusemide 40mg BD, Ipilimumab, Empagliflozin 10mg daily, Femofibrate 145mg daily, Metoprolol 25mg BD, Prazosin 5mg TDS, Paracetamol, Pantoprazole 40mg daily, Allopurinol 50mg daily.",
+    "agentType": "medication",
+    "sessionId": "session-1766648146753-ldmtowhnn",
+    "approvalStatus": "approved",
+    "userExplicitlyApproved": true,
+    "approvalTimestamp": 1766648279125,
+    "editTimestamp": 1766648272585,
+    "id": "asr-1766648279125-jj2lav3u9",
+    "timestamp": 1766648279125,
+    "audioPath": "data/asr/audio/asr-1766648279125-jj2lav3u9.webm"
+  },
+  {
+    "rawText": "Trans thoracic echocardiogram 9th December 2025 Low normal LV function EF50 Trivial MR Severely dilated left atrium Left atrial volume index 58 PASP 44 Miley dilated right ventricle Severely dilated right atrium Mild to moderate tricuspid regurgitation",
+    "correctedText": "Transthoracic echocardiogram 9th December 2025; Low normal LV function, EF50, Trivial MR Severely dilated left atrium, Left atrial volume index 58, PASP 44, Mildly dilated right ventricle, Severely dilated right atrium, moderate tricuspid regurgitation",
+    "agentType": "investigation-summary",
+    "sessionId": "session-1766650488600-ma8i5hk4j",
+    "approvalStatus": "approved",
+    "userExplicitlyApproved": true,
+    "approvalTimestamp": 1766650589079,
+    "editTimestamp": 1766650587388,
+    "id": "asr-1766650589079-grcryra28",
+    "timestamp": 1766650589079,
+    "audioPath": "data/asr/audio/asr-1766650589079-grcryra28.webm"
+  },
+  {
+    "rawText": "Spontaneous left carotid artery dissection, hypertension, hyperlipidemia, ex-marcha, G-O-R-D.",
+    "correctedText": "Spontaneous left carotid artery dissection, hypertension, hyperlipidaemia, ex-smoker, GORD",
+    "agentType": "background",
+    "sessionId": "session-1766691247843-8uw4ocuw2",
+    "approvalStatus": "approved",
+    "userExplicitlyApproved": true,
+    "approvalTimestamp": 1766691291356,
+    "editTimestamp": 1766691290004,
+    "id": "asr-1766691291356-hk9iamau9",
+    "timestamp": 1766691291356,
+    "audioPath": "data/asr/audio/asr-1766691291356-hk9iamau9.webm"
   }
 ]

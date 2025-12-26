@@ -6,7 +6,7 @@
 
 import React from 'react';
 
-type PageType = 'summary' | 'imaging';
+type PageType = 'summary' | 'imaging' | 'sizing';
 
 interface PageTabBarProps {
   currentPage: PageType;
@@ -46,6 +46,17 @@ export const PageTabBar: React.FC<PageTabBarProps> = ({
           <span className="tab-label">Imaging</span>
           {currentPage === 'imaging' && <span className="tab-indicator" />}
         </button>
+        <button
+          className={`tab-button ${currentPage === 'sizing' ? 'active' : ''}`}
+          onClick={() => onPageChange('sizing')}
+          aria-selected={currentPage === 'sizing' ? 'true' : 'false'}
+          role="tab"
+          id="tab-sizing"
+          aria-controls="panel-sizing"
+        >
+          <span className="tab-label">Valve Sizing</span>
+          {currentPage === 'sizing' && <span className="tab-indicator" />}
+        </button>
       </div>
 
       <div className="tab-bar-right">
@@ -63,6 +74,7 @@ export const PageTabBar: React.FC<PageTabBarProps> = ({
         <div className="keyboard-shortcuts-hint">
           <kbd>S</kbd> Summary
           <kbd>I</kbd> Imaging
+          <kbd>V</kbd> Sizing
           <kbd>P</kbd> Toggle Plan
         </div>
       </div>

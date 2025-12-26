@@ -793,6 +793,16 @@ export class TAVIWorkupAgent extends MedicalAgent {
    * Parse patient demographics from XestroBoxContent format
    */
   private parsePatientDemographics(content: any): any {
+    if (content && typeof content === 'object') {
+      return {
+        ...content,
+        raw: content,
+        dateOfBirth: content.dateOfBirth || content.dob,
+        dob: content.dob || content.dateOfBirth,
+        age: content.age ?? content.ageYears
+      };
+    }
+
     const demographics: any = { raw: content };
 
     try {
@@ -851,8 +861,9 @@ export class TAVIWorkupAgent extends MedicalAgent {
       parts.push(`Name: ${patientData.name}`);
     }
 
-    if (patientData.dateOfBirth) {
-      parts.push(`DOB: ${patientData.dateOfBirth}`);
+    const dateOfBirth = patientData.dateOfBirth || patientData.dob;
+    if (dateOfBirth) {
+      parts.push(`DOB: ${dateOfBirth}`);
     }
 
     if (patientData.age) {

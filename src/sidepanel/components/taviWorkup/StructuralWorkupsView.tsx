@@ -9,8 +9,8 @@
  * Phase 3: Add EMR auto-extraction + section editing
  */
 
-import React, { useState } from 'react';
-import { X, Heart, Plus, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, Heart, Plus, ChevronDown, ChevronUp, RefreshCw, Filter, Download } from 'lucide-react';
 import Button from '../buttons/Button';
 import { useTAVIWorkup } from '@/contexts/TAVIWorkupContext';
 import { TAVIWorkupDetailEditor } from './TAVIWorkupDetailEditor';
@@ -20,11 +20,15 @@ interface StructuralWorkupsViewProps {
   onClose: () => void;
 }
 
+const STATUS_FILTER_ALL = 'all';
+const STATUS_FILTER_EXCLUDE_PROCEDURE_COMPLETE = 'exclude-procedure-complete';
+
 export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ onClose }) => {
   const {
     workups,
     loading,
     createWorkup,
+    updateWorkup,
     selectedWorkupId,
     setSelectedWorkupId,
     notionAvailable,
@@ -34,21 +38,18 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notionSectionExpanded, setNotionSectionExpanded] = useState(true);
+  const [statusFilter, setStatusFilter] = useState(STATUS_FILTER_EXCLUDE_PROCEDURE_COMPLETE);
 
-  const handleCreateDemoWorkup = async () => {
-    await createWorkup({
-      notionPageId: 'demo-page-id',
-      notionUrl: 'https://notion.so/demo',
-      patient: 'Demo Patient',
-      referralDate: '2025-01-15',
-      referrer: 'Dr. Smith',
-      location: 'Cabrini',
-      procedureDate: '2025-02-01',
-      status: 'Pending',
-      category: 'Elective',
-      readyToPresent: false,
-      lastEditedTime: Date.now()
-    });
+  const handleCreateManualWorkup = async () => {
+    const patientName = prompt('Enter patient name:');
+    if (!patientName?.trim()) return;
+
+    const workup = await createWorkup();
+    await updateWorkup(workup.id, w => ({
+      ...w,
+      patient: patientName.trim(),
+      referralDate: new Date().toISOString().split('T')[0]
+    }));
   };
 
   const handleSelectWorkup = (workupId: string) => {
@@ -65,9 +66,36 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
     await createWorkup(patient);
   };
 
+  const statusOptions = useMemo(() => {
+    const statuses = Array.from(new Set(notionPatients.map(patient => patient.status).filter(Boolean))) as string[];
+    return [STATUS_FILTER_EXCLUDE_PROCEDURE_COMPLETE, STATUS_FILTER_ALL, ...statuses.sort((a, b) => a.localeCompare(b))];
+  }, [notionPatients]);
+
+  const filteredNotionPatients = useMemo(() => {
+    if (statusFilter === STATUS_FILTER_ALL) {
+      return notionPatients;
+    }
+    if (statusFilter === STATUS_FILTER_EXCLUDE_PROCEDURE_COMPLETE) {
+      return notionPatients.filter(patient => patient.status !== 'Procedure Complete');
+    }
+    return notionPatients.filter(patient => patient.status === statusFilter);
+  }, [notionPatients, statusFilter]);
+
   // Check if a Notion patient is already imported
   const isPatientImported = (notionPageId: string) => {
     return workups.some(w => w.notionPageId === notionPageId);
+  };
+
+  const importablePatients = useMemo(() => (
+    filteredNotionPatients.filter(patient => (
+      !workups.some(workup => workup.notionPageId === patient.notionPageId)
+    ))
+  ), [filteredNotionPatients, workups]);
+
+  const handleImportAll = async () => {
+    for (const patient of importablePatients) {
+      await createWorkup(patient);
+    }
   };
 
   // Show detail editor if workup is selected
@@ -115,19 +143,11 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
                 Create your first TAVI workup to get started. Workups sync with your Notion Structural Workup database.
               </p>
             </div>
-            <Button onClick={handleCreateDemoWorkup} icon={<Plus className="w-4 h-4" />}>
-              Create Demo Workup
+            <Button onClick={handleCreateManualWorkup} icon={<Plus className="w-4 h-4" />}>
+              Create Workup
             </Button>
-            <div className="pt-4 text-xs text-ink-tertiary">
-              <strong>Phase 1 Complete:</strong> Storage, Context, and Navigation working
-              <br />
-              <strong>Coming in Phase 2:</strong> Notion patient sync
-              <br />
-              <strong>Coming in Phase 3:</strong> Detail editor with EMR auto-extraction
-            </div>
           </div>
         ) : (
-          // Workup list (Phase 1: basic display)
           <div className="space-y-4">
             {/* Notion Patient Import Section */}
             {notionAvailable && notionPatients.length > 0 && (
@@ -140,7 +160,7 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
                   <div className="flex items-center gap-2">
                     <Heart className="w-4 h-4 text-purple-600" />
                     <span className="text-sm font-semibold text-ink-primary">
-                      Import from Notion ({notionPatients.length})
+                      Import from Notion ({statusFilter === STATUS_FILTER_ALL ? notionPatients.length : `${filteredNotionPatients.length}/${notionPatients.length}`})
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -163,16 +183,49 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
                   </div>
                 </button>
                 {notionSectionExpanded && (
-                  <div className="p-3 pt-0 space-y-2 max-h-80 overflow-y-auto">
-                    {notionPatients.map(patient => (
-                      <NotionPatientCard
-                        key={patient.notionPageId}
-                        patient={patient}
-                        onImport={handleImportNotionPatient}
-                        alreadyImported={isPatientImported(patient.notionPageId)}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className="px-3 pb-2 flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 text-xs text-ink-tertiary">
+                        <Filter className="w-3 h-3" />
+                        <span>Status</span>
+                      </div>
+                      <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                        className="px-2 py-1 text-xs border border-line-primary rounded-md bg-white text-ink-primary"
+                      >
+                        {statusOptions.map(option => (
+                          <option key={option} value={option}>
+                            {option === STATUS_FILTER_ALL
+                              ? 'All statuses'
+                              : option === STATUS_FILTER_EXCLUDE_PROCEDURE_COMPLETE
+                                ? 'Exclude Procedure Complete'
+                                : option}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleImportAll}
+                        disabled={importablePatients.length === 0}
+                        icon={<Download className="w-3 h-3" />}
+                      >
+                        <span>Import All</span>
+                        <span className="text-ink-tertiary text-xs">({importablePatients.length})</span>
+                      </Button>
+                    </div>
+                    <div className="p-3 pt-0 space-y-2 max-h-80 overflow-y-auto">
+                      {filteredNotionPatients.map(patient => (
+                        <NotionPatientCard
+                          key={patient.notionPageId}
+                          patient={patient}
+                          onImport={handleImportNotionPatient}
+                          alreadyImported={isPatientImported(patient.notionPageId)}
+                        />
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -182,7 +235,7 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
               <h4 className="text-sm font-semibold text-ink-primary">
                 All Workups ({workups.length})
               </h4>
-              <Button size="sm" onClick={handleCreateDemoWorkup} icon={<Plus className="w-4 h-4" />}>
+              <Button size="sm" onClick={handleCreateManualWorkup} icon={<Plus className="w-4 h-4" />}>
                 New Workup
               </Button>
             </div>
@@ -205,8 +258,17 @@ export const StructuralWorkupsView: React.FC<StructuralWorkupsViewProps> = ({ on
                         {workup.status}
                       </div>
                     </div>
-                    <div className="text-xs text-ink-tertiary">
-                      {workup.completionPercentage}%
+                    <div className="text-xs text-ink-tertiary text-right space-y-1">
+                      <div>{workup.completionPercentage}%</div>
+                      {workup.notionSyncConflict ? (
+                        <div className="text-amber-600">Sync conflict</div>
+                      ) : workup.notionSyncError ? (
+                        <div className="text-rose-600">Sync failed</div>
+                      ) : workup.notionPageId ? (
+                        <div className={workup.lastSyncedAt ? 'text-emerald-600' : 'text-ink-tertiary'}>
+                          {workup.lastSyncedAt ? 'Synced' : 'Syncing'}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </button>

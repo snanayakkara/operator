@@ -15,11 +15,25 @@ import { logger } from '@/utils/Logger';
 import { toError } from '@/utils/errorHelpers';
 import { PhrasebookService } from '@/services/PhrasebookService';
 import { OptimizationService } from '@/services/OptimizationService';
+import type { VesselKey } from '@/utils/coronaryAnatomy';
 import type {
   ASRCorrectionsEntry,
   OptimizationSettings,
   AgentType
 } from '@/types/optimization';
+
+/**
+ * Data for logging a lesion placement correction
+ * Used when user drags a lesion from one vessel to another
+ */
+export interface LesionPlacementCorrection {
+  lesionId: string;
+  branch: string;
+  fromVessel: VesselKey;
+  toVessel: VesselKey;
+  timestamp: number;
+  transcriptionSnippet?: string;
+}
 
 interface StoredCorrections {
   entries: ASRCorrectionsEntry[];
@@ -119,6 +133,59 @@ export class ASRCorrectionsLog {
         agentType: entry.agentType
       });
       throw err;
+    }
+  }
+
+  /**
+   * Log a lesion placement correction for training data
+   * Used when user drags a lesion from one vessel to another in the coronary tree
+   *
+   * This helps improve future lesion extraction by learning which branches
+   * belong to which vessels (e.g., OM1 always belongs to LCx, not RCA)
+   */
+  async addLesionPlacementCorrection(correction: LesionPlacementCorrection): Promise<void> {
+    try {
+      const id = this.generateEntryId();
+
+      const entry: ASRCorrectionsEntry = {
+        id,
+        timestamp: correction.timestamp,
+        rawText: `${correction.branch} placed under ${correction.fromVessel.toUpperCase()}`,
+        correctedText: `${correction.branch} should be under ${correction.toVessel.toUpperCase()}`,
+        agentType: 'angiogram-pci',
+        confidence: 1.0, // User correction = 100% confidence
+        source: 'user-drag-correction',
+        correctionType: 'lesion-placement',
+        approvalStatus: 'approved',
+        userExplicitlyApproved: true,
+        metadata: {
+          lesionId: correction.lesionId,
+          branch: correction.branch,
+          fromVessel: correction.fromVessel,
+          toVessel: correction.toVessel,
+          snippet: correction.transcriptionSnippet
+        }
+      };
+
+      const stored = await this.getStoredData();
+      stored.entries.push(entry);
+      await this.saveStoredData(stored);
+      this.invalidateCache();
+
+      logger.info('Lesion placement correction logged', {
+        component: 'ASRCorrectionsLog',
+        branch: correction.branch,
+        fromVessel: correction.fromVessel,
+        toVessel: correction.toVessel
+      });
+
+    } catch (error) {
+      const err = toError(error);
+      logger.error('Failed to log lesion placement correction', err, {
+        component: 'ASRCorrectionsLog',
+        branch: correction.branch
+      });
+      // Don't throw - logging failures shouldn't break the UI
     }
   }
 

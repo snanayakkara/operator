@@ -64,37 +64,56 @@ OUTPUT FORMAT: Valid JSON only, no markdown code fences.
   "grafts": [{ "id": "uuid", "branch": "SVG to LAD", "severity": "patent", "description": "..." }]
 }
 
-VESSEL MAPPING:
+=== CRITICAL ANATOMICAL HIERARCHY (MUST FOLLOW) ===
+
+**LAD branches** - These MUST ALWAYS go in the "lad" array:
+- D1, D2 (Diagonal 1, Diagonal 2, first/second diagonal)
+- S1, S2 (Septal 1, Septal 2, first/second septal)
+- Any "diagonal" or "septal" branch
+
+**LCx branches** - These MUST ALWAYS go in the "lcx" array:
+- OM1, OM2, OM3 (Obtuse Marginal 1/2/3)
+- OM (any obtuse marginal without number)
+- Ramus, Ramus Intermedius, RI
+- LPL (Left Posterolateral)
+
+**RCA branches** - These MUST ALWAYS go in the "rca" array:
+- PDA (Posterior Descending Artery) - unless "left dominant" stated
+- PLV, RPL (Posterolateral)
+- AM (Acute Marginal)
+
+=== VESSEL MAPPING ===
 - LM/Left Main → "lm"
-- LAD/Left Anterior Descending/Diagonal (D1, D2) → "lad"
-- LCx/Left Circumflex/Obtuse Marginal (OM1, OM2)/Ramus → "lcx"
-- RCA/Right Coronary/PDA/PLV → "rca"
+- LAD/Left Anterior Descending → "lad"
+- LCx/Circumflex → "lcx"
+- RCA/Right Coronary → "rca"
 - SVG/LIMA/RIMA/grafts → "grafts"
 
-SEGMENT DESCRIPTORS:
+=== SEGMENT DESCRIPTORS ===
 - Proximal, mid, distal, ostial
-- Diagonal 1 (D1), Diagonal 2 (D2)
-- Obtuse Marginal 1 (OM1), Obtuse Marginal 2 (OM2)
-- PDA (Posterior Descending), PLV (Posterolateral)
+- For LAD: "20% proximal, 50% mid" = TWO separate lesion entries
 
-SEVERITY FORMATS:
-- Percentage: "90% stenosis", "70% narrowing", "50% lesion"
-- Qualitative: "severe stenosis", "moderate lesion", "mild narrowing"
-- Special: "100% occluded", "chronic total occlusion", "patent"
+=== SEVERITY FORMATS ===
+- Percentage: "90% stenosis", "70% narrowing"
+- Qualitative: "severe", "moderate", "mild"
+- Special: "100% occluded", "CTO", "patent", "normal"
+- Irregularities: "20% irregularities throughout" = mild diffuse disease
 
-DESCRIPTION SHOULD INCLUDE:
+=== DESCRIPTION SHOULD INCLUDE ===
 - Lesion characteristics (calcified, eccentric, ulcerated)
 - Intervention if any (stented with 3.0x24mm DES)
-- TIMI flow if mentioned (TIMI 3 flow, TIMI 0)
+- TIMI flow if mentioned
+- Dominance info if attached to vessel ("dominant RCA")
 
-CRITICAL RULES:
-1. Extract ALL lesions mentioned in any order
-2. If user says "diagonal had 90% stenosis", map to LAD vessel, branch "D1" or "Diagonal"
-3. If user says "OM1 70% stenosis", map to LCx vessel, branch "OM1"
-4. Generate unique IDs for each lesion (use timestamp or uuid)
-5. If no lesions mentioned, return empty arrays for all vessels
-6. Understand natural language: "the left main was severely diseased" → lm vessel, severe stenosis
-7. Handle variations: "occluded RCA" = 100% stenosis, "patent" = 0% stenosis
+=== CRITICAL RULES ===
+1. Extract ALL lesions mentioned, creating SEPARATE entries for each segment
+   - "LAD 20% proximal, 50% mid" = TWO entries in "lad" array
+2. OM1/OM2/OM3/OM MUST go in "lcx" - NEVER in "rca"
+3. D1/D2/Diagonal MUST go in "lad" - NEVER elsewhere
+4. Generate unique IDs (e.g., "lesion-1", "lesion-2")
+5. If vessel is "normal", create one entry with severity "normal"
+6. Parse context: if a stenosis follows a vessel name in same sentence, it belongs to that vessel
+7. "dominant" is a description, not a severity - include in description field
 
 OUTPUT ONLY VALID JSON, NO EXPLANATIONS.`;
   }

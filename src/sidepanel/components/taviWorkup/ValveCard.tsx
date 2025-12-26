@@ -34,6 +34,10 @@ export const ValveCard: React.FC<ValveCardProps> = ({
   selectable = true
 }) => {
   const canAdjustVolume = result.brand === 'sapien' && onVolumeChange;
+  const volumeAdjustmentLabel =
+    result.brand === 'sapien' && result.volumeAdjustment && result.volumeAdjustment !== 0
+      ? `${result.volumeAdjustment > 0 ? '+' : ''}${result.volumeAdjustment.toFixed(1).replace(/\.0$/, '')}mL`
+      : null;
 
   const handleVolumeDecrease = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -49,17 +53,29 @@ export const ValveCard: React.FC<ValveCardProps> = ({
     }
   };
 
-  const formatRange = () => {
+  const formatRange = (): React.ReactNode => {
     if (!result.range) return null;
 
-    const parts: string[] = [];
+    // For Navitor: show on two lines with prefixes (matches TAVItool)
+    if (result.brand === 'navitor') {
+      return (
+        <>
+          {result.range.perimeter && (
+            <>P {result.range.perimeter.min}–{result.range.perimeter.max} mm</>
+          )}
+          {result.range.perimeter && result.range.area && <br />}
+          {result.range.area && (
+            <>A {result.range.area.min}–{result.range.area.max} mm²</>
+          )}
+        </>
+      );
+    }
+
+    // For Evolut: perimeter only with P prefix (matches TAVItool)
     if (result.range.perimeter) {
-      parts.push(`${result.range.perimeter.min}-${result.range.perimeter.max}mm`);
+      return `P ${result.range.perimeter.min}-${result.range.perimeter.max} mm`;
     }
-    if (result.range.area) {
-      parts.push(`${result.range.area.min}-${result.range.area.max}mm²`);
-    }
-    return parts.join(' | ');
+    return null;
   };
 
   if (compact) {
@@ -70,6 +86,8 @@ export const ValveCard: React.FC<ValveCardProps> = ({
         className={`w-full flex items-center gap-2 px-2 py-1.5 rounded border transition-all ${
           isSelected
             ? 'border-purple-500 bg-purple-50'
+            : result.isOptimal
+            ? 'border-blue-400 bg-blue-50'  // TAVItool style: blue for optimal
             : selectable
             ? 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
             : 'border-gray-200 bg-white'
@@ -87,9 +105,46 @@ export const ValveCard: React.FC<ValveCardProps> = ({
         )}
 
         {/* Size name */}
-        <span className="text-xs font-medium text-ink-primary w-12">
-          {result.sizeName}
-        </span>
+        <div className="flex flex-col w-12 leading-tight">
+          <span className="text-xs font-medium text-ink-primary">
+            {result.sizeName}
+          </span>
+          {volumeAdjustmentLabel && (
+            <span className="text-[10px] text-emerald-600">
+              {volumeAdjustmentLabel}
+            </span>
+          )}
+        </div>
+
+        {/* Mini volume controls for Sapien */}
+        {canAdjustVolume && (
+          <div
+            className="flex items-center gap-1 text-ink-secondary"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={handleVolumeDecrease}
+              className="p-0.5 text-ink-tertiary hover:text-ink-primary transition-colors"
+              title="Decrease balloon volume"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <span className="text-[11px] min-w-[24px] text-center font-medium">
+              {result.nominalVolume !== null && (
+                (result.nominalVolume + (result.volumeAdjustment ?? 0)).toFixed(1)
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={handleVolumeIncrease}
+              className="p-0.5 text-ink-tertiary hover:text-ink-primary transition-colors"
+              title="Increase balloon volume"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
         {/* Sizing bar */}
         <div className="flex-1">
@@ -125,6 +180,8 @@ export const ValveCard: React.FC<ValveCardProps> = ({
       className={`p-3 rounded-lg border transition-all ${
         isSelected
           ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-200'
+          : result.isOptimal
+          ? 'border-blue-400 bg-blue-50 shadow-sm'  // TAVItool style: blue for optimal
           : selectable
           ? 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer'
           : 'border-gray-200 bg-white'
@@ -145,9 +202,16 @@ export const ValveCard: React.FC<ValveCardProps> = ({
           )}
 
           {/* Size name */}
-          <span className="text-sm font-semibold text-ink-primary">
-            {result.sizeName}
-          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-semibold text-ink-primary">
+              {result.sizeName}
+            </span>
+            {volumeAdjustmentLabel && (
+              <span className="text-[11px] text-emerald-600">
+                {volumeAdjustmentLabel}
+              </span>
+            )}
+          </div>
 
           {/* Optimal badge */}
           {result.isOptimal && (
@@ -157,7 +221,7 @@ export const ValveCard: React.FC<ValveCardProps> = ({
           )}
         </div>
 
-        {/* Volume controls for Sapien */}
+        {/* Volume controls for Sapien - shows actual balloon volume (matches TAVItool) */}
         {canAdjustVolume && (
           <div className="flex items-center gap-1">
             <button
@@ -168,12 +232,9 @@ export const ValveCard: React.FC<ValveCardProps> = ({
             >
               <Minus className="w-3.5 h-3.5 text-ink-secondary" />
             </button>
-            <span className="text-xs text-ink-secondary min-w-[40px] text-center">
-              {result.volumeAdjustment !== null && result.volumeAdjustment !== 0 && (
-                <>
-                  {result.volumeAdjustment > 0 ? '+' : ''}
-                  {result.volumeAdjustment.toFixed(1)}mL
-                </>
+            <span className="text-xs text-ink-secondary min-w-[32px] text-center font-medium">
+              {result.nominalVolume !== null && (
+                (result.nominalVolume + (result.volumeAdjustment ?? 0))
               )}
             </span>
             <button
@@ -184,6 +245,12 @@ export const ValveCard: React.FC<ValveCardProps> = ({
             >
               <Plus className="w-3.5 h-3.5 text-ink-secondary" />
             </button>
+            {/* Volume adjustment indicator */}
+            {result.volumeAdjustment !== null && result.volumeAdjustment !== 0 && (
+              <span className="text-xs text-ink-tertiary">
+                ({result.volumeAdjustment > 0 ? '+' : ''}{result.volumeAdjustment.toFixed(1)}mL)
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -97,12 +97,25 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
         : measurements?.narrative
     };
 
-    onUpdate(merged);
+    // Sync alias fields for valve sizing components (ValveRecommendationCard, ValveSelectorCard)
+    const finalMerged: TAVIWorkupCTMeasurements = {
+      ...merged,
+      annulusArea: merged.annulusAreaMm2,
+      annulusPerimeter: merged.annulusPerimeterMm
+    };
+
+    onUpdate(finalMerged);
     setIsDictating(false);
   }, [measurements, onUpdate]);
 
   const handleSave = useCallback(() => {
-    onUpdate(editValues);
+    // Sync alias fields for valve sizing components (ValveRecommendationCard, ValveSelectorCard)
+    const finalValues: TAVIWorkupCTMeasurements = {
+      ...editValues,
+      annulusArea: editValues.annulusAreaMm2,
+      annulusPerimeter: editValues.annulusPerimeterMm
+    };
+    onUpdate(finalValues);
     setIsEditing(false);
   }, [editValues, onUpdate]);
 
@@ -362,13 +375,28 @@ export const CTMeasurementsCard: React.FC<CTMeasurementsCardProps> = ({
                 onChange={(v) => updateField('calciumScore', v)}
                 isEditing={isEditing}
               />
-              <MeasurementField
-                label="LVOT Calcium"
-                value={data.lvotCalciumScore}
-                unit="AU"
-                onChange={(v) => updateField('lvotCalciumScore', v)}
-                isEditing={isEditing}
-              />
+              {/* LVOT Calcium - Categorical dropdown */}
+              <div className="flex items-center justify-between py-1">
+                <span className="text-xs text-ink-secondary">LVOT Calcium</span>
+                {isEditing ? (
+                  <select
+                    value={data.lvotCalcium || ''}
+                    onChange={(e) => updateField('lvotCalcium', e.target.value || undefined)}
+                    className="px-2 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
+                    aria-label="LVOT Calcium Severity"
+                  >
+                    <option value="">Not specified</option>
+                    <option value="trivial">Trivial</option>
+                    <option value="mild">Mild</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="severe">Severe</option>
+                  </select>
+                ) : (
+                  <span className={`text-xs font-medium ${data.lvotCalcium ? 'text-ink-primary capitalize' : 'text-ink-tertiary'}`}>
+                    {data.lvotCalcium || '-'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

@@ -11,9 +11,10 @@ import { BentoBoard } from './components/BentoBoard';
 import { PatientStrip } from './components/PatientStrip';
 import { PageTabBar } from './components/PageTabBar';
 import { ImagingGrid } from './components/ImagingGrid';
+import { ValveSizingPage } from './components/ValveSizingPage';
 import { usePresentNavigation } from './hooks/usePresentNavigation';
 
-type PageType = 'summary' | 'imaging';
+type PageType = 'summary' | 'imaging' | 'sizing';
 
 export const PresentationPage: React.FC = () => {
   const [workup, setWorkup] = useState<TAVIWorkupItem | null>(null);
@@ -47,6 +48,8 @@ export const PresentationPage: React.FC = () => {
           setWorkup(found);
           if (initialPage === 'imaging') {
             setCurrentPage('imaging');
+          } else if (initialPage === 'sizing') {
+            setCurrentPage('sizing');
           }
         } else {
           setError('Workup not found');
@@ -101,6 +104,9 @@ export const PresentationPage: React.FC = () => {
         break;
       case 'KeyI':
         setCurrentPage('imaging');
+        break;
+      case 'KeyV':
+        setCurrentPage('sizing');
         break;
       case 'KeyS':
         setCurrentPage('summary');
@@ -198,8 +204,13 @@ export const PresentationPage: React.FC = () => {
             onToggleExpand={toggleExpand}
             planPinned={planPinned}
           />
-        ) : (
+        ) : currentPage === 'imaging' ? (
           <ImagingGrid
+            workup={workup}
+            planPinned={planPinned}
+          />
+        ) : (
+          <ValveSizingPage
             workup={workup}
             planPinned={planPinned}
           />
@@ -210,7 +221,7 @@ export const PresentationPage: React.FC = () => {
       <div className="keyboard-hint">
         <span>←→ Navigate</span>
         <span>Enter Expand</span>
-        <span>S/I Pages</span>
+        <span>S/I/V Pages</span>
         <span>Esc Close</span>
       </div>
     </div>

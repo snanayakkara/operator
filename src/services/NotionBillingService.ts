@@ -150,6 +150,48 @@ export class NotionBillingService {
     return { userId: me.id, name: me.name };
   }
 
+  public async getDatabaseInfo(databaseId: string): Promise<{ databaseId: string; title: string }> {
+    if (!databaseId?.trim()) {
+      throw new Error('Database ID is required.');
+    }
+    const trimmedId = databaseId.trim();
+    const db = await this.request<NotionDatabaseResponse>(`/databases/${trimmedId}`, { method: 'GET' });
+    const title = (db.title || []).map(t => t.plain_text).filter(Boolean).join('') || trimmedId;
+    return { databaseId: db.id || trimmedId, title };
+  }
+
+  public async getSampleRecords(
+    databaseId: string,
+    limit = 5
+  ): Promise<Array<{ id: string; title: string }>> {
+    if (!databaseId?.trim()) {
+      throw new Error('Database ID is required.');
+    }
+    const trimmedId = databaseId.trim();
+    const pageSize = Math.max(1, Math.min(limit, 10));
+    const [schema, response] = await Promise.all([
+      this.getDatabaseSchema(trimmedId),
+      this.request<NotionQueryResponse>(`/databases/${trimmedId}/query`, {
+        method: 'POST',
+        body: JSON.stringify({ page_size: pageSize })
+      })
+    ]);
+
+    const titleProp = this.findTitlePropertyName(schema);
+    return response.results.map((page) => {
+      const props = page.properties as Record<string, any>;
+      const primaryProp = titleProp ? props[titleProp] : undefined;
+      let titleText = primaryProp ? this.extractPlainText(primaryProp) : '';
+      if (!titleText) {
+        const fallback = Object.values(props).find((prop: any) => prop?.type === 'title');
+        if (fallback) {
+          titleText = this.extractPlainText(fallback);
+        }
+      }
+      return { id: page.id, title: titleText.trim() || 'Untitled' };
+    });
+  }
+
   public async getBillingDatabaseInfo(): Promise<{ databaseId: string; title: string }> {
     const config = await this.ensureConfig();
     const databaseId = config.databases.billing;
@@ -190,6 +232,15 @@ export class NotionBillingService {
 
   private normalizePropertyName(name: string): string {
     return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  private extractPlainText(prop: any): string {
+    const parts = prop?.title || prop?.rich_text || [];
+    if (!Array.isArray(parts)) return '';
+    return parts
+      .map((part: any) => part?.plain_text || part?.text?.content || '')
+      .filter(Boolean)
+      .join('');
   }
 
   private findTitlePropertyName(db: NotionDatabaseResponse): string | null {

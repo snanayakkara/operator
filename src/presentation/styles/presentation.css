@@ -861,6 +861,65 @@ body {
 }
 
 /* ============================================
+   Valve Sizing Page
+   ============================================ */
+
+.valve-sizing-layout {
+  display: grid;
+  gap: var(--gap-lg);
+  height: 100%;
+}
+
+.valve-sizing-layout.plan-pinned {
+  grid-template-columns: 1fr 320px;
+}
+
+.valve-sizing-layout.plan-hidden {
+  grid-template-columns: 1fr;
+}
+
+.valve-sizing-container {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: auto;
+  box-shadow: none;
+}
+
+.valve-sizing-html {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.valve-sizing-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+  padding: var(--gap-xl);
+  text-align: center;
+  min-height: 320px;
+}
+
+.valve-sizing-empty h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.valve-sizing-empty p {
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  max-width: 360px;
+}
+
+.valve-sizing-plan-rail {
+  min-width: 0;
+}
+
+/* ============================================
    Keyboard Hint
    ============================================ */
 
@@ -941,6 +1000,11 @@ body {
   
   .imaging-layout,
   .imaging-layout.plan-pinned {
+    grid-template-columns: 1fr;
+  }
+
+  .valve-sizing-layout,
+  .valve-sizing-layout.plan-pinned {
     grid-template-columns: 1fr;
   }
   

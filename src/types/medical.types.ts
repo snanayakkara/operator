@@ -649,6 +649,7 @@ export interface TAVIWorkupCTMeasurements {
   // Calcium scoring
   calciumScore?: number;
   lvotCalciumScore?: number;
+  lvotCalcium?: 'trivial' | 'mild' | 'moderate' | 'severe';  // Categorical severity (replaces numeric score in UI)
 
   // Detailed aortic measurements
   aorticDimensions?: {
@@ -820,6 +821,8 @@ export interface PatientSession {
   transcription: string;
   results: string;
   summary?: string; // Summary for dual card display (especially for QuickLetter)
+  nextStepResult?: import('@/types/nextStep.types').NextStepEngineResult | null;
+  nextStepContext?: import('@/types/nextStep.types').NextStepPatientContext;
   taviStructuredSections?: TAVIWorkupStructuredSections; // TAVI structured data for specialized display
   educationData?: any; // Patient Education structured data (JSON metadata + letter content)
   preOpPlanData?: PreOpPlanReport['planData']; // Pre-Op plan card + structured JSON
@@ -1287,6 +1290,36 @@ export interface MTEERExtractedData {
     post?: number;
   };
 }
+
+// ============================================================
+// Bloods Validation Types
+// ============================================================
+
+/**
+ * Bloods Extracted Data - structured output from regex extraction phase
+ * Covers all pathology tests: blood tests, urine, stool, swabs
+ */
+export interface BloodsExtractedData {
+  tests: string[]; // Array of test names (e.g., ["FBE", "EUC", "CRP"])
+  fastingRequired?: boolean; // True if "fasting" keyword detected
+  urgency?: 'routine' | 'urgent' | 'stat'; // Urgency level
+  clinicalIndication?: string; // Reason for ordering tests
+}
+
+/**
+ * Bloods field correction (uses generic FieldCorrection type)
+ */
+export type BloodsFieldCorrection = FieldCorrection;
+
+/**
+ * Bloods missing field (uses generic MissingField type)
+ */
+export type BloodsMissingField = MissingField;
+
+/**
+ * Bloods validation result (uses generic ValidationResult type)
+ */
+export type BloodsValidationResult = ValidationResult;
 
 /**
  * Comprehensive calculated haemodynamic values

@@ -2088,21 +2088,45 @@ const OptimizedAppContent: React.FC = memo(() => {
         }
 
         // Trigger Next-Step Engine inference for Quick Letter after letter generation completes
-	        if (agent === 'quick-letter' && letterContent) {
-	          console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter completion');
-	          const emrPatient = completedSession?.patient || state.currentPatientInfo;
-	          const patientContext = {
-	            demographics: {
-	              name: emrPatient?.name || 'Patient',
-	              age: emrPatient?.age
-	            }
-	          };
-	          // Run inference asynchronously - don't block the UI
-	          nextStepActions.runInference(letterContent, patientContext, sessionId, 'quick-letter')
-	            .catch(error => {
-	              console.error('❌ Next-Step Engine inference failed:', error);
-	            });
-	        }
+        if (agent === 'quick-letter' && letterContent) {
+          console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter completion');
+          const emrPatient = completedSession?.patient || state.currentPatientInfo;
+          const patientContext = {
+            demographics: {
+              name: emrPatient?.name || 'Patient',
+              age: emrPatient?.age
+            }
+          };
+          // Run inference asynchronously - don't block the UI
+          nextStepActions.runInference(letterContent, patientContext, sessionId, 'quick-letter')
+            .then(async engineResult => {
+              actions.updatePatientSession(sessionId, {
+                nextStepResult: engineResult,
+                nextStepContext: patientContext
+              });
+
+              if (completedSession) {
+                try {
+                  await saveSessionToPersistence({
+                    ...completedSession,
+                    results: letterContent,
+                    summary: extractedSummary,
+                    transcription: input || '',
+                    status: 'completed',
+                    completed: true,
+                    completedTime: completedSession.completedTime ?? Date.now(),
+                    nextStepResult: engineResult,
+                    nextStepContext: patientContext
+                  });
+                } catch (error) {
+                  console.warn('⚠️ Failed to persist next-step results:', error);
+                }
+              }
+            })
+            .catch(error => {
+              console.error('❌ Next-Step Engine inference failed:', error);
+            });
+        }
 
         // Clear progress indicator after fade-out animation (300ms)
         // Clear any existing timeout to prevent race conditions
@@ -3683,20 +3707,52 @@ const OptimizedAppContent: React.FC = memo(() => {
       });
 
       // Trigger Next-Step Engine for completed quick-letter sessions
-	      if (session.agentType === 'quick-letter' && session.results && session.status === 'completed') {
-	        console.log('🎯 NEXT-STEP ENGINE: Triggering inference for viewed Quick Letter session');
-	        const patientContext = {
-	          demographics: {
-	            name: session.patient?.name || 'Patient',
-	            age: session.patient?.age
-	          }
-	        };
-	        nextStepActions.reset();
-	        nextStepActions.runInference(session.results, patientContext, session.id, 'quick-letter')
-	          .catch(error => {
-	            console.error('❌ Next-Step Engine inference failed for viewed session:', error);
-	          });
-	      } else {
+      if (session.agentType === 'quick-letter' && session.results && session.status === 'completed') {
+        const defaultPatientContext = {
+          demographics: {
+            name: session.patient?.name || 'Patient',
+            age: session.patient?.age
+          }
+        };
+        const patientContext = session.nextStepContext
+          ? {
+              ...defaultPatientContext,
+              ...session.nextStepContext,
+              demographics: {
+                ...defaultPatientContext.demographics,
+                ...session.nextStepContext.demographics
+              }
+            }
+          : defaultPatientContext;
+
+        if (session.nextStepResult) {
+          console.log('🎯 NEXT-STEP ENGINE: Using stored suggestions for viewed Quick Letter session');
+          nextStepActions.hydrateFromSession(session.results, patientContext, session.id, session.nextStepResult);
+        } else {
+          console.log('🎯 NEXT-STEP ENGINE: Generating suggestions for viewed Quick Letter session');
+          nextStepActions.reset();
+          nextStepActions.runInference(session.results, patientContext, session.id, 'quick-letter')
+            .then(async engineResult => {
+              actions.updatePatientSession(session.id, {
+                nextStepResult: engineResult,
+                nextStepContext: patientContext
+              });
+
+              try {
+                await saveSessionToPersistence({
+                  ...session,
+                  nextStepResult: engineResult,
+                  nextStepContext: patientContext
+                });
+              } catch (error) {
+                console.warn('⚠️ Failed to persist next-step results for viewed session:', error);
+              }
+            })
+            .catch(error => {
+              console.error('❌ Next-Step Engine inference failed for viewed session:', error);
+            });
+        }
+      } else {
         // Reset Next-Step Engine for non-quick-letter sessions
         nextStepActions.reset();
       }
@@ -4861,23 +4917,45 @@ const OptimizedAppContent: React.FC = memo(() => {
       actions.completeProcessingAtomic(state.currentSessionId || 'reprocess-session', result.content);
 
       // Trigger Next-Step Engine for Quick Letter reprocessing
-	      if (newAgentType === 'quick-letter' && result.content) {
-	        console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter reprocessing');
-	        const session = state.patientSessions.find(s => s.id === targetSessionId);
-	        const emrPatient = session?.patient || state.currentPatientInfo;
-	        const patientContext = {
-	          demographics: {
-	            name: emrPatient?.name || 'Patient',
-	            age: emrPatient?.age
-	          }
-	        };
-	        // Reset and run inference asynchronously
-	        nextStepActions.reset();
-	        nextStepActions.runInference(result.content, patientContext, targetSessionId || 'reprocess-session', 'quick-letter')
-	          .catch(error => {
-	            console.error('❌ Next-Step Engine inference failed after reprocessing:', error);
-	          });
-	      }
+      if (newAgentType === 'quick-letter' && result.content) {
+        console.log('🎯 NEXT-STEP ENGINE: Triggering inference after Quick Letter reprocessing');
+        const session = state.patientSessions.find(s => s.id === targetSessionId);
+        const emrPatient = session?.patient || state.currentPatientInfo;
+        const patientContext = {
+          demographics: {
+            name: emrPatient?.name || 'Patient',
+            age: emrPatient?.age
+          }
+        };
+        // Reset and run inference asynchronously
+        nextStepActions.reset();
+        nextStepActions.runInference(result.content, patientContext, targetSessionId || 'reprocess-session', 'quick-letter')
+          .then(async engineResult => {
+            if (targetSessionId) {
+              actions.updatePatientSession(targetSessionId, {
+                nextStepResult: engineResult,
+                nextStepContext: patientContext
+              });
+            }
+
+            if (session) {
+              try {
+                await saveSessionToPersistence({
+                  ...session,
+                  results: result.content,
+                  completedTime: session.completedTime ?? Date.now(),
+                  nextStepResult: engineResult,
+                  nextStepContext: patientContext
+                });
+              } catch (error) {
+                console.warn('⚠️ Failed to persist next-step results after reprocessing:', error);
+              }
+            }
+          })
+          .catch(error => {
+            console.error('❌ Next-Step Engine inference failed after reprocessing:', error);
+          });
+      }
 
       // Set warnings and errors if any
       if (result.warnings?.length) {
@@ -5840,7 +5918,50 @@ const OptimizedAppContent: React.FC = memo(() => {
           console.log('📝 Agent requires direct cursor insertion - bypassing field mapping.');
         }
 
-        if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
+        // Special handling for bloods workflow
+        if (currentAgentType === 'bloods') {
+          try {
+            console.log('🩸 BloodsAgent: Setting up Lab Form with "Generic Pathology Request"...');
+
+            // Step 1: Setup Lab form dropdown (opens pathology form + sets dropdown)
+            await Promise.race([
+              chrome.runtime.sendMessage({
+                type: 'EXECUTE_ACTION',
+                action: 'bloods' // Calls clickPathologyButton() + setupLabField()
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Lab form setup timeout')), 15000)
+              )
+            ]);
+
+            // Step 2: Wait for UI to settle
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            console.log('✅ Lab form set to "Generic Pathology Request"');
+
+            // Step 3: Insert blood test results into tagit field
+            await chrome.runtime.sendMessage({
+              type: 'EXECUTE_ACTION',
+              action: 'bloods-insert',
+              data: { content: text }
+            });
+
+            console.log('✅ Blood test results inserted into Lab field');
+          } catch (error) {
+            console.warn('⚠️  Lab form setup failed (continuing anyway):', error);
+            // Don't block insertion - user can manually set dropdown if needed
+            // Try to insert the content anyway
+            try {
+              await chrome.runtime.sendMessage({
+                type: 'EXECUTE_ACTION',
+                action: 'bloods-insert',
+                data: { content: text }
+              });
+            } catch (insertError) {
+              console.error('❌ Blood test insertion failed:', insertError);
+            }
+          }
+        } else if (!shouldForceGenericInsertion && field && (quickActionField || supportsFieldSpecificInsertion(currentAgentType))) {
           // Field-specific insertion: open field dialog and append content at the end
           console.log(`📝 Opening ${getFieldDisplayName(field)} field and appending content`);
 

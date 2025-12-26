@@ -10,10 +10,12 @@
  * Phase 4: Add incremental dictation
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Calendar, MapPin, User, Stethoscope, CheckCircle2, RefreshCw, Database, Eye, FileDown } from 'lucide-react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { ArrowLeft, Calendar, MapPin, User, Stethoscope, RefreshCw, Eye, FileDown } from 'lucide-react';
 import Button from '../buttons/Button';
+import { PatientMismatchConfirmationModal } from '../PatientMismatchConfirmationModal';
 import { useTAVIWorkup } from '@/contexts/TAVIWorkupContext';
+import { useRounds } from '@/contexts/RoundsContext';
 import { EditableTAVIWorkupDisplay } from './EditableTAVIWorkupDisplay';
 import { CTMeasurementsCard } from './CTMeasurementsCard';
 import { ValveRecommendationCard } from './ValveRecommendationCard';
@@ -23,8 +25,215 @@ import { PresentationPreviewModal } from './PresentationPreviewModal';
 import { calculateCompletion } from '@/types/taviWorkup.types';
 import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
 import type { DicomSnapshot } from '@/types/dicom.types';
-import type { ValveSelection } from '@/services/ValveSizingServiceV2';
+import { ValveSizingServiceV2, type ValveSelection } from '@/services/ValveSizingServiceV2';
 import { taviWorkupPDFService } from '@/services/TAVIWorkupPDFService';
+import { patientNameValidator } from '@/utils/PatientNameValidator';
+import type { PatientNameComparison } from '@/utils/PatientNameValidator';
+
+interface EmrPatientData {
+  name?: string;
+  dob?: string;
+  dateOfBirth?: string;
+  age?: string | number;
+  ageYears?: number;
+  id?: string;
+  phone?: string;
+  medicare?: string;
+  address?: string;
+  email?: string;
+  insurance?: string;
+}
+
+interface InvestigationParseResult {
+  echocardiography: string;
+  laboratory: string;
+  otherInvestigations: string;
+}
+
+const isGenericWorkupName = (name: string): boolean => {
+  const normalized = name.trim().toLowerCase();
+  return normalized === 'new tavi workup' || normalized === 'tavi workup';
+};
+
+const formatPatientDemographics = (patientData?: EmrPatientData | null): string => {
+  if (!patientData) return '';
+
+  const lines: string[] = [];
+
+  if (patientData.name) {
+    lines.push(patientData.name.trim());
+  }
+
+  const dob = patientData.dateOfBirth || patientData.dob;
+  const age = patientData.age ?? patientData.ageYears;
+  if (dob || age) {
+    const detailParts: string[] = [];
+    if (dob) detailParts.push(`DOB: ${dob}`);
+    if (age !== undefined && age !== null && String(age).trim().length > 0) {
+      detailParts.push(`Age: ${age}`);
+    }
+    if (detailParts.length > 0) {
+      lines.push(detailParts.join(' | '));
+    }
+  }
+
+  if (patientData.id) {
+    lines.push(`ID: ${patientData.id}`);
+  }
+
+  if (patientData.phone) {
+    lines.push(`Phone: ${patientData.phone}`);
+  }
+
+  if (patientData.email) {
+    lines.push(`Email: ${patientData.email}`);
+  }
+
+  if (patientData.medicare) {
+    const medicareText = patientData.medicare.trim();
+    const hasLabel = medicareText.toLowerCase().includes('medicare');
+    lines.push(hasLabel ? medicareText : `Medicare: ${medicareText}`);
+  }
+
+  if (patientData.insurance) {
+    lines.push(`Insurance: ${patientData.insurance}`);
+  }
+
+  if (patientData.address) {
+    lines.push(`Address: ${patientData.address}`);
+  }
+
+  return lines.join('\n').trim();
+};
+
+const parseInvestigationSummary = (summary: string): InvestigationParseResult => {
+  if (!summary || !summary.trim()) {
+    return { echocardiography: '', laboratory: '', otherInvestigations: '' };
+  }
+
+  const normalized = summary
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u2022\u00b7]/g, '\n')
+    .replace(/\t/g, ' ');
+
+  const rawLines = normalized.split('\n').flatMap(line => line.split(';'));
+  const lines = rawLines.map(line => line.trim()).filter(Boolean);
+
+  const echoHeading = /^(echo(?:cardiogram|cardiography)?|tte|tee)\b[:\-]?\s*/i;
+  const labHeading = /^(labs?|bloods?|biochem(?:istry)?|haematology|hematology|fbc|cbc|full blood count|uec|u&?e|lfts?|renal|electrolytes)\b[:\-]?\s*/i;
+
+  const echoKeywords = [
+    /\becho\b/i,
+    /\bechocardiogram/i,
+    /\bechocardiography/i,
+    /\btte\b/i,
+    /\btee\b/i,
+    /\bef\b/i,
+    /ejection fraction/i,
+    /mean gradient/i,
+    /peak gradient/i,
+    /\bava\b/i,
+    /aortic valve/i,
+    /dimensionless index/i,
+    /\bdi\b/i,
+    /rvsp/i,
+    /\blv\b/i,
+    /\brv\b/i,
+    /lvot/i,
+    /\bmr\b/i,
+    /\bar\b/i,
+    /\btr\b/i
+  ];
+
+  const labKeywords = [
+    /creatinine/i,
+    /egfr/i,
+    /urea/i,
+    /\bhb\b/i,
+    /ha?emoglobin/i,
+    /platelet/i,
+    /\bplt\b/i,
+    /wcc/i,
+    /inr/i,
+    /albumin/i,
+    /bilirubin/i,
+    /\balt\b/i,
+    /\bast\b/i,
+    /\bna\b/i,
+    /\bk\b/i,
+    /sodium/i,
+    /potassium/i,
+    /troponin/i,
+    /bnp/i,
+    /nt-?pro?bnp/i,
+    /lipids?/i,
+    /cholesterol/i
+  ];
+
+  let activeSection: 'echo' | 'lab' | null = null;
+  const echoLines: string[] = [];
+  const labLines: string[] = [];
+  const otherLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmedLine = line.replace(/\s+/g, ' ').trim();
+    if (!trimmedLine) continue;
+
+    if (echoHeading.test(trimmedLine)) {
+      activeSection = 'echo';
+      const remainder = trimmedLine.replace(echoHeading, '').replace(/^[:\-]\s*/, '').trim();
+      if (remainder) echoLines.push(remainder);
+      continue;
+    }
+
+    if (labHeading.test(trimmedLine)) {
+      activeSection = 'lab';
+      const remainder = trimmedLine.replace(labHeading, '').replace(/^[:\-]\s*/, '').trim();
+      if (remainder) labLines.push(remainder);
+      continue;
+    }
+
+    if (activeSection === 'echo') {
+      echoLines.push(trimmedLine);
+      continue;
+    }
+
+    if (activeSection === 'lab') {
+      labLines.push(trimmedLine);
+      continue;
+    }
+
+    if (echoKeywords.some(keyword => keyword.test(trimmedLine))) {
+      echoLines.push(trimmedLine);
+      continue;
+    }
+
+    if (labKeywords.some(keyword => keyword.test(trimmedLine))) {
+      labLines.push(trimmedLine);
+      continue;
+    }
+
+    otherLines.push(trimmedLine);
+  }
+
+  return {
+    echocardiography: echoLines.join('\n').trim(),
+    laboratory: labLines.join('\n').trim(),
+    otherInvestigations: otherLines.join('\n').trim()
+  };
+};
+
+const formatSelectedValveName = (selection?: ValveSelection): string | undefined => {
+  if (!selection) return undefined;
+  const service = ValveSizingServiceV2.getInstance();
+  const manufacturer = service.getManufacturer(selection.brand).displayName;
+  const adjustment = selection.volumeAdjustment;
+  const adjustmentLabel = typeof adjustment === 'number' && adjustment !== 0
+    ? ` (${adjustment > 0 ? '+' : ''}${adjustment.toFixed(1)}mL)`
+    : '';
+
+  return `${manufacturer} ${selection.size}mm${adjustmentLabel}`;
+};
 
 interface TAVIWorkupDetailEditorProps {
   workupId: string;
@@ -32,7 +241,8 @@ interface TAVIWorkupDetailEditorProps {
 }
 
 export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ workupId, onBack }) => {
-  const { workups, updateWorkup, generatePresentation } = useTAVIWorkup();
+  const { workups, updateWorkup, generatePresentation, retryNotionSync, resolveNotionConflict } = useTAVIWorkup();
+  const { clinicians } = useRounds();
   const workup = workups.find(w => w.id === workupId);
 
   const [extracting, setExtracting] = useState(false);
@@ -40,54 +250,58 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
   const [presenting, setPresenting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [patientMismatch, setPatientMismatch] = useState<PatientNameComparison | null>(null);
+  const pendingExtractionRef = useRef<(() => Promise<void>) | null>(null);
 
   // === EMR AUTO-EXTRACTION (Phase 3) ===
-  const extractEMRData = useCallback(async () => {
+  const runEMRExtraction = useCallback(async (tabId: number, patientData: EmrPatientData | null) => {
     setExtracting(true);
     setExtractError(null);
 
     try {
-      // Get active tab ID
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tabs[0]?.id;
+      const emrResponse = await chrome.tabs.sendMessage(tabId, {
+        type: 'EXTRACT_EMR_DATA',
+        fields: ['background', 'investigations', 'medications']
+      });
 
-      if (!tabId) {
-        throw new Error('No active tab found');
+      if (!emrResponse?.success) {
+        throw new Error(emrResponse?.error || 'Failed to extract EMR data');
       }
 
-      // Extract Background, Investigations, and Medications from EMR
-      const [backgroundResult, investigationsResult, medicationsResult] = await Promise.allSettled([
-        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Background' }),
-        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Investigation Summary' }),
-        chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_CUSTOM_NOTE_CONTENT', fieldName: 'Medications (Problem List for Phil)' })
-      ]);
+      const emrData = emrResponse.data || {};
+      const emrBackground = (emrData.background || '').trim();
+      const emrInvestigations = (emrData.investigations || '').trim();
+      const emrMedications = (emrData.medications || '').trim();
 
-      const extractContent = (result: PromiseSettledResult<any>): string => {
-        if (result.status === 'fulfilled' && result.value?.content) {
-          return result.value.content.trim();
-        }
-        return '';
-      };
+      const parsedInvestigations = parseInvestigationSummary(emrInvestigations);
+      const patientDemographics = formatPatientDemographics(patientData);
 
-      const emrBackground = extractContent(backgroundResult);
-      const emrInvestigations = extractContent(investigationsResult);
-      const emrMedications = extractContent(medicationsResult);
-
-      // Update workup with extracted EMR data and pre-populate sections
       await updateWorkup(workupId, w => {
         const updatedSections = {
           ...w.structuredSections,
+          patient: {
+            ...w.structuredSections.patient,
+            content: patientDemographics || w.structuredSections.patient.content
+          },
           background: {
             ...w.structuredSections.background,
             content: emrBackground || w.structuredSections.background.content
           },
-          investigations: {
-            ...w.structuredSections.investigations,
-            content: emrInvestigations || w.structuredSections.investigations.content
-          },
           medications: {
             ...w.structuredSections.medications,
             content: emrMedications || w.structuredSections.medications.content
+          },
+          laboratory: {
+            ...w.structuredSections.laboratory,
+            content: parsedInvestigations.laboratory || w.structuredSections.laboratory.content
+          },
+          echocardiography: {
+            ...w.structuredSections.echocardiography,
+            content: parsedInvestigations.echocardiography || w.structuredSections.echocardiography.content
+          },
+          investigations: {
+            ...w.structuredSections.investigations,
+            content: parsedInvestigations.otherInvestigations || w.structuredSections.investigations.content
           }
         };
 
@@ -96,6 +310,9 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
           emrBackground,
           emrInvestigations,
           emrMedications,
+          emrPatientDemographics: patientDemographics,
+          emrLaboratory: parsedInvestigations.laboratory,
+          emrEchocardiography: parsedInvestigations.echocardiography,
           emrLastExtracted: Date.now(),
           structuredSections: updatedSections,
           completionPercentage: calculateCompletion(updatedSections)
@@ -110,6 +327,58 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
       setExtracting(false);
     }
   }, [workupId, updateWorkup]);
+
+  const extractEMRData = useCallback(async () => {
+    setExtractError(null);
+
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+
+      if (!tabId) {
+        throw new Error('No active tab found');
+      }
+
+      const patientResponse = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PATIENT_DATA' });
+      const patientData = patientResponse?.success ? (patientResponse.data as EmrPatientData) : null;
+      const emrPatientName = patientData?.name?.trim() || '';
+      const sidebarPatientName = workup?.patient?.trim() || '';
+
+      const shouldValidateNames =
+        !!emrPatientName &&
+        !!sidebarPatientName &&
+        !isGenericWorkupName(sidebarPatientName) &&
+        !patientNameValidator.shouldSkipValidation(sidebarPatientName, emrPatientName);
+
+      if (shouldValidateNames) {
+        const comparison = patientNameValidator.validatePatientNames(sidebarPatientName, emrPatientName);
+        if (!comparison.isMatch) {
+          pendingExtractionRef.current = () => runEMRExtraction(tabId, patientData);
+          setPatientMismatch(comparison);
+          return;
+        }
+      }
+
+      await runEMRExtraction(tabId, patientData);
+    } catch (error) {
+      console.error('[TAVIWorkupDetailEditor] EMR extraction failed:', error);
+      setExtractError(error instanceof Error ? error.message : 'Failed to extract EMR data');
+    }
+  }, [runEMRExtraction, workup?.patient]);
+
+  const handleMismatchConfirm = useCallback(async () => {
+    const pending = pendingExtractionRef.current;
+    pendingExtractionRef.current = null;
+    setPatientMismatch(null);
+    if (pending) {
+      await pending();
+    }
+  }, []);
+
+  const handleMismatchCancel = useCallback(() => {
+    pendingExtractionRef.current = null;
+    setPatientMismatch(null);
+  }, []);
 
   // Auto-extract EMR data on workup open (if not already extracted)
   useEffect(() => {
@@ -190,6 +459,31 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
     );
   }
 
+  const selectedValveName = formatSelectedValveName(workup.selectedValve);
+  const annulusArea = workup.ctMeasurements?.annulusArea ?? workup.ctMeasurements?.annulusAreaMm2;
+  const annulusPerimeter = workup.ctMeasurements?.annulusPerimeter ?? workup.ctMeasurements?.annulusPerimeterMm;
+
+  const conflictFieldLabels: Record<string, string> = {
+    patient: 'Patient',
+    status: 'Status',
+    category: 'Category',
+    referrer: 'Referrer',
+    location: 'Location',
+    procedureDate: 'Procedure Date',
+    referralDate: 'Referral Date',
+    notes: 'Notes',
+    datePresented: 'Date Presented'
+  };
+
+  const formatConflictValue = (value: unknown) => {
+    if (value === undefined || value === null || value === '') return '-';
+    return String(value);
+  };
+
+  const formatConflictTime = (timestamp?: number) => (
+    timestamp ? new Date(timestamp).toLocaleString() : 'Unknown'
+  );
+
   return (
     <div className="flex flex-col h-full bg-surface-secondary">
       {/* Header */}
@@ -239,21 +533,75 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
         <div className="bg-white rounded-lg border border-line-primary p-4">
           <h2 className="text-lg font-semibold text-ink-primary">{workup.patient}</h2>
           <div className="mt-2 flex items-center gap-2">
-            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-              workup.status === 'draft' ? 'bg-gray-100 text-gray-700' :
-              workup.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
-              'bg-blue-100 text-blue-700'
-            }`}>
-              {workup.status}
+            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+              {workup.status || 'Undergoing Workup'}
             </span>
-            {workup.readyToPresent && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                <CheckCircle2 className="w-3 h-3" />
-                Ready to Present
-              </span>
-            )}
           </div>
         </div>
+
+        {workup.notionSyncConflict && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-amber-900">Notion sync conflict</div>
+                <div className="text-xs text-amber-800 mt-1">
+                  Local edited {formatConflictTime(workup.notionSyncConflict.localEditedAt)} · Notion edited {formatConflictTime(workup.notionSyncConflict.notionEditedAt)}
+                </div>
+                <div className="text-xs text-amber-700 mt-1">
+                  Suggested: {workup.notionSyncConflict.preferredSource === 'local' ? 'Keep local changes' : 'Use Notion changes'}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[120px_1fr_1fr] gap-2 text-xs">
+              <div className="text-amber-700 font-medium">Field</div>
+              <div className="text-amber-700 font-medium">Local</div>
+              <div className="text-amber-700 font-medium">Notion</div>
+              {Object.keys(workup.notionSyncConflict.local).map((key) => {
+                const fieldKey = key as keyof typeof conflictFieldLabels;
+                return (
+                  <React.Fragment key={key}>
+                    <div className="text-amber-900">{conflictFieldLabels[fieldKey] || key}</div>
+                    <div className="text-amber-900">{formatConflictValue(workup.notionSyncConflict?.local[fieldKey])}</div>
+                    <div className="text-amber-900">{formatConflictValue(workup.notionSyncConflict?.notion[fieldKey])}</div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => resolveNotionConflict(workup.id, 'local')}
+              >
+                Keep Local
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => resolveNotionConflict(workup.id, 'notion')}
+              >
+                Use Notion
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {workup.notionSyncError && !workup.notionSyncConflict && (
+          <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+            <div className="text-sm font-semibold text-rose-900">Notion sync failed</div>
+            <div className="text-xs text-rose-800 mt-1">{workup.notionSyncError}</div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retryNotionSync(workup.id)}
+              className="mt-3"
+            >
+              Retry Sync
+            </Button>
+          </div>
+        )}
 
         {/* Metadata Grid */}
         <div className="bg-white rounded-lg border border-line-primary p-4 space-y-3">
@@ -310,32 +658,6 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
           )}
         </div>
 
-        {/* EMR Extraction Banner */}
-        {workup.emrLastExtracted && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-blue-600" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900">EMR Data Extracted</p>
-                  <p className="text-xs text-blue-700">
-                    {new Date(workup.emrLastExtracted).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={extractEMRData}
-                disabled={extracting}
-                icon={<RefreshCw className={`w-3 h-3 ${extracting ? 'animate-spin' : ''}`} />}
-              >
-                {extracting ? 'Extracting...' : 'Refresh'}
-              </Button>
-            </div>
-          </div>
-        )}
-
         {/* Extraction Error Banner */}
         {extractError && (
           <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
@@ -372,8 +694,8 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
 
         {/* Valve Selector Card (Phase 9) */}
         <ValveSelectorCard
-          area={workup.ctMeasurements?.annulusArea}
-          perimeter={workup.ctMeasurements?.annulusPerimeter}
+          area={annulusArea}
+          perimeter={annulusPerimeter}
           selectedValve={workup.selectedValve}
           onSelectValve={handleValveSelect}
         />
@@ -389,6 +711,8 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
         <EditableTAVIWorkupDisplay
           workup={workup}
           onUpdate={(updater) => updateWorkup(workupId, updater)}
+          clinicians={clinicians}
+          selectedValveName={selectedValveName}
         />
       </div>
 
@@ -430,6 +754,17 @@ export const TAVIWorkupDetailEditor: React.FC<TAVIWorkupDetailEditorProps> = ({ 
           onClose={() => setPreviewOpen(false)}
         />
       )}
+
+      <PatientMismatchConfirmationModal
+        isOpen={!!patientMismatch}
+        comparison={patientMismatch}
+        textToInsert={null}
+        actionContext="extract"
+        onConfirm={handleMismatchConfirm}
+        onCancel={handleMismatchCancel}
+        onRefreshEMR={extractEMRData}
+      />
+
     </div>
   );
 };

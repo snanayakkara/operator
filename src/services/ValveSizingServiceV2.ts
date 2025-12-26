@@ -48,6 +48,7 @@ export interface ValveResult {
   oversizing: number;
   isOptimal: boolean;
   volumeAdjustment: number | null; // Only for Sapien, in 0.5mL increments
+  nominalVolume: number | null; // Only for Sapien, base balloon volume (11, 17, 23, 33)
   range?: ValveRange; // Perimeter/area range for display
 }
 
@@ -393,6 +394,7 @@ export class ValveSizingServiceV2 {
           oversizing,
           isOptimal,
           volumeAdjustment: brand === 'sapien' ? 0 : null,
+          nominalVolume: valve.nominalVolume ?? null,
           range: this.getValveRange(brand, valve.size)
         });
       }

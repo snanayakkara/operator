@@ -70,7 +70,7 @@ const SECTION_CONFIGS: SectionConfig[] = [
   // Investigations Group
   { key: 'laboratory', title: 'Laboratory Values', icon: FileTextIcon, color: 'purple', priority: 'medium', group: 'investigations' },
   { key: 'ecg', title: 'ECG Assessment', icon: ActivityIcon, color: 'red', priority: 'medium', group: 'investigations' },
-  { key: 'investigations', title: 'Investigation Summary', icon: FileTextIcon, color: 'indigo', priority: 'medium', group: 'investigations' },
+  { key: 'investigations', title: 'Other Investigations', icon: FileTextIcon, color: 'indigo', priority: 'medium', group: 'investigations' },
   { key: 'echocardiography', title: 'Echocardiography', icon: HeartIcon, color: 'red', priority: 'high', group: 'investigations' },
 
   // Planning Group

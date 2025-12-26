@@ -18,6 +18,7 @@ interface PatientMismatchConfirmationModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   onRefreshEMR?: () => void;
+  actionContext?: 'insert' | 'extract';
 }
 
 export const PatientMismatchConfirmationModal: React.FC<PatientMismatchConfirmationModalProps> = ({
@@ -26,7 +27,8 @@ export const PatientMismatchConfirmationModal: React.FC<PatientMismatchConfirmat
   textToInsert,
   onConfirm,
   onCancel,
-  onRefreshEMR
+  onRefreshEMR,
+  actionContext = 'insert'
 }) => {
   if (!comparison) return null;
 
@@ -65,6 +67,16 @@ export const PatientMismatchConfirmationModal: React.FC<PatientMismatchConfirmat
   };
 
   const styles = getSeverityStyles();
+  const confirmLabel = comparison.isMatch
+    ? actionContext === 'extract' ? 'Continue' : 'Insert Text'
+    : actionContext === 'extract' ? 'Continue Anyway' : 'Insert Anyway';
+  const actionMessage = comparison.isMatch
+    ? actionContext === 'extract'
+      ? 'The patient names appear to match. You can proceed with EMR extraction.'
+      : 'The patient names appear to match. You can proceed with inserting the text.'
+    : actionContext === 'extract'
+      ? 'You are about to extract EMR data from a potentially different patient file. Please verify this is intentional.'
+      : 'You are about to insert session results into a potentially different patient\'s EMR file. Please verify this is intentional.';
 
   return (
     <Modal
@@ -104,7 +116,7 @@ export const PatientMismatchConfirmationModal: React.FC<PatientMismatchConfirmat
               variant={comparison.isMatch ? 'success' : 'danger'}
               onClick={onConfirm}
             >
-              {comparison.isMatch ? 'Insert Text' : 'Insert Anyway'}
+              {confirmLabel}
             </Button>
           </div>
         </div>
@@ -206,11 +218,7 @@ export const PatientMismatchConfirmationModal: React.FC<PatientMismatchConfirmat
           <div className={`text-sm ${
             comparison.isMatch ? 'text-green-800' : 'text-red-800'
           }`}>
-            {comparison.isMatch ? (
-              'The patient names appear to match. You can proceed with inserting the text.'
-            ) : (
-              'You are about to insert session results into a potentially different patient\'s EMR file. Please verify this is intentional.'
-            )}
+            {actionMessage}
           </div>
         </div>
       </div>

@@ -9,12 +9,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../modals';
-import { Volume2, Eye, Loader2, GitBranch } from 'lucide-react';
+import { Volume2, Eye, Loader2 } from 'lucide-react';
 import { KeyFact, ProofModeConfig, KeyFactsProofResult, LesionTree } from '../../../types/medical.types';
 import { ttsService } from '../../../services/TTSService';
 import VisualProofMode from './VisualProofMode';
 import AudioProofMode from './AudioProofMode';
-import { LesionProofMode } from './LesionProofMode';
 
 export interface KeyFactsProofDialogProps {
   /** Facts to verify */
@@ -35,11 +34,11 @@ export interface KeyFactsProofDialogProps {
   /** Optional initial configuration */
   initialConfig?: Partial<ProofModeConfig>;
 
-  /** Optional lesion tree for AngioPCI proof mode */
+  /** Optional lesion tree for AngioPCI - will be shown inline in Visual mode */
   lesionTree?: LesionTree;
 
-  /** Method used for lesion extraction */
-  lesionExtractionMethod?: 'regex' | 'quick-model';
+  /** Original transcription snippet for correction logging context */
+  transcriptionSnippet?: string;
 }
 
 /**
@@ -54,12 +53,11 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
   isOpen,
   initialConfig,
   lesionTree,
-  lesionExtractionMethod
+  transcriptionSnippet
 }) => {
-  // Determine initial mode: default to lesions if lesion tree provided, otherwise visual
-  const getInitialMode = (): 'audio' | 'visual' | 'lesions' => {
-    if (initialConfig?.mode) return initialConfig.mode;
-    if (lesionTree) return 'lesions';
+  // Determine initial mode: default to visual (lesion tree is now shown inline in visual mode)
+  const getInitialMode = (): 'audio' | 'visual' => {
+    if (initialConfig?.mode === 'audio') return 'audio';
     return 'visual';
   };
 
@@ -113,7 +111,7 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleModeChange = (mode: 'audio' | 'visual' | 'lesions') => {
+  const handleModeChange = (mode: 'audio' | 'visual') => {
     // Don't allow switching to audio if TTS unavailable
     if (mode === 'audio' && !ttsAvailable) {
       console.warn('[KeyFactsProofDialog] Cannot switch to audio mode: TTS unavailable');
@@ -168,6 +166,7 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
         {/* Mode switcher */}
         <div className="mode-switcher flex gap-2 mb-6 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
           <button
+            type="button"
             onClick={() => handleModeChange('visual')}
             disabled={checkingTTS}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
@@ -180,6 +179,7 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
             Visual
           </button>
           <button
+            type="button"
             onClick={() => handleModeChange('audio')}
             disabled={checkingTTS || !ttsAvailable}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
@@ -202,19 +202,6 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
               <span className="text-xs">(Unavailable)</span>
             )}
           </button>
-          {lesionTree && (
-            <button
-              onClick={() => handleModeChange('lesions')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                config.mode === 'lesions'
-                  ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}
-            >
-              <GitBranch className="w-4 h-4" />
-              Lesions
-            </button>
-          )}
         </div>
 
         {/* TTS unavailable warning */}
@@ -239,6 +226,8 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
               onCancel={handleCancel}
               groupByCategory={config.groupByCategory}
               showConfidence={config.showConfidence}
+              lesionTree={lesionTree}
+              transcriptionSnippet={transcriptionSnippet}
             />
           ) : config.mode === 'audio' ? (
             <AudioProofMode
@@ -248,14 +237,6 @@ export const KeyFactsProofDialog: React.FC<KeyFactsProofDialogProps> = ({
               onCancel={handleCancel}
               ttsSpeed={config.ttsSpeed}
               autoAdvance={config.autoAdvance}
-            />
-          ) : config.mode === 'lesions' && lesionTree ? (
-            <LesionProofMode
-              initialLesionTree={lesionTree}
-              extractionMethod={lesionExtractionMethod || 'regex'}
-              agentLabel={agentLabel}
-              onComplete={handleComplete}
-              onCancel={handleCancel}
             />
           ) : null}
         </div>

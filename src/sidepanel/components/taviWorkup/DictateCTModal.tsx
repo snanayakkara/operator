@@ -12,7 +12,7 @@
  * 5. User confirms → merges into CTMeasurementsCard
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Mic, Square, Loader2, Check, X, AlertCircle } from 'lucide-react';
 import Button from '../buttons/Button';
 import { TAVIWorkupDictationParserService } from '@/services/TAVIWorkupDictationParserService';
@@ -26,6 +26,153 @@ interface DictateCTModalProps {
 
 type ModalState = 'idle' | 'recording' | 'transcribing' | 'parsing' | 'review' | 'error';
 
+type ManualMapping = {
+  value: number;
+  fieldKey: string;
+};
+
+const CT_MANUAL_FIELDS = [
+  { value: 'annulusAreaMm2', label: 'Annulus area (mm2)' },
+  { value: 'annulusPerimeterMm', label: 'Annulus perimeter (mm)' },
+  { value: 'annulusMinDiameterMm', label: 'Annulus min diameter (mm)' },
+  { value: 'annulusMaxDiameterMm', label: 'Annulus max diameter (mm)' },
+  { value: 'annulusMeanDiameterMm', label: 'Annulus mean diameter (mm)' },
+  { value: 'coronaryHeights.leftMainMm', label: 'Left main height (mm)' },
+  { value: 'coronaryHeights.rightCoronaryMm', label: 'Right coronary height (mm)' },
+  { value: 'lvotAreaMm2', label: 'LVOT area (mm2)' },
+  { value: 'lvotPerimeterMm', label: 'LVOT perimeter (mm)' },
+  { value: 'stjDiameterMm', label: 'STJ diameter (mm)' },
+  { value: 'stjHeightMm', label: 'STJ height (mm)' },
+  { value: 'accessVessels.rightCIAmm', label: 'Right CIA (mm)' },
+  { value: 'accessVessels.leftCIAmm', label: 'Left CIA (mm)' },
+  { value: 'accessVessels.rightEIAmm', label: 'Right EIA (mm)' },
+  { value: 'accessVessels.leftEIAmm', label: 'Left EIA (mm)' },
+  { value: 'accessVessels.rightCFAmm', label: 'Right CFA (mm)' },
+  { value: 'accessVessels.leftCFAmm', label: 'Left CFA (mm)' },
+  { value: 'calciumScore', label: 'Aortic valve calcium score (AU)' },
+  { value: 'lvotCalciumScore', label: 'LVOT calcium score (AU)' }
+];
+
+const extractNumericValues = (text: string): number[] => {
+  const matches = text.match(/\d+(?:\.\d+)?/g);
+  if (!matches) return [];
+  return matches
+    .map(value => parseFloat(value))
+    .filter(value => Number.isFinite(value));
+};
+
+const setMeasurementValue = (
+  measurements: Partial<TAVIWorkupCTMeasurements>,
+  fieldKey: string,
+  value: number
+): void => {
+  const path = fieldKey.split('.');
+  let cursor: any = measurements;
+
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const key = path[i];
+    if (!cursor[key] || typeof cursor[key] !== 'object') {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  }
+
+  cursor[path[path.length - 1]] = value;
+};
+
+const buildMeasurementsFromMappings = (
+  mappings: ManualMapping[]
+): Partial<TAVIWorkupCTMeasurements> => {
+  const measurements: Partial<TAVIWorkupCTMeasurements> = {};
+  mappings.forEach(mapping => {
+    if (!mapping.fieldKey || !Number.isFinite(mapping.value)) {
+      return;
+    }
+    setMeasurementValue(measurements, mapping.fieldKey, mapping.value);
+  });
+  return measurements;
+};
+
+const mergeMeasurements = (
+  base: Partial<TAVIWorkupCTMeasurements>,
+  override: Partial<TAVIWorkupCTMeasurements>
+): Partial<TAVIWorkupCTMeasurements> => {
+  const merged: Partial<TAVIWorkupCTMeasurements> = { ...base, ...override };
+
+  if (base.coronaryHeights || override.coronaryHeights) {
+    merged.coronaryHeights = {
+      ...base.coronaryHeights,
+      ...override.coronaryHeights
+    };
+  }
+
+  if (base.accessVessels || override.accessVessels) {
+    merged.accessVessels = {
+      ...base.accessVessels,
+      ...override.accessVessels
+    };
+  }
+
+  if (base.sinusOfValsalva || override.sinusOfValsalva) {
+    merged.sinusOfValsalva = {
+      ...base.sinusOfValsalva,
+      ...override.sinusOfValsalva
+    };
+  }
+
+  if (base.aorticDimensions || override.aorticDimensions) {
+    merged.aorticDimensions = {
+      ...base.aorticDimensions,
+      ...override.aorticDimensions
+    };
+  }
+
+  return merged;
+};
+
+const countMeasurements = (measurements: Partial<TAVIWorkupCTMeasurements>): number => {
+  let count = 0;
+  const push = (value?: number) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      count += 1;
+    }
+  };
+
+  push(measurements.annulusAreaMm2);
+  push(measurements.annulusPerimeterMm);
+  push(measurements.annulusMinDiameterMm);
+  push(measurements.annulusMaxDiameterMm);
+  push(measurements.annulusMeanDiameterMm);
+  push(measurements.lvotAreaMm2);
+  push(measurements.lvotPerimeterMm);
+  push(measurements.stjDiameterMm);
+  push(measurements.stjHeightMm);
+  push(measurements.calciumScore);
+  push(measurements.lvotCalciumScore);
+
+  if (measurements.coronaryHeights) {
+    push(measurements.coronaryHeights.leftMainMm);
+    push(measurements.coronaryHeights.rightCoronaryMm);
+  }
+
+  if (measurements.accessVessels) {
+    push(measurements.accessVessels.rightCIAmm);
+    push(measurements.accessVessels.leftCIAmm);
+    push(measurements.accessVessels.rightEIAmm);
+    push(measurements.accessVessels.leftEIAmm);
+    push(measurements.accessVessels.rightCFAmm);
+    push(measurements.accessVessels.leftCFAmm);
+  }
+
+  if (measurements.sinusOfValsalva) {
+    push(measurements.sinusOfValsalva.leftMm);
+    push(measurements.sinusOfValsalva.rightMm);
+    push(measurements.sinusOfValsalva.nonCoronaryMm);
+  }
+
+  return count;
+};
+
 export const DictateCTModal: React.FC<DictateCTModalProps> = ({
   onClose,
   onMerge
@@ -37,6 +184,8 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
   const [confidence, setConfidence] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [manualMappings, setManualMappings] = useState<ManualMapping[]>([]);
+  const [showManualMapping, setShowManualMapping] = useState<boolean>(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -52,11 +201,38 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!transcription) {
+      setManualMappings([]);
+      return;
+    }
+
+    const values = extractNumericValues(transcription);
+    setManualMappings(values.map(value => ({ value, fieldKey: '' })));
+  }, [transcription]);
+
+  const manualMeasurements = useMemo(
+    () => buildMeasurementsFromMappings(manualMappings),
+    [manualMappings]
+  );
+
+  const combinedMeasurements = useMemo(
+    () => mergeMeasurements(extractedMeasurements, manualMeasurements),
+    [extractedMeasurements, manualMeasurements]
+  );
+
+  const combinedCount = useMemo(
+    () => countMeasurements(combinedMeasurements),
+    [combinedMeasurements]
+  );
+
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       audioChunksRef.current = [];
       setRecordingDuration(0);
+      setShowManualMapping(false);
+      setManualMappings([]);
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
@@ -125,6 +301,7 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
 
       setExtractedMeasurements(parseResult.extractedFields);
       setConfidence(parseResult.confidence);
+      setShowManualMapping(countMeasurements(parseResult.extractedFields) === 0);
 
       // Generate narrative from transcription if CT section
       if (parseResult.detectedSection === 'ct') {
@@ -140,8 +317,8 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
   }, []);
 
   const handleConfirm = useCallback(() => {
-    onMerge(extractedMeasurements, narrativeSummary);
-  }, [extractedMeasurements, narrativeSummary, onMerge]);
+    onMerge(combinedMeasurements, narrativeSummary);
+  }, [combinedMeasurements, narrativeSummary, onMerge]);
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -161,6 +338,12 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
     if (measurements.annulusMeanDiameterMm !== undefined) {
       items.push(<div key="mean" className="measurement-preview">Mean Diameter: <strong>{measurements.annulusMeanDiameterMm} mm</strong></div>);
     }
+    if (measurements.annulusMinDiameterMm !== undefined) {
+      items.push(<div key="min" className="measurement-preview">Min Diameter: <strong>{measurements.annulusMinDiameterMm} mm</strong></div>);
+    }
+    if (measurements.annulusMaxDiameterMm !== undefined) {
+      items.push(<div key="max" className="measurement-preview">Max Diameter: <strong>{measurements.annulusMaxDiameterMm} mm</strong></div>);
+    }
     if (measurements.coronaryHeights?.leftMainMm !== undefined) {
       items.push(<div key="lm" className="measurement-preview">LM Height: <strong>{measurements.coronaryHeights.leftMainMm} mm</strong></div>);
     }
@@ -173,16 +356,51 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
     if (measurements.accessVessels?.leftCFAmm !== undefined) {
       items.push(<div key="lcfa" className="measurement-preview">L CFA: <strong>{measurements.accessVessels.leftCFAmm} mm</strong></div>);
     }
+    if (measurements.accessVessels?.rightCIAmm !== undefined) {
+      items.push(<div key="rcia" className="measurement-preview">R CIA: <strong>{measurements.accessVessels.rightCIAmm} mm</strong></div>);
+    }
+    if (measurements.accessVessels?.leftCIAmm !== undefined) {
+      items.push(<div key="lcia" className="measurement-preview">L CIA: <strong>{measurements.accessVessels.leftCIAmm} mm</strong></div>);
+    }
+    if (measurements.accessVessels?.rightEIAmm !== undefined) {
+      items.push(<div key="reia" className="measurement-preview">R EIA: <strong>{measurements.accessVessels.rightEIAmm} mm</strong></div>);
+    }
+    if (measurements.accessVessels?.leftEIAmm !== undefined) {
+      items.push(<div key="leia" className="measurement-preview">L EIA: <strong>{measurements.accessVessels.leftEIAmm} mm</strong></div>);
+    }
     if (measurements.lvotAreaMm2 !== undefined) {
       items.push(<div key="lvot" className="measurement-preview">LVOT Area: <strong>{measurements.lvotAreaMm2} mm²</strong></div>);
+    }
+    if (measurements.lvotPerimeterMm !== undefined) {
+      items.push(<div key="lvot-perim" className="measurement-preview">LVOT Perimeter: <strong>{measurements.lvotPerimeterMm} mm</strong></div>);
+    }
+    if (measurements.stjDiameterMm !== undefined) {
+      items.push(<div key="stj-diam" className="measurement-preview">STJ Diameter: <strong>{measurements.stjDiameterMm} mm</strong></div>);
+    }
+    if (measurements.stjHeightMm !== undefined) {
+      items.push(<div key="stj-height" className="measurement-preview">STJ Height: <strong>{measurements.stjHeightMm} mm</strong></div>);
+    }
+    if (measurements.calciumScore !== undefined) {
+      items.push(<div key="calcium" className="measurement-preview">AV Calcium: <strong>{measurements.calciumScore} AU</strong></div>);
+    }
+    if (measurements.lvotCalciumScore !== undefined) {
+      items.push(<div key="lvot-calcium" className="measurement-preview">LVOT Calcium: <strong>{measurements.lvotCalciumScore} AU</strong></div>);
     }
 
     return items;
   };
 
+  const handleManualMappingChange = (index: number, fieldKey: string) => {
+    setManualMappings(prev =>
+      prev.map((mapping, idx) =>
+        idx === index ? { ...mapping, fieldKey } : mapping
+      )
+    );
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden">
+    <div className="fixed inset-0 bg-black/20 flex items-end justify-center z-50">
+      <div className="bg-white rounded-t-2xl shadow-2xl w-full max-w-md mx-3 mb-3 overflow-hidden flex flex-col max-h-[70vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-purple-50">
           <h3 className="text-sm font-semibold text-ink-primary">Dictate CT Measurements</h3>
@@ -196,7 +414,7 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-4 overflow-y-auto">
           {/* Idle State */}
           {state === 'idle' && (
             <div className="text-center py-8">
@@ -278,12 +496,56 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
                   </span>
                 </div>
                 <div className="bg-purple-50 rounded p-3 space-y-1">
-                  {formatMeasurementPreview(extractedMeasurements).length > 0 ? (
-                    formatMeasurementPreview(extractedMeasurements)
+                  {formatMeasurementPreview(combinedMeasurements).length > 0 ? (
+                    formatMeasurementPreview(combinedMeasurements)
                   ) : (
                     <p className="text-sm text-ink-tertiary italic">No measurements extracted</p>
                   )}
                 </div>
+              </div>
+
+              {/* Manual Mapping */}
+              <div className="bg-gray-50 rounded p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-ink-secondary">Manual Mapping</label>
+                  {combinedCount > 0 && (
+                    <button
+                      type="button"
+                      className="text-xs text-purple-600 hover:text-purple-700"
+                      onClick={() => setShowManualMapping(prev => !prev)}
+                    >
+                      {showManualMapping ? 'Hide' : 'Map Numbers'}
+                    </button>
+                  )}
+                </div>
+                {(showManualMapping || combinedCount === 0) && (
+                  <div className="mt-2 space-y-2">
+                    {manualMappings.length > 0 ? (
+                      manualMappings.map((mapping, index) => (
+                        <div key={`${mapping.value}-${index}`} className="flex items-center gap-2">
+                          <span className="w-16 text-xs font-mono text-ink-primary">{mapping.value}</span>
+                          <select
+                            value={mapping.fieldKey}
+                            onChange={(event) => handleManualMappingChange(index, event.target.value)}
+                            className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-ink-primary focus:outline-none focus:ring-2 focus:ring-purple-400/40"
+                          >
+                            <option value="">Unassigned</option>
+                            {CT_MANUAL_FIELDS.map(field => (
+                              <option key={field.value} value={field.value}>
+                                {field.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-ink-tertiary">No numeric values detected in the transcription.</p>
+                    )}
+                    <p className="text-[11px] text-ink-tertiary">
+                      Mapped values are merged with extracted measurements.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -295,6 +557,8 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
                     setState('idle');
                     setTranscription('');
                     setExtractedMeasurements({});
+                    setManualMappings([]);
+                    setShowManualMapping(false);
                   }}
                 >
                   Try Again
@@ -304,7 +568,7 @@ export const DictateCTModal: React.FC<DictateCTModalProps> = ({
                   size="sm"
                   onClick={handleConfirm}
                   icon={<Check className="w-3 h-3" />}
-                  disabled={Object.keys(extractedMeasurements).length === 0}
+                  disabled={combinedCount === 0}
                 >
                   Apply Measurements
                 </Button>

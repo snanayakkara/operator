@@ -111,7 +111,7 @@ Rules:
       background: 'Background History',
       medications: 'Medications',
       social_history: 'Social History',
-      investigations: 'Investigation Summary',
+      investigations: 'Other Investigations',
       echocardiography: 'Echocardiography',
       // enhanced_ct REMOVED - CT data in ctMeasurements
       procedure_planning: 'Procedure Planning',

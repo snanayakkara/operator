@@ -9,7 +9,7 @@
  * - Selected valve summary at bottom
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, Target, X } from 'lucide-react';
 import { ValveCard, ValveCardMini } from './ValveCard';
 import {
@@ -120,6 +120,7 @@ export const ValveSelectorCard: React.FC<ValveSelectorCardProps> = ({
   const [cardExpanded, setCardExpanded] = useState(initialExpanded);
   const [expandedBrands, setExpandedBrands] = useState<Set<ValveBrand>>(new Set(['evolut']));
   const [sapienAdjustments, setSapienAdjustments] = useState<Record<number, number>>({});
+  const lastAutoExpandKey = useRef<string | null>(null);
 
   const service = ValveSizingServiceV2.getInstance();
 
@@ -156,18 +157,22 @@ export const ValveSelectorCard: React.FC<ValveSelectorCardProps> = ({
 
   // Auto-expand brand with optimal valve on first render
   useEffect(() => {
-    if (bestPerBrand) {
-      const brandsWithOptimal: ValveBrand[] = [];
-      for (const [brand, result] of Object.entries(bestPerBrand)) {
-        if (result?.isOptimal) {
-          brandsWithOptimal.push(brand as ValveBrand);
-        }
-      }
-      if (brandsWithOptimal.length > 0) {
-        setExpandedBrands(new Set([brandsWithOptimal[0]]));
+    if (!bestPerBrand) return;
+
+    const measurementKey = `${area ?? 'na'}-${perimeter ?? 'na'}`;
+    if (lastAutoExpandKey.current === measurementKey) return;
+
+    const brandsWithOptimal: ValveBrand[] = [];
+    for (const [brand, result] of Object.entries(bestPerBrand)) {
+      if (result?.isOptimal) {
+        brandsWithOptimal.push(brand as ValveBrand);
       }
     }
-  }, [bestPerBrand]);
+    if (brandsWithOptimal.length > 0) {
+      setExpandedBrands(new Set([brandsWithOptimal[0]]));
+      lastAutoExpandKey.current = measurementKey;
+    }
+  }, [bestPerBrand, area, perimeter]);
 
   const toggleBrand = useCallback((brand: ValveBrand) => {
     setExpandedBrands((prev) => {

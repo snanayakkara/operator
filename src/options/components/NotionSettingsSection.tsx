@@ -2,12 +2,50 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Database, KeyRound, Link2, CheckCircle, AlertCircle, RefreshCw, Save } from 'lucide-react';
 import { DEFAULT_NOTION_CONFIG, loadNotionConfig, saveNotionConfig } from '@/config/notionConfig';
 import { notionBillingService } from '@/services/NotionBillingService';
+import { NotionStructuralWorkupService } from '@/services/NotionStructuralWorkupService';
 
 type TestState = 'idle' | 'running' | 'success' | 'error';
 type SchemaState = 'hidden' | 'loading' | 'ready' | 'error';
+type DatabaseKey = 'billing' | 'patients' | 'mbsCodes' | 'currentInpatients' | 'structuralWorkup';
+
+type DatabaseTestResult = {
+  status: TestState;
+  title?: string;
+  error?: string;
+};
+
+type SampleStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+type SampleRecord = {
+  id: string;
+  title: string;
+};
+
+type SampleResult = {
+  status: SampleStatus;
+  records: SampleRecord[];
+  error?: string;
+};
+
+const createEmptyDatabaseTests = (): Record<DatabaseKey, DatabaseTestResult> => ({
+  billing: { status: 'idle' },
+  patients: { status: 'idle' },
+  mbsCodes: { status: 'idle' },
+  currentInpatients: { status: 'idle' },
+  structuralWorkup: { status: 'idle' }
+});
+
+const createEmptySampleResults = (): Record<DatabaseKey, SampleResult> => ({
+  billing: { status: 'idle', records: [] },
+  patients: { status: 'idle', records: [] },
+  mbsCodes: { status: 'idle', records: [] },
+  currentInpatients: { status: 'idle', records: [] },
+  structuralWorkup: { status: 'idle', records: [] }
+});
 
 export const NotionSettingsSection: React.FC = () => {
   const defaults = useMemo(() => DEFAULT_NOTION_CONFIG, []);
+  const notionStructuralService = useMemo(() => NotionStructuralWorkupService.getInstance(), []);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<TestState>('idle');
@@ -15,6 +53,9 @@ export const NotionSettingsSection: React.FC = () => {
   const [schemaState, setSchemaState] = useState<SchemaState>('hidden');
   const [schemaMessage, setSchemaMessage] = useState<string>('');
   const [billingSchema, setBillingSchema] = useState<null | Awaited<ReturnType<typeof notionBillingService.getDatabaseSchemaSummary>>>(null);
+  const [databaseTests, setDatabaseTests] = useState<Record<DatabaseKey, DatabaseTestResult>>(createEmptyDatabaseTests);
+  const [sampleResults, setSampleResults] = useState<Record<DatabaseKey, SampleResult>>(createEmptySampleResults);
+  const [samplesVisible, setSamplesVisible] = useState(false);
 
   const [apiKey, setApiKey] = useState('');
   const [proxyUrl, setProxyUrl] = useState(defaults.proxyUrl || 'https://api.notion.com/v1');
@@ -35,6 +76,68 @@ export const NotionSettingsSection: React.FC = () => {
       structuralWorkup: structuralWorkupDbId.trim()
     }
   });
+
+  const databaseTargets = useMemo(() => ([
+    { key: 'billing' as const, label: 'Billing', id: billingDbId },
+    { key: 'patients' as const, label: 'Patient', id: patientsDbId },
+    { key: 'mbsCodes' as const, label: 'MBS Codes', id: mbsCodesDbId },
+    { key: 'currentInpatients' as const, label: 'Current Inpatients', id: currentInpatientsDbId },
+    { key: 'structuralWorkup' as const, label: 'Structural Workup', id: structuralWorkupDbId }
+  ]), [billingDbId, patientsDbId, mbsCodesDbId, currentInpatientsDbId, structuralWorkupDbId]);
+
+  const resetVerificationState = () => {
+    setTesting('idle');
+    setTestMessage('');
+    setDatabaseTests(createEmptyDatabaseTests());
+    setSampleResults(createEmptySampleResults());
+    setSamplesVisible(false);
+  };
+
+  const handleTextChange = (setter: React.Dispatch<React.SetStateAction<string>>) =>
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      resetVerificationState();
+      setter(event.target.value);
+    };
+
+  const renderDatabaseStatusIcon = (key: DatabaseKey) => {
+    const result = databaseTests[key];
+    if (!result || result.status === 'idle') return null;
+    if (result.status === 'running') {
+      return <RefreshCw className="w-4 h-4 text-ink-tertiary motion-safe:animate-spin" title="Testing database" />;
+    }
+    if (result.status === 'success') {
+      return (
+        <CheckCircle
+          className="w-4 h-4 text-green-600"
+          title={result.title ? `Verified: ${result.title}` : 'Verified'}
+        />
+      );
+    }
+    return (
+      <AlertCircle
+        className="w-4 h-4 text-red-600"
+        title={result.error || 'Database test failed'}
+      />
+    );
+  };
+
+  const renderSampleStatusIcon = (key: DatabaseKey) => {
+    const result = sampleResults[key];
+    if (!result || result.status === 'idle') return null;
+    if (result.status === 'loading') {
+      return <RefreshCw className="w-4 h-4 text-ink-tertiary motion-safe:animate-spin" title="Loading samples" />;
+    }
+    if (result.status === 'ready') {
+      const title = result.records.length ? `Loaded ${result.records.length} record(s)` : 'Connected, no records found';
+      return <CheckCircle className="w-4 h-4 text-green-600" title={title} />;
+    }
+    return (
+      <AlertCircle
+        className="w-4 h-4 text-red-600"
+        title={result.error || 'Sample load failed'}
+      />
+    );
+  };
 
   useEffect(() => {
     const run = async () => {
@@ -73,19 +176,129 @@ export const NotionSettingsSection: React.FC = () => {
     setTesting('running');
     setTestMessage('');
     setSchemaState('hidden');
+    setDatabaseTests(() => {
+      const next = createEmptyDatabaseTests();
+      databaseTargets.forEach(({ key }) => {
+        next[key] = { status: 'running' };
+      });
+      return next;
+    });
     try {
       // Ensure the service reads the latest values from storage.
       await saveNotionConfig(buildDraftConfig());
-      await notionBillingService.reloadConfig();
-      const [me, db] = await Promise.all([
-        notionBillingService.testConnection(),
-        notionBillingService.getBillingDatabaseInfo()
+      await Promise.all([
+        notionBillingService.reloadConfig(),
+        notionStructuralService.reloadConfig()
       ]);
-      setTesting('success');
-      setTestMessage(`Connected${me.name ? ` as ${me.name}` : ''}. Billing DB: ${db.title}`);
+
+      const me = await notionBillingService.testConnection();
+      const results = await Promise.all(
+        databaseTargets.map(async ({ key, label, id }) => {
+          const trimmedId = id.trim();
+          if (!trimmedId) {
+            return { key, label, status: 'error' as const, error: 'Missing database ID.' };
+          }
+          try {
+            const service = key === 'structuralWorkup' ? notionStructuralService : notionBillingService;
+            const info = await service.getDatabaseInfo(trimmedId);
+            return { key, label, status: 'success' as const, title: info.title };
+          } catch (error) {
+            return {
+              key,
+              label,
+              status: 'error' as const,
+              error: error instanceof Error ? error.message : String(error)
+            };
+          }
+        })
+      );
+
+      const nextTests = createEmptyDatabaseTests();
+      const errors: string[] = [];
+      results.forEach((result) => {
+        if (result.status === 'success') {
+          nextTests[result.key] = { status: 'success', title: result.title };
+        } else {
+          nextTests[result.key] = { status: 'error', error: result.error };
+          errors.push(`${result.label}: ${result.error}`);
+        }
+      });
+
+      setDatabaseTests(nextTests);
+      if (errors.length === 0) {
+        setTesting('success');
+        setTestMessage(`Connected${me.name ? ` as ${me.name}` : ''}. Verified ${results.length}/${results.length} databases.`);
+      } else {
+        const verifiedCount = results.length - errors.length;
+        const errorSummary = errors.length > 2
+          ? `${errors.slice(0, 2).join(' | ')} | ${errors.length - 2} more`
+          : errors.join(' | ');
+        setTesting('error');
+        setTestMessage(`Connected${me.name ? ` as ${me.name}` : ''}. Verified ${verifiedCount}/${results.length} databases. ${errorSummary}`);
+      }
     } catch (error) {
       setTesting('error');
       setTestMessage(error instanceof Error ? error.message : String(error));
+      setDatabaseTests(createEmptyDatabaseTests());
+    }
+  };
+
+  const handleLoadSampleRecords = async () => {
+    const sampleLimit = 5;
+    setSamplesVisible(true);
+    setSampleResults(() => {
+      const next = createEmptySampleResults();
+      databaseTargets.forEach(({ key }) => {
+        next[key] = { status: 'loading', records: [] };
+      });
+      return next;
+    });
+    try {
+      await saveNotionConfig(buildDraftConfig());
+      await Promise.all([
+        notionBillingService.reloadConfig(),
+        notionStructuralService.reloadConfig()
+      ]);
+
+      const results = await Promise.all(
+        databaseTargets.map(async ({ key, label, id }) => {
+          const trimmedId = id.trim();
+          if (!trimmedId) {
+            return { key, label, status: 'error' as const, error: 'Missing database ID.', records: [] };
+          }
+          try {
+            const records = await notionBillingService.getSampleRecords(trimmedId, sampleLimit);
+            return { key, label, status: 'ready' as const, records };
+          } catch (error) {
+            return {
+              key,
+              label,
+              status: 'error' as const,
+              error: error instanceof Error ? error.message : String(error),
+              records: []
+            };
+          }
+        })
+      );
+
+      const nextResults = createEmptySampleResults();
+      results.forEach((result) => {
+        if (result.status === 'ready') {
+          nextResults[result.key] = { status: 'ready', records: result.records };
+        } else {
+          nextResults[result.key] = { status: 'error', records: [], error: result.error };
+        }
+      });
+      setSampleResults(nextResults);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSampleResults(() => {
+        const next = createEmptySampleResults();
+        databaseTargets.forEach(({ key }) => {
+          next[key] = { status: 'error', records: [], error: message };
+        });
+        return next;
+      });
     }
   };
 
@@ -104,6 +317,8 @@ export const NotionSettingsSection: React.FC = () => {
       setSchemaMessage(error instanceof Error ? error.message : String(error));
     }
   };
+
+  const samplesLoading = Object.values(sampleResults).some((result) => result.status === 'loading');
 
   if (loading) {
     return (
@@ -165,7 +380,7 @@ export const NotionSettingsSection: React.FC = () => {
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary"
             placeholder="secret_..."
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={handleTextChange(setApiKey)}
           />
           <div className="text-xs text-ink-tertiary">
             Create a Notion Integration, copy the internal integration token, and share your database with that integration.
@@ -181,7 +396,7 @@ export const NotionSettingsSection: React.FC = () => {
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary"
             placeholder="https://api.notion.com/v1"
             value={proxyUrl}
-            onChange={(e) => setProxyUrl(e.target.value)}
+            onChange={handleTextChange(setProxyUrl)}
           />
           <div className="text-xs text-ink-tertiary">
             Default is direct Notion API. Set to a proxy only if you run one locally.
@@ -191,13 +406,14 @@ export const NotionSettingsSection: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
             <Database className="w-4 h-4" />
-            Billing Database ID
+            <span>Billing Database ID</span>
+            {renderDatabaseStatusIcon('billing')}
           </div>
           <input
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary font-mono"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             value={billingDbId}
-            onChange={(e) => setBillingDbId(e.target.value)}
+            onChange={handleTextChange(setBillingDbId)}
           />
           <div className="text-xs text-ink-tertiary">
             Fields: Patient, MBS Code, Date of service, Referring, Note, Billing Entered?
@@ -207,13 +423,14 @@ export const NotionSettingsSection: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
             <Database className="w-4 h-4" />
-            Patient Database ID
+            <span>Patient Database ID</span>
+            {renderDatabaseStatusIcon('patients')}
           </div>
           <input
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary font-mono"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             value={patientsDbId}
-            onChange={(e) => setPatientsDbId(e.target.value)}
+            onChange={handleTextChange(setPatientsDbId)}
           />
           <div className="text-xs text-ink-tertiary">
             Fields: Name, Cabrini UR, Summary
@@ -223,13 +440,14 @@ export const NotionSettingsSection: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
             <Database className="w-4 h-4" />
-            MBS Codes Database ID
+            <span>MBS Codes Database ID</span>
+            {renderDatabaseStatusIcon('mbsCodes')}
           </div>
           <input
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary font-mono"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             value={mbsCodesDbId}
-            onChange={(e) => setMbsCodesDbId(e.target.value)}
+            onChange={handleTextChange(setMbsCodesDbId)}
           />
           <div className="text-xs text-ink-tertiary">
             Fields: Code, Description, MBS Fee, Common (ranking)
@@ -239,13 +457,14 @@ export const NotionSettingsSection: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
             <Database className="w-4 h-4" />
-            Current Inpatients Database ID
+            <span>Current Inpatients Database ID</span>
+            {renderDatabaseStatusIcon('currentInpatients')}
           </div>
           <input
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary font-mono"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             value={currentInpatientsDbId}
-            onChange={(e) => setCurrentInpatientsDbId(e.target.value)}
+            onChange={handleTextChange(setCurrentInpatientsDbId)}
           />
           <div className="text-xs text-ink-tertiary">
             Fields: Patient information for current inpatients
@@ -255,13 +474,14 @@ export const NotionSettingsSection: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
             <Database className="w-4 h-4" />
-            Structural Workup Database ID
+            <span>Structural Workup Database ID</span>
+            {renderDatabaseStatusIcon('structuralWorkup')}
           </div>
           <input
             className="w-full px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary font-mono"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             value={structuralWorkupDbId}
-            onChange={(e) => setStructuralWorkupDbId(e.target.value)}
+            onChange={handleTextChange(setStructuralWorkupDbId)}
           />
           <div className="text-xs text-ink-tertiary">
             Fields: Patient, workup type, status, referring doctor, notes
@@ -346,6 +566,61 @@ export const NotionSettingsSection: React.FC = () => {
           {schemaMessage && (
             <div className="mt-2 text-[11px] text-ink-tertiary">{schemaMessage}</div>
           )}
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleLoadSampleRecords}
+          disabled={saving || testing === 'running' || samplesLoading}
+          className="flex items-center gap-2 px-3 py-2 bg-white border border-line-primary rounded-md text-sm text-ink-primary hover:bg-surface-tertiary disabled:opacity-50"
+          title="Fetch sample records from each Notion database"
+        >
+          {samplesLoading ? <RefreshCw className="w-4 h-4 motion-safe:animate-spin" /> : <Database className="w-4 h-4" />}
+          Load Sample Records
+        </button>
+        <span className="text-xs text-ink-tertiary">
+          Fetches up to 5 records from each database.
+        </span>
+      </div>
+
+      {samplesVisible && (
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {databaseTargets.map(({ key, label }) => {
+            const sample = sampleResults[key];
+            return (
+              <div key={key} className="p-3 rounded-lg border border-line-primary bg-white">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-xs text-ink-secondary">{label} samples</div>
+                  {renderSampleStatusIcon(key)}
+                </div>
+                {sample.status === 'loading' && (
+                  <div className="text-xs text-ink-tertiary">Loading samples...</div>
+                )}
+                {sample.status === 'error' && (
+                  <div className="text-xs text-red-700">{sample.error || 'Failed to load samples.'}</div>
+                )}
+                {sample.status === 'ready' && (
+                  sample.records.length > 0 ? (
+                    <select
+                      className="w-full px-3 py-2 bg-surface-secondary border border-line-primary rounded-md text-xs text-ink-primary appearance-none"
+                      defaultValue=""
+                    >
+                      <option value="">Sample records ({sample.records.length})</option>
+                      {sample.records.map((record) => (
+                        <option key={record.id} value={record.id}>
+                          {record.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-xs text-ink-tertiary">No records found.</div>
+                  )
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

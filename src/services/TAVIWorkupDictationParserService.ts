@@ -10,8 +10,8 @@
  * - Clinical symptoms → structuredSections.clinical only
  */
 
-import { LMStudioService } from './LMStudioService';
-import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
+import { LMStudioService, MODEL_CONFIG } from './LMStudioService';
+import type { LMStudioRequest, TAVIWorkupCTMeasurements } from '@/types/medical.types';
 
 export type DictationSection = 'ct' | 'echo' | 'clinical' | 'labs' | 'background' | 'medications' | 'freeform';
 
@@ -36,6 +36,18 @@ export interface DictationParseResult {
     suggestion?: string;
   }>;
 }
+
+type QuickModelFieldEntry = {
+  field: string;
+  value: number;
+  confidence?: number;
+};
+
+type QuickModelParseResponse = {
+  fields: QuickModelFieldEntry[];
+  overallConfidence?: number;
+  suggestedCorrections?: DictationParseResult['suggestedCorrections'];
+};
 
 /**
  * Section keyword mapping for auto-detection
@@ -132,36 +144,36 @@ const SECTION_MAP = {
  */
 const CT_MEASUREMENT_PATTERNS = {
   // Annulus measurements
-  annulusAreaMm2: /annulus\s+area[:\s]*(\d+(?:\.\d+)?)\s*(?:mm²|mm2|square\s*mm)/i,
-  annulusPerimeterMm: /annulus\s+perimeter[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  annulusMinDiameterMm: /(?:annulus\s+)?min(?:imum)?\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  annulusMaxDiameterMm: /(?:annulus\s+)?max(?:imum)?\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  annulusAreaMm2: /annulus\s+area[:\s]*(\d+(?:\.\d+)?)\s*(?:mm²|mm2|square\s*mm)?/i,
+  annulusPerimeterMm: /annulus\s+perimeter[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  annulusMinDiameterMm: /(?:annulus\s+)?min(?:imum)?\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  annulusMaxDiameterMm: /(?:annulus\s+)?max(?:imum)?\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // Perimeter-derived and area-derived sizing
-  perimeterDerived: /perimeter[- ]?derived[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  areaDerived: /area[- ]?derived[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  perimeterDerived: /perimeter[- ]?derived[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  areaDerived: /area[- ]?derived[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // Coronary heights
-  coronaryLeftMainMm: /(?:left\s+main|lm)\s+(?:coronary\s+)?height[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  coronaryRightMm: /(?:right\s+coronary|rca)\s+height[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  coronaryLeftMainMm: /(?:left\s+main|lm)\s+(?:coronary\s+)?height[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  coronaryRightMm: /(?:right\s+coronary|rca)\s+height[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // LVOT measurements
-  lvotAreaMm2: /lvot\s+area[:\s]*(\d+(?:\.\d+)?)\s*(?:mm²|mm2)/i,
-  lvotPerimeterMm: /lvot\s+perimeter[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  lvotAreaMm2: /lvot\s+area[:\s]*(\d+(?:\.\d+)?)\s*(?:mm²|mm2)?/i,
+  lvotPerimeterMm: /lvot\s+perimeter[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // STJ measurements
-  stjDiameterMm: /stj\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  stjHeightMm: /stj\s+height[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  stjDiameterMm: /stj\s+diameter[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  stjHeightMm: /stj\s+height[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // Access vessels (right side)
-  rightCIAmm: /(?:right|r)\s+(?:common\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  rightEIAmm: /(?:right|r)\s+(?:external\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  rightCFAmm: /(?:right|r)\s+(?:common\s+)?femoral[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  rightCIAmm: /(?:right|r)\s+(?:common\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  rightEIAmm: /(?:right|r)\s+(?:external\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  rightCFAmm: /(?:right|r)\s+(?:common\s+)?femoral[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // Access vessels (left side)
-  leftCIAmm: /(?:left|l)\s+(?:common\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  leftEIAmm: /(?:left|l)\s+(?:external\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
-  leftCFAmm: /(?:left|l)\s+(?:common\s+)?femoral[:\s]*(\d+(?:\.\d+)?)\s*mm/i,
+  leftCIAmm: /(?:left|l)\s+(?:common\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  leftEIAmm: /(?:left|l)\s+(?:external\s+)?iliac[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
+  leftCFAmm: /(?:left|l)\s+(?:common\s+)?femoral[:\s]*(\d+(?:\.\d+)?)\s*(?:mm)?/i,
 
   // Calcium scores
   calciumScore: /(?:av|aortic\s+valve)\s+calcium[:\s]*(\d+(?:\.\d+)?)\s*(?:au|agatston)?/i,
@@ -170,6 +182,45 @@ const CT_MEASUREMENT_PATTERNS = {
   // Valve sizing (if mentioned in dictation)
   recommendedValve: /(sapien|evolut|navitor|acurate|jena)[:\s]*(\d{2,3})\s*mm/i,
   oversizing: /oversizing[:\s]*(\d+(?:\.\d+)?)\s*%/i
+};
+
+const QUICK_MODEL_ALLOWED_FIELDS = new Set<string>([
+  'annulusAreaMm2',
+  'annulusPerimeterMm',
+  'annulusMinDiameterMm',
+  'annulusMaxDiameterMm',
+  'annulusMeanDiameterMm',
+  'coronaryHeights.leftMainMm',
+  'coronaryHeights.rightCoronaryMm',
+  'lvotAreaMm2',
+  'lvotPerimeterMm',
+  'stjDiameterMm',
+  'stjHeightMm',
+  'accessVessels.rightCIAmm',
+  'accessVessels.leftCIAmm',
+  'accessVessels.rightEIAmm',
+  'accessVessels.leftEIAmm',
+  'accessVessels.rightCFAmm',
+  'accessVessels.leftCFAmm',
+  'calciumScore',
+  'lvotCalciumScore'
+]);
+
+const extractJson = (raw: string): string => {
+  const match = raw.match(/\{[\s\S]*\}/);
+  return match ? match[0] : raw;
+};
+
+const parseJsonSafe = <T,>(raw: string, fallback: T): T => {
+  try {
+    return JSON.parse(extractJson(raw)) as T;
+  } catch (error) {
+    console.warn('[TAVIWorkupDictationParser] Failed to parse quick model JSON', {
+      error: error instanceof Error ? error.message : error,
+      rawPreview: raw?.slice(0, 300)
+    });
+    return fallback;
+  }
 };
 
 export class TAVIWorkupDictationParserService {
@@ -203,7 +254,7 @@ export class TAVIWorkupDictationParserService {
     const detectedSection = targetSection || this.detectSection(transcription);
 
     // Step 2: Extract numeric measurements (CT only)
-    const extractedFields = this.extractMeasurements(transcription);
+    const extractedFields = this.extractMeasurements(transcription, detectedSection);
 
     // Step 3: Generate narrative text content for each section
     const textContent = this.generateTextContent(transcription, detectedSection);
@@ -262,18 +313,29 @@ export class TAVIWorkupDictationParserService {
    * Extract numeric measurements using regex patterns
    * Only extracts CT measurements (not echo/labs)
    */
-  private extractMeasurements(text: string): Partial<TAVIWorkupCTMeasurements> {
+  private extractMeasurements(text: string, detectedSection?: DictationSection): Partial<TAVIWorkupCTMeasurements> {
     const measurements: Partial<TAVIWorkupCTMeasurements> = {};
+    const allowLooseAnnulus = detectedSection === 'ct';
 
     // Extract annulus measurements
     const annulusAreaMatch = text.match(CT_MEASUREMENT_PATTERNS.annulusAreaMm2);
     if (annulusAreaMatch) {
       measurements.annulusAreaMm2 = parseFloat(annulusAreaMatch[1]);
+    } else if (allowLooseAnnulus) {
+      const looseArea = this.findLooseAnnulusArea(text);
+      if (looseArea !== null) {
+        measurements.annulusAreaMm2 = looseArea;
+      }
     }
 
     const annulusPerimeterMatch = text.match(CT_MEASUREMENT_PATTERNS.annulusPerimeterMm);
     if (annulusPerimeterMatch) {
       measurements.annulusPerimeterMm = parseFloat(annulusPerimeterMatch[1]);
+    } else if (allowLooseAnnulus) {
+      const loosePerimeter = this.findLooseAnnulusPerimeter(text);
+      if (loosePerimeter !== null) {
+        measurements.annulusPerimeterMm = loosePerimeter;
+      }
     }
 
     const minDiameterMatch = text.match(CT_MEASUREMENT_PATTERNS.annulusMinDiameterMm);
@@ -358,6 +420,50 @@ export class TAVIWorkupDictationParserService {
     return measurements;
   }
 
+  private findLooseAnnulusArea(text: string): number | null {
+    const regex = /\barea\b[:\s]*(\d+(?:\.\d+)?)/gi;
+    const lowerText = text.toLowerCase();
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      const index = match.index ?? 0;
+      const prefix = lowerText.slice(Math.max(0, index - 24), index);
+
+      if (/\b(lvot|aortic\s+valve|av)\s*$/.test(prefix)) {
+        continue;
+      }
+
+      const value = parseFloat(match[1]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private findLooseAnnulusPerimeter(text: string): number | null {
+    const regex = /\bperimeter\b(?!\s*[- ]?derived)\s*[:\s]*(\d+(?:\.\d+)?)/gi;
+    const lowerText = text.toLowerCase();
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      const index = match.index ?? 0;
+      const prefix = lowerText.slice(Math.max(0, index - 16), index);
+
+      if (/\blvot\s*$/.test(prefix)) {
+        continue;
+      }
+
+      const value = parseFloat(match[1]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Generate narrative text content for appropriate section(s)
    * NOTE: CT dictation is special - narrative goes to ctMeasurements.narrative, not a text section
@@ -391,94 +497,242 @@ export class TAVIWorkupDictationParserService {
     regexResults: Partial<TAVIWorkupCTMeasurements>,
     textContent: Array<{ section: string; content: string }>
   ): Promise<DictationParseResult> {
-    const systemPrompt = `You are a medical AI assistant parsing TAVI workup dictation.
+    const baseConfidence = this.estimateConfidence(regexResults);
+    const numericCount = this.countNumericTokens(transcription);
+    const extractedCount = this.countMeasurements(regexResults);
+    const shouldEnhance = detectedSection === 'ct' && numericCount > extractedCount;
 
-CRITICAL RULES:
-1. Each measurement field exists in EXACTLY ONE location:
-   - CT measurements (annulus, coronaries, LVOT, access) → ctMeasurements
-   - Echo data (EF, gradients, AV area) → echocardiography section (NOT ctMeasurements)
-   - Labs (Cr, Hb, BNP) → laboratory section
-2. DO NOT duplicate fields across sections
-3. Validate regex extractions and suggest corrections ONLY if confidence < 0.8
-
-INPUT:
-- Transcription: """${transcription}"""
-- Detected section: ${detectedSection}
-- Regex-extracted CT measurements: ${JSON.stringify(regexResults, null, 2)}
-
-TASK:
-1. Validate regex extractions (are values plausible for TAVI workup?)
-2. Identify any MISSING critical CT fields that regex missed
-3. Generate a cleaned narrative summary for the ${detectedSection} section
-4. Return confidence scores for each extracted field
-
-OUTPUT FORMAT (JSON):
-{
-  "validatedFields": { /* corrected/enhanced CT measurements */ },
-  "missedFields": { /* fields regex missed */ },
-  "narrativeSummary": "...",
-  "suggestedCorrections": [
-    { "field": "annulusAreaMm2", "extractedValue": 650, "confidence": 0.9, "suggestion": null }
-  ],
-  "overallConfidence": 0.85
-}`;
-
-    // TODO: Implement LMStudioService.chat method for quick model enhancement
-    // For now, return regex results (quick model enhancement will be added in future phase)
-    console.log('[TAVIWorkupDictationParser] Quick model enhancement not yet implemented, using regex-only parse');
-
-    return {
-      detectedSection,
-      extractedFields: regexResults,
-      textContent,
-      confidence: 0.7,
-      suggestedCorrections: []
-    };
-
-    /* FUTURE: Once LMStudioService.chat is implemented, uncomment this:
-    try {
-      const response = await this.lmService.chat(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Parse the dictation.' }
-        ],
-        {
-          model: 'qwen/qwen3-4b-2507',
-          maxTokens: 800,
-          temperature: 0.2
-        }
-      );
-
-      const result = JSON.parse(response.choices[0].message.content);
-
-      // Merge validated fields with regex results
-      const mergedFields: Partial<TAVIWorkupCTMeasurements> = {
-        ...regexResults,
-        ...result.validatedFields,
-        ...result.missedFields
-      };
-
-      return {
-        detectedSection,
-        extractedFields: mergedFields,
-        textContent: result.narrativeSummary && SECTION_MAP[detectedSection as keyof typeof SECTION_MAP]
-          ? [{ section: SECTION_MAP[detectedSection as keyof typeof SECTION_MAP], content: result.narrativeSummary }]
-          : textContent,
-        confidence: result.overallConfidence || 0.7,
-        suggestedCorrections: result.suggestedCorrections || []
-      };
-    } catch (error) {
-      console.error('[TAVIWorkupDictationParser] Quick model enhancement failed:', error);
-
-      // Fallback: return regex results with medium confidence
+    if (!shouldEnhance) {
       return {
         detectedSection,
         extractedFields: regexResults,
         textContent,
-        confidence: 0.7,
+        confidence: baseConfidence,
         suggestedCorrections: []
       };
     }
-    */
+
+    const systemPrompt = `You are a medical AI assistant extracting CT measurements from TAVI workup dictation.
+
+Return ONLY JSON with this shape:
+{
+  "fields": [
+    { "field": "annulusAreaMm2", "value": 650, "confidence": 0.9 }
+  ],
+  "overallConfidence": 0.8
+}
+
+Rules:
+- Only use fields from the allowed list.
+- Only include values explicitly present in the dictation.
+- If ambiguous, omit the field.
+- Units: areas in mm2, lengths in mm, calcium scores in AU.
+- Do not invent values or infer missing measurements.
+- If "area" or "perimeter" are unqualified in CT dictation, treat them as annulus area/perimeter.
+
+Allowed fields:
+${Array.from(QUICK_MODEL_ALLOWED_FIELDS).join(', ')}`;
+
+    const userPrompt = [
+      'Dictation:',
+      transcription,
+      '',
+      'Regex extracted CT fields (may be incomplete):',
+      JSON.stringify(regexResults, null, 2)
+    ].join('\n');
+
+    const request: LMStudioRequest = {
+      model: MODEL_CONFIG.QUICK_MODEL,
+      temperature: 0.1,
+      max_tokens: 600,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'ct_measurement_extraction',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              fields: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    field: { type: 'string' },
+                    value: { type: 'number' },
+                    confidence: { type: 'number' }
+                  },
+                  required: ['field', 'value']
+                }
+              },
+              overallConfidence: { type: 'number' }
+            },
+            required: ['fields']
+          }
+        }
+      }
+    };
+
+    try {
+      const raw = await this.lmService.makeRequest(request, undefined, 'tavi-workup');
+      const parsed = parseJsonSafe<QuickModelParseResponse>(raw, { fields: [] });
+      const quickMeasurements = this.buildMeasurementsFromQuickFields(parsed.fields || []);
+      const mergedFields = this.mergeMeasurements(regexResults, quickMeasurements);
+      const mergedConfidence = parsed.overallConfidence ?? this.estimateConfidence(mergedFields);
+
+      return {
+        detectedSection,
+        extractedFields: mergedFields,
+        textContent,
+        confidence: mergedConfidence,
+        suggestedCorrections: parsed.suggestedCorrections || []
+      };
+    } catch (error) {
+      console.error('[TAVIWorkupDictationParser] Quick model enhancement failed:', error);
+      return {
+        detectedSection,
+        extractedFields: regexResults,
+        textContent,
+        confidence: baseConfidence,
+        suggestedCorrections: []
+      };
+    }
+  }
+
+  private countNumericTokens(text: string): number {
+    const matches = text.match(/\d+(?:\.\d+)?/g);
+    return matches ? matches.length : 0;
+  }
+
+  private countMeasurements(measurements: Partial<TAVIWorkupCTMeasurements>): number {
+    let count = 0;
+    const push = (value?: number) => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        count += 1;
+      }
+    };
+
+    push(measurements.annulusAreaMm2);
+    push(measurements.annulusPerimeterMm);
+    push(measurements.annulusMinDiameterMm);
+    push(measurements.annulusMaxDiameterMm);
+    push(measurements.annulusMeanDiameterMm);
+    push(measurements.lvotAreaMm2);
+    push(measurements.lvotPerimeterMm);
+    push(measurements.stjDiameterMm);
+    push(measurements.stjHeightMm);
+    push(measurements.calciumScore);
+    push(measurements.lvotCalciumScore);
+
+    if (measurements.coronaryHeights) {
+      push(measurements.coronaryHeights.leftMainMm);
+      push(measurements.coronaryHeights.rightCoronaryMm);
+    }
+
+    if (measurements.accessVessels) {
+      push(measurements.accessVessels.rightCIAmm);
+      push(measurements.accessVessels.leftCIAmm);
+      push(measurements.accessVessels.rightEIAmm);
+      push(measurements.accessVessels.leftEIAmm);
+      push(measurements.accessVessels.rightCFAmm);
+      push(measurements.accessVessels.leftCFAmm);
+    }
+
+    if (measurements.sinusOfValsalva) {
+      push(measurements.sinusOfValsalva.leftMm);
+      push(measurements.sinusOfValsalva.rightMm);
+      push(measurements.sinusOfValsalva.nonCoronaryMm);
+    }
+
+    return count;
+  }
+
+  private estimateConfidence(measurements: Partial<TAVIWorkupCTMeasurements>): number {
+    const count = this.countMeasurements(measurements);
+    if (count === 0) return 0.35;
+    if (count === 1) return 0.55;
+    if (count <= 3) return 0.7;
+    return 0.8;
+  }
+
+  private buildMeasurementsFromQuickFields(
+    fields: QuickModelFieldEntry[]
+  ): Partial<TAVIWorkupCTMeasurements> {
+    const measurements: Partial<TAVIWorkupCTMeasurements> = {};
+
+    for (const entry of fields) {
+      if (!entry || !Number.isFinite(entry.value)) {
+        continue;
+      }
+
+      const fieldKey = entry.field?.trim();
+      if (!fieldKey || !QUICK_MODEL_ALLOWED_FIELDS.has(fieldKey)) {
+        continue;
+      }
+
+      this.setMeasurementValue(measurements, fieldKey, entry.value);
+    }
+
+    return measurements;
+  }
+
+  private setMeasurementValue(
+    measurements: Partial<TAVIWorkupCTMeasurements>,
+    fieldKey: string,
+    value: number
+  ): void {
+    const path = fieldKey.split('.');
+    let cursor: any = measurements;
+
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const key = path[i];
+      if (!cursor[key] || typeof cursor[key] !== 'object') {
+        cursor[key] = {};
+      }
+      cursor = cursor[key];
+    }
+
+    cursor[path[path.length - 1]] = value;
+  }
+
+  private mergeMeasurements(
+    base: Partial<TAVIWorkupCTMeasurements>,
+    override: Partial<TAVIWorkupCTMeasurements>
+  ): Partial<TAVIWorkupCTMeasurements> {
+    const merged: Partial<TAVIWorkupCTMeasurements> = { ...base, ...override };
+
+    if (base.coronaryHeights || override.coronaryHeights) {
+      merged.coronaryHeights = {
+        ...base.coronaryHeights,
+        ...override.coronaryHeights
+      };
+    }
+
+    if (base.accessVessels || override.accessVessels) {
+      merged.accessVessels = {
+        ...base.accessVessels,
+        ...override.accessVessels
+      };
+    }
+
+    if (base.sinusOfValsalva || override.sinusOfValsalva) {
+      merged.sinusOfValsalva = {
+        ...base.sinusOfValsalva,
+        ...override.sinusOfValsalva
+      };
+    }
+
+    if (base.aorticDimensions || override.aorticDimensions) {
+      merged.aorticDimensions = {
+        ...base.aorticDimensions,
+        ...override.aorticDimensions
+      };
+    }
+
+    return merged;
   }
 }

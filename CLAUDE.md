@@ -2,7 +2,7 @@
 
 **Operator (Chrome side‑panel extension)** is a local‑first medical dictation + EMR helper.
 
-- 14+ specialty **agents** (TAVI, Angio/PCI, mTEER, PFO, RHC, Quick Letter, Consultation, Investigation Summary, Aus Review, Background, Medication, Bloods, Imaging, Patient Education, Batch Review)
+- 17 specialty **agents**: Procedures (TAVI, TAVI Workup, Angio/PCI, mTEER, PFO, RHC, Pre-Op Plan); Documentation (Quick Letter, Consultation, Investigation Summary); Review (Unified AI Medical Review, Background, Medication, Bloods, Imaging, Patient Education, Batch Review); Post-processing (Next Step Inference)
 - **ActionExecutor + command bar**: single registry drives command bar, favourites, and global `Shift+Letter` shortcuts; command bar now surfaces background errors and inline clarification forms before running actions.
 - **Ranked action search**: command bar search scores and ranks matches across label/alias/description/shortcut with lightweight fuzzy matching.
 - **TAVI Workup Presentation**: Landscape-first bento board layout for clinical meeting review with keyboard navigation, expandable tiles, and pinnable procedure plan
@@ -49,11 +49,12 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 
 ---
 
-## 2) Agents (Enhanced; DSPy‑optimised when available)
+## 2) Agents (17 total; DSPy‑optimised when available)
 
-**Core procedures**: TAVI; Angiogram/PCI; mTEER; PFO Closure; Right Heart Cath
-**Documentation & review**: Quick Letter; Consultation; Investigation Summary
-**Specialised**: Unified AI Medical Review (PRIMARY + SECONDARY prevention); Background; Medication; Bloods; Imaging; Patient Education; Batch Patient Review
+**Procedures**: TAVI, TAVI Workup, Angiogram/PCI, mTEER, PFO Closure, Right Heart Cath, Pre-Op Plan
+**Documentation**: Quick Letter, Consultation, Investigation Summary
+**Review & Education**: Unified AI Medical Review (PRIMARY + SECONDARY prevention), Background, Medication, Bloods, Imaging, Patient Education, Batch Patient Review
+**Post-processing**: Next Step Inference (clinical suggestions after letter generation)
 
 ### 2.1 Unified AI Medical Review (Intelligent PRIMARY + SECONDARY Prevention)
 
@@ -85,85 +86,23 @@ updateConcurrencySettings(maxConcurrent, maxQueueSize?)
 5. Generates 5 prioritized findings with classification tags
 6. For PRIMARY: includes MISSING TESTS and THERAPY TARGETS sections
 
-**Example Output:**
-```
-**PATIENT CLASSIFICATION:**
-- Category: PRIMARY
-- Rationale: No prior CABG, PCI, HFrEF, or severe valve disease. Presents with metabolic syndrome.
-- Review Focus: Insulin resistance phenotype, BP phenotyping (ABPM), subclinical atherosclerosis
-
-**CLASSIFICATION TAG:** [PRIMARY]
-**FINDING:** Insulin-resistant dyslipidaemia (TG/HDL high)
-**EVIDENCE:** TG 1.9 mmol/L, HDL-C 0.9 mmol/L (TG/HDL 2.11) on 2025-09-28
-**THRESHOLD/STATUS:** ≥1.5 (mmol/L) → crossed
-**MECHANISM:** Hepatic IR ↑ VLDL, low HDL, small-dense LDL → atherogenic milieu
-**RECOMMENDED ACTION:** Start statin if 5-yr risk ≥10% (LDL <2.0; Non-HDL <2.6); check ApoB, fasting insulin
-**PRIORITY:** high | **URGENCY:** Soon
-
-**MISSING / NEXT TESTS:**
-• Waist circumference (assess central obesity)
-• Fasting insulin (calculate HOMA-IR for insulin resistance quantification)
-• ABPM (assess nocturnal BP pattern)
-• ApoB (better marker than LDL-C)
-
-**THERAPY TARGETS:**
-• BP: <130/80 mmHg
-• LDL-C: <2.0 mmol/L
-• Non-HDL-C: <2.6 mmol/L
-• HbA1c: <7%
-```
+**Output format**: Classification header → Findings with evidence/threshold/mechanism/action/priority → Missing tests → Therapy targets
 
 ### 2.2 Interactive Validation Workflow (RHC, TAVI, AngioPCI, mTEER)
 
 **Intelligent validation workflow** prevents wasted reasoning model runs by validating extracted data before expensive report generation. **Now deployed across 4 procedural agents.**
 
-**Universal Workflow Pattern:**
-1. **Whisper Transcription** → ASR corrections for common errors (agent-specific patterns)
-2. **Regex Extraction** → Extract procedure-specific critical fields (valve sizing, stent details, clip deployment, haemodynamics)
-3. **Quick Model Validation** (qwen/qwen3-4b-2507, ~10-30s) → Validate extraction, detect gaps, suggest corrections with confidence scores
-4. **Auto-Apply High-Confidence** → Corrections ≥0.8 confidence applied automatically without user intervention
-5. **Interactive Checkpoint** → If critical fields missing or low-confidence corrections (<0.8):
-   - Pause workflow with `status: 'awaiting_validation'`
-   - Show validation modal with agent-specific field configurations:
-     - **Critical missing fields** (red) - REQUIRED for complete report/calculations
-     - **Low-confidence suggestions** (yellow) - User accepts/rejects proposed corrections
-     - **Optional fields** (blue) - Improves documentation quality but not essential
-   - User fills/approves fields → reprocess with `context.userProvidedFields`
-6. **Reasoning Model** → Generate report (MedGemma-27B, ~3-15min) ONLY after validation passes
+**Workflow**: Whisper → ASR corrections → Regex extraction → Quick model validation (qwen3-4b, ~10-30s) → Auto-apply high-confidence corrections (≥0.8) → Interactive checkpoint for missing/low-confidence fields → Reasoning model (MedGemma-27B, ~3-15min)
 
-**Agent-Specific Critical Fields:**
+**Validation modal** shows: Critical missing (red), Low-confidence suggestions (yellow), Optional fields (blue). User fills/approves → reprocesses with `context.userProvidedFields`.
 
-**RHC (Right Heart Cath):**
-- **For Fick Calculations**: Height, Weight, Hemoglobin, SaO2, SvO2 (ensures accurate CO/CI/PVR/SVR)
-- **Pressures**: RA, RV systolic/diastolic, PA systolic/diastolic/mean, PCWP
-- **Resources**: Fluoroscopy time, contrast volume (safety documentation)
+**Agent-specific critical fields** defined in `validationFieldConfig.ts`:
+- **RHC**: Fick inputs (height, weight, Hb, SaO2, SvO2), pressures (RA, RV, PA, PCWP)
+- **TAVI**: Annulus sizing, coronary heights, access assessment
+- **AngioPCI**: Stent details, TIMI flow, lesion characteristics
+- **mTEER**: MR grades, clip details, transmitral gradient
 
-**TAVI (Valve Sizing & Safety):**
-- **Valve Sizing**: Annulus diameter/perimeter/area from CT (CRITICAL for prosthesis selection)
-- **Coronary Heights**: Left/right coronary ostium heights (CRITICAL for coronary occlusion risk)
-- **Access Assessment**: Site, iliofemoral dimensions
-- **Aortic Valve**: Peak/mean gradient, AV area
-- **LV Assessment**: EF, LVIDD, LVIDS
-
-**Angiogram/PCI (Registry Reporting):**
-- **Intervention Details**: Stent type/diameter/length (REQUIRED for device tracking & registry)
-- **Lesion Characteristics**: Target vessel, location, stenosis %
-- **TIMI Flow**: Pre/post-intervention grades (REQUIRED for success assessment)
-- **Resources**: Contrast volume, fluoroscopy time (safety documentation)
-
-**mTEER (Procedural Success):**
-- **MR Grading**: Pre/post-procedure MR grade (KEY measure of procedural success)
-- **Clip Details**: Type (MitraClip/PASCAL), size, number deployed (REQUIRED for device tracking)
-- **Anatomical Location**: A2-P2, A1-P1, etc. (precise documentation)
-- **Transmitral Gradient**: Post-procedure gradient (CRITICAL for assessing mitral stenosis risk)
-
-**Benefits:**
-- **Saves time**: No wasted 3-15min reasoning model runs with incomplete data; quick model validation takes only 10-30s
-- **Improves accuracy**: User sees missing fields immediately before generation; model corrections reduce transcription errors (e.g., "three point five" → 3.5)
-- **Efficient resource usage**: Lightweight quick model validates before resource-intensive reasoning model runs
-- **Consistent UX**: All 4 agents use same generic `FieldValidationPrompt` component with agent-specific field configurations in `validationFieldConfig.ts`
-
-Each agent has dedicated SystemPrompts with `dataValidationPrompt`, validation patterns, critical field lists, confidence thresholds; Australian terminology.
+All agents use `FieldValidationPrompt` component; SystemPrompts include `dataValidationPrompt` with Australian terminology.
 
 ---
 
@@ -277,31 +216,25 @@ npm run optim:quick-letter
 ## 11) Project Structure (high‑signal)
 ```
 src/
-  agents/ (base/, specialized/, router/)
-  options/ (OptionsApp + components)
+  agents/ (base/, specialized/, router/) - 17 agents + SystemPrompts
+  background/ (service-worker.ts)
+  canvas/ (annotation feature)
+  config/ (12 files: workflowConfig, validationFieldConfig, unifiedActionsConfig, etc.)
+  content/ (content-script.ts - EMR integration)
+  contexts/ (TAVIWorkupContext, RoundsContext, AudioDeviceContext)
+  hooks/ (useRecorder, useModelStatus, useAIProcessing, useAppState, useNextStepEngine)
+  options/ (OptionsApp + settings components)
   orchestrators/ (BatchAIReview, CheckpointManager, MetricsCollector)
-  services/ (LMStudio, Transcription, WhisperServer, AgentFactory, LazyAgentLoader,
-             CrossAgentIntelligence, AudioProcessingQueue, DSPy, PerformanceMonitoring,
-             Metrics, ProcessingTimePredictor, AudioOptimization, ASRCorrectionsLog,
-             ScreenshotCombiner, Notification, Toast)
-  content/ (content-script.ts)
+  presentation/ (TAVI bento board: PresentationPage, BentoTile, PatientStrip, etc.)
+  services/ (~50 services: LMStudio, AgentFactory, AudioProcessingQueue, etc.)
   sidepanel/
-    OptimizedApp.tsx (main app)
-    components/
-      UnifiedPipelineProgress.tsx (single progress bar for all agents)
-      SessionDropdown.tsx (state-themed timeline)
-      results/
-        ResultsContainer.tsx (standardized layout wrapper)
-        ActionButtons.tsx (extensible actions)
-        TranscriptionSection.tsx (consistent transcription UI)
-        ReportDisplay.tsx, TAVIWorkupDisplay.tsx, RightHeartCathDisplay.tsx, etc.
-  hooks/ (useRecorder, useModelStatus, useAIProcessing, useAppState)
-  config/ (workflowConfig, appointmentPresets, recordingPrompts)
-  utils/
-    stateColors.ts (shared color definitions for consistency)
-    formatting.ts, animations.ts, etc.
-  types/ (medical.types.ts, optimization.ts, BatchProcessingTypes.ts)
-llm/ (DSPy server + prompts); eval/ (datasets + feedback); tests/e2e/*; whisper-server.py
+    OptimizedApp.tsx
+    components/ (results/, taviWorkup/, rounds/, forms/, etc.)
+  storage/ (clinicalStorage.ts)
+  types/ (medical.types.ts, taviWorkup.types.ts, optimization.ts, etc.)
+  utils/ (~47 files: stateColors.ts, formatting.ts, coronaryAnatomy.ts, etc.)
+  workers/ (audioProcessor.worker.ts)
+llm/; eval/; tests/e2e/*; whisper-server.py
 ```
 
 ---
@@ -397,190 +330,16 @@ npm run optim:quick-letter
 - **Idle State Cleanup**: Removed instruction text and background status from idle screen; lanyard centered vertically
 - **EMR Insertion Robustness**: Try/catch around content script calls for timeout handling; `insertionInFlightRef` prevents duplicate insertions
 
-**v3.38.0 (Nov 2025)**
-- **Rounds UI/UX Overhaul**: Comprehensive redesign of Rounds feature layout and interactions
-  - **Tab badges with counts**: `Patients (5)` | `Tasks (12)` for quick orientation
-  - **Handover button badge**: Shows active patient count `Handover (5)`
-  - **Patient selection indicator**: Shows selected patient name with icon in amber action bar
-  - **Sticky patient actions**: Amber bar stays visible when scrolling
-  - **GP letter loading spinner**: Uses `isLoading` prop for proper spinner animation
-  - **Toast notifications**: Success/info toasts for all actions (copy, discharge, undo, delete)
-  - **Delete confirmation modal**: ConfirmModal with danger variant prevents accidental deletions
-  - **Enhanced empty state**: Styled card with icon, description, and CTA button
-  - **Layout fixes**: Header flex improvements, button `flex-shrink-0` prevents squishing, reduced gap in action bar
-  - **Removed duplicates**: Eliminated duplicate Quick Add button from PatientsView
-  - **Color-coded action bars**: Indigo for global actions, amber for patient-specific actions
-
-**v3.32.0 (Nov 2025)**
-- **Quick Letter - Intelligent First Name Extraction**: Parses full patient names (strips titles) to extract first name only; prevents awkward title-heavy greetings ("I saw Bruce today" not "I saw Mr Bruce Taylor today"); system prompts enhanced with explicit first-name-only instructions
-- **RHC - Anti-Hallucination Post-Processing**: Comprehensive pipeline to detect and remove example text leaked from system prompts; pattern matching for placeholder brackets `[Age]`, `[gender]`, `[stated diagnosis]`; console warnings for suspicious content; preserves legitimate bracketed content like `[site not specified]`
-- **Enhanced Progress Tracking**: Time-based interpolation during prompt processing (50% → 68%); character-based tracking during streaming (70% → 98%); throttled updates every 500ms; proper cleanup of progress intervals
-- **Session Management Improvements**: Added `processingStartTime` for accurate ETA; patient context header now shows for both active and displayed sessions; audio duration tracking with fallback logic; auto-check fixes via `selectedSessionId` setting
-- **EMR Integration Timeout Protection**: 3-second timeout wrapper prevents hanging when content script doesn't respond; graceful error handling with workflow continuation
-
-**v3.29.1 (Nov 2025)** - Critical Bugfix Release
-- **Fixed validation checkpoint logic bug** affecting all 4 procedural agents (RHC, TAVI, AngioPCI, mTEER)
-  - **Issue**: Agents incorrectly triggered validation modal even when all critical fields were present
-  - **Root cause**: Checkpoint checked `missingCritical.length > 0` without filtering by `critical: true` property
-  - **Fix**: Now filters with `.some(field => field.critical === true)` before triggering checkpoint
-  - **Impact**: Agents correctly distinguish between "field present but flagged by model" vs "field truly missing and critical"
-- **Enhanced quick model validation prompt** (RHC)
-  - Added explicit "CRITICAL DECISION LOGIC" section with clear rules for when to mark fields as critical
-  - Guidance: Only add to `missingCritical` if BOTH (a) field not in regex extraction AND (b) field required for calculations
-  - Prevents model confusion about when to set `critical: true` vs `critical: false`
-- **Migrated RHC to centralized validation config**
-  - RHC now uses `getValidationConfig('rhc')` instead of local field definitions
-  - Ensures consistency with TAVI, AngioPCI, mTEER agents (v3.29.0 pattern)
-- **Improved console logging**: Shows accurate critical field counts ("X critical fields missing, Y low-confidence corrections")
-- **Files modified**: 4 agents (checkpoint logic), 1 system prompt (validation guidance), 1 display component (centralized config)
-
-**v3.29.0 (Nov 2025)**
-- **Universal Validation Workflow Extension**: Interactive validation now deployed across 4 procedural agents (RHC → TAVI, AngioPCI, mTEER)
-  - All agents follow identical pattern: Whisper → Regex → Quick Model → Auto-Correct → Checkpoint → Reasoning Model
-  - Agent-specific critical fields:
-    - **TAVI**: Valve sizing (annulus diameter/perimeter/area), coronary heights (safety), access assessment
-    - **AngioPCI**: Stent details (type/diameter/length for registry), TIMI flow (success assessment), lesion characteristics
-    - **mTEER**: Pre/post MR grades (procedural success), clip details (device tracking), transmitral gradient (stenosis risk)
-  - **Centralized validation configuration** (`validationFieldConfig.ts`): Single source of truth for field labels, placeholders, helper text across all agents
-  - **Generic FieldValidationPrompt component**: Reusable validation modal with agent-specific configs; eliminates code duplication
-  - **Type-safe validation system**: `ValidationResult`, `FieldCorrection`, `MissingField` types with agent-specific extracted data interfaces (`TAVIExtractedData`, `AngioPCIExtractedData`, `MTEERExtractedData`)
-  - **Auto-apply high-confidence corrections** (≥0.8 threshold) across all agents; consistent UX for low-confidence suggestions
-  - **Saves time & improves accuracy**: Prevents wasted 3-15min reasoning model runs; quick model validation (~10-30s) catches missing fields before generation
-- **Comprehensive SystemPrompts updates**: Added `dataValidationPrompt` for TAVI, AngioPCI, mTEER with agent-specific critical field lists and confidence scoring guidance
-- **Phase-based implementation**: Type definitions (Phase 1) → Agent methods (Phase 2) → Centralized config (Phase 3) → Integration (Phase 4)
-
-**v3.28.0 (Nov 2025)**
-- **RHC Interactive Validation Workflow**: Intelligent validation checkpoint prevents wasted reasoning model runs
-  - Quick model (qwen/qwen3-4b-2507, ~10-30s) validates extracted data before expensive report generation
-  - Auto-applies high-confidence corrections (≥0.8); shows modal for missing critical fields or low-confidence suggestions
-  - User fills missing fields (height, weight, Hb, SaO2, SvO2) → reprocesses with validated data
-  - Saves 3-15min wasted runs; efficient resource usage with lightweight validation before intensive generation
-  - Three-section modal: Critical Missing (red), Low-Confidence Corrections (yellow), Optional Fields (blue)
-- **Session Status Enhancements**: Added `'awaiting_validation'` and `'failed'` status types for better workflow state management
-- **Lint Fixes**: Cleaned up unused imports and invalid ESLint disable comments
-
-**v3.21.0 (Oct 2025)**
-- **3D Interactive Lanyard Component**: Physics-based 3D lanyard replaces static "Ready to Record" screen
-  - Built with Three.js, React Three Fiber, and Rapier physics engine
-  - Interactive draggable ID card with realistic rope physics simulation
-  - Lazy-loaded only when in idle state (~1MB gzipped, code-split into vendor-3d chunk)
-  - Graceful fallbacks for missing 3D assets (placeholder geometry)
-  - WebGL-accelerated 60fps rendering with full CSP compliance
-- **Dot Grid Background Pattern**: Professional, subtle dot grid background for idle state (4 CSS variants)
-- **Build System Enhancements**: Added .glb file support, automatic asset copying, TypeScript declarations for 3D assets
-
-**v3.19.0 (Oct 2025)**
-- **Circular Countdown Timer**: Large visual countdown timer with real-time ETA prediction
-  - Custom lightweight SVG implementation (~2 kB) with pipeline stage color matching
-  - Shows countdown time + current stage (e.g., "23.4s AI Analysis")
-  - Responsive sizing: 240px desktop, 208px tablet, 160px mobile
-  - Smooth 60fps animations with 500ms update interval
-- **Intelligent ETA Prediction System**: Machine learning-based processing time estimation
-  - Audio duration tracking: Calculates duration from recording blob using Web Audio API
-  - ProcessingTimePredictor enhancements with audio duration as primary input factor
-  - Records actual processing times after every completion (learning loop closed)
-  - Adaptive velocity-based countdown blending initial prediction with real-time velocity
-  - Precise decimal countdown with no rounding (e.g., "23.4s left", "2m 34.2s left")
-  - Predictions improve over time: ±40% accuracy after 5 sessions, ±20% after 20+ sessions
-- **RHC Major Enhancements**: Missing calculation fields identification, enhanced data extraction (fluoroscopy time/dose, contrast volume), comprehensive logging, post-processing pipeline
-- **Pre-Op Plan Export System**: A5 card export with copy to clipboard and download functionality
-- **New Components**: PatientContextHeader, UIPreferencesSection, CircularCountdownTimer, countdownCalculations utility
-- **RecordPanel State Management**: Fixed hover state persistence bugs with defensive checks for stale refs
-
-**v3.18.0 (Oct 2025)**
-- **Bright Card Design System**: High-contrast card design inspired by macOS Big Sur
-- **RHC Calculation Service**: Comprehensive haemodynamic calculations with reference ranges
-- **Patient Education Improvements**: Enhanced system prompts and action plan generation
-- **Session Management UI**: Storage management with visual indicators
-
-**v3.9.2 (Feb 2025)**
-- **Repository Cleanup**: Removed Synology Drive sync conflict files to maintain clean repository state
-
-**v3.9.0 (Feb 2025)**
-- **Recording Start Latency Optimizations**: Reduced recording start time from 2-8 seconds to 50-200ms (10-160x faster)
-- **Background Patient Data Caching**: New `PatientDataCacheService` proactively extracts patient data in background with 60s TTL; <5ms cache lookup vs 1-7+ second blocking extraction
-- **Audio Pipeline Pre-Warming**: `useRecorder` now requests microphone permission on load and keeps MediaStream/AudioContext alive (muted) between recordings for instant reuse
-- **Performance Impact**: First recording ~200ms (vs 2-8s), subsequent recordings ~50ms; cache hit rate >90% in active sessions
-- **Full Documentation**: See `RECORDING_LATENCY_OPTIMIZATIONS.md` for technical details and architecture
-
-**v3.8.0 (Jan 2025)**
-- **Beautiful PDF Export**: Replaced raw JSON PDF export with color-coded HTML cards categorized by topic (Exercise=Blue, Diet=Green, Alcohol=Purple, Weight=Orange, Smoking=Red, Mental Health=Teal) with numbered action items, reasons, and habit cues - matching inline display
-- **Category Legend**: PDF includes visual legend for easy scanning of different recommendation types
-- **Print-Optimized**: Page-break-aware styling ensures cards don't split across pages
-
-**v3.7.1 (Jan 2025)**
-- **Fixed "our" vs "or" Typo**: Added post-processing regex to fix common LLM error where "our" is used instead of "or" in conjunctions (e.g., "Monday our Thursday" → "Monday or Thursday")
-
-**v3.7.0 (Jan 2025)**
-- **Visual Action Plan Display**: Replaced unreadable raw JSON with beautiful color-coded priority cards showing numbered action items with impact levels (high=emerald, medium=blue), reasons, next actions, and habit cues
-- **Fixed Processing Time Display**: Added `displayProcessingTime` to session state so "Generated in Xs" shows actual time instead of 0s for viewed sessions
-- **Collapsible Raw JSON**: Moved technical JSON data behind expandable `<details>` section for developers while showing human-friendly UI by default
-
-**v3.6.9 (Jan 2025)**
-- **Fixed Elapsed Timer**: Added `setProcessingStartTime()` call when Patient Education starts so elapsed time counter runs properly instead of staying at 0s
-- **Dynamic Progress Text**: Processing header now shows live pipeline progress details (e.g., "Generating education plan") instead of generic "Extracting patient data from EMR..." text
-- **Realistic Progress Mapping**: Adjusted progress percentages (5% → 10% → 20% → 80% → 90% → 98% → 100%) to better reflect that LLM generation takes ~80% of total time, reducing perceived "stuck" time at 53%
-
-**v3.6.8 (Jan 2025)**
-- **Patient Education Live Progress Tracking**: Added simulated progress updates throughout agent processing (5%, 15%, 25%, 75%, 85%, 95%, 100%) with descriptive phase messages
-- **ETA Calculation**: Added `agentType` and `transcriptionLength` props to UnifiedPipelineProgress for accurate time estimates based on historical performance data
-- **Progress Bar Now Updates**: Fixed stuck 0% progress by implementing onProgress callbacks in PatientEducationAgent that report progress at key processing stages
-
-**v3.6.7 (Jan 2025)**
-- **Patient Education JSON Output Fix**: Fixed missing JSON metadata card in Patient Education results by adding `educationData` field to `AppState` interface and proper state management in useAppState/OptimizedApp
-- **Two-Part Display**: Patient Education now correctly displays both the patient letter AND the structured JSON metadata with Export PDF functionality
-- **State Flow**: `educationData` now properly flows from agent → AgentFactory → session → state → display, ensuring JSON box renders consistently
-
-**v3.6.6 (Jan 2025)**
-- **Session Timeline Progress Fix**: Updated SessionDropdown to use new `pipelineProgress` instead of old `processingProgress` system, eliminating redundant/misleading progress text in session timeline cards
-
-**v3.6.5 (Jan 2025)**
-- **Patient Education Unified Progress**: Added UnifiedPipelineProgress bar to Patient Education agent for consistent live progress tracking through AI Analysis → Generation phases
-- **Fixed Redundant Progress Displays**: Removed misleading "Extracting patient data from EMR..." text during processing (EMR extraction happens before config modal)
-- **Progress Callbacks**: Added onProgress callback to Patient Education agent processing for real-time pipeline updates
-
-**v3.6.4 (Jan 2025)**
-- **Investigation Summary Formatting Improvements**: Enhanced system prompts, ASR corrections, and post-processing to ensure precise medical formatting
-  - Fixed measurement spacing: `LVEDD 59` not `LVEDD-59`, `EF 43` not `EF43`, `GLS -16` not `GLS-16`
-  - Added severity abbreviations: `moderate` → `mod`, `moderately dilated` → `mod dil`
-  - Improved parentheses placement: `dilated LV (LVEDD 59)` for measurements quantifying findings
-  - Enhanced LLM instruction to preserve abbreviations (TTE, TOE, CTCA) without expansion
-  - Added golden standard training example (ex002_tte_format.json) for DSPy optimization
-
-**v3.6.3 (Jan 2025)**
-- **Patient Education Session Tracking**: Patient Education generations now create proper sessions in the timeline, enabling review, history tracking, and consistent UX with all other agents
-
-**v3.6.2 (Jan 2025)**
-- **Patient Education JSON Parsing**: Fixed two-part response parsing to properly strip markdown code fences and separate JSON metadata from patient letter content
-
-**v3.6.1 (Jan 2025)**
-- (Previous patch release)
-
-**v3.6.0 (Jan 2025)**
-- **Unified Pipeline Progress**: Single segmented progress bar showing live updates through Audio Processing → Transcribing → AI Analysis → Generation; replaces `FieldIngestionOverlay` and `ProcessingPhaseIndicator` with real-time tracking, no more 0% stuck screens
-- **Code Quality Excellence**: Achieved ZERO ESLint errors (479 errors eliminated across 141 files)
-- **Developer Experience**: Enhanced ./dev script with real-time model loading feedback and Whisper server diagnostics
-- **TAVI Workup Stability**: Fixed multiple display bugs including persistent "Processing Report" and "Loading Session" issues
-- **Session Management**: Resolved race conditions and state management bugs affecting session display
-- **UI Consistency**: Implemented consistent transcription UI across all processing states
-
-**v3.5.0 (Sep 2025)**
-- **TAVI Workup Critical Fixes**: Resolved HTTP 400 LM Studio errors, fixed Gemma prompt formatting
-- **Enhanced TAVI Display**: Structured UI with interactive transcription controls (Skip/Accept/Edit)
-- **Performance Optimizations**: Reduced console debug spam, improved error handling
-- **Data Safety**: Added anti-hallucination guardrails and input validation for clinical accuracy
-
-**v3.2.1 (Sep 2025)**
-- **AudioProcessingQueueService** (priority, concurrency 2, retries, cleanup, metrics)
-- **Full‑page Settings** (transcription management; expanded optimisation panel)
-- **Design system**: monochrome, responsive
-
-**v3.2.0 (Sep 2025)**
-- **Intelligent Features**: Dynamic agent loading, cross-agent intelligence, smart recommendations, real-time progress, bundle splitting
-- **DSPy/GEPA**: production‑ready, rubric, versioning, audit trails
-
-**Earlier highlights**
-- **11→14+ agents**, batch review, EMR enhancements, cancellation system, improved letter intelligence, SystemPrompts extraction, MLX Whisper integration
+**Earlier versions (v3.38 and below)**
+- v3.38: Rounds UI/UX overhaul (tab badges, sticky actions, color-coded bars)
+- v3.32: Quick Letter first-name extraction, RHC anti-hallucination, progress tracking
+- v3.29: Universal validation workflow deployed to 4 agents, centralized config
+- v3.28: RHC interactive validation checkpoint
+- v3.21: 3D lanyard component (Three.js + Rapier physics)
+- v3.19: Circular countdown timer, intelligent ETA prediction
+- v3.9: Recording latency optimizations (50ms vs 2-8s)
+- v3.6: Unified pipeline progress bar, zero ESLint errors
+- v3.2: Intelligent features (dynamic loading, cross-agent intelligence, DSPy)
 
 ---
 

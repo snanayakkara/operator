@@ -104,9 +104,9 @@ export const DictateSectionModal: React.FC<DictateSectionModalProps> = ({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+        className="bg-white rounded-t-2xl shadow-2xl max-w-2xl w-full mx-3 mb-3 max-h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -119,7 +119,7 @@ export const DictateSectionModal: React.FC<DictateSectionModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto">
           {/* Error Banner */}
           {error && (
             <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">

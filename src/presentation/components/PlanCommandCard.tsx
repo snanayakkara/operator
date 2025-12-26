@@ -7,6 +7,11 @@
 
 import React, { useMemo } from 'react';
 import type { TAVIWorkupItem } from '@/types/taviWorkup.types';
+import {
+  PROCEDURE_PLAN_FIELDS,
+  parseProcedurePlanContent,
+  type ProcedurePlanFieldKey
+} from '@/utils/taviProcedurePlan';
 
 interface PlanCommandCardProps {
   workup: TAVIWorkupItem;
@@ -22,6 +27,15 @@ interface PlanField {
   icon: string;
 }
 
+const PLAN_FIELD_ICONS: Record<ProcedurePlanFieldKey, string> = {
+  device: '🔧',
+  access: '🎯',
+  wire: '〰️',
+  pacing: '⚡',
+  closure: '🔒',
+  notes: '📝'
+};
+
 export const PlanCommandCard: React.FC<PlanCommandCardProps> = ({
   workup,
   isFocused,
@@ -29,47 +43,14 @@ export const PlanCommandCard: React.FC<PlanCommandCardProps> = ({
   onClick,
   onToggleExpand
 }) => {
-  // Parse procedure planning content into structured fields
   const planFields = useMemo((): PlanField[] => {
-    const content = workup.structuredSections.procedure_planning?.content || '';
-    
-    // Default fields
-    const fields: PlanField[] = [
-      { label: 'Device', value: '', icon: '🔧' },
-      { label: 'Access', value: '', icon: '🎯' },
-      { label: 'Wire', value: '', icon: '〰️' },
-      { label: 'Pacing', value: '', icon: '⚡' },
-      { label: 'Closure', value: '', icon: '🔒' },
-      { label: 'Notes', value: '', icon: '📝' },
-    ];
-
-    // Try to parse content into fields
-    if (content) {
-      // Simple parsing - look for patterns like "Device:" or "**Device**"
-      fields.forEach(field => {
-        const patterns = [
-          new RegExp(`${field.label}[:\\s]+([^\\n]+)`, 'i'),
-          new RegExp(`\\*\\*${field.label}\\*\\*[:\\s]+([^\\n]+)`, 'i'),
-        ];
-        
-        for (const pattern of patterns) {
-          const match = content.match(pattern);
-          if (match && match[1]) {
-            field.value = match[1].trim();
-            break;
-          }
-        }
-      });
-
-      // If no structured fields found, put everything in Notes
-      const hasStructuredContent = fields.some(f => f.label !== 'Notes' && f.value);
-      if (!hasStructuredContent && content.trim()) {
-        fields[5].value = content.trim();
-      }
-    }
-
-    return fields;
-  }, [workup.structuredSections.procedure_planning]);
+    const values = parseProcedurePlanContent(workup.structuredSections.procedure_planning?.content || '');
+    return PROCEDURE_PLAN_FIELDS.map(field => ({
+      label: field.label,
+      value: values[field.key],
+      icon: PLAN_FIELD_ICONS[field.key]
+    }));
+  }, [workup.structuredSections.procedure_planning?.content]);
 
   // Check if we have CT measurements
   const ctMeasurements = workup.ctMeasurements;

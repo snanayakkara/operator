@@ -1006,6 +1006,29 @@ class ContentScriptHandler {
         border-color: var(--operator-xestro-border) !important;
       }
 
+      /* Xestro note media and thumbnails */
+      html.operator-xestro-dark-mode .NoteMedia,
+      html.operator-xestro-dark-mode .thumbnailItem,
+      html.operator-xestro-dark-mode .thumbnailOverlay,
+      html.operator-xestro-dark-mode .thumbnailOverlayBackground,
+      html.operator-xestro-dark-mode .thumbnailImage,
+      html.operator-xestro-dark-mode .thumbnailNote {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Xestro note headers */
+      html.operator-xestro-dark-mode .NoteMeta {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Xestro custom note content */
+      html.operator-xestro-dark-mode .customNote {
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
       /* Sidebar panels and sections */
       html.operator-xestro-dark-mode .sidebar,
       html.operator-xestro-dark-mode .side-panel,
@@ -1022,6 +1045,14 @@ class ContentScriptHandler {
         border-color: var(--operator-xestro-border) !important;
       }
 
+      /* Xestro-specific sidebar containers */
+      html.operator-xestro-dark-mode .roundedBoxlessHeaderContent,
+      html.operator-xestro-dark-mode .PatientRightDetails,
+      html.operator-xestro-dark-mode .XestroBoxes {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
       /* Section headers and titles */
       html.operator-xestro-dark-mode .section,
       html.operator-xestro-dark-mode .section-header,
@@ -1036,6 +1067,37 @@ class ContentScriptHandler {
         background: var(--operator-xestro-surface-0) !important;
         color: var(--operator-xestro-text-primary) !important;
         border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Dialog and modal titles */
+      html.operator-xestro-dark-mode .title,
+      html.operator-xestro-dark-mode .header .title,
+      html.operator-xestro-dark-mode .ui-draggable-handle .title,
+      html.operator-xestro-dark-mode .modal-title,
+      html.operator-xestro-dark-mode .dialog-title {
+        color: var(--operator-xestro-text-primary) !important;
+        background: transparent !important;
+      }
+
+      html.operator-xestro-dark-mode .header,
+      html.operator-xestro-dark-mode .ui-draggable-handle {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Microphone floating elements (Xestro voice input) */
+      html.operator-xestro-dark-mode .microphone-icon,
+      html.operator-xestro-dark-mode .mic-float,
+      html.operator-xestro-dark-mode .microphone,
+      html.operator-xestro-dark-mode .mic-ring {
+        background: var(--operator-xestro-surface-2) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .mic-icon,
+      html.operator-xestro-dark-mode .fa-microphone {
+        color: var(--operator-xestro-text-primary) !important;
       }
 
       /* Generic div containers with white backgrounds */
@@ -1088,7 +1150,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="text"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1103,7 +1166,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="search"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1118,7 +1182,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="email"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1133,7 +1198,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="url"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1148,7 +1214,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="tel"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1163,7 +1230,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="password"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1178,7 +1246,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input[type="number"],
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1193,7 +1262,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) textarea,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1208,7 +1278,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) select,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1223,7 +1294,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) .form-control {
         background: var(--operator-xestro-surface-1) !important;
         color: var(--operator-xestro-text-primary) !important;
@@ -1243,7 +1315,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input::placeholder,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1258,7 +1331,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) textarea::placeholder {
         color: var(--operator-xestro-text-secondary) !important;
       }
@@ -1276,7 +1350,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) input:focus,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1291,7 +1366,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) textarea:focus,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1306,7 +1382,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) select:focus,
       html.operator-xestro-dark-mode :is(
         .XestroBox,
@@ -1321,7 +1398,8 @@ class ContentScriptHandler {
         .ui-widget-content,
         .ui-dialog,
         .ui-menu,
-        .ui-datepicker
+        .ui-datepicker,
+        .roundedBoxlessHeaderContent
       ) .form-control:focus {
         border-color: rgba(138, 180, 248, 0.55) !important;
         box-shadow: 0 0 0 3px var(--operator-xestro-focus) !important;
@@ -1565,21 +1643,378 @@ class ContentScriptHandler {
         background: rgba(255, 255, 255, 0.03) !important;
       }
 
-      /* Scrollbars (WebKit) */
+      /* Bootstrap background color overrides */
+      html.operator-xestro-dark-mode .bg-danger,
+      html.operator-xestro-dark-mode .bg-warning,
+      html.operator-xestro-dark-mode .bg-info,
+      html.operator-xestro-dark-mode .bg-success,
+      html.operator-xestro-dark-mode .bg-primary,
+      html.operator-xestro-dark-mode .bg-secondary {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Keep danger indication with subtle left border on table rows */
+      html.operator-xestro-dark-mode tr.bg-danger td {
+        border-left: 3px solid var(--operator-xestro-danger) !important;
+      }
+
+      /* Xestro inline button overrides (Investigations section) */
+      html.operator-xestro-dark-mode .XestroBoxTitleElements button,
+      html.operator-xestro-dark-mode .XestroBoxTitleElements button div,
+      html.operator-xestro-dark-mode .XestroBoxTitle button,
+      html.operator-xestro-dark-mode .XestroBoxTitle button div {
+        background: var(--operator-xestro-surface-2) !important;
+        background-color: var(--operator-xestro-surface-2) !important;
+      }
+
+      /* Font Awesome icons in XestroBox */
+      html.operator-xestro-dark-mode .XestroBox .fa,
+      html.operator-xestro-dark-mode .XestroBox .fa-info-circle,
+      html.operator-xestro-dark-mode .XestroBox .fa-blood,
+      html.operator-xestro-dark-mode .XestroBox .fa-xray,
+      html.operator-xestro-dark-mode .XestroBox .fa-add {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Note content and layout columns */
+      html.operator-xestro-dark-mode .Note {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .UpperCol,
+      html.operator-xestro-dark-mode .LowerCol,
+      html.operator-xestro-dark-mode .LeftCol,
+      html.operator-xestro-dark-mode .RightCol,
+      html.operator-xestro-dark-mode .CenterCol {
+        background: var(--operator-xestro-surface-0) !important;
+        background-color: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Override inline background-color:#f7f7f7 on columns */
+      html.operator-xestro-dark-mode .LeftCol[style*="background-color"],
+      html.operator-xestro-dark-mode .RightCol[style*="background-color"],
+      html.operator-xestro-dark-mode .CenterCol[style*="background-color"] {
+        background-color: var(--operator-xestro-surface-0) !important;
+      }
+
+      /* Date markers and controls */
+      html.operator-xestro-dark-mode .DateMarker {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      html.operator-xestro-dark-mode .Control {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      html.operator-xestro-dark-mode .Control span,
+      html.operator-xestro-dark-mode .DeleteNote,
+      html.operator-xestro-dark-mode .EditNote,
+      html.operator-xestro-dark-mode .ViewNoteHistory {
+        color: var(--operator-xestro-link) !important;
+      }
+
+      /* Form inputs - Provider, NoteType, Appointment */
+      html.operator-xestro-dark-mode .Provider,
+      html.operator-xestro-dark-mode .NoteType,
+      html.operator-xestro-dark-mode .Appointment,
+      html.operator-xestro-dark-mode input.form-control,
+      html.operator-xestro-dark-mode input.ui-autocomplete-input {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border-strong) !important;
+      }
+
+      /* Rounded box containers (Waiting Room, etc.) */
+      html.operator-xestro-dark-mode .roundedBox,
+      html.operator-xestro-dark-mode .roundedBoxHeader,
+      html.operator-xestro-dark-mode .roundedBoxContent,
+      html.operator-xestro-dark-mode .roundedBoxlessHeader {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Footer and waiting room */
+      html.operator-xestro-dark-mode .footer-inner-left,
+      html.operator-xestro-dark-mode #waiting-room-footer {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Panel tables */
+      html.operator-xestro-dark-mode .PanelTable,
+      html.operator-xestro-dark-mode .PanelTable tbody,
+      html.operator-xestro-dark-mode .PanelTable tr,
+      html.operator-xestro-dark-mode .PanelTable td {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .stagePanelBook,
+      html.operator-xestro-dark-mode #stagePanelList tr,
+      html.operator-xestro-dark-mode #stagePanelBooks tr {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .stagePanelBook:hover,
+      html.operator-xestro-dark-mode #stagePanelList tr:hover,
+      html.operator-xestro-dark-mode #stagePanelBooks tr:hover {
+        background: var(--operator-xestro-surface-1) !important;
+      }
+
+      /* Patient photo placeholder */
+      html.operator-xestro-dark-mode #SidebarPatientPhoto {
+        background: var(--operator-xestro-surface-2) !important;
+        border: 1px solid var(--operator-xestro-border) !important;
+      }
+
+      /* Clinical notes filter section */
+      html.operator-xestro-dark-mode .content-inner-center-row3,
+      html.operator-xestro-dark-mode .content-inner-center-row3-filter,
+      html.operator-xestro-dark-mode .content-inner-center-row3-history,
+      html.operator-xestro-dark-mode .PatientClinicalFilter,
+      html.operator-xestro-dark-mode .PatientClinicalNotes {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .FilterNoteType,
+      html.operator-xestro-dark-mode .ProviderGroup {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border-strong) !important;
+      }
+
+      /* Day notes and note containers */
+      html.operator-xestro-dark-mode .DayNote,
+      html.operator-xestro-dark-mode .NoteContainer {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Form groups and labels */
+      html.operator-xestro-dark-mode .form-group,
+      html.operator-xestro-dark-mode .form-hover {
+        background: transparent !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .control-label,
+      html.operator-xestro-dark-mode label {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Bootstrap btn-default and action buttons */
+      html.operator-xestro-dark-mode .btn-default,
+      html.operator-xestro-dark-mode .btn.full,
+      html.operator-xestro-dark-mode .QuickLetter,
+      html.operator-xestro-dark-mode .AppointmentBookButton {
+        background: var(--operator-xestro-surface-2) !important;
+        background-color: var(--operator-xestro-surface-2) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border: 1px solid var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .btn-default:hover,
+      html.operator-xestro-dark-mode .btn.full:hover {
+        background: var(--operator-xestro-surface-3) !important;
+      }
+
+      /* Notifications bar */
+      html.operator-xestro-dark-mode .communication-bar-hide-btn,
+      html.operator-xestro-dark-mode [class*="communication-bar"] {
+        background: var(--operator-xestro-surface-0) !important;
+        background-color: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Override inline background-color on notification bars */
+      html.operator-xestro-dark-mode div[style*="background-color: rgb(246, 246, 246)"],
+      html.operator-xestro-dark-mode div[style*="background-color:#f6f6f6"] {
+        background-color: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      /* Thumbnail overlay fix - ensure visibility */
+      html.operator-xestro-dark-mode .thumbnailOverlay {
+        background: rgba(0, 0, 0, 0.6) !important;
+      }
+
+      html.operator-xestro-dark-mode .thumbnailOverlayBackground {
+        background: rgba(0, 0, 0, 0.4) !important;
+      }
+
+      html.operator-xestro-dark-mode .thumbnailItem .icon {
+        filter: invert(1) !important;
+      }
+
+      html.operator-xestro-dark-mode .centeringOuter,
+      html.operator-xestro-dark-mode .centeringInner {
+        background: transparent !important;
+      }
+
+      /* Conversation/Communication elements */
+      html.operator-xestro-dark-mode .commConversation,
+      html.operator-xestro-dark-mode .commConversationTable,
+      html.operator-xestro-dark-mode .comm-conversation-grid,
+      html.operator-xestro-dark-mode .conversationContent {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .commConversationMembers,
+      html.operator-xestro-dark-mode .commConversationRegarding,
+      html.operator-xestro-dark-mode .commConversationSubject,
+      html.operator-xestro-dark-mode .commConversationRealLastMessage,
+      html.operator-xestro-dark-mode .commConversationLastMessageTimestamp {
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .commConversationRealLastMessage {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      html.operator-xestro-dark-mode .ConversationIcons .fa {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Conversation labels */
+      html.operator-xestro-dark-mode .commConversationLabels .label {
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .bg-strong-primary {
+        background: rgba(138, 180, 248, 0.25) !important;
+        color: var(--operator-xestro-link) !important;
+      }
+
+      html.operator-xestro-dark-mode .bg-strong-warning {
+        background: rgba(255, 193, 7, 0.25) !important;
+        color: #ffc107 !important;
+      }
+
+      /* Indicator bars */
+      html.operator-xestro-dark-mode .indicatorBar,
+      html.operator-xestro-dark-mode .indicatorBarLeft {
+        background: var(--operator-xestro-surface-1) !important;
+      }
+
+      /* Conversation avatar */
+      html.operator-xestro-dark-mode .conversationAvatar,
+      html.operator-xestro-dark-mode .commConversationProfilePicture {
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Loading indicators */
+      html.operator-xestro-dark-mode .LoadMoreNotes,
+      html.operator-xestro-dark-mode .LoadingText {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Tables inside notes */
+      html.operator-xestro-dark-mode .Note table,
+      html.operator-xestro-dark-mode .Note table td,
+      html.operator-xestro-dark-mode .Note table th {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .table-condensed {
+        background: var(--operator-xestro-surface-0) !important;
+      }
+
+      /* CreateLetter and text-primary links */
+      html.operator-xestro-dark-mode .CreateLetter,
+      html.operator-xestro-dark-mode .text-primary {
+        color: var(--operator-xestro-link) !important;
+      }
+
+      /* Intray/Results items */
+      html.operator-xestro-dark-mode .IntrayResult,
+      html.operator-xestro-dark-mode .IntrayResult.Abnormal,
+      html.operator-xestro-dark-mode .IntrayResult.active {
+        background: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      html.operator-xestro-dark-mode .IntrayResult.active {
+        background: var(--operator-xestro-surface-1) !important;
+        border-left: 3px solid var(--operator-xestro-accent) !important;
+      }
+
+      html.operator-xestro-dark-mode .IntrayResult .Type {
+        background: transparent !important;
+      }
+
+      html.operator-xestro-dark-mode .IntrayResult .PatientName {
+        color: var(--operator-xestro-text-primary) !important;
+      }
+
+      html.operator-xestro-dark-mode .IntrayResult .UnmatchedText {
+        color: var(--operator-xestro-danger) !important;
+      }
+
+      html.operator-xestro-dark-mode .IntrayResult .Note {
+        color: var(--operator-xestro-text-secondary) !important;
+      }
+
+      /* Text-danger for abnormal indicators */
+      html.operator-xestro-dark-mode .text-danger {
+        color: var(--operator-xestro-danger) !important;
+      }
+
+      /* Deep nested tables - catch-all for any remaining white tables */
+      html.operator-xestro-dark-mode table,
+      html.operator-xestro-dark-mode table tbody,
+      html.operator-xestro-dark-mode table tbody tr,
+      html.operator-xestro-dark-mode table tbody tr td {
+        background: var(--operator-xestro-surface-0) !important;
+        background-color: var(--operator-xestro-surface-0) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Alternating row backgrounds for tables */
+      html.operator-xestro-dark-mode table tbody tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.02) !important;
+      }
+
+      /* Table headers */
+      html.operator-xestro-dark-mode table thead,
+      html.operator-xestro-dark-mode table thead tr,
+      html.operator-xestro-dark-mode table thead th {
+        background: var(--operator-xestro-surface-1) !important;
+        color: var(--operator-xestro-text-primary) !important;
+        border-color: var(--operator-xestro-border) !important;
+      }
+
+      /* Scrollbars (WebKit) - darker styling */
       html.operator-xestro-dark-mode ::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
       }
       html.operator-xestro-dark-mode ::-webkit-scrollbar-track {
-        background: var(--operator-xestro-surface-0);
+        background: #0a0a0a;
       }
       html.operator-xestro-dark-mode ::-webkit-scrollbar-thumb {
-        background: var(--operator-xestro-surface-2);
-        border-radius: 8px;
-        border: 3px solid var(--operator-xestro-surface-0);
+        background: #3a3a3a;
+        border-radius: 5px;
+        border: 2px solid #0a0a0a;
       }
       html.operator-xestro-dark-mode ::-webkit-scrollbar-thumb:hover {
-        background: var(--operator-xestro-surface-3);
+        background: #4a4a4a;
+      }
+      html.operator-xestro-dark-mode ::-webkit-scrollbar-corner {
+        background: #0a0a0a;
       }
     `;
   }

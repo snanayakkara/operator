@@ -75,6 +75,8 @@ export interface ASRCorrectionsEntry {
   confidence?: number;
   source?: string;
   correctionType?: string;
+  // Extensible metadata for specialized correction types (e.g., lesion placement)
+  metadata?: Record<string, unknown>;
 }
 
 // Sort field type for FullPageCorrectionsViewer

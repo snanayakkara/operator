@@ -21,13 +21,15 @@ export const NotionPatientCard: React.FC<NotionPatientCardProps> = ({
   onImport,
   alreadyImported = false
 }) => {
+  const patientName = patient.patient?.trim() || 'Unnamed patient';
+
   return (
     <div className="bg-white border border-line-primary rounded-lg p-3">
       <div className="space-y-2">
         {/* Patient Name */}
         <div className="flex items-start justify-between">
           <div>
-            <div className="font-medium text-ink-primary text-sm">{patient.patient}</div>
+            <div className="font-medium text-ink-primary text-sm">{patientName}</div>
             {patient.status && (
               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mt-1 ${
                 patient.status === 'Pending' ? 'bg-gray-100 text-gray-700' :

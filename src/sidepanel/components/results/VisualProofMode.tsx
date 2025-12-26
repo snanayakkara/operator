@@ -8,10 +8,13 @@
  * Phase 1: Keyboard corrections only (voice corrections deferred to Phase 2)
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Check, Edit3, X, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
-import { KeyFact, KeyFactsProofResult } from '../../../types/medical.types';
+import { KeyFact, KeyFactsProofResult, LesionTree, LesionEntry } from '../../../types/medical.types';
 import { Button } from '../buttons';
+import { CoronaryAnatomyTree } from './CoronaryAnatomyTree';
+import { VesselKey } from '@/utils/coronaryAnatomy';
+import { logLesionCorrection } from '@/utils/lesionCorrectionLogger';
 
 export interface VisualProofModeProps {
   /** Facts to verify */
@@ -31,6 +34,12 @@ export interface VisualProofModeProps {
 
   /** Show confidence scores? */
   showConfidence?: boolean;
+
+  /** Lesion tree for AngioPCI (optional - only shown when provided) */
+  lesionTree?: LesionTree;
+
+  /** Transcription snippet for correction logging context */
+  transcriptionSnippet?: string;
 }
 
 interface FactGroup {
@@ -48,13 +57,21 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
   onConfirm,
   onCancel,
   groupByCategory = true,
-  showConfidence = false
+  showConfidence = false,
+  lesionTree: initialLesionTree,
+  transcriptionSnippet
 }) => {
   const [facts, setFacts] = useState<KeyFact[]>(initialFacts);
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [startTime] = useState(Date.now());
+
+  // Lesion tree state (for AngioPCI)
+  const [draftLesionTree, setDraftLesionTree] = useState<LesionTree | null>(
+    initialLesionTree ?? null
+  );
+  const [lesionTreeExpanded, setLesionTreeExpanded] = useState(true);
 
   // Auto-expand all categories on mount
   useEffect(() => {
@@ -154,6 +171,73 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
     });
   };
 
+  // Lesion tree handlers
+  const handleLesionMove = useCallback((lesionId: string, fromVessel: VesselKey, toVessel: VesselKey) => {
+    if (!draftLesionTree) return;
+
+    // Find the lesion in the source vessel
+    const lesion = draftLesionTree[fromVessel].find(l => l.id === lesionId);
+    if (!lesion) return;
+
+    // Update the tree
+    setDraftLesionTree(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [fromVessel]: prev[fromVessel].filter(l => l.id !== lesionId),
+        [toVessel]: [...prev[toVessel], lesion]
+      };
+    });
+
+    // Log the correction for training data
+    logLesionCorrection(
+      lesionId,
+      lesion.branch,
+      fromVessel,
+      toVessel,
+      transcriptionSnippet
+    );
+  }, [draftLesionTree, transcriptionSnippet]);
+
+  const handleLesionChange = useCallback((vessel: VesselKey, lesionId: string, field: keyof LesionEntry, value: string) => {
+    setDraftLesionTree(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [vessel]: prev[vessel].map(l =>
+          l.id === lesionId ? { ...l, [field]: value } : l
+        )
+      };
+    });
+  }, []);
+
+  const handleLesionAdd = useCallback((vessel: VesselKey) => {
+    const newLesion: LesionEntry = {
+      id: `manual-${Date.now()}`,
+      branch: '',
+      severity: '',
+      description: ''
+    };
+
+    setDraftLesionTree(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [vessel]: [...prev[vessel], newLesion]
+      };
+    });
+  }, []);
+
+  const handleLesionRemove = useCallback((vessel: VesselKey, lesionId: string) => {
+    setDraftLesionTree(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [vessel]: prev[vessel].filter(l => l.id !== lesionId)
+      };
+    });
+  }, []);
+
   const handleConfirmAll = () => {
     const timeSpent = Date.now() - startTime;
     const result: KeyFactsProofResult = {
@@ -163,7 +247,8 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
       timeSpent,
       completedAt: Date.now(),
       editsCount: stats.editsCount,
-      rejectsCount: stats.rejectsCount
+      rejectsCount: stats.rejectsCount,
+      refinedLesions: draftLesionTree ?? undefined
     };
     onConfirm(result);
   };
@@ -216,7 +301,7 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
       </div>
 
       {/* Fact groups */}
-      <div className="fact-groups space-y-2 max-h-[56vh] overflow-y-auto">
+      <div className="fact-groups space-y-2 max-h-[40vh] overflow-y-auto">
         {factGroups.map(group => (
           <div key={group.category} className="fact-group">
             {/* Category header */}
@@ -267,6 +352,44 @@ export const VisualProofMode: React.FC<VisualProofModeProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Coronary Findings Section (for AngioPCI when lesion tree is provided) */}
+      {draftLesionTree && (
+        <div className="coronary-findings-section mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+          {/* Section header */}
+          <button
+            onClick={() => setLesionTreeExpanded(!lesionTreeExpanded)}
+            className="w-full flex items-center justify-between mb-3 group"
+          >
+            <div className="flex items-center gap-2">
+              {lesionTreeExpanded ? (
+                <ChevronDown className="w-4 h-4 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
+              )}
+              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Coronary Findings
+              </span>
+            </div>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">
+              Drag lesions to reorganize
+            </span>
+          </button>
+
+          {/* Lesion tree */}
+          {lesionTreeExpanded && (
+            <div className="max-h-[30vh] overflow-y-auto">
+              <CoronaryAnatomyTree
+                lesionTree={draftLesionTree}
+                onLesionMove={handleLesionMove}
+                onLesionChange={handleLesionChange}
+                onLesionAdd={handleLesionAdd}
+                onLesionRemove={handleLesionRemove}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className="action-buttons flex gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">

@@ -313,7 +313,6 @@ interface OptimizedResultsPanelProps {
     onComplete: (result: KeyFactsProofResult) => void;
     onCancel: () => void;
     lesionTree?: import('@/types/medical.types').LesionTree;
-    lesionExtractionMethod?: 'regex' | 'quick-model';
   } | null;
   angiogramValidationResult?: ValidationResult | null;
   angiogramValidationStatus?: 'complete' | 'awaiting_validation';
@@ -2055,7 +2054,6 @@ const OptimizedResultsPanel: React.FC<OptimizedResultsPanelProps> = memo(({
           isOpen={showProofMode}
           initialConfig={proofConfig}
           lesionTree={agentType === 'angiogram-pci' ? angioProofModeData?.lesionTree : undefined}
-          lesionExtractionMethod={agentType === 'angiogram-pci' ? angioProofModeData?.lesionExtractionMethod : undefined}
         />
       )}
 

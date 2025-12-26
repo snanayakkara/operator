@@ -8,7 +8,7 @@
 
 import React, { useMemo } from 'react';
 import { Award, ChevronDown, ChevronUp, Info, Check } from 'lucide-react';
-import { ValveSizingServiceV2, type ValveBrand, type ValveResult } from '@/services/ValveSizingServiceV2';
+import { ValveSizingServiceV2, type ValveResult } from '@/services/ValveSizingServiceV2';
 import type { TAVIWorkupCTMeasurements } from '@/types/medical.types';
 
 interface ValveRecommendationCardProps {
@@ -59,26 +59,19 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
     return { bestPerBrand: best, hasData: true, overallBest: overall };
   }, [measurements, service]);
 
-  // Brand display colors
-  const getBrandColor = (brand: ValveBrand) => {
-    switch (brand) {
-      case 'evolut':
-        return 'bg-blue-50 border-blue-200 text-blue-700';
-      case 'sapien':
-        return 'bg-red-50 border-red-200 text-red-700';
-      case 'navitor':
-        return 'bg-purple-50 border-purple-200 text-purple-700';
-      case 'myval':
-        return 'bg-teal-50 border-teal-200 text-teal-700';
-    }
+  const getOversizingColor = (result: ValveResult) => {
+    if (result.isOptimal) return 'text-emerald-700';
+    return 'text-ink-secondary';
   };
 
-  const getOversizingColor = (result: ValveResult) => {
-    if (result.isOptimal) return 'text-emerald-600';
-    const range = service.getOptimalRange(result.brand);
-    if (result.oversizing < range.min) return 'text-amber-600';
-    if (result.oversizing > range.max) return 'text-rose-600';
-    return 'text-ink-secondary';
+  const getCardClasses = (result: ValveResult) => {
+    return result.isOptimal
+      ? 'bg-emerald-50 border-emerald-200'
+      : 'bg-gray-50 border-gray-200';
+  };
+
+  const getTitleClasses = (result: ValveResult) => {
+    return result.isOptimal ? 'text-emerald-800' : 'text-ink-primary';
   };
 
   return (
@@ -91,7 +84,7 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
           overallBest?.isOptimal
             ? 'bg-emerald-50 border-l-4 border-l-emerald-500'
             : hasData
-            ? 'bg-blue-50 border-l-4 border-l-blue-500'
+            ? 'bg-gray-50 border-l-4 border-l-gray-300'
             : 'bg-gray-50 border-l-4 border-l-gray-300'
         }`}
       >
@@ -143,17 +136,19 @@ export const ValveRecommendationCard: React.FC<ValveRecommendationCardProps> = (
                   return (
                     <div
                       key={brand}
-                      className={`p-2 rounded border ${getBrandColor(brand)}`}
+                      className={`p-2 rounded border ${getCardClasses(result)}`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold">{manufacturer.displayName}</span>
+                        <span className={`text-xs font-semibold ${getTitleClasses(result)}`}>
+                          {manufacturer.displayName}
+                        </span>
                         {result.isOptimal && (
                           <span className="flex items-center gap-0.5 text-xs text-emerald-600">
                             <Check className="w-3 h-3" />
                           </span>
                         )}
                       </div>
-                      <p className="text-sm font-bold">{result.sizeName}</p>
+                      <p className={`text-sm font-bold ${getTitleClasses(result)}`}>{result.sizeName}</p>
                       <p className={`text-xs font-medium ${getOversizingColor(result)}`}>
                         {result.oversizing.toFixed(1)}% oversizing
                       </p>
