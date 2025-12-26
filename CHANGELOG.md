@@ -9,6 +9,12 @@ The format is based on "Keep a Changelog" and follows semantic versioning.
 
 - No unreleased changes yet.
 
+## [4.3.1] - 2025-12-26
+
+### Changed
+
+- Bumped package and extension versions to 4.3.1 and updated changelog.
+
 ## [4.3.0] - 2025-12-24
 
 ### Added
